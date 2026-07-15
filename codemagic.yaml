@@ -1,0 +1,41 @@
+# codemagic.yaml
+workflows:
+  release:
+    name: Release Build
+    environment:
+      vars:
+        FLUTTER_VERSION: 3.41.9  # ou votre version
+      flutter: stable
+    scripts:
+      - name: Installer les dépendances
+        script: flutter pub get
+      
+      - name: Générer les fichiers de build
+        script: flutter pub run build_runner build --delete-conflicting-outputs
+      
+      - name: Nettoyer le projet
+        script: flutter clean
+      
+      - name: Builder l'APK Release
+        script: flutter build apk --release --split-per-abi
+      
+      - name: Builder l'App Bundle (AAB)
+        script: flutter build appbundle --release
+      
+      - name: Vérifier la signature
+        script: |
+          if [ -f "android/app/upload-keystore.jks" ]; then
+            echo "✅ Keystore trouvé"
+          else
+            echo "⚠️ Keystore non trouvé, APK non signé"
+          fi
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - votre-email@gmail.com
+        notify:
+          success: true
+          failure: true
