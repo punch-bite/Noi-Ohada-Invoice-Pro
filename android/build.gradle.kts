@@ -1,8 +1,9 @@
 allprojects {
     repositories {
-        maven { url 'https://maven.aliyun.com/repository/public' };  // Aliyun mirror
-        maven { url 'https://maven.aliyun.com/repository/google' };
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' };
+        //  Kotlin DSL syntax (correct)
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         google()
         mavenCentral()
     }
