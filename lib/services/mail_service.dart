@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
-import 'package:mailer/smtp_server/gmail.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MailService {
@@ -78,7 +77,7 @@ class MailService {
 
       final server = _getSmtpServer();
       final sendReport = await send(message, server);
-      print('✅ Email envoyé: ${sendReport.recipients}');
+      // print('✅ Email envoyé: ${sendReport.recipients}');
       return true;
     } catch (e) {
       print('❌ Erreur envoi email: $e');

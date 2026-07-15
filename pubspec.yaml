@@ -22,7 +22,7 @@ dependencies:
   # Database
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  mailer: ^6.1.0
+  mailer: ^6.4.0
 
   # PDF
   pdf: ^3.10.4
