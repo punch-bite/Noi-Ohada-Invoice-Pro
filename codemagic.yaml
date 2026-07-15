@@ -10,7 +10,17 @@ workflows:
         script: |
           echo "Génération de local.properties..."
           echo "flutter.sdk=$FCI_FLUTTER_HOME" > android/local.properties
+
+      - name: Créer le fichier .env
+        script: |
+          echo "Génération du fichier .env pour le build..."
+          # Remplacez par les variables que vous avez définies dans l'interface Codemagic
+          echo "API_URL=$API_URL" > .env
+          echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
           
+      - name: Nettoyer le projet
+        script: flutter clean
+
       - name: Nettoyer le projet
         script: flutter clean
         
