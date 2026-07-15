@@ -25,10 +25,13 @@ android {
 
     kotlin {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.config.JvmTarget.JVM_17)
-        }
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
     }
 
+kotlinOptions {
+    jvmTarget = "17"
+}
     buildTypes {
         release {
             // Note : Pensez à remplacer par une vraie clé de production (.jks) avant de publier sur le Play Store !
