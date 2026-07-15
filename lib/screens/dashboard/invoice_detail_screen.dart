@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/mail_service.dart';
 import '../../services/printing_service.dart';
 import '../../models/invoice.dart';
 import '../../models/client.dart';
@@ -201,7 +202,7 @@ Future<void> _sendInvoiceByEmail() async {
     );
 
     // TODO: Uploader le PDF quelque part (Firebase Storage, etc.) pour obtenir un lien
-    final pdfLink = '#'; // Remplacer par le vrai lien
+    const pdfLink = '#'; // Remplacer par le vrai lien
 
     final htmlBody = MailService.getInvoiceTemplate(
       _client!.name,

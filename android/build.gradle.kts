@@ -9,13 +9,14 @@ allprojects {
     }
 }
 
-// Configuration propre du dossier de build pour Flutter
-val newBuildDir = rootProject.layout.buildDirectory.dir("../../build")
+// Récupération propre du chemin absolu du dossier de build principal
+val newBuildDir = rootProject.layout.projectDirectory.dir("../build")
 rootProject.layout.buildDirectory.set(newBuildDir)
 
+// Configuration propre des sous-projets sans récursion
 subprojects {
-    val newSubprojectBuildDir = newBuildDir.map { it.dir(project.name) }
-    project.layout.buildDirectory.set(newSubprojectBuildDir)
+    val subprojectBuildDir = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.set(subprojectBuildDir)
 }
 
 subprojects {

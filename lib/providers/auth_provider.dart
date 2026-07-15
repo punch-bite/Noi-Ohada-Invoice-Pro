@@ -6,6 +6,7 @@ import 'package:noi_ohada_invoice_pro/services/security_service.dart';
 import 'package:noi_ohada_invoice_pro/services/two_factor_service.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
+import '../services/mail_service.dart';
 
 class AppAuthProvider extends ChangeNotifier {
   final AuthService _authService;
@@ -243,7 +244,7 @@ class AppAuthProvider extends ChangeNotifier {
         details: 'Demande de réinitialisation de mot de passe pour $email',
       );
       if (_user != null) {
-        final welcomeHtml = MailService.getResetPasswordTemplate(_user!.displayName);
+        final welcomeHtml = MailService.getResetPasswordTemplate(_user!.displayName, "");
         await MailService.sendHtmlEmail(
           to: email,
           subject: 'Bienvenue sur NOI OHADA Invoice Pro',
