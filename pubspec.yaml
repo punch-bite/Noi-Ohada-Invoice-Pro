@@ -33,7 +33,6 @@ dependencies:
   flutter_slidable: ^3.0.1
   intl: 0.17.0
   image_picker: ^1.0.7
-  fluttertoast: ^8.2.4
   shimmer: ^3.0.0
   
   # Firebase
