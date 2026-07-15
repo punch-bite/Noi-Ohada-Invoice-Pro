@@ -3,8 +3,8 @@
     // "cmake.sourceDirectory": "G:/futter_projets/noi_ohada_invoice_pro/windows/flutter",
     "java.import.gradle.wrapper.enabled": false,
     "java.import.gradle.home": "C:/gradle-9.6.1/", // Adaptez votre chemin
-    "java.import.gradle.version": "",
+    "java.import.gradle.version": "9.6.1",
     "java.import.gradle.offline.enabled": true,
     "java.compile.nullAnalysis.mode": "automatic",
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "automatic"
 }
