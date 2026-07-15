@@ -1,20 +1,24 @@
-# codemagic.yaml
 workflows:
   release:
     name: Release Build
     environment:
       vars:
-        FLUTTER_VERSION: 3.41.9  # ou votre version
+        FLUTTER_VERSION: 3.41.9  # Ajustez si nécessaire
       flutter: stable
     scripts:
+      - name: Générer local.properties pour Gradle
+        script: |
+          echo "Génération de local.properties..."
+          echo "flutter.sdk=$FCI_FLUTTER_HOME" > android/local.properties
+          
+      - name: Nettoyer le projet
+        script: flutter clean
+        
       - name: Installer les dépendances
         script: flutter pub get
       
       - name: Générer les fichiers de build
         script: flutter pub run build_runner build --delete-conflicting-outputs
-      
-      - name: Nettoyer le projet
-        script: flutter clean
       
       - name: Builder l'APK Release
         script: flutter build apk --release --split-per-abi
