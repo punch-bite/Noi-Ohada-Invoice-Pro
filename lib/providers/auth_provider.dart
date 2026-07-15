@@ -242,6 +242,14 @@ class AppAuthProvider extends ChangeNotifier {
         'reset_password',
         details: 'Demande de réinitialisation de mot de passe pour $email',
       );
+      if (_user != null) {
+        final welcomeHtml = MailService.getResetPasswordTemplate(_user!.displayName);
+        await MailService.sendHtmlEmail(
+          to: email,
+          subject: 'Bienvenue sur NOI OHADA Invoice Pro',
+          htmlBody: welcomeHtml,
+        );
+      }
       return true;
     } catch (e) {
       _error = e.toString();
