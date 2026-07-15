@@ -20,9 +20,6 @@ workflows:
           
       - name: Nettoyer le projet
         script: flutter clean
-
-      - name: Nettoyer le projet
-        script: flutter clean
         
       - name: Installer les dépendances
         script: flutter pub get

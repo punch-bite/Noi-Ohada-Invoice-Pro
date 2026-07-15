@@ -1,17 +1,30 @@
-// lib/services/mail_service.dart
 import 'dart:async';
 import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
 import 'package:mailer/smtp_server/gmail.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MailService {
-  static String get _host => dotenv.env['SMTP_HOST'] ?? 'smtp.gmail.com';
-  static int get _port => int.tryParse(dotenv.env['SMTP_PORT'] ?? '587') ?? 587;
-  static String get _username => dotenv.env['SMTP_USERNAME'] ?? '';
-  static String get _password => dotenv.env['SMTP_PASSWORD'] ?? '';
-  static String get _fromEmail => dotenv.env['SMTP_FROM_EMAIL'] ?? '';
-  static String get _fromName => dotenv.env['SMTP_FROM_NAME'] ?? 'OHADA Invoice Pro';
-  static bool get _secure => dotenv.env['SMTP_SECURE']?.toLowerCase() == 'true';
+  // Getters sécurisés avec valeurs de repli (fallback) si .env n'est pas encore chargé
+  static String get _host => _getSafeEnv('SMTP_HOST', 'smtp.gmail.com');
+  static int get _port => int.tryParse(_getSafeEnv('SMTP_PORT', '587')) ?? 587;
+  static String get _username => _getSafeEnv('SMTP_USERNAME', '');
+  static String get _password => _getSafeEnv('SMTP_PASSWORD', '');
+  static String get _fromEmail => _getSafeEnv('SMTP_FROM_EMAIL', '');
+  static String get _fromName => _getSafeEnv('SMTP_FROM_NAME', 'OHADA Invoice Pro');
+  static bool get _secure => _getSafeEnv('SMTP_SECURE', 'false').toLowerCase() == 'true';
+
+  /// Récupère une variable d'environnement de manière sécurisée sans bloquer le build
+  static String _getSafeEnv(String key, String defaultValue) {
+    try {
+      if (dotenv.isInitialized) {
+        return dotenv.env[key] ?? defaultValue;
+      }
+    } catch (_) {
+      // Évite de faire planter le compilateur ou le build si dotenv n'est pas encore prêt
+    }
+    return defaultValue;
+  }
 
   static bool get isConfigured =>
       _username.isNotEmpty && _password.isNotEmpty && _fromEmail.isNotEmpty;
@@ -38,21 +51,30 @@ class MailService {
     String? bcc,
     bool isHtml = false,
   }) async {
+    // S'assurer que le .env est bien chargé avant l'envoi
+    if (!dotenv.isInitialized) {
+      try {
+        await dotenv.load();
+      } catch (e) {
+        print('⚠️ Impossible de charger le fichier .env lors de l\'envoi du mail: $e');
+      }
+    }
+
     if (!isConfigured) {
-      print('⚠️ MailService non configuré');
+      print('⚠️ MailService non configuré. Veuillez vérifier vos variables d\'environnement.');
       return false;
     }
 
     try {
       final message = Message()
         ..from = Address(_fromEmail, _fromName)
-        ..recipients.add(to)
+        ..recipients.add(Address(to.trim()))
         ..subject = subject
         ..html = isHtml ? body : null
         ..text = isHtml ? null : body;
 
-      if (cc != null) message.cc.add(cc);
-      if (bcc != null) message.bcc.add(bcc);
+      if (cc != null) message.ccRecipients.add(cc);
+      if (bcc != null) message.bccRecipients.add(bcc);
 
       final server = _getSmtpServer();
       final sendReport = await send(message, server);
@@ -107,7 +129,7 @@ class MailService {
     </div>
     <div class="content">
       <h2>Bonjour $name,</h2>
-      <p>Nous sommes ravis de vous accueillir sur OHADA Invoice Pro, la solution de facturation conforme aux normes OHADA et SYSCOHADA.</p>
+      <p>Nous sommes ravis de vous accueillir sur Noi OHADA Invoice Pro, la solution de facturation conforme aux normes OHADA et SYSCOHADA.</p>
       <p>Voici ce que vous pouvez faire dès maintenant :</p>
       <ul>
         <li>Créer vos premières factures et devis</li>
@@ -122,7 +144,7 @@ class MailService {
       <p>Cordialement,<br>L'équipe OHADA Invoice Pro</p>
     </div>
     <div class="footer">
-      &copy; 2025 OHADA Invoice Pro - Tous droits réservés
+      &copy; 2026 OHADA Invoice Pro - Tous droits réservés
     </div>
   </div>
 </body>
@@ -162,7 +184,7 @@ class MailService {
       <p>Cordialement,<br>L'équipe OHADA Invoice Pro</p>
     </div>
     <div class="footer">
-      &copy; 2025 OHADA Invoice Pro - Tous droits réservés
+      &copy; 2026 OHADA Invoice Pro - Tous droits réservés
     </div>
   </div>
 </body>
@@ -201,7 +223,7 @@ class MailService {
       <p>Cordialement,<br>L'équipe OHADA Invoice Pro</p>
     </div>
     <div class="footer">
-      &copy; 2025 OHADA Invoice Pro - Tous droits réservés
+      &copy; 2026 OHADA Invoice Pro - Tous droits réservés
     </div>
   </div>
 </body>
@@ -245,7 +267,7 @@ class MailService {
       <p>Cordialement,<br>L'équipe OHADA Invoice Pro</p>
     </div>
     <div class="footer">
-      &copy; 2025 OHADA Invoice Pro - Tous droits réservés
+      &copy; 2026 OHADA Invoice Pro - Tous droits réservés
     </div>
   </div>
 </body>
