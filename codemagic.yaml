@@ -22,7 +22,10 @@ workflows:
         script: flutter clean
         
       - name: Installer les dépendances
-        script: flutter pub get
+        script: |
+           flutter pub pub cache clean --force # Nettoie le cache de Codemagic
+           flutter pub upgrade --major-versions # Force l'alignement sur les dernières versions compatibles
+           flutter pub get
       
       - name: Générer les fichiers de build
         script: flutter pub run build_runner build --delete-conflicting-outputs
