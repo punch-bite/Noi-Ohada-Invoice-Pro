@@ -22,12 +22,13 @@ class AdminService {
   //  UTILISATEURS
   // ============================================================
 
+  // lib/services/admin_service.dart
   Future<List<AppUser>> getAllUsers() async {
     try {
       final snapshot = await _firestore.collection('users').get();
       return snapshot.docs.map((doc) => AppUser.fromMap(doc.data())).toList();
     } catch (e) {
-      debugPrint("❌ Erreur getAllUsers: $e");
+      debugPrint('⚠️ Erreur getAllUsers (ignorée): $e');
       return [];
     }
   }

@@ -49,6 +49,7 @@ dependencies:
   image_picker: ^1.1.2
   flutter_dotenv: ^6.0.1
   local_auth: 3.0.2
+  contacts_service: ^0.6.3
 
   # --- UI ---
   fluttertoast: ^8.2.8

@@ -1,7 +1,11 @@
 // lib/screens/dashboard/create_client_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:contacts_service/contacts_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../providers/theme_provider.dart';
@@ -25,6 +29,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   final _emailController = TextEditingController();
 
   bool _isSaving = false;
+  bool _isLoadingContacts = false;
 
   @override
   void initState() {
@@ -74,7 +79,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         await _db.addClient(client);
       }
       
-      if (!mounted) return; // ✅ Empêche les crashs asynchrones si l'écran est démonté
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -94,11 +99,180 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     }
   }
 
+  // ===== IMPORTER DEPUIS LE RÉPERTOIRE =====
+
+  Future<void> _importFromContacts() async {
+    // Vérifier les permissions
+    final status = await Permission.contacts.request();
+    if (status != PermissionStatus.granted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permission d\'accès aux contacts refusée'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingContacts = true);
+
+    try {
+      final contacts = await ContactsService.getContacts(
+        withThumbnails: false,
+      );
+
+      if (contacts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Aucun contact trouvé'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        setState(() => _isLoadingContacts = false);
+        return;
+      }
+
+      // Afficher la liste des contacts dans un dialogue
+      _showContactsDialog(contacts);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors du chargement des contacts: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _isLoadingContacts = false);
+    }
+  }
+
+  void _showContactsDialog(List<Contact> contacts) {
+    final theme = context.read<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Sélectionner un contact',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: contacts.isEmpty
+              ? Center(
+                  child: Text(
+                    'Aucun contact disponible',
+                    style: TextStyle(color: subTextColor),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: contacts.length,
+                  itemBuilder: (context, index) {
+                    final contact = contacts[index];
+                    final displayName = contact.displayName ?? 'Sans nom';
+                    final phones = contact.phones ?? [];
+                    final emails = contact.emails ?? [];
+                    
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: theme.primaryColor.withOpacity(0.1),
+                        child: Text(
+                          displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                          style: TextStyle(
+                            color: theme.primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        displayName,
+                        style: TextStyle(color: textColor),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (phones.isNotEmpty)
+                            Text(
+                              phones.first.value ?? '',
+                              style: TextStyle(color: subTextColor, fontSize: 12),
+                            ),
+                          if (emails.isNotEmpty)
+                            Text(
+                              emails.first.value ?? '',
+                              style: TextStyle(color: subTextColor, fontSize: 12),
+                            ),
+                        ],
+                      ),
+                      onTap: () {
+                        _fillClientFromContact(contact);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annuler',
+              style: TextStyle(color: subTextColor),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    setState(() => _isLoadingContacts = false);
+  }
+
+  void _fillClientFromContact(Contact contact) {
+    final displayName = contact.displayName ?? '';
+    final phones = contact.phones ?? [];
+    final emails = contact.emails ?? [];
+    final addresses = contact.postalAddresses ?? [];
+
+    setState(() {
+      if (displayName.isNotEmpty) {
+        _nameController.text = displayName;
+      }
+      if (phones.isNotEmpty && phones.first.value != null) {
+        _phoneController.text = phones.first.value!;
+      }
+      if (emails.isNotEmpty && emails.first.value != null) {
+        _emailController.text = emails.first.value!;
+      }
+      if (addresses.isNotEmpty && addresses.first.label != null) {
+        _addressController.text = addresses.first.label ?? '';
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Données importées depuis le contact'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
+    final subTextColor = themeProvider.subTextColor;
     final bgColor = themeProvider.backgroundColor;
     final primaryColor = themeProvider.primaryColor;
     final isEditing = widget.client != null;
@@ -117,22 +291,41 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          _isSaving
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : TextButton(
-                  onPressed: _saveClient,
-                  child: Text(
-                    'Enregistrer',
-                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-                  ),
-                ),
+          if (!isEditing)
+            IconButton(
+              icon: Icon(
+                Icons.contact_phone_outlined,
+                color: primaryColor,
+              ),
+              onPressed: _isLoadingContacts ? null : _importFromContacts,
+              tooltip: 'Importer depuis les contacts',
+            ),
+          if (_isLoadingContacts)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else if (_isSaving)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            TextButton(
+              onPressed: _saveClient,
+              child: Text(
+                'Enregistrer',
+                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+              ),
+            ),
         ],
       ),
       body: Padding(
@@ -142,6 +335,38 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
+                // Icône d'import (raccourci visuel)
+                if (!isEditing)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: primaryColor.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.contact_phone,
+                          color: primaryColor,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Appuyez sur l\'icône 📇 en haut à droite pour importer depuis vos contacts',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: subTextColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 _buildField(
                   controller: _nameController,
                   label: 'Nom complet *',

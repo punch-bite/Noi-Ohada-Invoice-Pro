@@ -3,6 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<key>NSContactsUsageDescription</key>
+    <string>Pour importer vos contacts en tant que clients</string>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>

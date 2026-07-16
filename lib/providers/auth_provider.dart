@@ -17,8 +17,8 @@ class AppAuthProvider extends ChangeNotifier {
   AppUser? _user;
   bool _isLoading = false;
   String? _error;
-  bool _needsTwoFactor = false; // Indique si le 2FA est requis
-  AppUser? _pendingUser; // Utilisateur temporaire en attente de vérification 2FA
+  bool _needsTwoFactor = false;
+  AppUser? _pendingUser;
   UserCredential? _pendingCredential;
 
   AppUser? get user => _user;
@@ -35,7 +35,6 @@ class AppAuthProvider extends ChangeNotifier {
   void _init() {
     _authStateSubscription = _authService.authStateChanges.listen((firebaseUser) async {
       if (firebaseUser != null) {
-        // Sécurité : Ne pas charger automatiquement le profil si une procédure 2FA est en cours
         if (!_needsTwoFactor) {
           await _loadUserProfile(firebaseUser.uid);
         }
@@ -44,14 +43,13 @@ class AppAuthProvider extends ChangeNotifier {
         _needsTwoFactor = false;
         _pendingUser = null;
         _pendingCredential = null;
-        SecurityService.clearUserContext(); // Purge du contexte de sécurité à la fermeture
+        SecurityService.clearUserContext();
         notifyListeners();
-        notifyRouter(); // ✅ Notifie GoRouter du changement d'état d'accès
+        notifyRouter();
       }
     });
   }
 
-  /// Force GoRouter à réévaluer les droits d'accès des pages (redirections automatiques)
   void notifyRouter() {
     // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     (AppRouter.authChangeNotifier as ValueNotifier).notifyListeners();
@@ -65,7 +63,6 @@ class AppAuthProvider extends ChangeNotifier {
       _user = await _authService.getUserProfile(userId);
       _error = null;
       if (_user != null) {
-        // ✅ On synchronise le contexte pour les logs sécurisés
         SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
       }
     } catch (e) {
@@ -73,7 +70,7 @@ class AppAuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-      notifyRouter(); // ✅ On force la redirection automatique après chargement du profil
+      notifyRouter();
     }
   }
 
@@ -98,15 +95,13 @@ class AppAuthProvider extends ChangeNotifier {
       );
       
       if (_user != null) {
-        // Synchroniser le contexte de sécurité
         SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
       }
 
       _isLoading = false;
       notifyListeners();
-      notifyRouter(); // ✅ Redirection automatique vers le dashboard
+      notifyRouter();
 
-      // Log d'inscription
       await LoggerService.info(
         'register',
         details: 'Nouvel utilisateur inscrit: ${_user?.email}',
@@ -140,33 +135,28 @@ class AppAuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Connexion avec limitation de tentative intégrée dans AuthService
       final appUser = await _authService.signInWithEmailPassword(
         email: email,
         password: password,
       );
 
-      // 2. Vérifier si le 2FA est activé pour cet utilisateur
       final is2FAEnabled = await SecurityService.isTwoFactorEnabled();
 
       if (is2FAEnabled) {
-        // Stocker l'utilisateur en attente
         _pendingUser = appUser;
         _needsTwoFactor = true;
         _isLoading = false;
         notifyListeners();
-        return true; // Connexion initiée, l'UI affichera l'écran 2FA (pas de redirection automatique encore)
+        return true;
       }
 
-      // 3. Pas de 2FA : connexion directe
       _user = appUser;
       SecurityService.setUserContext(userId: appUser.id, userEmail: appUser.email);
       
       _isLoading = false;
       notifyListeners();
-      notifyRouter(); // ✅ Déclenche la transition vers le Dashboard
+      notifyRouter();
 
-      // Log de connexion
       await LoggerService.info(
         'login',
         details: 'Utilisateur connecté: ${appUser.email}',
@@ -179,7 +169,6 @@ class AppAuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
 
-      // Log d'échec de connexion
       await LoggerService.warning(
         'login_failed',
         details: 'Tentative de connexion échouée pour $email: $e',
@@ -188,7 +177,6 @@ class AppAuthProvider extends ChangeNotifier {
     }
   }
 
-  // Vérification du code 2FA après saisie de l'utilisateur
   Future<bool> verifyTwoFactorCode(String code) async {
     if (_pendingUser == null) {
       _error = 'Aucune session en attente d\'authentification';
@@ -200,7 +188,6 @@ class AppAuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Vérification asynchrone du code
       final isValid = await TwoFactorService.verifyCode(_pendingUser!.id, code);
       if (!isValid) {
         _error = 'Code de sécurité invalide';
@@ -209,7 +196,6 @@ class AppAuthProvider extends ChangeNotifier {
         return false;
       }
 
-      // Code valide : Finalisation de la session utilisateur
       _user = _pendingUser;
       SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
 
@@ -220,9 +206,8 @@ class AppAuthProvider extends ChangeNotifier {
       _isLoading = false;
       
       notifyListeners();
-      notifyRouter(); // ✅ Redirection automatique vers le Dashboard
+      notifyRouter();
 
-      // Log de connexion réussie avec 2FA
       await LoggerService.info(
         'login_2fa_success',
         details: 'Authentification 2FA réussie pour ${_user?.email}',
@@ -238,14 +223,13 @@ class AppAuthProvider extends ChangeNotifier {
     }
   }
 
-  // Annuler la tentative de connexion 2FA
   void cancelTwoFactorLogin() async {
     _pendingUser = null;
     _pendingCredential = null;
     _needsTwoFactor = false;
     _isLoading = false;
     SecurityService.clearUserContext();
-    await _authService.signOut(); // Déconnecte la session Firebase incomplète
+    await _authService.signOut();
     notifyListeners();
     notifyRouter();
   }
@@ -271,7 +255,7 @@ class AppAuthProvider extends ChangeNotifier {
     SecurityService.clearUserContext();
     
     notifyListeners();
-    notifyRouter(); // ✅ Redirection vers la Landing/Login forcée
+    notifyRouter();
   }
 
   Future<bool> resetPassword(String email) async {
@@ -283,10 +267,10 @@ class AppAuthProvider extends ChangeNotifier {
       await _authService.resetPassword(email);
       await LoggerService.info(
         'reset_password',
-        details: 'Demande de réinitialisation de mot de passe pour $email', targetType: '',
+        details: 'Demande de réinitialisation de mot de passe pour $email',
+        targetType: '',
       );
 
-      // On tente de récupérer le profil pour personnaliser l'e-mail (optionnel)
       String targetName = "Utilisateur";
       if (_user != null) {
         targetName = _user!.displayName;

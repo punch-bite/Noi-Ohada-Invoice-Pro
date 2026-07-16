@@ -18,7 +18,7 @@ class SettingsScreen extends StatelessWidget {
     final subscriptionProvider = context.watch<SubscriptionProvider>();
     final user = authProvider.user;
 
-    // 🔒 Sécurisation maximale des couleurs
+    // 🔒 Sécurisation des couleurs
     final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor ?? Colors.black;
     final subTextColor = themeProvider.subTextColor ?? Colors.grey;
@@ -230,7 +230,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // ===== PROFIL TILE (sécurisé) =====
+  // ===== PROFIL TILE (SÉCURISÉ) =====
   Widget _buildProfileTile(
     BuildContext context,
     AppUser? user,
@@ -240,12 +240,14 @@ class SettingsScreen extends StatelessWidget {
     Color cardColor,
     bool isDark,
   ) {
+    // ✅ VÉRIFICATION CRUCIALE : si user est null, on ne construit rien
     if (user == null) {
       return const SizedBox.shrink();
     }
 
-    final String displayName = user.displayName ?? 'Utilisateur';
-    final String email = user.email ?? 'Compte non configuré';
+    // ✅ Utilisation des getters sécurisés du modèle AppUser
+    final String displayName = user.displayNameOrDefault;
+    final String email = user.emailOrDefault;
     final String initial = displayName.trim().isNotEmpty
         ? displayName.trim()[0].toUpperCase()
         : 'U';
@@ -563,7 +565,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// ===== WIDGETS INTERNES (sécurisés) =====
+// ===== WIDGETS INTERNES (SÉCURISÉS) =====
 
 class _SettingsTile extends StatelessWidget {
   final IconData icon;

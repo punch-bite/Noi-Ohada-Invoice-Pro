@@ -3,10 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-part 'user.g.dart'; // Généré par Hive
+part 'user.g.dart'; // Généré par Hive et json_serializable
 
 @JsonSerializable()
-@HiveType(typeId: 15) // Attribué à 9 pour suivre notre registre de modèles (Supplier: 8)
+@HiveType(typeId: 15) // Attribué à 15 pour suivre notre registre de modèles
 class AppUser {
   @HiveField(0)
   final String id;
@@ -95,6 +95,12 @@ class AppUser {
     );
   }
 
+  // ===== JSON (pour les APIs) =====
+
+  Map<String, dynamic> toJson() => _$AppUserToJson(this);
+
+  factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
+
   // ===== CLONAGE (copyWith) =====
 
   AppUser copyWith({
@@ -130,17 +136,25 @@ class AppUser {
   bool get isAdmin => roles.contains('admin');
   bool get hasActiveSubscription => subscriptionId != null && subscriptionId!.isNotEmpty;
 
+  /// Retourne le nom d'affichage ou 'Utilisateur' par défaut
+  String get displayNameOrDefault => displayName.isNotEmpty ? displayName : 'Utilisateur';
+
+  /// Retourne l'email ou 'Non renseigné' par défaut
+  String get emailOrDefault => email.isNotEmpty ? email : 'Non renseigné';
+
+  /// Retourne le téléphone ou 'Non renseigné' par défaut
+  String get phoneOrDefault => phone?.isNotEmpty == true ? phone! : 'Non renseigné';
+
+  /// Retourne le nom de l'entreprise ou 'Non renseignée' par défaut
+  String get companyNameOrDefault => companyName?.isNotEmpty == true ? companyName! : 'Non renseignée';
+
   /// Fonction d'aide pour parser les dates de manière ultra-robuste (Firestore, Hive et JSON)
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    } else if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
-    } else if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    } else if (value is DateTime) {
-      return value;
-    }
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is DateTime) return value;
     return DateTime.now();
   }
 }

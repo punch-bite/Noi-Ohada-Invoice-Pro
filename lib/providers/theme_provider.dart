@@ -4,6 +4,7 @@ import '../services/theme_service.dart';
 
 class ThemeProvider extends ChangeNotifier {
   AppTheme _currentTheme = AppTheme.system;
+  bool _isInitialized = false;
 
   ThemeProvider() {
     _loadTheme();
@@ -21,6 +22,7 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> _loadTheme() async {
     _currentTheme = ThemeService.getThemeMode();
+    _isInitialized = true;
     notifyListeners();
   }
 
@@ -50,7 +52,7 @@ class ThemeProvider extends ChangeNotifier {
     setTheme(AppTheme.system);
   }
 
-  // ===== COULEURS DYNAMIQUES =====
+  // ===== COULEURS DYNAMIQUES (avec fallback explicite pour éviter null sur le Web) =====
   Color get primaryColor => isDarkMode 
       ? const Color(0xFF3949AB) 
       : const Color(0xFF1A237E);
@@ -72,20 +74,20 @@ class ThemeProvider extends ChangeNotifier {
       : const Color(0xFF1A1A1A);
   
   Color get subTextColor => isDarkMode 
-      ? Colors.grey[400]! 
-      : Colors.grey[600]!;
+      ? (Colors.grey[400] ?? Colors.grey) 
+      : (Colors.grey[600] ?? Colors.grey);
   
   Color get dividerColor => isDarkMode 
-      ? Colors.grey[800]! 
-      : Colors.grey[200]!;
+      ? (Colors.grey[800] ?? Colors.grey) 
+      : (Colors.grey[200] ?? Colors.grey);
   
   Color get inputFillColor => isDarkMode 
       ? const Color(0xFF2C2C2C) 
       : Colors.white;
   
   Color get inputBorderColor => isDarkMode 
-      ? Colors.grey[700]! 
-      : Colors.grey[200]!;
+      ? (Colors.grey[700] ?? Colors.grey) 
+      : (Colors.grey[200] ?? Colors.grey);
   
   Color get inputFocusedBorderColor => isDarkMode 
       ? const Color(0xFF3949AB) 
