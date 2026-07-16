@@ -1,31 +1,57 @@
+// lib/models/notification.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
+
+part 'notification.g.dart'; // Généré par Hive
 
 enum NotificationType {
   invoice_created,
   invoice_paid,
   invoice_overdue,
-  invoice_long_overdue,      // 🔥 NOUVEAU : impayé depuis longtemps
+  invoice_long_overdue,      // Impayé depuis longtemps
   invoice_cancelled,
   client_added,
   payment_received,
   subscription_expired,
+  subscription_activated,    // Activé ou renouvelé
   system_update,
-  reminder,                  // 🔥 Rappel normal
-  reminder_auto,             // 🔥 Rappel automatique (système)
-  low_stock,                 // 🔥 NOUVEAU : stock faible
-  stock_out, subscription_activated,                 // 🔥 NOUVEAU : rupture de stock
+  reminder,                  // Rappel manuel
+  reminder_auto,             // Rappel automatique système
+  low_stock,                 // Stock faible
+  stock_out,                 // Rupture de stock
 }
 
+@JsonSerializable()
+@HiveType(typeId: 4) // Ajuste le typeId selon ton registre Hive
 class AppNotification {
+  @HiveField(0)
   final String id;
+  
+  @HiveField(1)
   final String title;
+  
+  @HiveField(2)
   final String body;
-  final String type;
+  
+  @HiveField(3)
+  final String type; // Stocké sous forme de String simple (ex: 'invoice_created')
+  
+  @HiveField(4)
   final DateTime timestamp;
+  
+  @HiveField(5)
   final bool isRead;
+  
+  @HiveField(6)
   final String? referenceId;
+  
+  @HiveField(7)
   final String? referenceType;
+  
+  @HiveField(8)
   final Map<String, dynamic>? data;
 
   AppNotification({
@@ -38,12 +64,13 @@ class AppNotification {
     this.referenceId,
     this.referenceType,
     this.data,
-  }) : id = id ?? const Uuid().v4(),
-       timestamp = timestamp ?? DateTime.now();
+  })  : id = id ?? const Uuid().v4(),
+        timestamp = timestamp ?? DateTime.now();
 
+  /// Parse la chaîne `type` de manière sécurisée vers l'enum [NotificationType]
   NotificationType get notificationType {
     return NotificationType.values.firstWhere(
-      (e) => e.toString() == type,
+      (e) => e.name == type || e.toString() == type,
       orElse: () => NotificationType.system_update,
     );
   }
@@ -54,7 +81,7 @@ class AppNotification {
       'title': title,
       'body': body,
       'type': type,
-      'timestamp': timestamp.toIso8601String(),
+      'timestamp': Timestamp.fromDate(timestamp),
       'isRead': isRead,
       'referenceId': referenceId,
       'referenceType': referenceType,
@@ -62,17 +89,17 @@ class AppNotification {
     };
   }
 
-  factory AppNotification.fromMap(Map<String, dynamic> map) {
+  factory AppNotification.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return AppNotification(
-      id: map['id'] ?? const Uuid().v4(),
+      id: documentId ?? map['id'] ?? const Uuid().v4(),
       title: map['title'] ?? '',
       body: map['body'] ?? '',
-      type: map['type'] ?? NotificationType.system_update.toString(),
-      timestamp: DateTime.tryParse(map['timestamp'] ?? '') ?? DateTime.now(),
+      type: map['type'] ?? NotificationType.system_update.name,
+      timestamp: _parseDateTime(map['timestamp']),
       isRead: map['isRead'] ?? false,
       referenceId: map['referenceId'],
       referenceType: map['referenceType'],
-      data: map['data'],
+      data: map['data'] != null ? Map<String, dynamic>.from(map['data']) : null,
     );
   }
 
@@ -80,6 +107,9 @@ class AppNotification {
     String? title,
     String? body,
     bool? isRead,
+    String? referenceId,
+    String? referenceType,
+    Map<String, dynamic>? data,
   }) {
     return AppNotification(
       id: id,
@@ -88,13 +118,14 @@ class AppNotification {
       type: type,
       timestamp: timestamp,
       isRead: isRead ?? this.isRead,
-      referenceId: referenceId,
-      referenceType: referenceType,
-      data: data,
+      referenceId: referenceId ?? this.referenceId,
+      referenceType: referenceType ?? this.referenceType,
+      data: data ?? this.data,
     );
   }
 
   // ===== ICÔNES ET COULEURS =====
+
   IconData get icon {
     switch (notificationType) {
       case NotificationType.invoice_created:
@@ -112,6 +143,8 @@ class AppNotification {
         return Icons.payment;
       case NotificationType.subscription_expired:
         return Icons.timer_off;
+      case NotificationType.subscription_activated:
+        return Icons.card_membership;
       case NotificationType.system_update:
         return Icons.system_update;
       case NotificationType.reminder:
@@ -143,6 +176,8 @@ class AppNotification {
         return Colors.orange;
       case NotificationType.subscription_expired:
         return Colors.red;
+      case NotificationType.subscription_activated:
+        return Colors.teal;
       case NotificationType.system_update:
         return Colors.indigo;
       case NotificationType.reminder:
@@ -164,7 +199,7 @@ class AppNotification {
     } else if (difference.inDays > 30) {
       return 'il y a ${(difference.inDays / 30).floor()} mois';
     } else if (difference.inDays > 7) {
-      return 'il y a ${(difference.inDays / 7).floor()} semaines';
+      return 'il y a ${(difference.inDays / 7).floor()} semaine${(difference.inDays / 7).floor() > 1 ? 's' : ''}';
     } else if (difference.inDays > 0) {
       return 'il y a ${difference.inDays} jour${difference.inDays > 1 ? 's' : ''}';
     } else if (difference.inHours > 0) {
@@ -176,14 +211,13 @@ class AppNotification {
     }
   }
 
-  // ===== MÉTHODES DE CRÉATION =====
+  // ===== MÉTHODES DE CRÉATION CRISTALLINES =====
 
-  // --- Factures ---
   static AppNotification createInvoiceCreated(String invoiceNumber) {
     return AppNotification(
       title: 'Nouvelle facture créée',
       body: 'La facture $invoiceNumber a été créée avec succès.',
-      type: NotificationType.invoice_created.toString(),
+      type: NotificationType.invoice_created.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
     );
@@ -193,7 +227,7 @@ class AppNotification {
     return AppNotification(
       title: 'Paiement reçu',
       body: 'La facture $invoiceNumber a été payée.',
-      type: NotificationType.invoice_paid.toString(),
+      type: NotificationType.invoice_paid.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
     );
@@ -203,70 +237,83 @@ class AppNotification {
     return AppNotification(
       title: 'Facture en retard',
       body: 'La facture $invoiceNumber est en retard de paiement.',
-      type: NotificationType.invoice_overdue.toString(),
+      type: NotificationType.invoice_overdue.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
     );
   }
 
-  // 🔥 NOUVEAU : impayé depuis longtemps (ex : > 30 jours)
   static AppNotification createInvoiceLongOverdue(String invoiceNumber, int days) {
     return AppNotification(
       title: '⚠️ Facture très en retard',
       body: 'La facture $invoiceNumber est impayée depuis $days jours. Une action est nécessaire.',
-      type: NotificationType.invoice_long_overdue.toString(),
+      type: NotificationType.invoice_long_overdue.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
       data: {'days': days},
     );
   }
 
-  // --- Clients ---
+  static AppNotification createInvoiceCancelled(String invoiceNumber) {
+    return AppNotification(
+      title: 'Facture annulée',
+      body: 'La facture $invoiceNumber a été annulée.',
+      type: NotificationType.invoice_cancelled.name,
+      referenceId: invoiceNumber,
+      referenceType: 'invoice',
+    );
+  }
+
   static AppNotification createClientAdded(String clientName) {
     return AppNotification(
       title: 'Nouveau client',
-      body: 'Le client $clientName a été ajouté.',
-      type: NotificationType.client_added.toString(),
+      body: 'Le client $clientName a été ajouté avec succès.',
+      type: NotificationType.client_added.name,
       referenceId: clientName,
       referenceType: 'client',
     );
   }
 
-  // --- Paiements ---
-  static AppNotification createPaymentReceived(double amount) {
+  static AppNotification createPaymentReceived(double amount, [String currency = 'FCFA']) {
+    final amountStr = amount % 1 == 0 ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
     return AppNotification(
       title: 'Paiement reçu',
-      body: 'Un paiement de ${amount.toStringAsFixed(0)} FCFA a été reçu.',
-      type: NotificationType.payment_received.toString(),
-      data: {'amount': amount},
+      body: 'Un paiement de $amountStr $currency a été reçu.',
+      type: NotificationType.payment_received.name,
+      data: {'amount': amount, 'currency': currency},
     );
   }
 
-  // --- Abonnement ---
   static AppNotification createSubscriptionExpired() {
     return AppNotification(
       title: 'Abonnement expiré',
       body: 'Votre abonnement est arrivé à expiration. Renouvelez-le maintenant.',
-      type: NotificationType.subscription_expired.toString(),
+      type: NotificationType.subscription_expired.name,
     );
   }
 
-  // --- Système ---
+  static AppNotification createSubscriptionActivated(String planName) {
+    return AppNotification(
+      title: 'Abonnement activé',
+      body: 'Votre abonnement au plan $planName est désormais actif !',
+      type: NotificationType.subscription_activated.name,
+    );
+  }
+
   static AppNotification createSystemUpdate(String version) {
     return AppNotification(
       title: 'Mise à jour disponible',
       body: 'La version $version de l\'application est disponible.',
-      type: NotificationType.system_update.toString(),
+      type: NotificationType.system_update.name,
       data: {'version': version},
     );
   }
 
-  // --- Rappels ---
   static AppNotification createReminder(String message) {
     return AppNotification(
       title: '📌 Rappel',
       body: message,
-      type: NotificationType.reminder.toString(),
+      type: NotificationType.reminder.name,
     );
   }
 
@@ -274,19 +321,17 @@ class AppNotification {
     return AppNotification(
       title: '🤖 Rappel automatique',
       body: message,
-      type: NotificationType.reminder_auto.toString(),
+      type: NotificationType.reminder_auto.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
     );
   }
 
-  // ===== 🔥 NOUVEAU : GESTION DES STOCKS =====
-
   static AppNotification createLowStock(String productName, int quantity, int minStock) {
     return AppNotification(
       title: '⚠️ Stock faible',
       body: 'Le produit "$productName" n\'a plus que $quantity unités (seuil : $minStock).',
-      type: NotificationType.low_stock.toString(),
+      type: NotificationType.low_stock.name,
       referenceId: productName,
       referenceType: 'product',
       data: {'quantity': quantity, 'minStock': minStock},
@@ -297,9 +342,23 @@ class AppNotification {
     return AppNotification(
       title: '🚨 Rupture de stock',
       body: 'Le produit "$productName" est en rupture de stock !',
-      type: NotificationType.stock_out.toString(),
+      type: NotificationType.stock_out.name,
       referenceId: productName,
       referenceType: 'product',
     );
+  }
+
+  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
   }
 }

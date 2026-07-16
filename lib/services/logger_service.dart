@@ -1,13 +1,8 @@
-// lib/services/logger_service.dart
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../services/admin_service.dart';
 
-enum LogLevel {
-  debug,
-  info,
-  warning,
-  error,
-}
+enum LogLevel { debug, info, warning, error }
 
 class LoggerService {
   static const String _logBox = 'app_logs';
@@ -16,34 +11,31 @@ class LoggerService {
   static String? _currentUserId;
   static String? _currentUserEmail;
   static bool _remoteLoggingEnabled = true;
-  static LogLevel _minLogLevel = LogLevel.debug; // Par défaut, tout est logué
+  static LogLevel _minLogLevel = LogLevel.debug;
 
   static final AdminService _adminService = AdminService();
 
-  // ===== INITIALISATION =====
-
+  // Initialisation du service
   static Future<void> init() async {
-    _box = await Hive.openBox(_logBox);
-    print('✅ LoggerService initialisé');
+    if (!Hive.isBoxOpen(_logBox)) {
+      _box = await Hive.openBox(_logBox);
+    } else {
+      _box = Hive.box(_logBox);
+    }
+    debugPrint('✅ LoggerService initialisé');
   }
 
-  // ===== CONFIGURATION =====
-
+  // Configuration contextuelle
   static void setUserContext({required String userId, required String userEmail}) {
     _currentUserId = userId;
     _currentUserEmail = userEmail;
   }
 
-  static void setMinLogLevel(LogLevel level) {
-    _minLogLevel = level;
-  }
+  static void setMinLogLevel(LogLevel level) => _minLogLevel = level;
 
-  static void enableRemoteLogging(bool enabled) {
-    _remoteLoggingEnabled = enabled;
-  }
+  static void enableRemoteLogging(bool enabled) => _remoteLoggingEnabled = enabled;
 
-  // ===== MÉTHODE PRINCIPALE DE LOG =====
-
+  // Méthode principale de log
   static Future<void> log({
     required String action,
     String? details,
@@ -52,16 +44,14 @@ class LoggerService {
     String? targetType,
     Map<String, dynamic>? extra,
   }) async {
-    // Vérifier si le niveau est suffisant
     if (_shouldSkipLog(level)) return;
 
-    final timestamp = DateTime.now();
     final logEntry = {
-      'id': timestamp.millisecondsSinceEpoch.toString(),
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'action': action,
       'details': details ?? '',
       'level': level.name,
-      'timestamp': timestamp.toIso8601String(),
+      'timestamp': DateTime.now().toIso8601String(),
       'userId': _currentUserId ?? '',
       'userEmail': _currentUserEmail ?? '',
       'targetId': targetId,
@@ -69,120 +59,67 @@ class LoggerService {
       'extra': extra ?? {},
     };
 
-    // 1. Log local
-    await _saveLocalLog(logEntry);
+    // Exécution asynchrone sans bloquer le flux principal
+    await Future.wait([
+      _saveLocalLog(logEntry),
+      if (_remoteLoggingEnabled && _currentUserId != null) _saveRemoteLog(logEntry),
+    ]);
 
-    // 2. Log distant (Firestore)
-    if (_remoteLoggingEnabled && _currentUserId != null && _currentUserEmail != null) {
-      await _saveRemoteLog(logEntry);
-    }
-
-    // 3. Affichage console en développement
-    if (LogLevel.debug == level) {
-      print('📝 [${level.name.toUpperCase()}] $action : ${details ?? ''}');
+    if (kDebugMode) {
+      debugPrint('📝 [${level.name.toUpperCase()}] $action : ${details ?? ''}');
     }
   }
 
-  // ===== LOGS LOCAUX =====
-
-  static Future<void> _saveLocalLog(Map<String, dynamic> logEntry) async {
-    try {
-      final logs = await getLocalLogs();
-      logs.insert(0, logEntry);
-      if (logs.length > 200) {
-        logs.removeRange(200, logs.length);
-      }
-      await _box?.put('logs', logs);
-    } catch (e) {
-      print('❌ Erreur sauvegarde log local: $e');
-    }
+  // Stockage local optimisé (Buffer circulaire 200 entrées)
+  static Future<void> _saveLocalLog(Map<String, dynamic> entry) async {
+    final int count = _box?.get('count', defaultValue: 0) ?? 0;
+    final int index = count % 200;
+    
+    await _box?.put('log_$index', entry);
+    await _box?.put('count', count + 1);
   }
 
+  // Récupération des logs (du plus récent au plus ancien)
   static Future<List<Map<String, dynamic>>> getLocalLogs() async {
-    final logs = _box?.get('logs', defaultValue: []) as List? ?? [];
-    return logs.cast<Map<String, dynamic>>();
+    final int count = _box?.get('count', defaultValue: 0) ?? 0;
+    final int limit = count > 200 ? 200 : count;
+    final List<Map<String, dynamic>> logs = [];
+
+    for (int i = 0; i < limit; i++) {
+      final int index = (count - 1 - i) % 200;
+      final entry = _box?.get('log_$index');
+      if (entry != null) {
+        logs.add(Map<String, dynamic>.from(entry as Map));
+      }
+    }
+    return logs;
   }
 
-  static Future<void> clearLocalLogs() async {
-    await _box?.put('logs', []);
-  }
-
-  // ===== LOGS DISTANTS =====
-
-  static Future<void> _saveRemoteLog(Map<String, dynamic> logEntry) async {
+  // Envoi vers le service distant (Admin)
+  static Future<void> _saveRemoteLog(Map<String, dynamic> log) async {
     try {
       await _adminService.logActivity(
         userId: _currentUserId!,
         userEmail: _currentUserEmail!,
-        action: logEntry['action'],
-        targetId: logEntry['targetId'],
-        targetType: logEntry['targetType'],
+        action: log['action'],
+        targetId: log['targetId'],
+        targetType: log['targetType'],
         details: {
-          'details': logEntry['details'],
-          'level': logEntry['level'],
-          'extra': logEntry['extra'],
-        },
+          'details': log['details'], 
+          'level': log['level'], 
+          'extra': log['extra']
+        }, limit: 200,
       );
     } catch (e) {
-      print('❌ Erreur sauvegarde log distant: $e');
+      debugPrint('❌ Erreur log distant: $e');
     }
   }
 
-  // ===== UTILITAIRES =====
+  static bool _shouldSkipLog(LogLevel level) => level.index < _minLogLevel.index;
 
-  static bool _shouldSkipLog(LogLevel level) {
-    const levels = LogLevel.values;
-    final minIndex = levels.indexOf(_minLogLevel);
-    final currentIndex = levels.indexOf(level);
-    return currentIndex < minIndex;
-  }
-
-  // ===== MÉTHODES RACCOURCIS =====
-
-  static Future<void> debug(String action, {String? details, String? targetId, String? targetType}) {
-    return log(action: action, details: details, level: LogLevel.debug, targetId: targetId, targetType: targetType);
-  }
-
-  static Future<void> info(String action, {String? details, String? targetId, String? targetType}) {
-    return log(action: action, details: details, level: LogLevel.info, targetId: targetId, targetType: targetType);
-  }
-
-  static Future<void> warning(String action, {String? details, String? targetId, String? targetType}) {
-    return log(action: action, details: details, level: LogLevel.warning, targetId: targetId, targetType: targetType);
-  }
-
-  static Future<void> error(String action, {String? details, String? targetId, String? targetType}) {
-    return log(action: action, details: details, level: LogLevel.error, targetId: targetId, targetType: targetType);
-  }
-
-  // ===== RÉCUPÉRATION DES LOGS FILTRÉS =====
-
-  static Future<List<Map<String, dynamic>>> getFilteredLogs({
-    String? userId,
-    String? action,
-    LogLevel? level,
-    DateTime? from,
-    DateTime? to,
-    int limit = 100,
-  }) async {
-    var logs = await getLocalLogs();
-
-    if (userId != null) {
-      logs = logs.where((l) => l['userId'] == userId).toList();
-    }
-    if (action != null) {
-      logs = logs.where((l) => l['action'] == action).toList();
-    }
-    if (level != null) {
-      logs = logs.where((l) => l['level'] == level.name).toList();
-    }
-    if (from != null) {
-      logs = logs.where((l) => DateTime.parse(l['timestamp']).isAfter(from)).toList();
-    }
-    if (to != null) {
-      logs = logs.where((l) => DateTime.parse(l['timestamp']).isBefore(to)).toList();
-    }
-
-    return logs.take(limit).toList();
-  }
+  // Méthodes raccourcies
+  static Future<void> debug(String a, {String? d, String? ti, String? tt}) => log(action: a, details: d, level: LogLevel.debug, targetId: ti, targetType: tt);
+  static Future<void> info(String a, {String? d, String? ti, String? tt, required String details, String? targetId, required String targetType}) => log(action: a, details: d, level: LogLevel.info, targetId: ti, targetType: tt);
+  static Future<void> warning(String a, {String? d, String? ti, String? tt, required String details}) => log(action: a, details: d, level: LogLevel.warning, targetId: ti, targetType: tt);
+  static Future<void> error(String a, {String? d, String? ti, String? tt, required String details}) => log(action: a, details: d, level: LogLevel.error, targetId: ti, targetType: tt);
 }

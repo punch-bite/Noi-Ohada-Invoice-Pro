@@ -1,20 +1,53 @@
 // lib/models/subscription.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 
+part 'subscription.g.dart'; // Généré par Hive
+
+@JsonSerializable()
+@HiveType(typeId: 7) // Ajout de l'annotation Hive avec un typeId dédié
 class Subscription {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String userId;
+
+  @HiveField(2)
   final String planId;
+
+  @HiveField(3)
   final DateTime startDate;
+
+  @HiveField(4)
   final DateTime endDate;
+
+  @HiveField(5)
   final String status; // active, expired, canceled, pending
-  final String paymentMethod; // stripe, paystack, orange_money
+
+  @HiveField(6)
+  final String paymentMethod; // stripe, paystack, orange_money, mtn_momo
+
+  @HiveField(7)
   final String paymentId;
+
+  @HiveField(8)
   final double amount;
+
+  @HiveField(9)
   final String currency;
+
+  @HiveField(10)
   final bool autoRenew;
+
+  @HiveField(11)
   final DateTime? canceledAt;
+
+  @HiveField(12)
   final Map<String, dynamic> metadata;
+
+
 
   Subscription({
     required this.id,
@@ -30,74 +63,118 @@ class Subscription {
     this.autoRenew = true,
     this.canceledAt,
     this.metadata = const {},
+    required bool isActive,
+    required DateTime createdAt
   });
+
+  // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'userId': userId,
       'planId': planId,
-      'startDate': startDate,
-      'endDate': endDate,
+      'startDate': Timestamp.fromDate(startDate),
+      'endDate': Timestamp.fromDate(endDate),
       'status': status,
       'paymentMethod': paymentMethod,
       'paymentId': paymentId,
       'amount': amount,
       'currency': currency,
       'autoRenew': autoRenew,
-      'canceledAt': canceledAt,
+      'canceledAt': canceledAt != null ? Timestamp.fromDate(canceledAt!) : null,
       'metadata': metadata,
     };
   }
 
-  factory Subscription.fromMap(Map<String, dynamic> map) {
+  factory Subscription.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Subscription(
-      id: map['id'] ?? '',
+      id: documentId ?? map['id'] ?? '',
       userId: map['userId'] ?? '',
       planId: map['planId'] ?? '',
-      startDate: (map['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      endDate: (map['endDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      startDate: map['startDate'] != null
+          ? _parseDateTime(map['startDate'])
+          : DateTime.now(),
+      endDate: map['endDate'] != null
+          ? _parseDateTime(map['endDate'])
+          : DateTime.now(),
       status: map['status'] ?? 'pending',
       paymentMethod: map['paymentMethod'] ?? '',
       paymentId: map['paymentId'] ?? '',
-      amount: (map['amount'] as num?)?.toDouble() ?? 0,
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       currency: map['currency'] ?? 'XAF',
       autoRenew: map['autoRenew'] ?? true,
-      canceledAt: (map['canceledAt'] as Timestamp?)?.toDate(),
-      metadata: map['metadata'] ?? {},
+      canceledAt:
+          map['canceledAt'] != null ? _parseDateTime(map['canceledAt']) : null,
+      metadata: map['metadata'] != null
+          ? Map<String, dynamic>.from(map['metadata'])
+          : const {},
+      isActive: false,
+      createdAt: DateTime.now(),
     );
   }
 
-  bool get isActive => status == 'active';
+  // ===== GETTERS APPLICATIFS =====
+
+  bool get isActive => status == 'active' && !isExpired;
   bool get isExpired => status == 'expired' || endDate.isBefore(DateTime.now());
   bool get isCanceled => status == 'canceled';
-  
-  int get daysRemaining => endDate.difference(DateTime.now()).inDays;
-  
+
+  int get daysRemaining {
+    final difference = endDate.difference(DateTime.now()).inDays;
+    return difference < 0 ? 0 : difference;
+  }
+
   bool get willExpireSoon => daysRemaining <= 7 && daysRemaining > 0;
-  
   bool get isTrial => status == 'pending' && amount == 0;
 
+  // ===== CLONAGE (copyWith) =====
+
   Subscription copyWith({
-    String? status,
+    String? id,
+    String? userId,
+    String? planId,
+    DateTime? startDate,
     DateTime? endDate,
+    String? status,
+    String? paymentMethod,
+    String? paymentId,
+    double? amount,
+    String? currency,
     bool? autoRenew,
     DateTime? canceledAt,
+    Map<String, dynamic>? metadata,
   }) {
     return Subscription(
-      id: id,
-      userId: userId,
-      planId: planId,
-      startDate: startDate,
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      planId: planId ?? this.planId,
+      startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       status: status ?? this.status,
-      paymentMethod: paymentMethod,
-      paymentId: paymentId,
-      amount: amount,
-      currency: currency,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentId: paymentId ?? this.paymentId,
+      amount: amount ?? this.amount,
+      currency: currency ?? this.currency,
       autoRenew: autoRenew ?? this.autoRenew,
       canceledAt: canceledAt ?? this.canceledAt,
-      metadata: metadata,
+      metadata: metadata ?? this.metadata,
+      isActive: false,
+      createdAt: DateTime.now(),
     );
+  }
+
+  /// Fonction d'aide pour parser les dates de manière ultra-robuste (Firestore, Hive et JSON)
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
   }
 }

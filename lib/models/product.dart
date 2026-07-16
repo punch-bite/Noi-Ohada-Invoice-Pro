@@ -1,11 +1,14 @@
 // lib/models/product.dart
-import 'package:flutter/material.dart'; // ✅ AJOUTER CET IMPORT
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'product.g.dart';
 
-@HiveType(typeId: 4)
+@JsonSerializable()
+@HiveType(typeId: 5) // Modifié à 5 pour éviter le conflit avec Notification (typeId: 4)
 class Product {
   @HiveField(0)
   final String id;
@@ -20,10 +23,10 @@ class Product {
   final String category;
 
   @HiveField(4)
-  final double price;
+  final double price; // Prix de vente HT / TTC
 
   @HiveField(5)
-  final double costPrice;
+  final double costPrice; // Prix d'achat / de revient
 
   @HiveField(6)
   final int quantity;
@@ -49,7 +52,7 @@ class Product {
   @HiveField(13)
   final DateTime? updatedAt;
 
-  @HiveField(14) // Nouveau champ
+  @HiveField(14)
   final String? supplierId; // Référence vers un fournisseur
 
   Product({
@@ -58,7 +61,7 @@ class Product {
     this.description = '',
     this.category = '',
     required this.price,
-    this.costPrice = 0,
+    this.costPrice = 0.0,
     this.quantity = 0,
     this.minStock = 5,
     this.unit = 'pièce',
@@ -70,6 +73,8 @@ class Product {
     this.supplierId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
+
+  // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {
@@ -85,38 +90,43 @@ class Product {
       'barcode': barcode,
       'imagePath': imagePath,
       'isActive': isActive,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'supplierId': supplierId,
     };
   }
 
-  factory Product.fromMap(Map<String, dynamic> map) {
+  factory Product.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Product(
-      id: map['id'] ?? const Uuid().v4(),
-      supplierId: map['supplierId'],
+      id: documentId ?? map['id'] ?? const Uuid().v4(),
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
-      price: (map['price'] as num?)?.toDouble() ?? 0,
-      costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
-      quantity: map['quantity'] ?? 0,
-      minStock: map['minStock'] ?? 5,
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+      costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0.0,
+      quantity: (map['quantity'] as num?)?.toInt() ?? 0,
+      minStock: (map['minStock'] as num?)?.toInt() ?? 5,
       unit: map['unit'] ?? 'pièce',
       barcode: map['barcode'],
       imagePath: map['imagePath'],
       isActive: map['isActive'] ?? true,
-      createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
-      updatedAt:
-          map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) : null,
+      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      supplierId: map['supplierId'],
     );
   }
 
-  // ===== GETTERS =====
+  // ===== GETTERS METIER & RENTABILITE =====
 
   bool get isLowStock => quantity <= minStock;
   bool get isOutOfStock => quantity <= 0;
   double get stockValue => quantity * price;
+
+  /// Calcul de la marge brute par unité
+  double get margin => price - costPrice;
+
+  /// Pourcentage de marge brute sur le prix de vente
+  double get marginPercentage => price > 0 ? (margin / price) * 100 : 0.0;
 
   String get formattedPrice => '$price FCFA';
   String get formattedCostPrice => '$costPrice FCFA';
@@ -128,7 +138,6 @@ class Product {
     return 'En stock';
   }
 
-  // ✅ Maintenant Colors est disponible
   Color get statusColor {
     if (isOutOfStock) return Colors.red;
     if (isLowStock) return Colors.orange;
@@ -139,7 +148,8 @@ class Product {
     return name.isNotEmpty && price > 0 && quantity >= 0 && minStock >= 0;
   }
 
-  // ===== COPY WITH =====
+  // ===== CLONAGE (copyWith) =====
+
   Product copyWith({
     String? name,
     String? description,
@@ -174,18 +184,32 @@ class Product {
     );
   }
 
-  // ===== FACTORY =====
+  // ===== FACTORIES & MOCKS =====
 
   factory Product.mock() {
     return Product(
       name: 'Produit exemple',
       description: 'Description du produit',
       category: 'Électronique',
-      price: 1500,
-      costPrice: 1000,
+      price: 1500.0,
+      costPrice: 1000.0,
       quantity: 10,
       minStock: 3,
       unit: 'pièce',
     );
+  }
+
+  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
   }
 }

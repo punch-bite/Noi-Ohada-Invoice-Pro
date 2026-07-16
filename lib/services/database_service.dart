@@ -1,35 +1,99 @@
 // lib/services/database_service.dart
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:noi_ohada_invoice_pro/models/user.dart';
+import '../models/user.dart';
 import '../models/invoice.dart';
 import '../models/client.dart';
 import '../models/company.dart';
 import '../models/line_item.dart';
+import '../models/product.dart';
+import '../models/supplier.dart';
+import '../models/reminder.dart';
+import '../models/subscription.dart';
 
 class DatabaseService {
-  static const String invoiceBox = 'invoices';
-  static const String clientBox = 'clients';
+  // Noms des Boxes
+  static const String userBox = 'user_cache';
   static const String companyBox = 'companies';
+  static const String clientBox = 'clients';
+  static const String invoiceBox = 'invoices';
+  static const String productBox = 'products';
+  static const String supplierBox = 'suppliers';
+  static const String reminderBox = 'reminders';
+  static const String subscriptionBox = 'subscriptions';
 
+  /// Initialisation globale de Hive et ouverture de toutes les boxes requises
   static Future<void> init() async {
-    await Hive.initFlutter();
-    Hive.registerAdapter(InvoiceAdapter());
-    Hive.registerAdapter(ClientAdapter());
-    Hive.registerAdapter(CompanyAdapter());
-    Hive.registerAdapter(LineItemAdapter());
+    // ignore: invalid_use_of_visible_for_testing_member
+    Hive.resetAdapters();
 
-    await Hive.openBox<Invoice>(invoiceBox);
-    await Hive.openBox<Client>(clientBox);
-    await Hive.openBox<Company>(companyBox);
+    await Hive.initFlutter();
+
+    // 2. Enregistrement des adaptateurs
+    _registerAdapters();
+
+    // 3. Ouverture des boxes
+    await Future.wait([
+      Hive.openBox<AppUser>(userBox),
+      Hive.openBox<Company>(companyBox),
+      Hive.openBox<Client>(clientBox),
+      Hive.openBox<Invoice>(invoiceBox),
+      Hive.openBox<Product>(productBox),
+      Hive.openBox<Supplier>(supplierBox),
+      Hive.openBox<Reminder>(reminderBox),
+      Hive.openBox<Subscription>(subscriptionBox),
+    ]);
+  }
+
+  static void _registerAdapters() {
+    // Liste des adaptateurs avec leur typeId
+    final Map<int, TypeAdapter> adapters = {
+      0: CompanyAdapter(),
+      1: ClientAdapter(),
+      2: InvoiceAdapter(),
+      3: LineItemAdapter(),
+      5: ProductAdapter(),
+      6: ReminderAdapter(),
+      7: SubscriptionAdapter(),
+      8: SupplierAdapter(),
+      9: AppUserAdapter(),
+    };
+
+    adapters.forEach((typeId, adapter) {
+      if (!Hive.isAdapterRegistered(typeId)) {
+        Hive.registerAdapter(adapter);
+      }
+    });
+  }
+
+  // ==========================================
+  // ---- USER CACHE ----
+  // ==========================================
+
+  Future<AppUser?> getUser() async {
+    final box = Hive.box<AppUser>(userBox);
+    return box.get('current_user');
+  }
+
+  Future<void> saveUser(AppUser user) async {
+    final box = Hive.box<AppUser>(userBox);
+    await box.put('current_user', user);
   }
 
   Future<void> updateUser(AppUser user) async {
-    final box = Hive.box<AppUser>('user_cache');
-    await box.put('user_data', user);
-    
+    final box = Hive.box<AppUser>(userBox);
+    // On utilise la même clé que dans saveUser
+    await box.put('current_user', user);
   }
 
+  Future<void> clearUser() async {
+    final box = Hive.box<AppUser>(userBox);
+    await box.clear();
+  }
+
+  // ==========================================
   // ---- COMPANY ----
+  // ==========================================
+
   Future<Company?> getCompany() async {
     final box = Hive.box<Company>(companyBox);
     return box.values.isNotEmpty ? box.getAt(0) : null;
@@ -44,81 +108,66 @@ class DatabaseService {
     }
   }
 
-  // ---- CLIENTS ----
+  // ==========================================
+  // ---- CLIENTS (Optimisés avec clé unique) ----
+  // ==========================================
+
   Future<List<Client>> getClients() async {
     final box = Hive.box<Client>(clientBox);
     return box.values.toList();
   }
 
-  // ⚠️ UNE SEULE FOIS cette fonction
   Future<Client?> getClient(String id) async {
     final box = Hive.box<Client>(clientBox);
-    try {
-      return box.values.firstWhere((client) => client.id == id);
-    } catch (e) {
-      return null;
-    }
+    return box.get(id); // Récupération directe en O(1)
   }
 
   Future<void> addClient(Client client) async {
     final box = Hive.box<Client>(clientBox);
-    await box.add(client);
+    await box.put(client.id, client); // Utilisation de l'UUID en clé
   }
 
   Future<void> updateClient(Client client) async {
     final box = Hive.box<Client>(clientBox);
-    final index = box.values.toList().indexWhere((c) => c.id == client.id);
-    if (index != -1) {
-      await box.putAt(index, client);
-    }
+    await box.put(
+        client.id, client); // Écrase l'ancienne valeur sans parcourir la liste
   }
 
   Future<void> deleteClient(String id) async {
     final box = Hive.box<Client>(clientBox);
-    final index = box.values.toList().indexWhere((c) => c.id == id);
-    if (index != -1) {
-      await box.deleteAt(index);
-    }
+    await box.delete(id);
   }
 
-  // ---- INVOICES ----
+  // ==========================================
+  // ---- INVOICES (Optimisés avec clé unique) ----
+  // ==========================================
+
   Future<List<Invoice>> getInvoices() async {
     final box = Hive.box<Invoice>(invoiceBox);
     return box.values.toList();
   }
 
-  // ⚠️ UNE SEULE FOIS cette fonction (GARDE CELLE-CI)
   Future<Invoice?> getInvoice(String id) async {
     final box = Hive.box<Invoice>(invoiceBox);
-    try {
-      return box.values.firstWhere((invoice) => invoice.id == id);
-    } catch (e) {
-      return null;
-    }
+    return box.get(id); // Récupération directe en O(1)
   }
 
   Future<void> addInvoice(Invoice invoice) async {
     final box = Hive.box<Invoice>(invoiceBox);
-    await box.add(invoice);
+    await box.put(invoice.id, invoice);
   }
 
   Future<void> updateInvoice(Invoice invoice) async {
     final box = Hive.box<Invoice>(invoiceBox);
-    final index = box.values.toList().indexWhere((inv) => inv.id == invoice.id);
-    if (index != -1) {
-      await box.putAt(index, invoice);
-    }
+    await box.put(invoice.id, invoice);
   }
 
   Future<void> deleteInvoice(String id) async {
     final box = Hive.box<Invoice>(invoiceBox);
-    final index = box.values.toList().indexWhere((inv) => inv.id == id);
-    if (index != -1) {
-      await box.deleteAt(index);
-    }
+    await box.delete(id);
   }
 
-  // Get next invoice number
+  // Génération dynamique du numéro de facture ou devis
   Future<String> getNextInvoiceNumber(bool isDevis) async {
     final box = Hive.box<Invoice>(invoiceBox);
     final prefix = isDevis ? 'DEV' : 'FA';
@@ -129,13 +178,11 @@ class DatabaseService {
     return '$prefix-$year-$sequence';
   }
 
-  // Get invoices by status
   Future<List<Invoice>> getInvoicesByStatus(String status) async {
     final box = Hive.box<Invoice>(invoiceBox);
     return box.values.where((inv) => inv.status == status).toList();
   }
 
-  // Get overdue invoices
   Future<List<Invoice>> getOverdueInvoices() async {
     final now = DateTime.now();
     final box = Hive.box<Invoice>(invoiceBox);
@@ -147,13 +194,11 @@ class DatabaseService {
         .toList();
   }
 
-  // Get invoices by client
   Future<List<Invoice>> getInvoicesByClient(String clientId) async {
     final box = Hive.box<Invoice>(invoiceBox);
     return box.values.where((inv) => inv.clientId == clientId).toList();
   }
 
-  // Update invoice status
   Future<void> updateInvoiceStatus(String id, String status) async {
     final invoice = await getInvoice(id);
     if (invoice != null) {
@@ -162,26 +207,61 @@ class DatabaseService {
     }
   }
 
+  // ==========================================
+  // ---- PRODUCTS (Ajouté pour le workflow) ----
+  // ==========================================
+
+  Future<List<Product>> getProducts() async {
+    final box = Hive.box<Product>(productBox);
+    return box.values.toList();
+  }
+
+  Future<Product?> getProduct(String id) async {
+    return Hive.box<Product>(productBox).get(id);
+  }
+
+  Future<void> saveProduct(Product product) async {
+    await Hive.box<Product>(productBox).put(product.id, product);
+  }
+
+  Future<void> deleteProduct(String id) async {
+    await Hive.box<Product>(productBox).delete(id);
+  }
+
+  // ==========================================
+  // ---- SUPPLIERS & REMINDERS ----
+  // ==========================================
+
+  Future<List<Supplier>> getSuppliers() async {
+    return Hive.box<Supplier>(supplierBox).values.toList();
+  }
+
+  Future<void> saveSupplier(Supplier supplier) async {
+    await Hive.box<Supplier>(supplierBox).put(supplier.id, supplier);
+  }
+
+  Future<List<Reminder>> getReminders() async {
+    return Hive.box<Reminder>(reminderBox).values.toList();
+  }
+
+  Future<void> saveReminder(Reminder reminder) async {
+    await Hive.box<Reminder>(reminderBox).put(reminder.id, reminder);
+  }
+
+  // ==========================================
+  // ---- NETTOYAGE ABSOLU (Déconnexion) ----
+  // ==========================================
+
   Future<void> clearAllData() async {
-    await Hive.box<Invoice>(invoiceBox).clear();
-    await Hive.box<Client>(clientBox).clear();
-    await Hive.box<Company>(companyBox).clear();
-  }
-  // Ajouter ces méthodes dans DatabaseService
-
-// --- USER DATA (local cache) ---
-  Future<void> saveUserData(Map<String, dynamic> userData) async {
-    final box = await Hive.openBox('user_cache');
-    await box.put('user_data', userData);
-  }
-
-  Future<Map<String, dynamic>?> getUserData() async {
-    final box = await Hive.openBox('user_cache');
-    return box.get('user_data');
-  }
-
-  Future<void> clearUserData() async {
-    final box = await Hive.openBox('user_cache');
-    await box.clear();
+    await Future.wait([
+      Hive.box<AppUser>(userBox).clear(),
+      Hive.box<Company>(companyBox).clear(),
+      Hive.box<Client>(clientBox).clear(),
+      Hive.box<Invoice>(invoiceBox).clear(),
+      Hive.box<Product>(productBox).clear(),
+      Hive.box<Supplier>(supplierBox).clear(),
+      Hive.box<Reminder>(reminderBox).clear(),
+      Hive.box<Subscription>(subscriptionBox).clear(),
+    ]);
   }
 }

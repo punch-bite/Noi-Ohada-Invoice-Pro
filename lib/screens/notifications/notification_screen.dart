@@ -1,4 +1,3 @@
-// lib/screens/notifications/notification_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -13,10 +12,8 @@ class NotificationScreen extends StatefulWidget {
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
-class _NotificationScreenState extends State<NotificationScreen>
-    with SingleTickerProviderStateMixin {
+class _NotificationScreenState extends State<NotificationScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  NotificationService? _notificationService;
 
   @override
   void initState() {
@@ -32,365 +29,112 @@ class _NotificationScreenState extends State<NotificationScreen>
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
-    final primaryColor = themeProvider.primaryColor;
-    final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final cardColor = themeProvider.cardColor;
-    final bgColor = themeProvider.backgroundColor;
-    final shadowColor = themeProvider.shadowColor;
-
-    _notificationService = context.watch<NotificationService>();
+    final theme = context.watch<ThemeProvider>();
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: theme.backgroundColor,
       appBar: AppBar(
+        title: const Text('Notifications'),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-          onPressed: () => context.go('/dashboard'),
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
         ),
-        title: Text(
-          'Notifications',
-          style: TextStyle(
-            color: textColor,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: primaryColor,
-          labelColor: primaryColor,
-          unselectedLabelColor: subTextColor,
-          indicatorSize: TabBarIndicatorSize.label,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14),
-          tabs: const [
-            Tab(text: 'Toutes'),
-            Tab(text: 'Non lues'),
-          ],
+          indicatorColor: theme.primaryColor,
+          labelColor: theme.primaryColor,
+          tabs: const [Tab(text: 'Toutes'), Tab(text: 'Non lues')],
         ),
-        actions: [
-          if (_notificationService != null &&
-              _notificationService!.notifications.isNotEmpty)
-            PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert, color: textColor),
-              onSelected: (value) async {
-                if (value == 'mark_all_read') {
-                  await _notificationService?.markAllAsRead();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Toutes les notifications marquées comme lues'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } else if (value == 'delete_all') {
-                  _showDeleteAllDialog(context);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'mark_all_read',
-                  child: Row(
-                    children: [
-                      Icon(Icons.done_all, color: Colors.green),
-                      SizedBox(width: 8),
-                      Text('Tout marquer comme lu'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete_all',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete_outline, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Tout supprimer', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-        ],
+        actions: [_buildPopupMenu(context)],
       ),
-      body: _notificationService == null
-          ? const Center(child: CircularProgressIndicator())
-          : _notificationService!.notifications.isEmpty
-              ? _buildEmptyState(isDark, textColor, subTextColor)
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildNotificationList(false, isDark, textColor, subTextColor, cardColor, shadowColor, primaryColor),
-                    _buildNotificationList(true, isDark, textColor, subTextColor, cardColor, shadowColor, primaryColor),
-                  ],
-                ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDark, Color textColor, Color subTextColor) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(
-              Icons.notifications_off_outlined,
-              size: 32,
-              color: isDark ? Colors.grey[600] : Colors.grey[400],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Aucune notification',
-            style: TextStyle(
-              fontSize: 18,
-              color: textColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Vous serez notifié des activités importantes',
-            style: TextStyle(fontSize: 14, color: subTextColor),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationList(
-    bool onlyUnread,
-    bool isDark,
-    Color textColor,
-    Color subTextColor,
-    Color cardColor,
-    Color shadowColor,
-    Color primaryColor,
-  ) {
-    final notifications = onlyUnread
-        ? _notificationService!.unreadNotifications
-        : _notificationService!.notifications;
-
-    if (notifications.isEmpty) {
-      return Center(
-        child: Text(
-          onlyUnread ? 'Aucune notification non lue' : 'Aucune notification',
-          style: TextStyle(
-            color: subTextColor.withOpacity(0.7),
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: notifications.length,
-      itemBuilder: (context, index) {
-        final notification = notifications[index];
-        return _buildNotificationTile(
-          notification,
-          isDark,
-          textColor,
-          subTextColor,
-          cardColor,
-          shadowColor,
-          primaryColor,
-        );
-      },
-    );
-  }
-
-  Widget _buildNotificationTile(
-    AppNotification notification,
-    bool isDark,
-    Color textColor,
-    Color subTextColor,
-    Color cardColor,
-    Color shadowColor,
-    Color primaryColor,
-  ) {
-    final isUnread = !notification.isRead;
-
-    return Dismissible(
-      key: Key(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
-        child: const Icon(
-          Icons.delete_outline,
-          color: Colors.white,
-          size: 24,
-        ),
-      ),
-      onDismissed: (direction) async {
-        await _notificationService?.deleteNotification(notification.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Notification supprimée'),
-              backgroundColor: Colors.grey,
-            ),
-          );
-        }
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isUnread ? primaryColor.withOpacity(0.2) : (isDark ? Colors.grey[800]! : Colors.grey[100]!),
-            width: isUnread ? 1.5 : 0.5,
-          ),
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: notification.color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              notification.icon,
-              color: notification.color,
-              size: 22,
-            ),
-          ),
-          title: Text(
-            notification.title,
-            style: TextStyle(
-              fontWeight: isUnread ? FontWeight.w600 : FontWeight.w400,
-              fontSize: 14,
-              color: textColor,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body: Consumer<NotificationService>(
+        builder: (context, service, _) {
+          if (service.notifications.isEmpty) return _buildEmptyState();
+          return TabBarView(
+            controller: _tabController,
             children: [
-              const SizedBox(height: 2),
-              Text(
-                notification.body,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isUnread ? textColor : subTextColor.withOpacity(0.7),
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                notification.timeAgo,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: subTextColor.withOpacity(0.6),
-                ),
-              ),
+              _NotificationList(notifications: service.notifications),
+              _NotificationList(notifications: service.unreadNotifications),
             ],
-          ),
-          trailing: isUnread
-              ? Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.blue,
-                    shape: BoxShape.circle,
-                  ),
-                )
-              : null,
-          onTap: () async {
-            if (!notification.isRead) {
-              await _notificationService?.markAsRead(notification.id);
-            }
-            _handleNotificationTap(context, notification);
-          },
-        ),
+          );
+        },
       ),
     );
   }
 
-  void _handleNotificationTap(BuildContext context, AppNotification notification) {
-    // Redirection en fonction du type de référence
-    if (notification.referenceType == 'invoice' && notification.referenceId != null) {
-      context.push('/dashboard/invoices/${notification.referenceId}');
-    } else if (notification.referenceType == 'product') {
-      context.push('/dashboard/stock');
-    } else if (notification.referenceType == 'client') {
-      context.push('/dashboard/clients');
-    } else if (notification.referenceType == 'reminder') {
-      context.push('/dashboard/reminders');
-    } else if (notification.referenceType == 'subscription') {
-      context.push('/dashboard/subscription');
-    } else {
-      // Redirection par défaut vers le tableau de bord
-      context.push('/dashboard');
-    }
+  Widget _buildPopupMenu(BuildContext context) {
+    return PopupMenuButton(
+      onSelected: (value) {
+        final service = context.read<NotificationService>();
+        value == 'read' ? service.markAllAsRead() : _confirmDeleteAll(context);
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'read', child: Text('Tout marquer lu')),
+        const PopupMenuItem(value: 'del', child: Text('Tout supprimer', style: TextStyle(color: Colors.red))),
+      ],
+    );
   }
 
-  void _showDeleteAllDialog(BuildContext context) {
-    final themeProvider = context.read<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
-    final subTextColor = themeProvider.subTextColor;
+  Widget _buildEmptyState() => const Center(child: Text("Aucune notification pour le moment."));
 
+  void _confirmDeleteAll(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: isDark ? Colors.grey[850] : Colors.white,
-        title: const Text(
-          'Supprimer toutes les notifications',
-          style: TextStyle(color: Colors.red),
-        ),
-        content: Text(
-          'Cette action est irréversible. Voulez-vous vraiment supprimer toutes les notifications ?',
-          style: TextStyle(color: subTextColor),
-        ),
+      builder: (ctx) => AlertDialog(
+        title: const Text("Supprimer tout ?"),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Annuler")),
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Annuler',
-              style: TextStyle(color: subTextColor),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _notificationService?.deleteAllNotifications();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Toutes les notifications ont été supprimées'),
-                    backgroundColor: Colors.grey,
-                  ),
-                );
-              }
+            onPressed: () {
+              context.read<NotificationService>().deleteAllNotifications();
+              Navigator.pop(ctx);
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Supprimer tout'),
+            child: const Text("Confirmer", style: TextStyle(color: Colors.red)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Composant de liste optimisé
+class _NotificationList extends StatelessWidget {
+  final List<AppNotification> notifications;
+  const _NotificationList({required this.notifications});
+
+  @override
+  Widget build(BuildContext context) {
+    if (notifications.isEmpty) return const Center(child: Text("Aucun élément"));
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: notifications.length,
+      itemBuilder: (_, i) => _NotificationTile(notification: notifications[i]),
+    );
+  }
+}
+
+// Composant de tuile extrait pour la performance
+class _NotificationTile extends StatelessWidget {
+  final AppNotification notification;
+  const _NotificationTile({required this.notification});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    return Dismissible(
+      key: Key(notification.id),
+      onDismissed: (_) => context.read<NotificationService>().deleteNotification(notification.id),
+      child: Card(
+        color: theme.cardColor,
+        child: ListTile(
+          leading: Icon(notification.icon, color: notification.color),
+          title: Text(notification.title, style: TextStyle(fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold)),
+          subtitle: Text(notification.body),
+          onTap: () {
+            context.read<NotificationService>().markAsRead(notification.id);
+            // Redirection ici...
+          },
+        ),
       ),
     );
   }

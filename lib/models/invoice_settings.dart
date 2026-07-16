@@ -2,21 +2,21 @@
 import 'package:flutter/material.dart';
 
 class InvoiceSettings {
-  bool showLogo;
-  bool showBorder;
-  bool showWatermark;
-  bool showPaymentQR;
-  Color primaryColor;
-  Color secondaryColor;
-  Color backgroundColor;
-  Color textColor;
-  String fontFamily;
-  double fontSize;
-  bool showCompanyInfo;
-  bool showClientInfo;
-  bool showPaymentTerms;
-  bool showTaxDetails;
-  String watermarkText;
+  final bool showLogo;
+  final bool showBorder;
+  final bool showWatermark;
+  final bool showPaymentQR;
+  final Color primaryColor;
+  final Color secondaryColor;
+  final Color backgroundColor;
+  final Color textColor;
+  final String fontFamily;
+  final double fontSize;
+  final bool showCompanyInfo;
+  final bool showClientInfo;
+  final bool showPaymentTerms;
+  final bool showTaxDetails;
+  final String watermarkText;
 
   InvoiceSettings({
     this.showLogo = true,
@@ -62,12 +62,12 @@ class InvoiceSettings {
       showBorder: map['showBorder'] ?? true,
       showWatermark: map['showWatermark'] ?? false,
       showPaymentQR: map['showPaymentQR'] ?? false,
-      primaryColor: Color(map['primaryColor'] ?? 0xFF1A237E),
-      secondaryColor: Color(map['secondaryColor'] ?? 0xFF3949AB),
-      backgroundColor: Color(map['backgroundColor'] ?? 0xFFFFFFFF),
-      textColor: Color(map['textColor'] ?? 0xFF1A1A1A),
+      primaryColor: Color((map['primaryColor'] as num?)?.toInt() ?? 0xFF1A237E),
+      secondaryColor: Color((map['secondaryColor'] as num?)?.toInt() ?? 0xFF3949AB),
+      backgroundColor: Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
+      textColor: Color((map['textColor'] as num?)?.toInt() ?? 0xFF1A1A1A),
       fontFamily: map['fontFamily'] ?? 'Roboto',
-      fontSize: map['fontSize'] ?? 12.0,
+      fontSize: (map['fontSize'] as num?)?.toDouble() ?? 12.0,
       showCompanyInfo: map['showCompanyInfo'] ?? true,
       showClientInfo: map['showClientInfo'] ?? true,
       showPaymentTerms: map['showPaymentTerms'] ?? true,

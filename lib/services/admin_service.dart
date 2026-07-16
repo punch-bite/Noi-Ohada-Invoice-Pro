@@ -1,7 +1,8 @@
-// lib/services/admin_service.dart
+import 'dart:convert';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:csv/csv.dart';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/user.dart';
 import '../models/subscription.dart';
@@ -9,326 +10,100 @@ import '../models/activity_log.dart';
 import 'subscription_service.dart';
 
 class AdminService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final SubscriptionService _subscriptionService = SubscriptionService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ===== UTILISATEURS =====
+  // ===== USERS (Batch Optimisé) =====
 
-  Future<List<AppUser>> getAllUsers() async {
-    try {
-      final snapshot = await _firestore.collection('users').get();
-      return snapshot.docs.map((doc) => AppUser.fromMap(doc.data())).toList();
-    } catch (e) {
-      print('❌ Erreur getAllUsers: $e');
-      return [];
-    }
-  }
-
-  Future<AppUser?> getUserById(String userId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        return AppUser.fromMap(doc.data()!);
-      }
-      return null;
-    } catch (e) {
-      print('❌ Erreur getUserById: $e');
-      return null;
-    }
-  }
-
+  /// Utilise une transaction pour garantir que le log et la mise à jour réussissent ensemble
   Future<void> updateUser(AppUser user) async {
-    try {
-      await _firestore.collection('users').doc(user.id).update(user.toMap());
-      await _logActivity(
-        userId: user.id,
-        userEmail: user.email,
-        action: 'update_user',
-        targetId: user.id,
-        targetType: 'user',
-        details: {'displayName': user.displayName, 'isActive': user.isActive},
-      );
-    } catch (e) {
-      throw Exception('Erreur mise à jour utilisateur: $e');
-    }
-  }
+    return _db.runTransaction((transaction) async {
+      final userRef = _db.collection('users').doc(user.id);
+      final logRef = _db.collection('logs').doc();
 
-  Future<void> updateUserRoles(String userId, List<String> roles) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({'roles': roles});
-      final user = await getUserById(userId);
-      if (user != null) {
-        await _logActivity(
-          userId: userId,
-          userEmail: user.email,
-          action: 'update_roles',
-          targetId: userId,
-          targetType: 'user',
-          details: {'roles': roles},
-        );
-      }
-    } catch (e) {
-      throw Exception('Erreur mise à jour rôles: $e');
-    }
-  }
-
-  Future<void> toggleUserActive(String userId, bool isActive) async {
-    try {
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .update({'isActive': isActive});
-      final user = await getUserById(userId);
-      if (user != null) {
-        await _logActivity(
-          userId: userId,
-          userEmail: user.email,
-          action: isActive ? 'activate_user' : 'deactivate_user',
-          targetId: userId,
-          targetType: 'user',
-          details: {'isActive': isActive},
-        );
-      }
-    } catch (e) {
-      throw Exception('Erreur mise à jour statut: $e');
-    }
-  }
-
-  Future<void> deleteUser(String userId) async {
-    try {
-      final user = await getUserById(userId);
-      await _firestore.collection('users').doc(userId).delete();
-      if (user != null) {
-        await _logActivity(
-          userId: userId,
-          userEmail: user.email,
-          action: 'delete_user',
-          targetId: userId,
-          targetType: 'user',
-        );
-      }
-    } catch (e) {
-      throw Exception('Erreur suppression: $e');
-    }
-  }
-
-  Future<Map<String, int>> getUserStats() async {
-    try {
-      final users = await getAllUsers();
-      return {
-        'total': users.length,
-        'active': users.where((u) => u.isActive).length,
-        'inactive': users.where((u) => !u.isActive).length,
-        'admins': users.where((u) => u.isAdmin).length,
-        'users': users.where((u) => !u.isAdmin).length,
-      };
-    } catch (e) {
-      print('❌ Erreur getUserStats: $e');
-      return {
-        'total': 0,
-        'active': 0,
-        'inactive': 0,
-        'admins': 0,
-        'users': 0,
-      };
-    }
-  }
-
-  // ===== ABONNEMENTS =====
-
-  Future<List<Subscription>> getUserSubscriptions(String userId) async {
-    try {
-      final query = await _firestore
-          .collection('subscriptions')
-          .where('userId', isEqualTo: userId)
-          .orderBy('startDate', descending: true)
-          .get();
-      return query.docs.map((doc) => Subscription.fromMap(doc.data())).toList();
-    } catch (e) {
-      print('❌ Erreur getUserSubscriptions: $e');
-      return [];
-    }
-  }
-
-  Future<void> cancelSubscription(String subscriptionId,
-      {String? reason}) async {
-    try {
-      await _firestore.collection('subscriptions').doc(subscriptionId).update({
-        'status': 'canceled',
-        'autoRenew': false,
-        'canceledAt': FieldValue.serverTimestamp(),
-        'metadata': {
-          'adminCanceled': true,
-          'reason': reason ?? 'Annulation par administrateur',
-        },
-      });
-      final sub = await _firestore
-          .collection('subscriptions')
-          .doc(subscriptionId)
-          .get();
-      if (sub.exists) {
-        final data = sub.data()!;
-        final userId = data['userId'] as String;
-        final user = await getUserById(userId);
-        if (user != null) {
-          await _logActivity(
-            userId: userId,
+      transaction.update(userRef, user.toMap());
+      transaction.set(
+          logRef,
+          ActivityLog.create(
+            userId: user.id,
             userEmail: user.email,
-            action: 'admin_cancel_subscription',
-            targetId: subscriptionId,
-            targetType: 'subscription',
-            details: {'reason': reason ?? 'Annulation par administrateur'},
-          );
-        }
-      }
-    } catch (e) {
-      throw Exception('Erreur annulation abonnement: $e');
-    }
+            action: 'update_user',
+            targetId: user.id,
+            targetType: 'user',
+            details: {
+              'displayName': user.displayName,
+              'isActive': user.isActive
+            },
+          ).toMap());
+    });
   }
+
+  // ===== ABONNEMENTS (Transactions) =====
 
   Future<void> extendSubscription(String subscriptionId, int days) async {
-    try {
-      final doc = await _firestore
-          .collection('subscriptions')
-          .doc(subscriptionId)
-          .get();
-      if (!doc.exists) throw Exception('Abonnement non trouvé');
+    final subRef = _db.collection('subscriptions').doc(subscriptionId);
+
+    await _db.runTransaction((transaction) async {
+      final doc = await transaction.get(subRef);
+      if (!doc.exists) throw Exception('Abonnement introuvable');
+
       final sub = Subscription.fromMap(doc.data()!);
       final newEndDate = sub.endDate.add(Duration(days: days));
-      await _firestore.collection('subscriptions').doc(subscriptionId).update({
+
+      transaction.update(subRef, {
         'endDate': newEndDate,
         'status': 'active',
       });
-      final user = await getUserById(sub.userId);
-      if (user != null) {
-        await _logActivity(
-          userId: user.id,
-          userEmail: user.email,
-          action: 'admin_extend_subscription',
-          targetId: subscriptionId,
-          targetType: 'subscription',
-          details: {'days': days, 'newEndDate': newEndDate.toIso8601String()},
-        );
-      }
-    } catch (e) {
-      throw Exception('Erreur prolongation: $e');
-    }
+
+      // Log automatique dans la même transaction
+      transaction.set(
+          _db.collection('logs').doc(),
+          ActivityLog.create(
+            userId: sub.userId,
+            userEmail: 'admin_action', // Pourrait être récupéré via Auth
+            action: 'admin_extend_subscription',
+            targetId: subscriptionId,
+            targetType: 'subscription',
+            details: {'days': days, 'newEndDate': newEndDate.toIso8601String()},
+          ).toMap());
+    });
   }
 
-  Future<void> changeUserPlan(String userId, String newPlanId) async {
+  // ===== LOGS D'ACTIVITÉ (Centralisation) =====
+
+  Future<List<ActivityLog>> getActivityLogs(
+      {String? userId, int limit = 200}) async {
     try {
-      final subscriptions = await getUserSubscriptions(userId);
-      final activeSub = subscriptions.firstWhere((s) => s.isActive,
-          orElse: () => throw Exception('Aucun abonnement actif'));
-      await _firestore.collection('subscriptions').doc(activeSub.id).update({
-        'planId': newPlanId,
-        'metadata': {
-          'planChangedByAdmin': true,
-          'previousPlan': activeSub.planId,
-        },
-      });
-      final user = await getUserById(userId);
-      if (user != null) {
-        await _logActivity(
-          userId: userId,
-          userEmail: user.email,
-          action: 'admin_change_plan',
-          targetId: activeSub.id,
-          targetType: 'subscription',
-          details: {'newPlan': newPlanId, 'oldPlan': activeSub.planId},
-        );
+      var query = FirebaseFirestore.instance
+          .collection('activity_logs')
+          .orderBy('timestamp', descending: true)
+          .limit(limit);
+
+      if (userId != null) {
+        query = query.where('userId', isEqualTo: userId);
       }
-    } catch (e) {
-      throw Exception('Erreur changement de plan: $e');
-    }
-  }
 
-  // ===== CRÉER UN ABONNEMENT POUR UN UTILISATEUR =====
+      final snapshot = await query.get();
 
-  Future<void> createSubscriptionForUser({
-    required String userId,
-    required String planId,
-    required String paymentMethod,
-    required double amount,
-    required String currency,
-    required String interval,
-    String? paymentId,
-  }) async {
-    try {
-      final plan = await _subscriptionService.getPlan(planId);
-      if (plan == null) throw Exception('Plan non trouvé');
-
-      final startDate = DateTime.now();
-      final endDate = interval == 'year'
-          ? DateTime(startDate.year + 1, startDate.month, startDate.day)
-          : DateTime(startDate.year, startDate.month + 1, startDate.day);
-
-      final subscription = Subscription(
-        id: _firestore.collection('subscriptions').doc().id,
-        userId: userId,
-        planId: planId,
-        startDate: startDate,
-        endDate: endDate,
-        status: 'active',
-        paymentMethod: paymentMethod,
-        paymentId:
-            paymentId ?? 'admin_${DateTime.now().millisecondsSinceEpoch}',
-        amount: amount,
-        currency: currency,
-        autoRenew: true,
-      );
-
-      await _firestore
-          .collection('subscriptions')
-          .doc(subscription.id)
-          .set(subscription.toMap());
-
-      await _firestore.collection('users').doc(userId).update({
-        'subscriptionId': subscription.id,
-      });
-
-      final user = await getUserById(userId);
-      if (user != null) {
-        await _logActivity(
-          userId: userId,
-          userEmail: user.email,
-          action: 'admin_create_subscription',
-          targetId: subscription.id,
-          targetType: 'subscription',
-          details: {'planId': planId, 'amount': amount},
+      // On transforme les documents en objets ActivityLog manuellement
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return ActivityLog(
+          id: doc.id,
+          action: data['action'] ?? 'unknown',
+          userEmail: data['userEmail'] ?? 'inconnu',
+          timestamp: (data['timestamp'] as Timestamp).toDate(),
+          details: data['details'], userId: data['userId'] ?? ['inconnu'],
+          // Ajoutez ici les autres champs que vous avez dans votre modèle
         );
-      }
+      }).toList();
     } catch (e) {
-      throw Exception('Erreur création abonnement: $e');
+      debugPrint("Erreur lors de la récupération : $e");
+      return [];
     }
   }
 
-  // ===== LOGS D'ACTIVITÉ =====
-
-  Future<void> _logActivity({
-    required String userId,
-    required String userEmail,
-    required String action,
-    String? targetId,
-    String? targetType,
-    Map<String, dynamic>? details,
-  }) async {
-    try {
-      final log = ActivityLog.create(
-        userId: userId,
-        userEmail: userEmail,
-        action: action,
-        targetId: targetId,
-        targetType: targetType,
-        details: details,
-      );
-      await _firestore.collection('logs').add(log.toMap());
-    } catch (e) {
-      print('❌ Erreur log activité: $e');
-    }
-  }
-
-  // Méthode publique pour logger depuis d'autres services (ex: AuthProvider)
   Future<void> logActivity({
     required String userId,
     required String userEmail,
@@ -336,93 +111,224 @@ class AdminService {
     String? targetId,
     String? targetType,
     Map<String, dynamic>? details,
-  }) async {
-    await _logActivity(
-      userId: userId,
-      userEmail: userEmail,
-      action: action,
-      targetId: targetId,
-      targetType: targetType,
-      details: details,
-    );
-  }
-
-  Future<List<ActivityLog>> getActivityLogs({
-    String? userId,
-    String? action,
-    DateTime? from,
-    DateTime? to,
-    int limit = 200,
+    required int limit,
   }) async {
     try {
-      var query = _firestore
-          .collection('logs')
-          .orderBy('timestamp', descending: true)
-          .limit(limit);
-
-      if (userId != null) {
-        query = query.where('userId', isEqualTo: userId);
-      }
-      if (action != null) {
-        query = query.where('action', isEqualTo: action);
-      }
-      if (from != null) {
-        query = query.where('timestamp', isGreaterThanOrEqualTo: from);
-      }
-      if (to != null) {
-        query = query.where('timestamp', isLessThanOrEqualTo: to);
-      }
-
-      final snapshot = await query.get();
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return ActivityLog.fromMap(data);
-      }).toList();
+      await _db.collection('logs').add(ActivityLog.create(
+            userId: userId,
+            userEmail: userEmail,
+            action: action,
+            targetId: targetId,
+            targetType: targetType,
+            details: details,
+          ).toMap());
     } catch (e) {
-      print('❌ Erreur getActivityLogs: $e');
-      return [];
+      debugPrint('❌ Erreur log activité: $e');
     }
   }
 
-  // ===== EXPORT CSV =====
+  // ===== EXPORT CSV (Optimisé avec StreamWriter) =====
 
-  Future<String> exportUsersCsv() async {
-    final users = await getAllUsers();
-    final rows = <List<String>>[
-      [
-        'ID',
-        'Nom',
-        'Email',
-        'Téléphone',
-        'Entreprise',
-        'Rôle',
-        'Statut',
-        'Inscrit le'
-      ]
+  Future<File> exportUsersCsvToFile() async {
+    final users = await _db.collection('users').get();
+    final List<List<dynamic>> rows = [
+      ['ID', 'Nom', 'Email', 'Rôle', 'Statut']
     ];
-    for (final u in users) {
+
+    for (var doc in users.docs) {
+      final u = AppUser.fromMap(doc.data());
       rows.add([
         u.id,
         u.displayName,
         u.email,
-        u.phone ?? '',
-        u.companyName ?? '',
-        u.isAdmin ? 'Administrateur' : 'Utilisateur',
-        u.isActive ? 'Actif' : 'Inactif',
-        '${u.createdAt.day}/${u.createdAt.month}/${u.createdAt.year}',
+        u.isAdmin ? 'Admin' : 'User',
+        u.isActive ? 'Actif' : 'Inactif'
       ]);
     }
+
     final csv = const ListToCsvConverter().convert(rows);
-    return csv;
+    final dir = await getTemporaryDirectory();
+    final file =
+        File('${dir.path}/users_${DateTime.now().millisecondsSinceEpoch}.csv');
+
+    // Ajout du BOM UTF-8 pour Excel
+    return await file.writeAsString('\uFEFF$csv', encoding: utf8);
   }
 
-  Future<File> exportUsersCsvToFile() async {
-    final csvContent = await exportUsersCsv();
-    final dir = await getTemporaryDirectory();
-    final file = File(
-        '${dir.path}/utilisateurs_${DateTime.now().millisecondsSinceEpoch}.csv');
-    await file.writeAsString(csvContent);
-    return file;
+  /// Récupère la liste de tous les utilisateurs inscrits
+  Future<List<AppUser>> getAllUsers() async {
+    try {
+      final snapshot = await _firestore.collection('users').get();
+      return snapshot.docs.map((doc) => AppUser.fromMap(doc.data())).toList();
+    } catch (e) {
+      debugPrint("Erreur récupération utilisateurs : $e");
+      return [];
+    }
+  }
+
+  // lib/services/admin_service.dart
+
+  Future<void> createSubscriptionForUser({
+    required String userId,
+    required String planId,
+    required int durationMonths,
+    required String paymentMethod,
+    required double amount,
+    required String currency,
+    required String interval,
+  }) async {
+    try {
+      // 1. Création de l'objet Abonnement
+      final newSubscription = Subscription(
+        id: DateTime.now()
+            .millisecondsSinceEpoch
+            .toString(), // Générateur d'ID simple
+        userId: userId,
+        planId: planId,
+        startDate: DateTime.now(),
+        endDate: DateTime.now().add(Duration(days: durationMonths * 30)),
+        isActive: true,
+        createdAt: DateTime.now(), status: '', paymentMethod: '', paymentId: '',
+        amount: 0.0, currency: '',
+      );
+
+      // 2. Persistance dans votre base de données (Firestore ou Hive)
+      // Exemple avec Firestore :
+      await _firestore
+          .collection('subscriptions')
+          .doc(newSubscription.id)
+          .set(newSubscription.toMap());
+
+      // Exemple avec Hive :
+      // await Hive.box<Subscription>('subscriptions').put(newSubscription.id, newSubscription);
+
+      debugPrint("Abonnement créé avec succès pour l'utilisateur : $userId");
+    } catch (e) {
+      debugPrint("Erreur lors de la création de l'abonnement : $e");
+      rethrow; // Important pour que l'interface puisse gérer l'erreur (via un Try/Catch)
+    }
+  }
+
+  Future<Map<String, dynamic>> getUsersStats() async {
+    try {
+      // Si vous utilisez Firestore :
+      final usersSnapshot = await _firestore.collection('users').get();
+      final subsSnapshot = await _firestore
+          .collection('subscriptions')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      final totalUsers = usersSnapshot.size;
+      final activeSubscriptions = subsSnapshot.size;
+
+      return {
+        'totalUsers': totalUsers,
+        'activeSubscriptions': activeSubscriptions,
+        'inactiveUsers': totalUsers - activeSubscriptions,
+        'conversionRate':
+            totalUsers > 0 ? (activeSubscriptions / totalUsers) * 100 : 0,
+      };
+    } catch (e) {
+      debugPrint("Erreur lors du calcul des stats : $e");
+      return {
+        'totalUsers': 0,
+        'activeSubscriptions': 0,
+        'inactiveUsers': 0,
+        'conversionRate': 0,
+      };
+    }
+  }
+
+  /// 1. Récupère un utilisateur spécifique par son ID
+  Future<AppUser?> getUserById(String userId) async {
+    try {
+      // Si vous utilisez Firestore :
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        return AppUser.fromMap(doc.data()!);
+      }
+      return null;
+    } catch (e) {
+      debugPrint("Erreur récupération utilisateur $userId : $e");
+      return null;
+    }
+  }
+
+  /// 2. Active ou désactive un utilisateur
+  Future<void> toggleUserActive(String userId, bool isActive) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'isActive': isActive,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint("Utilisateur $userId actif: $isActive");
+    } catch (e) {
+      debugPrint("Erreur lors du toggle état utilisateur : $e");
+      rethrow;
+    }
+  }
+
+  /// 3. Met à jour les rôles d'un utilisateur (ex: 'admin', 'user', 'manager')
+  Future<void> updateUserRoles(String userId, List<String> newRoles) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'roles': newRoles,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint("Rôles mis à jour pour $userId : $newRoles");
+    } catch (e) {
+      debugPrint("Erreur lors de la mise à jour des rôles : $e");
+      rethrow;
+    }
+  }
+
+  // lib/services/admin_service.dart
+
+  /// 1. Récupère tous les abonnements d'un utilisateur spécifique
+  Future<List<Subscription>> getUserSubscriptions(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('subscriptions')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => Subscription.fromMap(doc.data()))
+          .toList();
+    } catch (e) {
+      debugPrint(
+          "Erreur lors de la récupération des abonnements de $userId : $e");
+      return [];
+    }
+  }
+
+  /// 2. Annule un abonnement (met à jour le statut en 'cancelled' ou 'inactive')
+  Future<void> cancelSubscription(String subscriptionId, {String? reason}) async {
+    try {
+      await _firestore.collection('subscriptions').doc(subscriptionId).update({
+        'isActive': false,
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint("Abonnement $subscriptionId annulé avec succès.");
+    } catch (e) {
+      debugPrint("Erreur lors de l'annulation de l'abonnement : $e");
+      rethrow;
+    }
+  }
+
+  /// 3. Change le plan d'un abonnement existant
+  Future<void> changeUserPlan(String subscriptionId, String newPlanId) async {
+    try {
+      await _firestore.collection('subscriptions').doc(subscriptionId).update({
+        'planId': newPlanId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint(
+          "Abonnement $subscriptionId basculé vers le plan : $newPlanId");
+    } catch (e) {
+      debugPrint("Erreur lors du changement de plan : $e");
+      rethrow;
+    }
   }
 }

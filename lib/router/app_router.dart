@@ -1,42 +1,60 @@
 // lib/router/app_router.dart
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:noi_ohada_invoice_pro/screens/dashboard/stock/product_detail_screen.dart';
-import 'package:noi_ohada_invoice_pro/screens/dashboard/stock/products_screen.dart';
 import 'package:provider/provider.dart';
+
+// Modèles
 import '../models/delivery.dart';
+import '../models/plan.dart';
+
+// Providers
 import '../providers/auth_provider.dart';
-import '../screens/dashboard/profile_update_screen.dart';
-import '../screens/dashboard/stock/create_delivery_screen.dart';
-import '../screens/dashboard/stock/stock_screen.dart';
-import '../screens/landing/landing_screen_carousel.dart';
+
+// Écrans - Auth / Landing
+import '../screens/landing/landing_screen_carousel.dart'; // Assure-toi que la classe s'appelle bien LandingScreen ou LandingScreenCarousel
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/verify_2fa_screen.dart';
+
+// Écrans - Dashboard & Stock
 import '../screens/dashboard/dashboard_screen.dart';
+import '../screens/dashboard/profile_update_screen.dart';
+import '../screens/dashboard/stock/stock_screen.dart';
+import '../screens/dashboard/stock/products_screen.dart';
+import '../screens/dashboard/stock/product_detail_screen.dart';
+import '../screens/dashboard/stock/create_delivery_screen.dart';
+
+// Écrans - Clients, Factures & Fournisseurs
 import '../screens/dashboard/clients_screen.dart';
+import '../screens/dashboard/create_client_screen.dart';
+import '../screens/dashboard/client_detail_screen.dart';
 import '../screens/dashboard/invoices_screen.dart';
+import '../screens/dashboard/create_invoice_screen.dart';
+import '../screens/dashboard/invoice_detail_screen.dart';
+import '../screens/dashboard/suppliers/suppliers_screen.dart';
+import '../screens/dashboard/suppliers/create_supplier_screen.dart';
+
+// Écrans - Utilitaires & Analytics
 import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
-import '../screens/dashboard/create_invoice_screen.dart';
-import '../screens/dashboard/create_client_screen.dart';
-import '../screens/dashboard/invoice_detail_screen.dart';
-import '../screens/dashboard/client_detail_screen.dart';
+import '../screens/dashboard/company_config_screen.dart';
+import '../screens/dashboard/reminders_screen.dart';
+import '../screens/status/no_internet_screen.dart';
+
+// Écrans - Customisation, Abonnements & Support
+import '../screens/customization/invoice_customization_screen.dart';
+import '../screens/customization/templates_screen.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
 import '../screens/notifications/notification_screen.dart';
 import '../screens/support/support_screen.dart';
 import '../screens/support/faq_screen.dart';
 import '../screens/support/contact_support_screen.dart';
-import '../screens/customization/invoice_customization_screen.dart';
-import '../screens/customization/templates_screen.dart';
 import '../screens/security/security_screen.dart';
 import '../screens/security/sessions_screen.dart';
-import '../screens/dashboard/company_config_screen.dart';
-import '../models/plan.dart';
-import '../screens/status/no_internet_screen.dart';
-import '../screens/dashboard/reminders_screen.dart';
-import '../screens/dashboard/suppliers/suppliers_screen.dart';
-import '../screens/dashboard/suppliers/create_supplier_screen.dart';
+
+// Écrans - Admin
 import '../screens/admin/admin_dashboard.dart';
 import '../screens/admin/users_list_screen.dart';
 import '../screens/admin/user_detail_screen.dart';
@@ -46,23 +64,38 @@ import '../screens/admin/admin_add_subscription_screen.dart';
 import '../screens/admin/admin_template_form_screen.dart';
 
 class AppRouter {
+  // Un ValueNotifier pour écouter les changements d'auth et forcer la redirection
+  static final Listenable authChangeNotifier = ValueNotifier<void>(null);
+
   static final GoRouter router = GoRouter(
     initialLocation: '/',
+    // On force la réévaluation du redirect dès que l'état d'authentification change
+    refreshListenable: authChangeNotifier,
     redirect: (context, state) {
-      // ✅ Utilisation correcte de Provider sans écoute
       final authProvider = Provider.of<AppAuthProvider>(context, listen: false);
       final isAuthenticated = authProvider.isAuthenticated;
+      final needs2Fa = authProvider.needsTwoFactor;
       final location = state.uri.path;
 
-      if (isAuthenticated &&
-          (location == '/' || location.startsWith('/auth'))) {
+      // 🛡️ SÉCURITÉ : Si la double authentification est requise, on verrouille l'utilisateur sur l'écran 2FA
+      if (needs2Fa) {
+        if (location != '/auth/verify-2fa') {
+          return '/auth/verify-2fa';
+        }
+        return null; // On le laisse sur la page de vérification
+      }
+
+      // 1. Redirection si authentifié : on quitte l'auth ou la landing vers le dashboard
+      if (isAuthenticated && (location == '/' || location.startsWith('/auth'))) {
         return '/dashboard';
       }
 
-      if (!isAuthenticated && location.startsWith('/dashboard')) {
+      // 2. Redirection si non authentifié : accès interdit aux zones privées
+      if (!isAuthenticated && (location.startsWith('/dashboard') || location.startsWith('/admin') || location.startsWith('/security'))) {
         return '/';
       }
 
+      // 3. Redirection si non authentifié pour s'abonner
       if (!isAuthenticated && location == '/subscription') {
         return '/auth/login';
       }
@@ -70,13 +103,13 @@ class AppRouter {
       return null;
     },
     routes: [
-      // Landing
+      // Landing / Accueil
       GoRoute(
         path: '/',
-        builder: (context, state) => const LandingScreen(),
+        builder: (context, state) => const LandingScreen(), // ✅ CORRECTION : Utilisation de la classe du fichier importé
       ),
 
-      // Auth
+      // Auth group
       GoRoute(
         path: '/auth',
         redirect: (context, state) => '/auth/login',
@@ -84,6 +117,10 @@ class AppRouter {
       GoRoute(
         path: '/auth/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/auth/verify-2fa',
+        builder: (context, state) => const VerifyTwoFactorScreen(),
       ),
       GoRoute(
         path: '/auth/register',
@@ -94,7 +131,7 @@ class AppRouter {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
 
-      // Subscription
+      // Abonnement
       GoRoute(
         path: '/subscription',
         builder: (context, state) => const SubscriptionScreen(),
@@ -124,7 +161,7 @@ class AppRouter {
         builder: (context, state) => const ContactSupportScreen(),
       ),
 
-      // Security
+      // Sécurité & Sessions
       GoRoute(
         path: '/security',
         builder: (context, state) => const SecurityScreen(),
@@ -134,7 +171,7 @@ class AppRouter {
         builder: (context, state) => const SessionsScreen(),
       ),
 
-      // Customization
+      // Customisation visuelle des factures
       GoRoute(
         path: '/customization',
         builder: (context, state) => const InvoiceCustomizationScreen(),
@@ -150,19 +187,19 @@ class AppRouter {
         builder: (context, state) => const NotificationScreen(),
       ),
 
-      // Reminders
+      // Relances / Rappels
       GoRoute(
         path: '/dashboard/reminders',
         builder: (context, state) => const RemindersScreen(),
       ),
 
-      // No Internet
+      // Erreur réseau
       GoRoute(
         path: '/no-internet',
         builder: (context, state) => const NoInternetScreen(),
       ),
 
-      // ========== DASHBOARD ROUTE ==========
+      // ========== ESPACE DASHBOARD ==========
       GoRoute(
         path: '/dashboard',
         builder: (context, state) => const DashboardScreen(),
@@ -170,6 +207,23 @@ class AppRouter {
       GoRoute(
         path: '/dashboard/profile',
         builder: (context, state) => const ProfileUpdateScreen(),
+      ),
+      
+      // Stock & Produits
+      GoRoute(
+        path: '/dashboard/stock',
+        builder: (context, state) => const StockScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard/stock/products',
+        builder: (context, state) => const ProductsScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard/stock/products/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return ProductDetailScreen(productId: id);
+        },
       ),
       GoRoute(
         path: '/dashboard/stock/create-delivery',
@@ -183,17 +237,8 @@ class AppRouter {
           );
         },
       ),
-      GoRoute(
-        path: '/dashboard/stock/products',
-        builder: (context, state) => const ProductsScreen(),
-      ),
-      GoRoute(
-        path: '/dashboard/stock/products/:id',
-        builder: (context, state) =>
-            const ProductDetailScreen(productId: ':id'),
-      ),
 
-      // ========== PAGES INDÉPENDANTES ==========
+      // Clients
       GoRoute(
         path: '/dashboard/clients',
         builder: (context, state) => const ClientsScreen(),
@@ -209,6 +254,8 @@ class AppRouter {
           return ClientDetailScreen(clientId: id);
         },
       ),
+
+      // Factures
       GoRoute(
         path: '/dashboard/invoices',
         builder: (context, state) => const InvoicesScreen(),
@@ -224,6 +271,8 @@ class AppRouter {
           return InvoiceDetailScreen(invoiceId: id);
         },
       ),
+
+      // Statistiques & Entreprise
       GoRoute(
         path: '/dashboard/analytics',
         builder: (context, state) => const AnalyticsScreen(),
@@ -236,12 +285,8 @@ class AppRouter {
         path: '/dashboard/company-config',
         builder: (context, state) => const CompanyConfigScreen(),
       ),
-      GoRoute(
-        path: '/dashboard/stock',
-        builder: (context, state) => const StockScreen(),
-      ),
 
-      // Suppliers
+      // Fournisseurs
       GoRoute(
         path: '/suppliers',
         builder: (context, state) => const SuppliersScreen(),
@@ -251,7 +296,7 @@ class AppRouter {
         builder: (context, state) => const CreateSupplierScreen(),
       ),
 
-      // ========== ADMIN ==========
+      // ========== ESPACE ADMINISTRATION ==========
       GoRoute(
         path: '/admin',
         name: 'admin',
@@ -306,12 +351,11 @@ class AppRouter {
               return AdminAddSubscriptionScreen(userId: userId);
             },
           ),
-          // 🔥 Routes pour les modèles personnalisés (admin)
           GoRoute(
             path: 'templates/create',
             name: 'admin-template-create',
             builder: (context, state) => const AdminTemplateFormScreen(
-              templateId: "id",
+              templateId: null,
             ),
           ),
           GoRoute(

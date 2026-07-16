@@ -5,9 +5,9 @@ class Plan {
   final String description;
   final double price;
   final String currency;
-  final String interval;
-  final int maxInvoices;
-  final int maxClients;
+  final String interval; // ex: 'month', 'year'
+  final int maxInvoices; // -1 pour illimité
+  final int maxClients;  // -1 pour illimité
   final bool hasPdfExport;
   final bool hasCloudSync;
   final bool hasTeamAccess;
@@ -32,6 +32,8 @@ class Plan {
     this.isActive = true,
   });
 
+  // ===== SÉRIALISATION =====
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -51,16 +53,16 @@ class Plan {
     };
   }
 
-  factory Plan.fromMap(Map<String, dynamic> map) {
+  factory Plan.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Plan(
-      id: map['id'] ?? '',
+      id: documentId ?? map['id'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
-      price: (map['price'] as num?)?.toDouble() ?? 0,
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
       currency: map['currency'] ?? 'XAF',
       interval: map['interval'] ?? 'month',
-      maxInvoices: map['maxInvoices'] ?? -1,
-      maxClients: map['maxClients'] ?? -1,
+      maxInvoices: (map['maxInvoices'] as num?)?.toInt() ?? -1,
+      maxClients: (map['maxClients'] as num?)?.toInt() ?? -1,
       hasPdfExport: map['hasPdfExport'] ?? true,
       hasCloudSync: map['hasCloudSync'] ?? true,
       hasTeamAccess: map['hasTeamAccess'] ?? false,
@@ -70,17 +72,62 @@ class Plan {
     );
   }
 
+  // ===== CLONAGE (copyWith) =====
+
+  Plan copyWith({
+    String? id,
+    String? name,
+    String? description,
+    double? price,
+    String? currency,
+    String? interval,
+    int? maxInvoices,
+    int? maxClients,
+    bool? hasPdfExport,
+    bool? hasCloudSync,
+    bool? hasTeamAccess,
+    List<String>? features,
+    bool? isPopular,
+    bool? isActive,
+  }) {
+    return Plan(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      currency: currency ?? this.currency,
+      interval: interval ?? this.interval,
+      maxInvoices: maxInvoices ?? this.maxInvoices,
+      maxClients: maxClients ?? this.maxClients,
+      hasPdfExport: hasPdfExport ?? this.hasPdfExport,
+      hasCloudSync: hasCloudSync ?? this.hasCloudSync,
+      hasTeamAccess: hasTeamAccess ?? this.hasTeamAccess,
+      features: features ?? this.features,
+      isPopular: isPopular ?? this.isPopular,
+      isActive: isActive ?? this.isActive,
+    );
+  }
+
+  // ===== LOGIQUE APPLICATIVE =====
+
   String getFormattedPrice() {
     if (price == 0) return 'Gratuit';
-    return '$price $currency';
+    final priceStr = price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
+    return '$priceStr $currency';
   }
+
+  bool get isFree => price == 0;
+  bool get hasInvoiceLimit => maxInvoices > 0;
+  bool get hasClientLimit => maxClients > 0;
+
+  // ===== JEUX DE DONNÉES PAR DÉFAUT =====
 
   static Plan getFreePlan() {
     return Plan(
       id: 'free',
       name: 'Gratuit',
-      description: 'Plan gratuit',
-      price: 0,
+      description: 'Pour démarrer avec OHADA Invoice Pro',
+      price: 0.0,
       currency: 'XAF',
       interval: 'month',
       maxInvoices: 3,
@@ -88,42 +135,25 @@ class Plan {
       hasPdfExport: true,
       hasCloudSync: false,
       hasTeamAccess: false,
-      features: ['3 factures', '5 clients', 'Export PDF'],
+      features: [
+        '3 factures par mois',
+        '5 clients',
+        'Export PDF',
+        'Stockage local',
+      ],
       isPopular: false,
       isActive: true,
     );
   }
 
-  bool get isFree => price == 0;
-  bool get hasInvoiceLimit => maxInvoices > 0;
-  bool get hasClientLimit => maxClients > 0;
-
   static List<Plan> getDefaultPlans() {
     return [
-      Plan(
-        id: 'free',
-        name: 'Gratuit',
-        description: 'Pour démarrer avec OHADA Invoice Pro',
-        price: 0,
-        currency: 'XAF',
-        interval: 'month',
-        maxInvoices: 3,
-        maxClients: 5,
-        hasPdfExport: true,
-        hasCloudSync: false,
-        hasTeamAccess: false,
-        features: [
-          '3 factures par mois',
-          '5 clients',
-          'Export PDF',
-          'Stockage local',
-        ],
-      ),
+      getFreePlan(),
       Plan(
         id: 'pro',
         name: 'Pro',
         description: 'Pour les PME en croissance',
-        price: 9900,
+        price: 9900.0,
         currency: 'XAF',
         interval: 'month',
         maxInvoices: -1,
@@ -144,7 +174,7 @@ class Plan {
         id: 'business',
         name: 'Business',
         description: 'Pour les entreprises et équipes',
-        price: 49000,
+        price: 49000.0,
         currency: 'XAF',
         interval: 'year',
         maxInvoices: -1,

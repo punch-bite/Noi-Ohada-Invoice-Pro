@@ -1,7 +1,7 @@
-// lib/services/printing_service.dart
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:noi_ohada_invoice_pro/models/company.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
@@ -11,22 +11,44 @@ import '../../../models/invoice.dart';
 import '../../../models/invoice_template.dart';
 
 class PrintingService {
+  
+  // Chargement de la police pour supporter les caractères spéciaux et accents
+  static Future<pw.Font> _getFont() async {
+    try {
+      final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+      return pw.Font.ttf(fontData);
+    } catch (_) {
+      // Fallback sur la police par défaut si l'asset n'est pas trouvé
+      return pw.Font.helvetica();
+    }
+  }
+
   static Future<void> printInvoice({
     required Invoice invoice,
     required Client client,
     required Company company,
     required InvoiceTemplate template,
+    bool share = false,
   }) async {
+    final font = await _getFont();
     final pdf = await generateInvoicePdf(
       invoice: invoice,
       client: client,
       company: company,
       template: template,
+      font: font,
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf,
-    );
+    if (share) {
+      await Printing.sharePdf(
+        bytes: pdf,
+        filename: '${invoice.isDevis ? "Devis" : "Facture"}_${invoice.invoiceNumber}.pdf',
+      );
+    } else {
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf,
+      );
+    }
   }
 
   static Future<Uint8List> generateInvoicePdf({
@@ -34,12 +56,15 @@ class PrintingService {
     required Client client,
     required Company company,
     required InvoiceTemplate template,
+    pw.Font? font,
   }) async {
     final pdf = pw.Document();
+    final baseFont = font ?? await _getFont();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(base: baseFont),
         margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) => [
           _buildHeader(invoice, company, template),
@@ -67,7 +92,6 @@ class PrintingService {
     final primaryColor = _getPdfColor(template.primaryColor);
     final textColor = _getPdfColor(template.textColor);
 
-    // Chargement du logo
     pw.Widget? logoWidget;
     if (template.showLogo && company.logoPath.isNotEmpty) {
       try {
@@ -82,12 +106,10 @@ class PrintingService {
           );
         }
       } catch (e) {
-        // Ignorer l'erreur, on n'affiche pas le logo
         logoWidget = null;
       }
     }
 
-    // Contenu de l'en-tête
     return pw.Container(
       decoration: template.showBorder
           ? pw.BoxDecoration(
@@ -104,7 +126,6 @@ class PrintingService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // Partie gauche : logo + infos entreprise
           pw.Expanded(
             child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -160,7 +181,6 @@ class PrintingService {
               ],
             ),
           ),
-          // Partie droite : titre + numéro
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
@@ -278,7 +298,6 @@ class PrintingService {
         4: const pw.FlexColumnWidth(1.5),
       },
       children: [
-        // En-tête du tableau
         pw.TableRow(
           decoration: pw.BoxDecoration(
             color: primaryColor,
@@ -345,66 +364,65 @@ class PrintingService {
             ),
           ],
         ),
-        // Lignes du tableau
         ...invoice.items.map((item) => pw.TableRow(
-          children: [
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(8),
-              child: pw.Text(
-                item.description,
-                style: pw.TextStyle(
-                  fontSize: template.fontSize,
-                  color: textColor,
+              children: [
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    item.description,
+                    style: pw.TextStyle(
+                      fontSize: template.fontSize,
+                      color: textColor,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(8),
-              child: pw.Text(
-                item.quantity.toString(),
-                style: pw.TextStyle(
-                  fontSize: template.fontSize,
-                  color: textColor,
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    item.quantity.toString(),
+                    style: pw.TextStyle(
+                      fontSize: template.fontSize,
+                      color: textColor,
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
                 ),
-                textAlign: pw.TextAlign.center,
-              ),
-            ),
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(8),
-              child: pw.Text(
-                '${item.unitPrice.toStringAsFixed(0)} FCFA',
-                style: pw.TextStyle(
-                  fontSize: template.fontSize,
-                  color: textColor,
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    '${item.unitPrice.toStringAsFixed(0)} FCFA',
+                    style: pw.TextStyle(
+                      fontSize: template.fontSize,
+                      color: textColor,
+                    ),
+                    textAlign: pw.TextAlign.right,
+                  ),
                 ),
-                textAlign: pw.TextAlign.right,
-              ),
-            ),
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(8),
-              child: pw.Text(
-                item.taxRate.toString(),
-                style: pw.TextStyle(
-                  fontSize: template.fontSize,
-                  color: textColor,
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    item.taxRate.toString(),
+                    style: pw.TextStyle(
+                      fontSize: template.fontSize,
+                      color: textColor,
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
                 ),
-                textAlign: pw.TextAlign.center,
-              ),
-            ),
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(8),
-              child: pw.Text(
-                '${item.total.toStringAsFixed(0)} FCFA',
-                style: pw.TextStyle(
-                  fontSize: template.fontSize,
-                  fontWeight: pw.FontWeight.bold,
-                  color: textColor,
+                pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Text(
+                    '${item.total.toStringAsFixed(0)} FCFA',
+                    style: pw.TextStyle(
+                      fontSize: template.fontSize,
+                      fontWeight: pw.FontWeight.bold,
+                      color: textColor,
+                    ),
+                    textAlign: pw.TextAlign.right,
+                  ),
                 ),
-                textAlign: pw.TextAlign.right,
-              ),
-            ),
-          ],
-        )),
+              ],
+            )),
       ],
     );
   }

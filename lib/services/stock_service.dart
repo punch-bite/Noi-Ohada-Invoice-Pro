@@ -1,4 +1,4 @@
-// lib/services/stock_service.dart
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:noi_ohada_invoice_pro/models/notification.dart';
 import '../models/product.dart';
@@ -6,244 +6,166 @@ import '../models/delivery.dart';
 import '../services/notification_service.dart';
 
 class StockService {
-  static const String _productBox = 'products';
-  static const String _deliveryBox = 'deliveries';
-
-  late Box<Product> _productBoxInstance;
-  late Box<Delivery> _deliveryBoxInstance;
-  bool _isInitialized = false;
-
-  // Cache pour éviter les notifications en double
-  final Map<String, String> _notifiedStatuses = {}; // productId -> 'low_stock' | 'out_of_stock' | 'normal'
+  static const String _productBoxName = 'products';
+  static const String _deliveryBoxName = 'deliveries';
 
   final NotificationService _notificationService = NotificationService();
+  final Map<String, String> _notifiedStatuses = {};
+
+  bool _isInitialized = false;
+
+  // Accesseurs sécurisés
+  Box<Product> get _productBox => Hive.box<Product>(_productBoxName);
+  Box<Delivery> get _deliveryBox => Hive.box<Delivery>(_deliveryBoxName);
 
   // ===== INITIALISATION =====
 
   Future<void> init() async {
     if (_isInitialized) return;
     try {
-      _productBoxInstance = await Hive.openBox<Product>(_productBox);
-      _deliveryBoxInstance = await Hive.openBox<Delivery>(_deliveryBox);
-      _isInitialized = true;
+      if (!Hive.isBoxOpen(_productBoxName)) await Hive.openBox<Product>(_productBoxName);
+      if (!Hive.isBoxOpen(_deliveryBoxName)) await Hive.openBox<Delivery>(_deliveryBoxName);
       await _notificationService.init();
-      print('✅ StockService initialisé avec ${_productBoxInstance.length} produits');
+      _isInitialized = true;
+      debugPrint('✅ StockService initialisé.');
     } catch (e) {
-      print('❌ Erreur init StockService: $e');
+      debugPrint('❌ Erreur critique init StockService: $e');
       rethrow;
     }
   }
 
   Future<void> _ensureInitialized() async {
-    if (!_isInitialized) {
-      await init();
-    }
+    if (!_isInitialized) await init();
   }
 
-  // ===== VÉRIFICATION ET ENVOI DE NOTIFICATIONS =====
+  // ===== SYSTÈME D'ALERTES =====
 
   Future<void> _checkAndNotifyStockStatus(Product product) async {
     if (!product.isActive) return;
 
-    final currentStatus = product.isOutOfStock 
-        ? 'out_of_stock' 
+    final currentStatus = product.isOutOfStock
+        ? 'out_of_stock'
         : (product.isLowStock ? 'low_stock' : 'normal');
 
-    final previousStatus = _notifiedStatuses[product.id] ?? 'normal';
-
-    if (currentStatus == previousStatus) return;
+    if (_notifiedStatuses[product.id] == currentStatus) return;
 
     _notifiedStatuses[product.id] = currentStatus;
 
     if (currentStatus == 'out_of_stock') {
-      final notification = AppNotification.createStockOut(product.name);
-      await _notificationService.addNotification(notification);
-      print('🔔 Notification rupture de stock pour ${product.name}');
+      await _notificationService.addNotification(AppNotification.createStockOut(product.name));
     } else if (currentStatus == 'low_stock') {
-      final notification = AppNotification.createLowStock(
-        product.name,
-        product.quantity,
-        product.minStock,
-      );
-      await _notificationService.addNotification(notification);
-      print('🔔 Notification stock faible pour ${product.name}');
+      await _notificationService.addNotification(AppNotification.createLowStock(
+        product.name, product.quantity, product.minStock));
     }
   }
 
   Future<void> checkAllProductsStockStatus() async {
     await _ensureInitialized();
-    final products = await getProducts();
-    for (final product in products) {
+    for (final product in _productBox.values) {
       await _checkAndNotifyStockStatus(product);
     }
   }
 
-  // ===== PRODUCTS =====
+  // ===== PRODUITS =====
 
   Future<List<Product>> getProducts() async {
     await _ensureInitialized();
-    try {
-      return _productBoxInstance.values.toList();
-    } catch (e) {
-      print('❌ Erreur getProducts: $e');
-      return [];
-    }
+    return _productBox.values.toList();
   }
 
   Future<List<Product>> getActiveProducts() async {
     await _ensureInitialized();
-    try {
-      return _productBoxInstance.values.where((p) => p.isActive).toList();
-    } catch (e) {
-      return [];
-    }
+    return _productBox.values.where((p) => p.isActive).toList();
   }
 
   Future<Product?> getProduct(String id) async {
     await _ensureInitialized();
-    try {
-      return _productBoxInstance.values.firstWhere((p) => p.id == id);
-    } catch (e) {
-      return null;
-    }
+    return _productBox.get(id);
   }
 
   Future<void> addProduct(Product product) async {
     await _ensureInitialized();
-    try {
-      await _productBoxInstance.add(product);
-      print('✅ Produit ajouté: ${product.name}');
-      await _checkAndNotifyStockStatus(product);
-    } catch (e) {
-      print('❌ Erreur addProduct: $e');
-      throw Exception('Erreur lors de l\'ajout du produit: $e');
-    }
+    await _productBox.put(product.id, product);
+    await _checkAndNotifyStockStatus(product);
   }
 
   Future<void> updateProduct(Product product) async {
     await _ensureInitialized();
-    try {
-      final index = _productBoxInstance.values
-          .toList()
-          .indexWhere((p) => p.id == product.id);
-      if (index != -1) {
-        await _productBoxInstance.putAt(index, product);
-        print('✅ Produit mis à jour: ${product.name}');
-        await _checkAndNotifyStockStatus(product);
-      } else {
-        throw Exception('Produit non trouvé');
-      }
-    } catch (e) {
-      print('❌ Erreur updateProduct: $e');
-      throw Exception('Erreur lors de la mise à jour du produit: $e');
-    }
+    if (!_productBox.containsKey(product.id)) throw Exception("Produit introuvable");
+    await _productBox.put(product.id, product);
+    await _checkAndNotifyStockStatus(product);
   }
 
   Future<void> deleteProduct(String id) async {
     await _ensureInitialized();
-    try {
-      final index =
-          _productBoxInstance.values.toList().indexWhere((p) => p.id == id);
-      if (index != -1) {
-        await _productBoxInstance.deleteAt(index);
-        _notifiedStatuses.remove(id);
-        print('✅ Produit supprimé: $id');
-      }
-    } catch (e) {
-      print('❌ Erreur deleteProduct: $e');
-      throw Exception('Erreur lors de la suppression du produit: $e');
-    }
+    await _productBox.delete(id);
+    _notifiedStatuses.remove(id);
   }
 
   Future<void> updateStock(String productId, int quantity) async {
-    await _ensureInitialized();
     final product = await getProduct(productId);
     if (product != null) {
-      final updated = product.copyWith(
-        quantity: quantity,
-        updatedAt: DateTime.now(),
-      );
-      await updateProduct(updated);
+      await updateProduct(product.copyWith(quantity: quantity, updatedAt: DateTime.now()));
     }
   }
 
+  // ===== FILTRES =====
+
   Future<List<Product>> getLowStockProducts() async {
     await _ensureInitialized();
-    return _productBoxInstance.values
-        .where((p) => p.isLowStock && p.isActive)
-        .toList();
+    return _productBox.values.where((p) => p.isLowStock && p.isActive).toList();
   }
 
   Future<List<Product>> getOutOfStockProducts() async {
     await _ensureInitialized();
-    return _productBoxInstance.values
-        .where((p) => p.isOutOfStock && p.isActive)
-        .toList();
+    return _productBox.values.where((p) => p.isOutOfStock && p.isActive).toList();
   }
 
   Future<double> getTotalStockValue() async {
     await _ensureInitialized();
-    return _productBoxInstance.values
-        .fold<double>(0.0, (sum, p) => sum + p.stockValue);
+    return _productBox.values.fold<double>(0.0, (sum, p) => sum + p.stockValue);
   }
 
   Future<int> getTotalItems() async {
     await _ensureInitialized();
-    return _productBoxInstance.values
-        .fold<int>(0, (sum, p) => sum + p.quantity);
+    return _productBox.values.fold<int>(0, (sum, p) => sum + p.quantity);
   }
 
-  // ===== DELIVERIES =====
+  // ===== LIVRAISONS =====
 
   Future<List<Delivery>> getDeliveries() async {
     await _ensureInitialized();
-    return _deliveryBoxInstance.values.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return _deliveryBox.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<Delivery?> getDelivery(String id) async {
     await _ensureInitialized();
-    try {
-      return _deliveryBoxInstance.values.firstWhere((d) => d.id == id);
-    } catch (e) {
-      return null;
-    }
+    return _deliveryBox.get(id);
   }
 
   Future<void> addDelivery(Delivery delivery) async {
     await _ensureInitialized();
     final product = await getProduct(delivery.productId);
-    if (product != null) {
-      int newQuantity = product.quantity;
-      if (delivery.isIncoming) {
-        newQuantity += delivery.quantity;
-      } else if (delivery.isOutgoing) {
-        newQuantity -= delivery.quantity;
-      }
-      await updateStock(delivery.productId, newQuantity);
-    }
-    await _deliveryBoxInstance.add(delivery);
+    if (product == null) throw Exception('Produit associé introuvable.');
+
+    int newQuantity = product.quantity;
+    if (delivery.isIncoming) newQuantity += delivery.quantity;
+    if (delivery.isOutgoing) newQuantity -= delivery.quantity;
+
+    await _deliveryBox.put(delivery.id, delivery);
+    await updateStock(delivery.productId, newQuantity);
   }
 
   Future<void> updateDelivery(Delivery delivery) async {
     await _ensureInitialized();
-    final index = _deliveryBoxInstance.values
-        .toList()
-        .indexWhere((d) => d.id == delivery.id);
-    if (index != -1) {
-      await _deliveryBoxInstance.putAt(index, delivery);
-    }
+    await _deliveryBox.put(delivery.id, delivery);
   }
 
   Future<void> completeDelivery(String id) async {
     await _ensureInitialized();
     final delivery = await getDelivery(id);
     if (delivery != null && !delivery.isCompleted) {
-      final updated = delivery.copyWith(
-        status: DeliveryStatus.completed.toString(),
-        completedAt: DateTime.now(),
-      );
-      await updateDelivery(updated);
+      await updateDelivery(delivery.copyWith(status: DeliveryStatus.completed.toString(), completedAt: DateTime.now()));
     }
   }
 
@@ -254,30 +176,22 @@ class StockService {
       final product = await getProduct(delivery.productId);
       if (product != null) {
         int newQuantity = product.quantity;
-        if (delivery.isIncoming) {
-          newQuantity -= delivery.quantity;
-        } else if (delivery.isOutgoing) {
-          newQuantity += delivery.quantity;
-        }
+        if (delivery.isIncoming) newQuantity -= delivery.quantity;
+        if (delivery.isOutgoing) newQuantity += delivery.quantity;
         await updateStock(delivery.productId, newQuantity);
       }
-      final updated = delivery.copyWith(
-        status: DeliveryStatus.cancelled.toString(),
-      );
-      await updateDelivery(updated);
+      await updateDelivery(delivery.copyWith(status: DeliveryStatus.cancelled.toString()));
     }
   }
 
   Future<List<Delivery>> getDeliveriesByProduct(String productId) async {
     await _ensureInitialized();
-    return _deliveryBoxInstance.values
-        .where((d) => d.productId == productId)
-        .toList();
+    return _deliveryBox.values.where((d) => d.productId == productId).toList();
   }
 
   Future<List<Delivery>> getPendingDeliveries() async {
     await _ensureInitialized();
-    return _deliveryBoxInstance.values.where((d) => d.isPending).toList();
+    return _deliveryBox.values.where((d) => d.isPending).toList();
   }
 
   Future<List<Delivery>> getRecentDeliveries({int limit = 10}) async {
@@ -288,19 +202,20 @@ class StockService {
 
   Future<void> clearAll() async {
     await _ensureInitialized();
-    await _productBoxInstance.clear();
-    await _deliveryBoxInstance.clear();
+    await _productBox.clear();
+    await _deliveryBox.clear();
+    _notifiedStatuses.clear();
   }
+
+  // ===== LIENS FOURNISSEURS =====
 
   Future<List<Product>> getProductsBySupplier(String supplierId) async {
     await _ensureInitialized();
-    return _productBoxInstance.values
-        .where((p) => p.supplierId == supplierId)
-        .toList();
+    return _productBox.values.where((p) => p.supplierId == supplierId).toList();
   }
 
   Future<bool> hasProductsForSupplier(String supplierId) async {
     await _ensureInitialized();
-    return _productBoxInstance.values.any((p) => p.supplierId == supplierId);
+    return _productBox.values.any((p) => p.supplierId == supplierId);
   }
 }

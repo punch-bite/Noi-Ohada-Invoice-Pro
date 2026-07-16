@@ -1,10 +1,12 @@
 // lib/models/company.dart
 import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'company.g.dart';
 
-@HiveType(typeId: 3)
+@JsonSerializable()
+@HiveType(typeId: 10)
 class Company {
   @HiveField(0)
   final String id;
@@ -16,7 +18,7 @@ class Company {
   final String address;
   
   @HiveField(3)
-  final String taxId;
+  final String taxId; // NUI (Numéro d'Identifiant Unique)
   
   @HiveField(4)
   final String phone;
@@ -51,8 +53,8 @@ class Company {
     required this.email,
     this.logoPath = '',
     this.currency = 'XAF',
-    this.defaultTaxRate = 18,
-    this.legalText = 'Conforme aux normes OHADA et SYSCOHADA',
+    this.defaultTaxRate = 18.0,
+    this.legalText = 'Conforme aux dispositions du SYSCOHADA révisé',
     this.website = '',
     this.rccm = '',
   }) : id = id ?? const Uuid().v4();
@@ -74,9 +76,9 @@ class Company {
     };
   }
 
-  factory Company.fromMap(Map<String, dynamic> map) {
+  factory Company.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Company(
-      id: map['id'] ?? const Uuid().v4(),
+      id: documentId ?? map['id'] ?? const Uuid().v4(),
       name: map['name'] ?? '',
       address: map['address'] ?? '',
       taxId: map['taxId'] ?? '',
@@ -84,8 +86,8 @@ class Company {
       email: map['email'] ?? '',
       logoPath: map['logoPath'] ?? '',
       currency: map['currency'] ?? 'XAF',
-      defaultTaxRate: (map['defaultTaxRate'] as num?)?.toDouble() ?? 18,
-      legalText: map['legalText'] ?? 'Conforme aux normes OHADA et SYSCOHADA',
+      defaultTaxRate: (map['defaultTaxRate'] as num?)?.toDouble() ?? 18.0,
+      legalText: map['legalText'] ?? 'Conforme aux dispositions du SYSCOHADA révisé',
       website: map['website'] ?? '',
       rccm: map['rccm'] ?? '',
     );

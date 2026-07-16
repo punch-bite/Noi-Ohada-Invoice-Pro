@@ -1,68 +1,47 @@
-// lib/services/subscription_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import '../models/notification.dart';
 import '../models/subscription.dart';
 import '../models/plan.dart';
 import '../services/notification_service.dart';
 
+
 class SubscriptionService {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notifications = NotificationService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final NotificationService _notificationService = NotificationService();
+  // Cache mémoire pour éviter les lectures Firestore inutiles
+  final Map<String, Plan> _planCache = {};
 
-  // Obtenir l'abonnement actif d'un utilisateur
+  // --- Lecture optimisée avec support du cache ---
+  Future<Plan?> getPlan(String planId) async {
+    if (_planCache.containsKey(planId)) return _planCache[planId];
+
+    final doc = await _db.collection('plans').doc(planId).get();
+    if (doc.exists) {
+      final plan = Plan.fromMap({...doc.data()!, 'id': doc.id});
+      _planCache[planId] = plan;
+      return plan;
+    }
+    return null;
+  }
+
+  // --- Lecture optimisée (Indexée) ---
   Future<Subscription?> getUserSubscription(String userId) async {
-    try {
-      final query = await _firestore
-          .collection('subscriptions')
-          .where('userId', isEqualTo: userId)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
+    final query = await _db
+        .collection('subscriptions')
+        .where('userId', isEqualTo: userId)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
 
-      if (query.docs.isNotEmpty) {
-        return Subscription.fromMap(query.docs.first.data());
-      }
-      return null;
-    } catch (e) {
-      print('Erreur get user subscription: $e');
-      return null;
-    }
+    return query.docs.isNotEmpty
+        ? Subscription.fromMap(
+            {...query.docs.first.data(), 'id': query.docs.first.id})
+        : null;
   }
 
-  // Obtenir tous les abonnements d'un utilisateur
-  Future<List<Subscription>> getUserSubscriptions(String userId) async {
-    try {
-      final query = await _firestore
-          .collection('subscriptions')
-          .where('userId', isEqualTo: userId)
-          .orderBy('startDate', descending: true)
-          .get();
-
-      return query.docs
-          .map((doc) => Subscription.fromMap(doc.data()))
-          .toList();
-    } catch (e) {
-      print('Erreur get user subscriptions: $e');
-      return [];
-    }
-  }
-
-  // Obtenir tous les abonnements actifs (pour vérification périodique)
-  Future<List<Subscription>> getActiveSubscriptions() async {
-    try {
-      final query = await _firestore
-          .collection('subscriptions')
-          .where('status', isEqualTo: 'active')
-          .get();
-
-      return query.docs.map((doc) => Subscription.fromMap(doc.data())).toList();
-    } catch (e) {
-      print('Erreur get active subscriptions: $e');
-      return [];
-    }
-  }
-
-  // Créer un abonnement
+  // --- Écritures sécurisées ---
   Future<Subscription> createSubscription({
     required String userId,
     required String planId,
@@ -72,225 +51,121 @@ class SubscriptionService {
     required String currency,
     required String interval,
   }) async {
+    final plan = await getPlan(planId) ?? Plan.getFreePlan();
+
     try {
-      final plan = await getPlan(planId);
-      if (plan == null) {
-        throw Exception('Plan non trouvé');
-      }
+      return await _db.runTransaction((transaction) async {
+        final subRef = _db.collection('subscriptions').doc();
+        final userRef = _db.collection('users').doc(userId);
 
-      final startDate = DateTime.now();
-      final endDate = interval == 'year'
-          ? DateTime(startDate.year + 1, startDate.month, startDate.day)
-          : DateTime(startDate.year, startDate.month + 1, startDate.day);
+        final startDate = DateTime.now();
+        final endDate =
+            startDate.add(Duration(days: interval == 'year' ? 365 : 30));
 
-      final subscription = Subscription(
-        id: _firestore.collection('subscriptions').doc().id,
-        userId: userId,
-        planId: planId,
-        startDate: startDate,
-        endDate: endDate,
-        status: 'active',
-        paymentMethod: paymentMethod,
-        paymentId: paymentId,
-        amount: amount,
-        currency: currency,
-        autoRenew: true,
-      );
+        final sub = Subscription(
+          id: subRef.id,
+          userId: userId,
+          planId: planId,
+          startDate: startDate,
+          endDate: endDate,
+          status: 'active',
+          paymentMethod: paymentMethod,
+          paymentId: paymentId,
+          amount: amount,
+          currency: currency,
+          autoRenew: true, isActive: false, createdAt: DateTime.now(),
+        );
 
-      await _firestore
-          .collection('subscriptions')
-          .doc(subscription.id)
-          .set(subscription.toMap());
-
-      await _firestore.collection('users').doc(userId).update({
-        'subscriptionId': subscription.id,
+        transaction.set(subRef, sub.toMap());
+        transaction.update(userRef, {'subscriptionId': subRef.id});
+        return sub;
+      }).then((sub) async {
+        await _notifications.addNotification(_buildNotif('🎉 Abonnement activé',
+            'Votre abonnement ${plan.name} est actif.', sub.id));
+        return sub;
       });
-
-      // ✅ Notification d'activation
-      await _notificationService.addNotification(
-        AppNotification(
-          title: '🎉 Abonnement activé',
-          body: 'Votre abonnement ${plan.name} est maintenant actif.',
-          type: NotificationType.subscription_activated.toString(),
-          referenceId: subscription.id,
-          referenceType: 'subscription',
-        ),
-      );
-
-      return subscription;
     } catch (e) {
-      // Notification d'échec
-      await _notificationService.addNotification(
-        AppNotification(
-          title: '⚠️ Échec de l\'activation',
-          body: 'L\'activation de votre abonnement a échoué. Veuillez réessayer.',
-          type: NotificationType.system_update.toString(),
-        ),
-      );
-      throw Exception('Erreur création abonnement: $e');
+      await _notifications.addNotification(
+          _buildNotif('⚠️ Échec activation', 'L\'activation a échoué.'));
+      throw Exception('Transaction échouée: $e');
     }
   }
 
-  // Annuler un abonnement
+// Ajoutez cette méthode à votre classe SubscriptionService
+  Future<List<Subscription>> getActiveSubscriptions() async {
+    try {
+      final querySnapshot = await _db
+          .collection('subscriptions')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return querySnapshot.docs.map((doc) {
+        return Subscription.fromMap({...doc.data(), 'id': doc.id});
+      }).toList();
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la récupération des abonnements actifs: $e');
+      return [];
+    }
+  }
+
+  /// Annule un abonnement dans Firestore
   Future<void> cancelSubscription(String subscriptionId) async {
     try {
-      await _firestore.collection('subscriptions').doc(subscriptionId).update({
+      await _db.collection('subscriptions').doc(subscriptionId).update({
         'status': 'canceled',
         'autoRenew': false,
         'canceledAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Notification d'annulation
-      await _notificationService.addNotification(
-        AppNotification(
-          title: '📌 Abonnement annulé',
-          body: 'Votre abonnement a été annulé avec succès.',
-          type: NotificationType.system_update.toString(),
-          referenceId: subscriptionId,
-          referenceType: 'subscription',
-        ),
-      );
+      // Optionnel : ajouter une notification de confirmation
+      await _notifications.addNotification(_buildNotif('Abonnement annulé',
+          'Votre abonnement a été annulé avec succès.', subscriptionId));
     } catch (e) {
-      throw Exception('Erreur annulation abonnement: $e');
+      debugPrint('❌ Erreur lors de l\'annulation: $e');
+      throw Exception('Impossible d\'annuler l\'abonnement.');
     }
   }
 
-  // Renouveler un abonnement
-  Future<void> renewSubscription(String subscriptionId) async {
-    try {
-      final doc = await _firestore.collection('subscriptions').doc(subscriptionId).get();
-      if (!doc.exists) {
-        throw Exception('Abonnement non trouvé');
-      }
+  // --- Vérification des limites (Performance) ---
+  Future<bool> hasReachedInvoiceLimit(String userId) async {
+    final sub = await getUserSubscription(userId);
+    if (sub == null) return true;
 
-      final subscription = Subscription.fromMap(doc.data()!);
-      final newEndDate = DateTime(
-        subscription.endDate.year,
-        subscription.endDate.month + 1,
-        subscription.endDate.day,
-      );
+    final plan = await getPlan(sub.planId);
+    if (plan == null || !plan.hasInvoiceLimit) return false;
 
-      await _firestore.collection('subscriptions').doc(subscriptionId).update({
-        'endDate': newEndDate,
-        'status': 'active',
-      });
+    final startOfMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
-      // ✅ Notification de renouvellement
-      final plan = await getPlan(subscription.planId);
-      await _notificationService.addNotification(
-        AppNotification(
-          title: '🔄 Abonnement renouvelé',
-          body: 'Votre abonnement ${plan?.name ?? ''} a été renouvelé jusqu\'au ${_formatDate(newEndDate)}.',
-          type: NotificationType.system_update.toString(),
-          referenceId: subscriptionId,
-          referenceType: 'subscription',
-        ),
-      );
-    } catch (e) {
-      throw Exception('Erreur renouvellement abonnement: $e');
-    }
+    // .count() est la méthode la plus légère (ne télécharge aucun document)
+    final snapshot = await _db
+        .collection('invoices')
+        .where('userId', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: startOfMonth)
+        .count()
+        .get();
+
+    return (snapshot.count ?? 0) >= plan.maxInvoices;
   }
 
-  // Obtenir un plan
-  Future<Plan?> getPlan(String planId) async {
-    try {
-      final doc = await _firestore.collection('plans').doc(planId).get();
-      if (doc.exists) {
-        return Plan.fromMap(doc.data()!);
-      }
-      return null;
-    } catch (e) {
-      print('Erreur get plan: $e');
-      return null;
-    }
-  }
+  AppNotification _buildNotif(String title, String body, [String? refId]) =>
+      AppNotification(
+        title: title,
+        body: body,
+        type: 'subscription_update',
+        referenceId: refId,
+        referenceType: 'subscription',
+      );
 
-  // Obtenir tous les plans
+  /// Récupère la liste des plans d'abonnement disponibles
   Future<List<Plan>> getPlans() async {
     try {
-      final query = await _firestore
-          .collection('plans')
-          .where('isActive', isEqualTo: true)
+      final snapshot = await _firestore.collection('plans')
+          .orderBy('price') // Tri par prix par exemple
           .get();
-
-      if (query.docs.isNotEmpty) {
-        return query.docs.map((doc) => Plan.fromMap(doc.data())).toList();
-      }
-      
-      return Plan.getDefaultPlans();
+      return snapshot.docs.map((doc) => Plan.fromMap(doc.data())).toList();
     } catch (e) {
-      print('Erreur get plans: $e');
-      return Plan.getDefaultPlans();
+      debugPrint("Erreur récupération plans : $e");
+      return [];
     }
-  }
-
-  // Initialiser les plans par défaut dans Firestore
-  Future<void> initializeDefaultPlans() async {
-    try {
-      final existing = await _firestore.collection('plans').get();
-      if (existing.docs.isEmpty) {
-        final plans = Plan.getDefaultPlans();
-        for (final plan in plans) {
-          await _firestore.collection('plans').doc(plan.id).set(plan.toMap());
-        }
-        print('Plans par défaut créés avec succès');
-      }
-    } catch (e) {
-      print('Erreur initialization plans: $e');
-    }
-  }
-
-  // Vérifier si l'utilisateur a dépassé la limite de factures
-  Future<bool> hasReachedInvoiceLimit(String userId) async {
-    try {
-      final subscription = await getUserSubscription(userId);
-      if (subscription == null) return true;
-
-      final plan = await getPlan(subscription.planId);
-      if (plan == null) return true;
-      if (!plan.hasInvoiceLimit) return false;
-
-      final startOfMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
-      final endOfMonth = DateTime(DateTime.now().year, DateTime.now().month + 1, 1);
-
-      final query = await _firestore
-          .collection('invoices')
-          .where('userId', isEqualTo: userId)
-          .where('createdAt', isGreaterThanOrEqualTo: startOfMonth)
-          .where('createdAt', isLessThan: endOfMonth)
-          .get();
-
-      return query.size >= plan.maxInvoices;
-    } catch (e) {
-      print('Erreur vérification limite: $e');
-      return true;
-    }
-  }
-
-  // Vérifier si l'utilisateur a dépassé la limite de clients
-  Future<bool> hasReachedClientLimit(String userId) async {
-    try {
-      final subscription = await getUserSubscription(userId);
-      if (subscription == null) return true;
-
-      final plan = await getPlan(subscription.planId);
-      if (plan == null) return true;
-      if (!plan.hasClientLimit) return false;
-
-      final query = await _firestore
-          .collection('clients')
-          .where('userId', isEqualTo: userId)
-          .get();
-
-      return query.size >= plan.maxClients;
-    } catch (e) {
-      print('Erreur vérification limite clients: $e');
-      return true;
-    }
-  }
-
-  // ===== UTILITAIRES =====
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 }

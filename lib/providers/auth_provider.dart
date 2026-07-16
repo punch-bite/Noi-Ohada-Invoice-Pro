@@ -1,20 +1,23 @@
 // lib/providers/auth_provider.dart
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:noi_ohada_invoice_pro/services/logger_service.dart';
 import 'package:noi_ohada_invoice_pro/services/security_service.dart';
 import 'package:noi_ohada_invoice_pro/services/two_factor_service.dart';
+import '../router/app_router.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import '../services/mail_service.dart';
 
 class AppAuthProvider extends ChangeNotifier {
   final AuthService _authService;
+  StreamSubscription<User?>? _authStateSubscription;
 
   AppUser? _user;
   bool _isLoading = false;
   String? _error;
-  bool _needsTwoFactor = false; // Indique si le 2FA est requis pour la connexion
+  bool _needsTwoFactor = false; // Indique si le 2FA est requis
   AppUser? _pendingUser; // Utilisateur temporaire en attente de vérification 2FA
   UserCredential? _pendingCredential;
 
@@ -30,17 +33,28 @@ class AppAuthProvider extends ChangeNotifier {
   }
 
   void _init() {
-    _authService.authStateChanges.listen((firebaseUser) {
+    _authStateSubscription = _authService.authStateChanges.listen((firebaseUser) async {
       if (firebaseUser != null) {
-        _loadUserProfile(firebaseUser.uid);
+        // Sécurité : Ne pas charger automatiquement le profil si une procédure 2FA est en cours
+        if (!_needsTwoFactor) {
+          await _loadUserProfile(firebaseUser.uid);
+        }
       } else {
         _user = null;
         _needsTwoFactor = false;
         _pendingUser = null;
         _pendingCredential = null;
+        SecurityService.clearUserContext(); // Purge du contexte de sécurité à la fermeture
         notifyListeners();
+        notifyRouter(); // ✅ Notifie GoRouter du changement d'état d'accès
       }
     });
+  }
+
+  /// Force GoRouter à réévaluer les droits d'accès des pages (redirections automatiques)
+  void notifyRouter() {
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    (AppRouter.authChangeNotifier as ValueNotifier).notifyListeners();
   }
 
   Future<void> _loadUserProfile(String userId) async {
@@ -50,11 +64,16 @@ class AppAuthProvider extends ChangeNotifier {
     try {
       _user = await _authService.getUserProfile(userId);
       _error = null;
+      if (_user != null) {
+        // ✅ On synchronise le contexte pour les logs sécurisés
+        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
+      notifyRouter(); // ✅ On force la redirection automatique après chargement du profil
     }
   }
 
@@ -77,8 +96,15 @@ class AppAuthProvider extends ChangeNotifier {
         companyName: companyName,
         phone: phone,
       );
+      
+      if (_user != null) {
+        // Synchroniser le contexte de sécurité
+        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+      }
+
       _isLoading = false;
       notifyListeners();
+      notifyRouter(); // ✅ Redirection automatique vers le dashboard
 
       // Log d'inscription
       await LoggerService.info(
@@ -88,7 +114,6 @@ class AppAuthProvider extends ChangeNotifier {
         targetType: 'user',
       );
 
-      // Dans la méthode register, après création du compte :
       if (_user != null) {
         final welcomeHtml = MailService.getWelcomeTemplate(displayName);
         await MailService.sendHtmlEmail(
@@ -115,35 +140,31 @@ class AppAuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Connexion Firebase
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      // 1. Connexion avec limitation de tentative intégrée dans AuthService
+      final appUser = await _authService.signInWithEmailPassword(
         email: email,
         password: password,
       );
-      final firebaseUser = userCredential.user;
-      if (firebaseUser == null) throw Exception('Utilisateur non trouvé');
 
-      // 2. Récupérer le profil utilisateur depuis Firestore
-      final appUser = await _authService.getUserProfile(firebaseUser.uid);
-      if (appUser == null) throw Exception('Profil utilisateur manquant');
-
-      // 3. Vérifier si le 2FA est activé pour cet utilisateur
+      // 2. Vérifier si le 2FA est activé pour cet utilisateur
       final is2FAEnabled = await SecurityService.isTwoFactorEnabled();
 
       if (is2FAEnabled) {
-        // Stocker l'utilisateur en attente et les identifiants
+        // Stocker l'utilisateur en attente
         _pendingUser = appUser;
-        _pendingCredential = userCredential;
         _needsTwoFactor = true;
         _isLoading = false;
         notifyListeners();
-        return true; // Connexion initiée, en attente du code 2FA
+        return true; // Connexion initiée, l'UI affichera l'écran 2FA (pas de redirection automatique encore)
       }
 
-      // 4. Pas de 2FA : connexion directe
+      // 3. Pas de 2FA : connexion directe
       _user = appUser;
+      SecurityService.setUserContext(userId: appUser.id, userEmail: appUser.email);
+      
       _isLoading = false;
       notifyListeners();
+      notifyRouter(); // ✅ Déclenche la transition vers le Dashboard
 
       // Log de connexion
       await LoggerService.info(
@@ -154,42 +175,52 @@ class AppAuthProvider extends ChangeNotifier {
       );
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = e.toString().replaceAll('Exception: ', '');
       _isLoading = false;
       notifyListeners();
 
       // Log d'échec de connexion
       await LoggerService.warning(
         'login_failed',
-        details: 'Tentative de connexion échouée: $e',
+        details: 'Tentative de connexion échouée pour $email: $e',
       );
       return false;
     }
   }
 
-  // Vérification du code 2FA après que l'utilisateur l'a saisi
+  // Vérification du code 2FA après saisie de l'utilisateur
   Future<bool> verifyTwoFactorCode(String code) async {
-    if (_pendingUser == null || _pendingCredential == null) {
-      _error = 'Aucune session en attente';
+    if (_pendingUser == null) {
+      _error = 'Aucune session en attente d\'authentification';
       notifyListeners();
       return false;
     }
 
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      final isValid = TwoFactorService.verifyCode(_pendingUser!.id, code);
+      // Vérification asynchrone du code
+      final isValid = await TwoFactorService.verifyCode(_pendingUser!.id, code);
       if (!isValid) {
-        _error = 'Code invalide';
+        _error = 'Code de sécurité invalide';
+        _isLoading = false;
         notifyListeners();
         return false;
       }
 
-      // Code valide : finaliser la connexion
+      // Code valide : Finalisation de la session utilisateur
       _user = _pendingUser;
+      SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+
       _needsTwoFactor = false;
       _pendingUser = null;
       _pendingCredential = null;
+      _error = null;
       _isLoading = false;
+      
       notifyListeners();
+      notifyRouter(); // ✅ Redirection automatique vers le Dashboard
 
       // Log de connexion réussie avec 2FA
       await LoggerService.info(
@@ -201,24 +232,28 @@ class AppAuthProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = e.toString();
+      _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
   // Annuler la tentative de connexion 2FA
-  void cancelTwoFactorLogin() {
+  void cancelTwoFactorLogin() async {
     _pendingUser = null;
     _pendingCredential = null;
     _needsTwoFactor = false;
+    _isLoading = false;
+    SecurityService.clearUserContext();
+    await _authService.signOut(); // Déconnecte la session Firebase incomplète
     notifyListeners();
+    notifyRouter();
   }
 
   Future<void> logout() async {
     final userId = _user?.id;
     final userEmail = _user?.email;
 
-    // Log de déconnexion avant de sign out
     if (userId != null && userEmail != null) {
       await LoggerService.info(
         'logout',
@@ -233,27 +268,47 @@ class AppAuthProvider extends ChangeNotifier {
     _needsTwoFactor = false;
     _pendingUser = null;
     _pendingCredential = null;
+    SecurityService.clearUserContext();
+    
     notifyListeners();
+    notifyRouter(); // ✅ Redirection vers la Landing/Login forcée
   }
 
   Future<bool> resetPassword(String email) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
     try {
       await _authService.resetPassword(email);
       await LoggerService.info(
         'reset_password',
-        details: 'Demande de réinitialisation de mot de passe pour $email',
+        details: 'Demande de réinitialisation de mot de passe pour $email', targetType: '',
       );
+
+      // On tente de récupérer le profil pour personnaliser l'e-mail (optionnel)
+      String targetName = "Utilisateur";
       if (_user != null) {
-        final welcomeHtml = MailService.getResetPasswordTemplate(_user!.displayName, "");
-        await MailService.sendHtmlEmail(
-          to: email,
-          subject: 'Bienvenue sur NOI OHADA Invoice Pro',
-          htmlBody: welcomeHtml,
-        );
+        targetName = _user!.displayName;
       }
+
+      final resetHtml = MailService.getResetPasswordTemplate(
+        targetName,
+        "https://invoicepro.noiconcept.com/reset-password?email=$email", 
+      );
+
+      await MailService.sendHtmlEmail(
+        to: email.trim(),
+        subject: 'Réinitialisation de votre mot de passe - NOI OHADA Invoice Pro',
+        htmlBody: resetHtml,
+      );
+
+      _isLoading = false;
+      notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
       notifyListeners();
       await LoggerService.error(
         'reset_password_failed',
@@ -276,5 +331,11 @@ class AppAuthProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }

@@ -1,33 +1,85 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:noi_ohada_invoice_pro/services/logger_service.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'router/app_router.dart';
-import 'services/config_service.dart';
-import 'services/reminder_service.dart';
-import 'services/theme_service.dart';
-import 'services/security_service.dart';
-import 'services/connectivity_service.dart';
-import 'services/stock_service.dart';
-import 'services/database_service.dart';
-import 'services/firestore_service.dart';
-import 'services/notification_service.dart';
-import 'services/subscription_checker_service.dart'; // 🔥 AJOUT
-import 'models/product.dart';
-import 'models/delivery.dart';
-import 'providers/auth_provider.dart';
-import 'providers/subscription_provider.dart';
-import 'providers/theme_provider.dart';
-import 'widgets/connectivity_wrapper.dart';
+
+// Services & Modèles
+import '../services/config_service.dart';
+import '../services/logger_service.dart';
+import '../services/theme_service.dart';
+import '../services/security_service.dart';
+import '../services/database_service.dart';
+import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
+import '../services/reminder_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/stock_service.dart';
+import '../services/nochpay_service.dart'; // Import ajouté
+import '../services/subscription_checker_service.dart';
+
+import '../models/product.dart';
+import '../models/delivery.dart';
+import '../models/reminder.dart';
+import '../models/invoice.dart'; // Import nécessaire pour l'adaptateur
+
+import '../providers/auth_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../providers/theme_provider.dart';
+import '../router/app_router.dart';
+import '../widgets/connectivity_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 1. Initialisation synchrone
   await ConfigService.init();
-  ConfigService.printConfig();
+  await LoggerService.init();
+  // 2. Initialisation Hive
+  await _initHive();
 
+  // 3. Initialisation Firebase
+  await _initFirebase();
+
+  // 4. Initialisation services
+  final notificationService = NotificationService();
+  final connectivityService = ConnectivityService();
+  final stockService = StockService();
+  final nochPayService = NochPayService(); // Instanciation
+
+  await Future.wait([
+    notificationService.init(),
+    ReminderService().init(),
+    stockService.init(),
+    ThemeService.init(),
+    SecurityService.init(),
+  ]);
+
+  SubscriptionCheckerService().start().ignore();
+
+  runApp(MyApp(
+    notificationService: notificationService,
+    connectivityService: connectivityService,
+    stockService: stockService,
+    nochPayService: nochPayService, // Injection
+  ));
+}
+
+Future<void> _initHive() async {
+  await Hive.initFlutter();
+
+  // Enregistrement des adaptateurs (n'oubliez pas de générer invoice.g.dart)
+  Hive.registerAdapter(ReminderAdapter());
+  Hive.registerAdapter(ProductAdapter());
+  Hive.registerAdapter(DeliveryAdapter());
+  Hive.registerAdapter(InvoiceAdapter()); // Ajouté
+
+  await Future.wait([
+    Hive.openBox<Reminder>('reminders'),
+    DatabaseService.init(),
+  ]);
+}
+
+Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp(
       options: FirebaseOptions(
@@ -39,53 +91,23 @@ void main() async {
         storageBucket: ConfigService.firebaseStorageBucket,
       ),
     );
-    print('✅ Firebase initialisé avec succès');
   } catch (e) {
-    print('❌ Erreur Firebase: $e');
+    await LoggerService.error('firebase_init_failed', details: e.toString());
   }
-
-  await Hive.initFlutter();
-
-  // 🔥 ENREGISTRER LES ADAPTATEURS HIVE
-  Hive.registerAdapter(ProductAdapter());
-  Hive.registerAdapter(DeliveryAdapter());
-
-  await DatabaseService.init();
-  await ThemeService.init();
-  await SecurityService.init();
-  await LoggerService.init();
-
-  // 🔥 INITIALISER LE SERVICE DE STOCK
-  final stockService = StockService();
-  await stockService.init();
-  print('✅ StockService initialisé avec succès');
-
-  final notificationService = NotificationService();
-  await notificationService.init();
-  final reminderService = ReminderService();
-  await reminderService.init();
-  final connectivityService = ConnectivityService();
-
-  // 🔥 DÉMARRER LE SERVICE DE VÉRIFICATION DES ABONNEMENTS
-  await SubscriptionCheckerService().start();
-
-  runApp(MyApp(
-    notificationService: notificationService,
-    connectivityService: connectivityService,
-    stockService: stockService,
-  ));
 }
 
 class MyApp extends StatelessWidget {
   final NotificationService notificationService;
   final ConnectivityService connectivityService;
   final StockService stockService;
+  final NochPayService nochPayService;
 
   const MyApp({
     super.key,
     required this.notificationService,
     required this.connectivityService,
     required this.stockService,
+    required this.nochPayService,
   });
 
   @override
@@ -95,40 +117,35 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppAuthProvider()),
         ChangeNotifierProvider(create: (_) => SubscriptionProvider()),
         ChangeNotifierProvider(create: (_) => FirestoreService()),
-        ChangeNotifierProvider(create: (_) => notificationService),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => connectivityService),
+        ChangeNotifierProvider.value(value: notificationService),
+        ChangeNotifierProvider.value(value: connectivityService),
         Provider<StockService>.value(value: stockService),
+        Provider<NochPayService>.value(
+            value: nochPayService), // Injection sécurisée
       ],
-      child: Consumer2<ThemeProvider, ConnectivityService>(
-        builder: (context, themeProvider, connectivityService, child) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
           return MaterialApp.router(
-            title: 'OHADA Invoice Pro',
+            title: 'NOI OHADA Invoice Pro',
             debugShowCheckedModeBanner: false,
             theme: ThemeService.getLightTheme(),
             darkTheme: ThemeService.getDarkTheme(),
             themeMode: _getThemeMode(themeProvider.currentTheme),
             routerConfig: AppRouter.router,
-            builder: (context, child) {
-              return ConnectivityWrapper(
-                child: child!,
-                onRetry: () {},
-              );
-            },
+            builder: (context, child) => ConnectivityWrapper(
+              child: child ?? const SizedBox.shrink(),
+              onRetry: () {},
+            ),
           );
         },
       ),
     );
   }
 
-  ThemeMode _getThemeMode(AppTheme theme) {
-    switch (theme) {
-      case AppTheme.light:
-        return ThemeMode.light;
-      case AppTheme.dark:
-        return ThemeMode.dark;
-      case AppTheme.system:
-        return ThemeMode.system;
-    }
-  }
+  ThemeMode _getThemeMode(AppTheme theme) => switch (theme) {
+        AppTheme.light => ThemeMode.light,
+        AppTheme.dark => ThemeMode.dark,
+        AppTheme.system => ThemeMode.system,
+      };
 }

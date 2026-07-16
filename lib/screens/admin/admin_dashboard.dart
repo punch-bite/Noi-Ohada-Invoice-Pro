@@ -27,8 +27,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadStats() async {
     setState(() => _isLoading = true);
-    _stats = await _adminService.getUserStats();
-    setState(() => _isLoading = false);
+
+    try {
+      // 1. Assurez-vous que le nom de la méthode est identique à celle dans AdminService
+      final stats = await _adminService.getUsersStats();
+
+      // 2. Mise à jour de l'état
+      if (mounted) {
+        setState(() {
+          _stats = stats.map((key, value) => MapEntry(key, value as int));
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erreur lors du chargement des statistiques : $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override

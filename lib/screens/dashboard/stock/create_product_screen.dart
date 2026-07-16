@@ -58,7 +58,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   Future<void> _initializeData() async {
     await _supplierService.init();
-    _suppliers = await _supplierService.getActiveSuppliers();
+    _suppliers = (await _supplierService.getActiveSupplier()) as List<Supplier>;
     setState(() => _isLoadingSuppliers = false);
 
     if (widget.product != null) {
@@ -161,7 +161,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   Future<void> _refreshSuppliers() async {
     setState(() => _isLoadingSuppliers = true);
-    _suppliers = await _supplierService.getActiveSuppliers();
+    _suppliers = (await _supplierService.getActiveSupplier()) as List<Supplier>;
     setState(() => _isLoadingSuppliers = false);
   }
 

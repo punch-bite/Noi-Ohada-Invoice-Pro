@@ -8,7 +8,7 @@ part of 'line_item.dart';
 
 class LineItemAdapter extends TypeAdapter<LineItem> {
   @override
-  final int typeId = 2;
+  final int typeId = 3;
 
   @override
   LineItem read(BinaryReader reader) {

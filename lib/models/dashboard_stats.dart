@@ -1,12 +1,13 @@
 // lib/models/dashboard_stats.dart
 import 'package:flutter/material.dart';
+import 'activity_log.dart';
 
 class DashboardStats {
   final double netRevenue;
-  final double revenueChange;
-  final double arr;
+  final double revenueChange; // ex: 0.4 pour +40%
+  final double arr; // Annual Recurring Revenue (Revenu récurrent annuel)
   final double arrChange;
-  final double goalProgress;
+  final double goalProgress; // ex: 71 pour 71%
   final double goalTarget;
   final int newOrders;
   final double ordersChange;
@@ -26,20 +27,64 @@ class DashboardStats {
     this.totalSales = 71020,
   });
 
-  // Getters formatés
-  String get formattedNetRevenue => _formatCurrency(netRevenue);
-  String get formattedARR => _formatCurrency(arr);
-  String get formattedGoalTarget => _formatCurrency(goalTarget);
-  String get formattedTotalProfit => _formatCurrency(totalProfit);
-  String get formattedTotalSales => _formatCurrency(totalSales);
+  // Getters formatés par défaut (XAF/FCFA)
+  String getFormattedNetRevenue([String currency = 'FCFA']) => _formatCurrency(netRevenue, currency);
+  String getFormattedARR([String currency = 'FCFA']) => _formatCurrency(arr, currency);
+  String getFormattedGoalTarget([String currency = 'FCFA']) => _formatCurrency(goalTarget, currency);
+  String getFormattedTotalProfit([String currency = 'FCFA']) => _formatCurrency(totalProfit, currency);
+  String getFormattedTotalSales([String currency = 'FCFA']) => _formatCurrency(totalSales, currency);
 
-  String _formatCurrency(double value) {
+  String _formatCurrency(double value, String currency) {
+    String suffix = '';
+    double formattedValue = value;
+
     if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(1)}M';
+      formattedValue = value / 1000000;
+      suffix = 'M';
     } else if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(0)}K';
+      formattedValue = value / 1000;
+      suffix = 'K';
     }
-    return value.toStringAsFixed(0);
+
+    final numberStr = formattedValue % 1 == 0 
+        ? formattedValue.toStringAsFixed(0) 
+        : formattedValue.toStringAsFixed(1);
+
+    // Ajustement de la position du symbole selon la devise locale (OHADA / International)
+    if (currency == 'FCFA' || currency == 'XAF' || currency == 'XOF') {
+      return '$numberStr$suffix $currency';
+    }
+    return '$currency$numberStr$suffix';
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'netRevenue': netRevenue,
+      'revenueChange': revenueChange,
+      'arr': arr,
+      'arrChange': arrChange,
+      'goalProgress': goalProgress,
+      'goalTarget': goalTarget,
+      'newOrders': newOrders,
+      'ordersChange': ordersChange,
+      'totalProfit': totalProfit,
+      'totalSales': totalSales,
+    };
+  }
+
+  factory DashboardStats.fromMap(Map<String, dynamic> map) {
+    return DashboardStats(
+      netRevenue: (map['netRevenue'] as num?)?.toDouble() ?? 0.0,
+      revenueChange: (map['revenueChange'] as num?)?.toDouble() ?? 0.0,
+      arr: (map['arr'] as num?)?.toDouble() ?? 0.0,
+      arrChange: (map['arrChange'] as num?)?.toDouble() ?? 0.0,
+      goalProgress: (map['goalProgress'] as num?)?.toDouble() ?? 0.0,
+      goalTarget: (map['goalTarget'] as num?)?.toDouble() ?? 0.0,
+      newOrders: (map['newOrders'] as num?)?.toInt() ?? 0,
+      ordersChange: (map['ordersChange'] as num?)?.toDouble() ?? 0.0,
+      totalProfit: (map['totalProfit'] as num?)?.toDouble() ?? 0.0,
+      totalSales: (map['totalSales'] as num?)?.toDouble() ?? 0.0,
+    );
   }
 }
 
@@ -54,10 +99,30 @@ class Customer {
     required this.totalValue,
   });
 
-  String get formattedValue => 
-      totalValue >= 1000 
-          ? '${(totalValue / 1000).toStringAsFixed(0)}K' 
-          : totalValue.toStringAsFixed(0);
+  String getFormattedValue([String currency = 'FCFA']) {
+    final valueStr = totalValue >= 1000 
+        ? '${(totalValue / 1000).toStringAsFixed(0)}K' 
+        : totalValue.toStringAsFixed(0);
+    return currency == 'FCFA' || currency == 'XAF' || currency == 'XOF'
+        ? '$valueStr $currency'
+        : '$currency$valueStr';
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'deals': deals,
+      'totalValue': totalValue,
+    };
+  }
+
+  factory Customer.fromMap(Map<String, dynamic> map) {
+    return Customer(
+      name: map['name'] ?? '',
+      deals: (map['deals'] as num?)?.toInt() ?? 0,
+      totalValue: (map['totalValue'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 
   static List<Customer> get sampleCustomers => [
     Customer(name: 'Danny Liu', deals: 1023, totalValue: 37431),
@@ -125,6 +190,15 @@ class ActivityItem {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
+  /// ✅ NOUVEAU : Instancier directement une ligne d'activité visuelle depuis un [ActivityLog]
+  factory ActivityItem.fromLog(ActivityLog log) {
+    return ActivityItem(
+      title: log.action,
+      detail: log.userEmail,
+      timestamp: log.timestamp,
+    );
+  }
+
   static List<ActivityItem> get sampleActivities => [
     ActivityItem(title: 'Changed the style'),
     ActivityItem(title: '177 New products added'),
@@ -147,6 +221,25 @@ class SalesCategory {
     required this.value,
     this.subCategories = const [],
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'value': value,
+      'subCategories': subCategories.map((sc) => sc.toMap()).toList(),
+    };
+  }
+
+  factory SalesCategory.fromMap(Map<String, dynamic> map) {
+    return SalesCategory(
+      name: map['name'] ?? '',
+      value: (map['value'] as num?)?.toDouble() ?? 0.0,
+      subCategories: (map['subCategories'] as List?)
+              ?.map((sc) => SalesSubCategory.fromMap(Map<String, dynamic>.from(sc)))
+              .toList() ??
+          [],
+    );
+  }
 
   static List<SalesCategory> get sampleSales => [
     SalesCategory(
@@ -176,4 +269,18 @@ class SalesSubCategory {
     required this.name,
     required this.value,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'value': value,
+    };
+  }
+
+  factory SalesSubCategory.fromMap(Map<String, dynamic> map) {
+    return SalesSubCategory(
+      name: map['name'] ?? '',
+      value: (map['value'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 }

@@ -1,10 +1,13 @@
 // lib/models/client.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'client.g.dart';
 
-@HiveType(typeId: 1)
+@JsonSerializable()
+@HiveType(typeId: 0)
 class Client {
   @HiveField(0)
   final String id;
@@ -50,21 +53,21 @@ class Client {
       'taxId': taxId,
       'phone': phone,
       'email': email,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };
   }
 
-  factory Client.fromMap(Map<String, dynamic> map) {
+  factory Client.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Client(
-      id: map['id'] ?? const Uuid().v4(),
+      id: documentId ?? map['id'] ?? const Uuid().v4(),
       name: map['name'] ?? '',
       address: map['address'] ?? '',
       taxId: map['taxId'] ?? '',
       phone: map['phone'] ?? '',
       email: map['email'] ?? '',
-      createdAt: map['createdAt'] ?? DateTime.now(),
-      updatedAt: map['updatedAt'],
+      createdAt: _parseDateTime(map['createdAt']),
+      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
     );
   }
 
@@ -84,7 +87,21 @@ class Client {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      updatedAt: updatedAt ?? DateTime.now(), // Met à jour automatiquement la date de modification
     );
+  }
+
+  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
   }
 }

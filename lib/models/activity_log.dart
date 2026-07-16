@@ -1,5 +1,6 @@
 // lib/models/activity_log.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 
 class ActivityLog {
   final String id;
@@ -31,24 +32,39 @@ class ActivityLog {
       'targetId': targetId,
       'targetType': targetType,
       'details': details,
-      'timestamp': timestamp,
+      // On sauvegarde en format Timestamp pour Firestore
+      'timestamp': Timestamp.fromDate(timestamp),
     };
   }
 
-  factory ActivityLog.fromMap(Map<String, dynamic> map) {
+  factory ActivityLog.fromMap(Map<String, dynamic> map, {String? documentId}) {
+    // Gestion ultra-robuste du parsing de la date (Timestamp, String ISO ou int)
+    DateTime parsedTimestamp = DateTime.now();
+    final rawTimestamp = map['timestamp'];
+    
+    if (rawTimestamp is Timestamp) {
+      parsedTimestamp = rawTimestamp.toDate();
+    } else if (rawTimestamp is String) {
+      parsedTimestamp = DateTime.tryParse(rawTimestamp) ?? DateTime.now();
+    } else if (rawTimestamp is int) {
+      parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(rawTimestamp);
+    }
+
     return ActivityLog(
-      id: map['id'] ?? '',
+      // On utilise l'id passé (ex: document ID Firestore) ou celui du map, sinon vide ou généré
+      id: documentId ?? map['id'] ?? '',
       userId: map['userId'] ?? '',
       userEmail: map['userEmail'] ?? '',
       action: map['action'] ?? '',
       targetId: map['targetId'],
       targetType: map['targetType'],
-      details: map['details'],
-      timestamp: (map['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      details: map['details'] != null ? Map<String, dynamic>.from(map['details']) : null,
+      timestamp: parsedTimestamp,
     );
   }
 
   factory ActivityLog.create({
+    String? id,
     required String userId,
     required String userEmail,
     required String action,
@@ -57,7 +73,8 @@ class ActivityLog {
     Map<String, dynamic>? details,
   }) {
     return ActivityLog(
-      id: '', // Sera défini par Firestore
+      // On génère un UUID client-side si aucun ID n'est fourni, évitant ainsi les IDs vides perturbants en UI
+      id: id ?? const Uuid().v4(),
       userId: userId,
       userEmail: userEmail,
       action: action,

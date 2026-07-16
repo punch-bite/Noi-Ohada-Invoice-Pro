@@ -77,7 +77,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success && mounted) {
       await _saveEmailPreference();
-      context.go('/dashboard');
+      
+      //  Vérifier si l'utilisateur a besoin de valider le 2FA d'abord
+      if (authProvider.needsTwoFactor) {
+        context.push('/auth/verify-2fa'); // Redirige vers l'écran de saisie OTP
+      } else {
+        context.go('/dashboard'); // Connexion directe
+      }
     } else if (mounted) {
       setState(() {
         _errorMessage = authProvider.error ?? 'Échec de connexion';
@@ -224,23 +230,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
 
-                  // Erreur
+                  // Affichage des erreurs (dont blocages et tentatives restantes)
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.red.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[700], size: 16),
-                          const SizedBox(width: 8),
+                          Icon(Icons.error_outline, color: Colors.red[700], size: 18),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red[700], fontSize: 12),
+                              style: TextStyle(color: Colors.red[700], fontSize: 12, height: 1.3),
                             ),
                           ),
                         ],
@@ -262,7 +268,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isLoading
-                          ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
                           : const Text('Se connecter', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     ),
                   ),

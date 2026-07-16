@@ -1,4 +1,5 @@
 // lib/models/invoice_template.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class InvoiceTemplate {
@@ -35,7 +36,7 @@ class InvoiceTemplate {
     this.isPremium = false,
     this.isDefault = false,
     this.fontFamily = 'Roboto',
-    this.fontSize = 12,
+    this.fontSize = 12.0,
     this.showBorder = true,
     this.createdBy,
     this.isActive = true,
@@ -61,18 +62,18 @@ class InvoiceTemplate {
       'showBorder': showBorder,
       'createdBy': createdBy,
       'isActive': isActive,
-      'createdAt': createdAt?.toIso8601String(),
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
     };
   }
 
-  factory InvoiceTemplate.fromMap(Map<String, dynamic> map) {
+  factory InvoiceTemplate.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return InvoiceTemplate(
-      id: map['id'] ?? '',
+      id: documentId ?? map['id'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
-      primaryColor: Color(map['primaryColor'] ?? 0xFF1976D2),
-      textColor: Color(map['textColor'] ?? 0xFF000000),
-      backgroundColor: Color(map['backgroundColor'] ?? 0xFFFFFFFF),
+      primaryColor: Color((map['primaryColor'] as num?)?.toInt() ?? 0xFF1976D2),
+      textColor: Color((map['textColor'] as num?)?.toInt() ?? 0xFF000000),
+      backgroundColor: Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
       showLogo: map['showLogo'] ?? true,
       showTaxDetails: map['showTaxDetails'] ?? true,
       showPaymentTerms: map['showPaymentTerms'] ?? true,
@@ -84,7 +85,7 @@ class InvoiceTemplate {
       showBorder: map['showBorder'] ?? true,
       createdBy: map['createdBy'],
       isActive: map['isActive'] ?? true,
-      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt']) : null,
+      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : null,
     );
   }
 
@@ -120,7 +121,7 @@ class InvoiceTemplate {
         name: 'Premium Or',
         description: 'Design luxueux pour les clients VIP',
         primaryColor: const Color(0xFFFFD700),
-        textColor: Colors.white, // ✅ une seule fois
+        textColor: Colors.white,
         backgroundColor: const Color(0xFF1A1A2E),
         isPremium: true,
       ),
@@ -164,5 +165,19 @@ class InvoiceTemplate {
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
     );
+  }
+
+  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    } else if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value is DateTime) {
+      return value;
+    }
+    return DateTime.now();
   }
 }

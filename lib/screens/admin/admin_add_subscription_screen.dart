@@ -68,7 +68,7 @@ class _AdminAddSubscriptionScreenState
         paymentMethod: _paymentMethod,
         amount: _selectedPlan!.price,
         currency: _selectedPlan!.currency,
-        interval: _selectedPlan!.interval,
+        interval: _selectedPlan!.interval, durationMonths: 1,
       );
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(

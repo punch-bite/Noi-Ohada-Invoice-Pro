@@ -8,7 +8,7 @@ part of 'invoice.dart';
 
 class InvoiceAdapter extends TypeAdapter<Invoice> {
   @override
-  final int typeId = 0;
+  final int typeId = 2;
 
   @override
   Invoice read(BinaryReader reader) {
@@ -34,13 +34,14 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       isDevis: fields[14] as bool,
       notes: fields[15] as String,
       syncedAt: fields[16] as DateTime?,
+      updatedAt: fields[17] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Invoice obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +75,9 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       ..writeByte(15)
       ..write(obj.notes)
       ..writeByte(16)
-      ..write(obj.syncedAt);
+      ..write(obj.syncedAt)
+      ..writeByte(17)
+      ..write(obj.updatedAt);
   }
 
   @override

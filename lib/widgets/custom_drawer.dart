@@ -74,7 +74,7 @@ class CustomDrawer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    subscriptionProvider.currentPlan?.name ?? 'Gratuit',
+                    subscriptionProvider.currentPlan.name ?? 'Gratuit',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,

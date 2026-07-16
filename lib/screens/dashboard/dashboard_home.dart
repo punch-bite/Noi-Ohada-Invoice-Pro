@@ -409,7 +409,7 @@ class _DashboardHomeState extends State<DashboardHome> {
       children: [
         _buildStatCard(
           label: 'Revenus',
-          value: _financialStats.formattedTotalRevenue,
+          value: _financialStats.getFormattedTotalRevenue(),
           color: primaryColor,
           icon: Icons.trending_up,
           isDark: isDark,
@@ -420,7 +420,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         const SizedBox(width: 12),
         _buildStatCard(
           label: 'Moyenne',
-          value: _financialStats.formattedAverageInvoice,
+          value: _financialStats.getFormattedAverageInvoice(),
           color: const Color(0xFF4CAF50),
           icon: Icons.equalizer,
           isDark: isDark,
@@ -539,7 +539,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
           const SizedBox(height: 4),
           Text(
-            _financialStats.formattedTotalRevenue,
+            _financialStats.getFormattedAverageInvoice(),
             style: const TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
@@ -551,17 +551,17 @@ class _DashboardHomeState extends State<DashboardHome> {
             children: [
               _buildBalanceItem(
                 label: 'Payé',
-                value: _financialStats.formattedTotalPaid,
+                value: _financialStats.getFormattedTotalPaid(),
                 color: Colors.greenAccent,
               ),
               _buildBalanceItem(
                 label: 'En attente',
-                value: _financialStats.formattedTotalPending,
+                value: _financialStats.getFormattedTotalPending(),
                 color: Colors.orangeAccent,
               ),
               _buildBalanceItem(
                 label: 'En retard',
-                value: _financialStats.formattedTotalOverdue,
+                value: _financialStats.getFormattedTotalOverdue(),
                 color: Colors.redAccent,
               ),
             ],
@@ -705,7 +705,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             _buildStatusCard(
               label: 'Payées',
               count: _financialStats.paidCount,
-              amount: _financialStats.formattedTotalPaid,
+              amount: _financialStats.getFormattedTotalPaid(),
               color: Colors.green,
               icon: Icons.check_circle,
               isDark: isDark,
@@ -717,7 +717,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             _buildStatusCard(
               label: 'En attente',
               count: _financialStats.pendingCount,
-              amount: _financialStats.formattedTotalPending,
+              amount: _financialStats.getFormattedTotalPending(),
               color: Colors.orange,
               icon: Icons.hourglass_empty,
               isDark: isDark,
@@ -729,7 +729,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             _buildStatusCard(
               label: 'En retard',
               count: _financialStats.overdueCount,
-              amount: _financialStats.formattedTotalOverdue,
+              amount: _financialStats.getFormattedTotalOverdue(),
               color: Colors.red,
               icon: Icons.warning,
               isDark: isDark,
@@ -741,7 +741,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             _buildStatusCard(
               label: 'Annulées',
               count: _financialStats.cancelledCount,
-              amount: _financialStats.formattedTotalCancelled,
+              amount: _financialStats.getFormattedTotalCancelled(),
               color: Colors.grey,
               icon: Icons.cancel,
               isDark: isDark,

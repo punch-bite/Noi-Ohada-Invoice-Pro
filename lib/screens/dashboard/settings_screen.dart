@@ -72,7 +72,7 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsTile(
                   icon: Icons.payment_outlined,
                   title: 'Abonnement',
-                  subtitle: subscriptionProvider.currentPlan?.name ?? 'Gratuit',
+                  subtitle: subscriptionProvider.currentPlan.name ?? 'Gratuit',
                   onTap: () => context.push('/subscription'),
                   isDark: isDark,
                   textColor: textColor,
