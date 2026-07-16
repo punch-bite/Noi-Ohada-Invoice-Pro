@@ -8,7 +8,7 @@ part of 'subscription.dart';
 
 class SubscriptionAdapter extends TypeAdapter<Subscription> {
   @override
-  final int typeId = 7;
+  final int typeId = 13;
 
   @override
   Subscription read(BinaryReader reader) {
@@ -81,3 +81,48 @@ class SubscriptionAdapter extends TypeAdapter<Subscription> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
+      id: json['id'] as String,
+      userId: json['userId'] as String,
+      planId: json['planId'] as String,
+      startDate: DateTime.parse(json['startDate'] as String),
+      endDate: DateTime.parse(json['endDate'] as String),
+      status: json['status'] as String,
+      paymentMethod: json['paymentMethod'] as String,
+      paymentId: json['paymentId'] as String,
+      amount: (json['amount'] as num).toDouble(),
+      currency: json['currency'] as String,
+      autoRenew: json['autoRenew'] as bool? ?? true,
+      canceledAt: json['canceledAt'] == null
+          ? null
+          : DateTime.parse(json['canceledAt'] as String),
+      metadata: json['metadata'] as Map<String, dynamic>? ?? const {},
+      isActive: json['isActive'] as bool,
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+    );
+
+Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'userId': instance.userId,
+      'planId': instance.planId,
+      'startDate': instance.startDate.toIso8601String(),
+      'endDate': instance.endDate.toIso8601String(),
+      'status': instance.status,
+      'paymentMethod': instance.paymentMethod,
+      'paymentId': instance.paymentId,
+      'amount': instance.amount,
+      'currency': instance.currency,
+      'autoRenew': instance.autoRenew,
+      'canceledAt': instance.canceledAt?.toIso8601String(),
+      'isActive': instance.isActive,
+      'createdAt': instance.createdAt?.toIso8601String(),
+      'metadata': instance.metadata,
+    };

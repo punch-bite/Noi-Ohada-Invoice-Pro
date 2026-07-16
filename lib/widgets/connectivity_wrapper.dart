@@ -1,71 +1,37 @@
 // lib/widgets/connectivity_wrapper.dart
 import 'package:flutter/material.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import '../services/connectivity_service.dart';
 import '../screens/status/no_internet_screen.dart';
 
-class ConnectivityWrapper extends StatefulWidget {
+class ConnectivityWrapper extends StatelessWidget {
   final Widget child;
-  final VoidCallback? onRetry;
+  final VoidCallback onRetry;
 
   const ConnectivityWrapper({
     super.key,
     required this.child,
-    this.onRetry,
+    required this.onRetry,
   });
 
   @override
-  State<ConnectivityWrapper> createState() => _ConnectivityWrapperState();
-}
-
-class _ConnectivityWrapperState extends State<ConnectivityWrapper> {
-  ConnectivityResult _connectivityResult = ConnectivityResult.none;
-  bool _isChecking = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkConnectivity();
-    _listenConnectivity();
-  }
-
-  Future<void> _checkConnectivity() async {
-    final result = await Connectivity().checkConnectivity();
-    setState(() {
-      _connectivityResult = result;
-      _isChecking = false;
-    });
-  }
-
-  void _listenConnectivity() {
-    Connectivity().onConnectivityChanged.listen((result) {
-      setState(() {
-        _connectivityResult = result;
-        if (result != ConnectivityResult.none && widget.onRetry != null) {
-          widget.onRetry!();
-        }
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isChecking) {
+    final connectivity = context.watch<ConnectivityService>();
+
+    // Sur le Web, on n'utilise pas la détection de connectivité
+    if (kIsWeb) return child;
+
+    if (!connectivity.isInitialized) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    if (_connectivityResult == ConnectivityResult.none) {
-      return NoInternetScreen(
-        onRetry: () {
-          setState(() {});
-          if (widget.onRetry != null) {
-            widget.onRetry!();
-          }
-        },
-      );
+    if (connectivity.noInternet) {
+      return NoInternetScreen(onRetry: onRetry);
     }
 
-    return widget.child;
+    return child;
   }
 }

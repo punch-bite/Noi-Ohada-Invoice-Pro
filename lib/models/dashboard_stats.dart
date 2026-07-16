@@ -1,17 +1,44 @@
 // lib/models/dashboard_stats.dart
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart'; // Pour Hive (optionnel)
+import 'package:json_annotation/json_annotation.dart';
 import 'activity_log.dart';
 
+part 'dashboard_stats.g.dart';
+// ============================================================
+//  DASHBOARD STATS (Stats globales du tableau de bord)
+// ============================================================
+@JsonSerializable()
+@HiveType(typeId: 2) // À ajouter si tu veux stocker les stats en cache Hive
 class DashboardStats {
+  @HiveField(0)
   final double netRevenue;
-  final double revenueChange; // ex: 0.4 pour +40%
-  final double arr; // Annual Recurring Revenue (Revenu récurrent annuel)
+
+  @HiveField(1)
+  final double revenueChange; // ex: 0.4 → +40%
+
+  @HiveField(2)
+  final double arr; // Annual Recurring Revenue
+
+  @HiveField(3)
   final double arrChange;
-  final double goalProgress; // ex: 71 pour 71%
+
+  @HiveField(4)
+  final double goalProgress; // ex: 71 → 71%
+
+  @HiveField(5)
   final double goalTarget;
+
+  @HiveField(6)
   final int newOrders;
+
+  @HiveField(7)
   final double ordersChange;
+
+  @HiveField(8)
   final double totalProfit;
+
+  @HiveField(9)
   final double totalSales;
 
   DashboardStats({
@@ -27,7 +54,8 @@ class DashboardStats {
     this.totalSales = 71020,
   });
 
-  // Getters formatés par défaut (XAF/FCFA)
+  // ===== FORMATAGE =====
+
   String getFormattedNetRevenue([String currency = 'FCFA']) => _formatCurrency(netRevenue, currency);
   String getFormattedARR([String currency = 'FCFA']) => _formatCurrency(arr, currency);
   String getFormattedGoalTarget([String currency = 'FCFA']) => _formatCurrency(goalTarget, currency);
@@ -35,6 +63,8 @@ class DashboardStats {
   String getFormattedTotalSales([String currency = 'FCFA']) => _formatCurrency(totalSales, currency);
 
   String _formatCurrency(double value, String currency) {
+    if (value == 0) return currency == 'FCFA' ? '0 FCFA' : '$currency 0';
+
     String suffix = '';
     double formattedValue = value;
 
@@ -46,16 +76,17 @@ class DashboardStats {
       suffix = 'K';
     }
 
-    final numberStr = formattedValue % 1 == 0 
-        ? formattedValue.toStringAsFixed(0) 
+    final numberStr = formattedValue % 1 == 0
+        ? formattedValue.toStringAsFixed(0)
         : formattedValue.toStringAsFixed(1);
 
-    // Ajustement de la position du symbole selon la devise locale (OHADA / International)
     if (currency == 'FCFA' || currency == 'XAF' || currency == 'XOF') {
       return '$numberStr$suffix $currency';
     }
     return '$currency$numberStr$suffix';
   }
+
+  // ===== SÉRIALISATION =====
 
   Map<String, dynamic> toMap() {
     return {
@@ -86,11 +117,29 @@ class DashboardStats {
       totalSales: (map['totalSales'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  // Constructeur Firestore (si tu stockes les stats dans Firestore)
+  factory DashboardStats.fromFirestore(Map<String, dynamic> map, {String? documentId}) {
+    return DashboardStats.fromMap(map);
+  }
+
+  // Instance par défaut
+  static DashboardStats get empty => DashboardStats();
 }
 
+// ============================================================
+//  CUSTOMER (Client pour les statistiques)
+// ============================================================
+
+@HiveType(typeId: 13)
 class Customer {
+  @HiveField(0)
   final String name;
+
+  @HiveField(1)
   final int deals;
+
+  @HiveField(2)
   final double totalValue;
 
   Customer({
@@ -99,15 +148,17 @@ class Customer {
     required this.totalValue,
   });
 
+  // Formatage
   String getFormattedValue([String currency = 'FCFA']) {
-    final valueStr = totalValue >= 1000 
-        ? '${(totalValue / 1000).toStringAsFixed(0)}K' 
+    final valueStr = totalValue >= 1000
+        ? '${(totalValue / 1000).toStringAsFixed(0)}K'
         : totalValue.toStringAsFixed(0);
     return currency == 'FCFA' || currency == 'XAF' || currency == 'XOF'
         ? '$valueStr $currency'
         : '$currency$valueStr';
   }
 
+  // SÉRIALISATION
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -124,6 +175,8 @@ class Customer {
     );
   }
 
+  factory Customer.fromFirestore(Map<String, dynamic> map) => Customer.fromMap(map);
+
   static List<Customer> get sampleCustomers => [
     Customer(name: 'Danny Liu', deals: 1023, totalValue: 37431),
     Customer(name: 'Bella Deviant', deals: 963, totalValue: 30423),
@@ -133,6 +186,10 @@ class Customer {
   ];
 }
 
+// ============================================================
+//  NOTIFICATION ITEM (pour le centre de notifications)
+// ============================================================
+
 class NotificationItem {
   final String title;
   final String? subtitle;
@@ -140,7 +197,7 @@ class NotificationItem {
   final Color color;
   final bool isUrgent;
 
-  NotificationItem({
+  const NotificationItem({
     required this.title,
     this.subtitle,
     required this.icon,
@@ -149,35 +206,39 @@ class NotificationItem {
   });
 
   static List<NotificationItem> get sampleNotifications => [
-    NotificationItem(
+    const NotificationItem(
       title: '56 New users registered',
       icon: Icons.person_add,
       color: Colors.blue,
       isUrgent: true,
     ),
-    NotificationItem(
+    const NotificationItem(
       title: '132 Orders placed',
       icon: Icons.shopping_cart,
       color: Colors.green,
     ),
-    NotificationItem(
+    const NotificationItem(
       title: 'Funds have been withdrawn',
       icon: Icons.payment,
       color: Colors.orange,
     ),
-    NotificationItem(
+    const NotificationItem(
       title: '5 Unread messages',
       icon: Icons.message,
       color: Colors.purple,
       isUrgent: true,
     ),
-    NotificationItem(
+    const NotificationItem(
       title: '11% vs last quarter',
       icon: Icons.trending_up,
       color: Colors.teal,
     ),
   ];
 }
+
+// ============================================================
+//  ACTIVITY ITEM (pour le flux d'activités)
+// ============================================================
 
 class ActivityItem {
   final String title;
@@ -190,12 +251,44 @@ class ActivityItem {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
-  /// ✅ NOUVEAU : Instancier directement une ligne d'activité visuelle depuis un [ActivityLog]
+  // ✅ Constructeur depuis un ActivityLog (utiliser la date du log)
   factory ActivityItem.fromLog(ActivityLog log) {
     return ActivityItem(
       title: log.action,
       detail: log.userEmail,
       timestamp: log.timestamp,
+    );
+  }
+
+  // Formatage de la date (ex: "Il y a 2h")
+  String get timeAgo {
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inDays > 0) {
+      return 'Il y a ${diff.inDays} jour${diff.inDays > 1 ? 's' : ''}';
+    } else if (diff.inHours > 0) {
+      return 'Il y a ${diff.inHours} heure${diff.inHours > 1 ? 's' : ''}';
+    } else if (diff.inMinutes > 0) {
+      return 'Il y a ${diff.inMinutes} minute${diff.inMinutes > 1 ? 's' : ''}';
+    } else {
+      return 'À l\'instant';
+    }
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'detail': detail,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  factory ActivityItem.fromMap(Map<String, dynamic> map) {
+    return ActivityItem(
+      title: map['title'] ?? '',
+      detail: map['detail'],
+      timestamp: map['timestamp'] != null
+          ? DateTime.tryParse(map['timestamp']) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
@@ -210,6 +303,10 @@ class ActivityItem {
     ),
   ];
 }
+
+// ============================================================
+//  SALES CATEGORY (pour les graphiques)
+// ============================================================
 
 class SalesCategory {
   final String name;

@@ -8,7 +8,7 @@ part of 'line_item.dart';
 
 class LineItemAdapter extends TypeAdapter<LineItem> {
   @override
-  final int typeId = 3;
+  final int typeId = 8;
 
   @override
   LineItem read(BinaryReader reader) {
@@ -53,3 +53,23 @@ class LineItemAdapter extends TypeAdapter<LineItem> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+LineItem _$LineItemFromJson(Map<String, dynamic> json) => LineItem(
+      id: json['id'] as String?,
+      description: json['description'] as String,
+      quantity: (json['quantity'] as num).toInt(),
+      unitPrice: (json['unitPrice'] as num).toDouble(),
+      taxRate: (json['taxRate'] as num?)?.toDouble() ?? 18.0,
+    );
+
+Map<String, dynamic> _$LineItemToJson(LineItem instance) => <String, dynamic>{
+      'id': instance.id,
+      'description': instance.description,
+      'quantity': instance.quantity,
+      'unitPrice': instance.unitPrice,
+      'taxRate': instance.taxRate,
+    };

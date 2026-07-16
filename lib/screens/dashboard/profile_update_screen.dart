@@ -17,16 +17,17 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
   final _formKey = GlobalKey<FormState>();
   final DatabaseService _db = DatabaseService();
   
-  late TextEditingController _nameController;
-  late TextEditingController _phoneController;
-  late TextEditingController _companyController;
-  late TextEditingController _addressController;
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _companyController;
+  late final TextEditingController _addressController;
   
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
+    // Lecture sécurisée du profil actuel lors de l'initialisation
     final user = context.read<AppAuthProvider>().user;
     _nameController = TextEditingController(text: user?.displayName ?? '');
     _phoneController = TextEditingController(text: user?.phone ?? '');
@@ -65,18 +66,24 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       await authProvider.refreshUser();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Profil mis à jour avec succès !'),
-          backgroundColor: Colors.green,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profil mis à jour avec succès !'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Erreur: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur : ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -91,49 +98,138 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
     return Scaffold(
       backgroundColor: theme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Modifier le profil'),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
+          onPressed: () => context.pop(),
+        ),
+        title: Text(
+          'Modifier le profil',
+          style: TextStyle(
+            color: theme.textColor,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         elevation: 0,
-        backgroundColor: theme.backgroundColor,
+        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _saveProfile,
-            child: Text('Enregistrer', style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: _isSaving
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
+                        ),
+                      ),
+                    ),
+                  )
+                : TextButton(
+                    onPressed: _saveProfile,
+                    child: Text(
+                      'Enregistrer',
+                      style: TextStyle(
+                        color: theme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           children: [
-            _ProfileAvatar(name: user?.displayName ?? 'U'),
+            _ProfileAvatar(name: user?.displayName ?? ''),
             const SizedBox(height: 32),
-            _buildTextField(controller: _nameController, label: 'Nom complet', icon: Icons.person_outline),
+            _buildTextField(
+              controller: _nameController,
+              label: 'Nom complet',
+              icon: Icons.person_outline,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Veuillez entrer votre nom';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 16),
-            _buildTextField(controller: _phoneController, label: 'Téléphone', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+            _buildTextField(
+              controller: _phoneController,
+              label: 'Téléphone',
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 16),
-            _buildTextField(controller: _companyController, label: 'Entreprise', icon: Icons.business_outlined),
+            _buildTextField(
+              controller: _companyController,
+              label: 'Entreprise',
+              icon: Icons.business_outlined,
+            ),
             const SizedBox(height: 16),
-            _buildTextField(controller: _addressController, label: 'Adresse', icon: Icons.location_on_outlined, maxLines: 2),
+            _buildTextField(
+              controller: _addressController,
+              label: 'Adresse',
+              icon: Icons.location_on_outlined,
+              maxLines: 3,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType? keyboardType, int maxLines = 1}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
     final theme = context.watch<ThemeProvider>();
+    
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: TextStyle(color: theme.textColor),
+      validator: validator,
+      style: TextStyle(color: theme.textColor, fontSize: 15),
+      cursorColor: theme.primaryColor,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: theme.primaryColor),
+        labelStyle: TextStyle(color: theme.subTextColor.withOpacity(0.8), fontSize: 14),
+        floatingLabelStyle: TextStyle(color: theme.primaryColor),
+        prefixIcon: Icon(icon, color: theme.primaryColor.withOpacity(0.8), size: 22),
         filled: true,
-        fillColor: theme.inputFillColor,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        fillColor: theme.inputFillColor ?? (theme.isDarkMode ? Colors.grey[900] : Colors.grey[100]),
+        alignLabelWithHint: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
       ),
     );
   }
@@ -146,11 +242,36 @@ class _ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    
+    // Évite l'erreur de chaîne vide si displayName n'est pas encore défini
+    final String initial = name.trim().isNotEmpty 
+        ? name.trim()[0].toUpperCase() 
+        : 'U';
+
     return Center(
-      child: CircleAvatar(
-        radius: 40,
-        backgroundColor: theme.primaryColor,
-        child: Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold)),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: theme.primaryColor.withOpacity(0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: CircleAvatar(
+          radius: 45,
+          backgroundColor: theme.primaryColor,
+          child: Text(
+            initial,
+            style: const TextStyle(
+              fontSize: 34,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
       ),
     );
   }

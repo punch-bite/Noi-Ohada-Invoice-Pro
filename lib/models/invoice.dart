@@ -8,7 +8,7 @@ import 'line_item.dart';
 part 'invoice.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 2)
+@HiveType(typeId: 7)
 class Invoice {
   @HiveField(0) final String id;
   @HiveField(1) final String companyId;

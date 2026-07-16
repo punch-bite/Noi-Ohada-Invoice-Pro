@@ -1,56 +1,83 @@
+// lib/services/connectivity_service.dart
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class ConnectivityService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
-  
-  // 1. On utilise une liste pour être conforme aux nouvelles versions du plugin
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
   List<ConnectivityResult> _connectivityResults = [ConnectivityResult.none];
   bool _hasInternet = false;
+  bool _isInitialized = false;
 
   ConnectivityService() {
     _initConnectivity();
     _listenConnectivity();
   }
 
-  // Getters adaptés
-  List<ConnectivityResult> get connectivityResults => _connectivityResults;
   bool get hasInternet => _hasInternet;
   bool get noInternet => !_hasInternet;
+  bool get isInitialized => _isInitialized;
 
   Future<void> _initConnectivity() async {
     try {
-      final List<ConnectivityResult> results = (await _connectivity.checkConnectivity()) as List<ConnectivityResult>;
+      if (kIsWeb) {
+        // Sur le Web, on considère qu'Internet est disponible par défaut
+        _updateState([ConnectivityResult.wifi]);
+        _isInitialized = true;
+        return;
+      }
+      final results = await _connectivity.checkConnectivity();
       _updateState(results);
+      _isInitialized = true;
     } catch (e) {
-      _hasInternet = false;
-      notifyListeners();
+      debugPrint("❌ Erreur init connectivité : $e");
+      _updateState([ConnectivityResult.wifi]); // fallback
+      _isInitialized = true;
     }
   }
 
   void _listenConnectivity() {
-    _connectivity.onConnectivityChanged.listen((List<ConnectivityResult> results) {
-      _updateState(results);
-    } as void Function(ConnectivityResult event)?);
+    if (kIsWeb) return;
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
+      (results) => _updateState(results),
+      onError: (error) {
+        debugPrint("❌ Erreur écoute connectivité : $error");
+        _updateState([ConnectivityResult.none]);
+      },
+    );
   }
 
   void _updateState(List<ConnectivityResult> results) {
     _connectivityResults = results;
-    
-    // 2. On vérifie si la liste contient autre chose que 'none'
-    // Si la liste contient ConnectivityResult.none, on n'est pas connecté
+    final previous = _hasInternet;
     _hasInternet = !results.contains(ConnectivityResult.none);
-    
-    notifyListeners();
+    if (previous != _hasInternet) {
+      debugPrint("🌐 Connectivité : ${_hasInternet ? 'Connecté' : 'Déconnecté'}");
+      notifyListeners();
+    }
   }
 
   Future<bool> checkConnection() async {
-    final ConnectivityResult results = await _connectivity.checkConnectivity();
-    _updateState(results as List<ConnectivityResult>);
+    if (kIsWeb) return true;
+    try {
+      final results = await _connectivity.checkConnectivity();
+      _updateState(results);
+    } catch (_) {
+      _updateState([ConnectivityResult.none]);
+    }
     return _hasInternet;
   }
 
   Future<void> retryConnection() async {
     await checkConnection();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
   }
 }

@@ -24,6 +24,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
 
+  bool _isSaving = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +48,52 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     super.dispose();
   }
 
+  Future<void> _saveClient() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      if (widget.client != null) {
+        final updated = widget.client!.copyWith(
+          name: _nameController.text.trim(),
+          address: _addressController.text.trim(),
+          phone: _phoneController.text.trim(),
+          email: _emailController.text.trim(),
+          taxId: _taxIdController.text.trim(),
+        );
+        await _db.updateClient(updated);
+      } else {
+        final client = Client(
+          name: _nameController.text.trim(),
+          address: _addressController.text.trim(),
+          phone: _phoneController.text.trim(),
+          email: _emailController.text.trim(),
+          taxId: _taxIdController.text.trim(),
+        );
+        await _db.addClient(client);
+      }
+      
+      if (!mounted) return; // ✅ Empêche les crashs asynchrones si l'écran est démonté
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.client != null ? 'Client modifié !' : 'Client ajouté !'
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
@@ -60,7 +108,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       appBar: AppBar(
         title: Text(
           isEditing ? 'Modifier le client' : 'Nouveau client',
-          style: TextStyle(color: textColor),
+          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
@@ -69,13 +117,22 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          TextButton(
-            onPressed: _saveClient,
-            child: Text(
-              'Enregistrer',
-              style: TextStyle(color: primaryColor),
-            ),
-          ),
+          _isSaving
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : TextButton(
+                  onPressed: _saveClient,
+                  child: Text(
+                    'Enregistrer',
+                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                  ),
+                ),
         ],
       ),
       body: Padding(
@@ -88,7 +145,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _buildField(
                   controller: _nameController,
                   label: 'Nom complet *',
-                  icon: Icons.person,
+                  icon: Icons.person_outline,
                   isDark: isDark,
                   textColor: textColor,
                   validator: (value) {
@@ -102,7 +159,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _buildField(
                   controller: _addressController,
                   label: 'Adresse *',
-                  icon: Icons.location_on,
+                  icon: Icons.location_on_outlined,
                   isDark: isDark,
                   textColor: textColor,
                   validator: (value) {
@@ -116,7 +173,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _buildField(
                   controller: _phoneController,
                   label: 'Téléphone *',
-                  icon: Icons.phone,
+                  icon: Icons.phone_outlined,
                   isDark: isDark,
                   textColor: textColor,
                   keyboardType: TextInputType.phone,
@@ -131,7 +188,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _buildField(
                   controller: _emailController,
                   label: 'Email',
-                  icon: Icons.email,
+                  icon: Icons.email_outlined,
                   isDark: isDark,
                   textColor: textColor,
                   keyboardType: TextInputType.emailAddress,
@@ -140,7 +197,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _buildField(
                   controller: _taxIdController,
                   label: 'NUI / RCCM',
-                  icon: Icons.numbers,
+                  icon: Icons.numbers_outlined,
                   isDark: isDark,
                   textColor: textColor,
                 ),
@@ -165,11 +222,11 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
-      style: TextStyle(color: textColor),
+      style: TextStyle(color: textColor, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-        prefixIcon: Icon(icon, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+        labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
+        prefixIcon: Icon(icon, color: isDark ? Colors.grey[400] : Colors.grey[600], size: 20),
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
         border: OutlineInputBorder(
@@ -190,45 +247,5 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
-  }
-
-  Future<void> _saveClient() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    try {
-      if (widget.client != null) {
-        final updated = widget.client!.copyWith(
-          name: _nameController.text.trim(),
-          address: _addressController.text.trim(),
-          phone: _phoneController.text.trim(),
-          email: _emailController.text.trim(),
-          taxId: _taxIdController.text.trim(),
-        );
-        await _db.updateClient(updated);
-      } else {
-        final client = Client(
-          name: _nameController.text.trim(),
-          address: _addressController.text.trim(),
-          phone: _phoneController.text.trim(),
-          email: _emailController.text.trim(),
-          taxId: _taxIdController.text.trim(),
-        );
-        await _db.addClient(client);
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.client != null ? 'Client modifié !' : 'Client ajouté !'
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-      context.pop(true);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
-      );
-    }
   }
 }

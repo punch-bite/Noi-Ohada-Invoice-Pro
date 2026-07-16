@@ -33,6 +33,12 @@ class SubscriptionProvider extends ChangeNotifier {
     return can;
   }
 
+  bool get hasCloudAccess {
+    final sub = subscription;
+    if (sub == null || !sub.isActive) return false;
+    return sub.planId == 'pro' || sub.planId == 'business';
+  }
+
 // C'est ici que la logique doit être centralisée
   // bool get canAccessPremiumTemplates {
   //   if (_subscription == null) return false;
@@ -148,7 +154,8 @@ class SubscriptionProvider extends ChangeNotifier {
   Future<void> loadSubscriptions(String id) async {
     try {
       // Si vous avez une méthode getSubscriptions dans DatabaseService
-      _subscription = (await _subscriptionService.getActiveSubscriptions()) as Subscription?;
+      _subscription = (await _subscriptionService.getActiveSubscriptions())
+          as Subscription?;
       notifyListeners();
     } catch (e) {
       debugPrint("Erreur lors du chargement des abonnements : $e");

@@ -1,4 +1,3 @@
-// lib/screens/admin/users_list_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -28,27 +27,39 @@ class _UsersListScreenState extends State<UsersListScreen> {
   }
 
   Future<void> _loadUsers() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    _users = await _adminService.getAllUsers();
-    _applyFilters();
-    setState(() => _isLoading = false);
+
+    try {
+      final users = await _adminService.getAllUsers();
+      if (mounted) {
+        setState(() {
+          _users = users;
+          _applyFilters();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur de chargement: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
   void _applyFilters() {
     var list = _users;
 
-    // Recherche
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      list = list
-          .where((u) =>
-              u.displayName.toLowerCase().contains(q) ||
-              u.email.toLowerCase().contains(q) ||
-              u.companyName?.toLowerCase().contains(q) == true)
-          .toList();
+      list = list.where((u) =>
+          u.displayName.toLowerCase().contains(q) ||
+          u.email.toLowerCase().contains(q) ||
+          (u.companyName?.toLowerCase().contains(q) ?? false)).toList();
     }
 
-    // Filtre rôle
     if (_filterRole != 'all') {
       list = list.where((u) => u.roles.contains(_filterRole)).toList();
     }
@@ -69,29 +80,21 @@ class _UsersListScreenState extends State<UsersListScreen> {
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: Text(
-          'Utilisateurs',
-          style: TextStyle(color: text, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text('Utilisateurs', style: TextStyle(color: text, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
           onPressed: () => context.go('/admin'),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.download, color: text),
-            onPressed: _exportCsv,
-          ),
-          IconButton(
-            icon: Icon(Icons.add, color: text),
-            onPressed: () => context.push('/admin/add-subscription'),
-          ),
+          IconButton(icon: Icon(Icons.download, color: text), onPressed: _exportCsv),
+          IconButton(icon: Icon(Icons.add, color: text), onPressed: () => context.push('/admin/add-subscription')),
           PopupMenuButton<String>(
             icon: Icon(Icons.filter_list, color: text),
             onSelected: (value) {
-              setState(() => _filterRole = value);
+              _filterRole = value;
               _applyFilters();
             },
             itemBuilder: (context) => const [
@@ -102,26 +105,22 @@ class _UsersListScreenState extends State<UsersListScreen> {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
+          preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextField(
-              onChanged: (value) {
-                setState(() => _searchQuery = value);
+              onChanged: (v) {
+                _searchQuery = v;
                 _applyFilters();
               },
               style: TextStyle(color: text),
               decoration: InputDecoration(
-                hintText: 'Rechercher...',
-                hintStyle: TextStyle(color: sub),
+                hintText: 'Rechercher par nom, email ou entreprise...',
+                hintStyle: TextStyle(color: sub, fontSize: 13),
                 prefixIcon: Icon(Icons.search, color: sub),
                 filled: true,
-                fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                fillColor: isDark ? Colors.grey[850] : Colors.grey[100],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
             ),
           ),
@@ -130,134 +129,63 @@ class _UsersListScreenState extends State<UsersListScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _filteredUsers.isEmpty
-              ? _emptyState(isDark, text, sub, primary)
+              ? _emptyState(text, sub, primary)
               : RefreshIndicator(
                   onRefresh: _loadUsers,
-                  color: primary,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: _filteredUsers.length,
-                    itemBuilder: (context, index) {
-                      final user = _filteredUsers[index];
-                      return _userTile(user, isDark, text, sub, card, primary);
-                    },
+                    itemBuilder: (context, index) => _userTile(_filteredUsers[index], isDark, text, sub, card, primary),
                   ),
                 ),
     );
   }
 
-  Widget _userTile(AppUser user, bool isDark, Color text, Color sub, Color card,
-      Color primary) {
-    final isAdmin = user.isAdmin;
-
+  Widget _userTile(AppUser user, bool isDark, Color text, Color sub, Color card, Color primary) {
     return Card(
       color: card,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-            color: isDark ? Colors.grey[800]! : Colors.grey[100]!, width: 0.5),
+        side: BorderSide(color: isDark ? Colors.grey[850]! : Colors.grey[200]!, width: 0.5),
       ),
       child: ListTile(
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: isAdmin
-                ? Colors.purple.withOpacity(0.1)
-                : primary.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              user.displayName.isNotEmpty
-                  ? user.displayName[0].toUpperCase()
-                  : '?',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isAdmin ? Colors.purple : primary,
-              ),
-            ),
+        leading: CircleAvatar(
+          backgroundColor: user.isAdmin ? Colors.purple.withOpacity(0.1) : primary.withOpacity(0.1),
+          child: Text(
+            user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+            style: TextStyle(fontWeight: FontWeight.bold, color: user.isAdmin ? Colors.purple : primary),
           ),
         ),
         title: Row(
           children: [
-            Text(
-              user.displayName,
-              style: TextStyle(fontWeight: FontWeight.w500, color: text),
-            ),
-            if (isAdmin) ...[
-              const SizedBox(width: 6),
+            Text(user.displayName, style: TextStyle(fontWeight: FontWeight.w600, color: text)),
+            if (user.isAdmin) ...[
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Admin',
-                  style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.purple,
-                      fontWeight: FontWeight.w600),
-                ),
+                decoration: BoxDecoration(color: Colors.purple.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: const Text('ADMIN', style: TextStyle(fontSize: 9, color: Colors.purple, fontWeight: FontWeight.bold)),
               ),
-            ],
+            ]
           ],
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(user.email, style: TextStyle(fontSize: 12, color: sub)),
-            if (user.companyName?.isNotEmpty == true)
-              Text(user.companyName!,
-                  style: TextStyle(fontSize: 11, color: sub)),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: user.isActive ? Colors.green : Colors.red,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: Icon(Icons.arrow_forward_ios, size: 16, color: sub),
-              onPressed: () => context.push('/admin/users/${user.id}'),
-            ),
-          ],
-        ),
+        subtitle: Text(user.email, style: TextStyle(fontSize: 12, color: sub)),
+        trailing: Icon(Icons.circle, size: 10, color: user.isActive ? Colors.green : Colors.redAccent),
         onTap: () => context.push('/admin/users/${user.id}'),
       ),
     );
   }
 
-  Widget _emptyState(bool isDark, Color text, Color sub, Color primary) {
+  Widget _emptyState(Color text, Color sub, Color primary) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 64, color: sub),
+          Icon(Icons.person_search_rounded, size: 64, color: sub.withOpacity(0.5)),
           const SizedBox(height: 16),
-          Text(
-            'Aucun utilisateur trouvé',
-            style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w600, color: text),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _searchQuery.isNotEmpty
-                ? 'Essayez d\'autres critères'
-                : 'Aucun utilisateur enregistré',
-            style: TextStyle(fontSize: 14, color: sub),
-          ),
+          Text('Aucun résultat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: text)),
         ],
       ),
     );
@@ -266,23 +194,14 @@ class _UsersListScreenState extends State<UsersListScreen> {
   Future<void> _exportCsv() async {
     try {
       final file = await _adminService.exportUsersCsvToFile();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.green),
-              const SizedBox(width: 8),
-              Text('Exporté : ${file.path}'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
-        ),
+        SnackBar(content: Text('Export réussi : ${file.path.split('/').last}'), backgroundColor: Colors.green),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Erreur export: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Erreur export: $e'), backgroundColor: Colors.redAccent),
       );
     }
   }

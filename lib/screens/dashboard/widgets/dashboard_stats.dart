@@ -26,6 +26,7 @@ class DashboardStats extends StatelessWidget {
     final textColor = themeProvider.textColor;
     final subTextColor = themeProvider.subTextColor;
     final cardColor = themeProvider.cardColor;
+    final primaryColor = themeProvider.primaryColor;
 
     return Row(
       children: [
@@ -33,7 +34,8 @@ class DashboardStats extends StatelessWidget {
           label: 'Revenus',
           value: revenue,
           change: revenueChange,
-          color: const Color(0xFF1A237E),
+          icon: Icons.account_balance_wallet_outlined,
+          color: isDark ? const Color(0xFF9FA8DA) : const Color(0xFF1A237E), // Bleu contrasté
           isDark: isDark,
           textColor: textColor,
           subTextColor: subTextColor,
@@ -44,7 +46,8 @@ class DashboardStats extends StatelessWidget {
           label: 'Commandes',
           value: orders,
           change: ordersChange,
-          color: const Color(0xFF4CAF50),
+          icon: Icons.shopping_bag_outlined,
+          color: const Color(0xFF4CAF50), // Vert stable
           isDark: isDark,
           textColor: textColor,
           subTextColor: subTextColor,
@@ -54,8 +57,9 @@ class DashboardStats extends StatelessWidget {
         _buildStatCard(
           label: 'Objectif',
           value: goal,
-          change: 8.2,
-          color: const Color(0xFFFF9800),
+          change: 8.2, // Valeur fixe ou dynamique
+          icon: Icons.track_changes_rounded,
+          color: const Color(0xFFFF9800), // Orange stable
           isDark: isDark,
           textColor: textColor,
           subTextColor: subTextColor,
@@ -69,6 +73,7 @@ class DashboardStats extends StatelessWidget {
     required String label,
     required String value,
     required double change,
+    required IconData icon,
     required Color color,
     required bool isDark,
     required Color textColor,
@@ -76,60 +81,76 @@ class DashboardStats extends StatelessWidget {
     required Color cardColor,
   }) {
     final isPositive = change >= 0;
+    final badgeColor = isPositive ? Colors.green : Colors.red;
 
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-              blurRadius: 5,
-            ),
-          ],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: subTextColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: color.withOpacity(0.8),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
               value,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: color,
+                color: textColor,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: subTextColor,
-              ),
-            ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: isPositive ? Colors.green[50] : Colors.red[50],
-                borderRadius: BorderRadius.circular(8),
+                // Utilisation d'une opacité dynamique pour s'adapter au Dark Mode sans délaver la couleur
+                color: badgeColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                    color: isPositive ? Colors.green : Colors.red,
-                    size: 10,
+                    isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                    color: badgeColor,
+                    size: 12,
                   ),
+                  const SizedBox(width: 2),
                   Text(
                     '${change.abs().toStringAsFixed(1)}%',
                     style: TextStyle(
-                      color: isPositive ? Colors.green : Colors.red,
+                      color: badgeColor,
                       fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],

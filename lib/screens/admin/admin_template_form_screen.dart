@@ -1,6 +1,4 @@
 // lib/screens/admin/admin_template_form_screen.dart
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use, unused_local_variable
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -59,8 +57,8 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   }
 
   void _initControllers() {
-    _nameController = TextEditingController(text: '');
-    _descriptionController = TextEditingController(text: '');
+    _nameController = TextEditingController();
+    _descriptionController = TextEditingController();
     _fontSizeController = TextEditingController(text: '12');
     _primaryColorController = TextEditingController(text: '#1976D2');
     _textColorController = TextEditingController(text: '#000000');
@@ -72,11 +70,11 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _descriptionController.text = template.description;
     _fontSizeController.text = template.fontSize.toString();
     _primaryColorController.text =
-        '#${template.primaryColor.value.toRadixString(16).padLeft(6, '0')}';
+        '#${template.primaryColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _textColorController.text =
-        '#${template.textColor.value.toRadixString(16).padLeft(6, '0')}';
+        '#${template.textColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _backgroundColorController.text =
-        '#${template.backgroundColor.value.toRadixString(16).padLeft(6, '0')}';
+        '#${template.backgroundColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _showLogo = template.showLogo;
     _showTaxDetails = template.showTaxDetails;
     _showPaymentTerms = template.showPaymentTerms;
@@ -87,19 +85,35 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   }
 
   Future<void> _loadTemplate(String id) async {
-    final template = await _templateService.getTemplateById(id);
-    if (template != null) {
-      setState(() {
-        _updateControllersFromTemplate(template);
-        _isLoadingData = false;
-      });
-    } else {
-      setState(() => _isLoadingData = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Modèle introuvable'),
-            backgroundColor: Colors.orange),
-      );
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      final template = await _templateService.getTemplateById(id);
+      if (mounted) {
+        if (template != null) {
+          setState(() {
+            _updateControllersFromTemplate(template);
+            _isLoadingData = false;
+          });
+        } else {
+          setState(() => _isLoadingData = false);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Modèle introuvable'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingData = false);
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Erreur de chargement: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -116,7 +130,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
 
   Color _parseColor(String hex) {
     try {
-      String clean = hex.replaceAll('#', '');
+      String clean = hex.replaceAll('#', '').trim();
       if (clean.length == 6) clean = 'FF$clean';
       return Color(int.parse(clean, radix: 16));
     } catch (_) {
@@ -130,10 +144,14 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
 
     final auth = context.read<AppAuthProvider>();
     final userId = auth.user?.id ?? 'admin_unknown';
+    final navigator = GoRouter.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    final existingId = widget.templateId != null
-        ? (await _templateService.getTemplateById(widget.templateId!))?.id
-        : null;
+    String? existingId;
+    if (widget.templateId != null) {
+      final t = await _templateService.getTemplateById(widget.templateId!);
+      existingId = t?.id;
+    }
 
     final template = InvoiceTemplate(
       id: existingId ?? const Uuid().v4(),
@@ -162,17 +180,26 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       } else {
         await _templateService.createTemplate(template);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
-            content: Text('Modèle enregistré'), backgroundColor: Colors.green),
+          content: Text('Modèle enregistré avec succès'),
+          backgroundColor: Colors.green,
+        ),
       );
-      context.pop(true);
+      if (mounted) {
+        navigator.pop(true);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Erreur d\'enregistrement : $e'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -180,23 +207,24 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
-    final text = theme.textColor;
-    final sub = theme.subTextColor;
-    final bg = theme.backgroundColor;
-    final primary = theme.primaryColor;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final bgColor = theme.backgroundColor;
+    final cardColor = theme.cardColor;
+    final primaryColor = theme.primaryColor;
 
     if (_isLoadingData) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: Text(
             widget.templateId == null ? 'Nouveau modèle' : 'Modifier le modèle',
-            style: TextStyle(color: text, fontWeight: FontWeight.w600),
+            style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+            icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
             onPressed: () => context.pop(),
           ),
         ),
@@ -205,16 +233,17 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     }
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
           widget.templateId == null ? 'Nouveau modèle' : 'Modifier le modèle',
-          style: TextStyle(color: text, fontWeight: FontWeight.w600),
+          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
@@ -222,148 +251,261 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
             onPressed: _isLoading ? null : _save,
             child: Text(
               widget.templateId == null ? 'Ajouter' : 'Modifier',
-              style: TextStyle(color: primary, fontWeight: FontWeight.w600),
+              style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    _buildField(
-                        'Nom du modèle', _nameController, Icons.text_fields),
-                    const SizedBox(height: 12),
-                    _buildField('Description', _descriptionController,
-                        Icons.description,
-                        maxLines: 2),
-                    const SizedBox(height: 12),
-                    _buildColorField(
-                        'Couleur primaire', _primaryColorController),
-                    const SizedBox(height: 12),
-                    _buildColorField('Couleur du texte', _textColorController),
-                    const SizedBox(height: 12),
-                    _buildColorField(
-                        'Couleur de fond', _backgroundColorController),
-                    const SizedBox(height: 12),
-
-                    // Options avancées
-                    _buildSwitch('Afficher le logo', _showLogo,
-                        (v) => setState(() => _showLogo = v)),
-                    _buildSwitch('Afficher la TVA', _showTaxDetails,
-                        (v) => setState(() => _showTaxDetails = v)),
-                    _buildSwitch(
-                        'Afficher les conditions de paiement',
-                        _showPaymentTerms,
-                        (v) => setState(() => _showPaymentTerms = v)),
-                    _buildSwitch('Afficher QR Code paiement', _showPaymentQR,
-                        (v) => setState(() => _showPaymentQR = v)),
-                    _buildSwitch('Afficher les bordures', _showBorder,
-                        (v) => setState(() => _showBorder = v)),
-                    _buildSwitch('Modèle premium', _isPremium,
-                        (v) => setState(() => _isPremium = v)),
-
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDropdown(
-                              'Police',
-                              _fontFamily,
-                              _fontOptions,
-                              (v) => setState(() => _fontFamily = v!)),
+          : GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildSectionLabel('Informations générales', textColor),
+                      const SizedBox(height: 10),
+                      _buildField('Nom du modèle *', _nameController, Icons.label_important_outline_rounded, cardColor, textColor, subTextColor, primaryColor, isDark),
+                      const SizedBox(height: 12),
+                      _buildField('Description *', _descriptionController, Icons.description_outlined, cardColor, textColor, subTextColor, primaryColor, isDark, maxLines: 3),
+                      
+                      const SizedBox(height: 24),
+                      _buildSectionLabel('Couleurs du modèle (Hexadécimal)', textColor),
+                      const SizedBox(height: 10),
+                      _buildColorField('Couleur primaire *', _primaryColorController, cardColor, textColor, subTextColor, primaryColor, isDark),
+                      const SizedBox(height: 12),
+                      _buildColorField('Couleur de texte *', _textColorController, cardColor, textColor, subTextColor, primaryColor, isDark),
+                      const SizedBox(height: 12),
+                      _buildColorField('Couleur d\'arrière-plan *', _backgroundColorController, cardColor, textColor, subTextColor, primaryColor, isDark),
+                      
+                      const SizedBox(height: 24),
+                      _buildSectionLabel('Options d\'affichage', textColor),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+                            width: 0.5,
+                          ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildField('Taille police',
-                              _fontSizeController, Icons.format_size,
-                              keyboard: TextInputType.number),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: ElevatedButton(
-                        onPressed: _save,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: Text(
-                          widget.templateId == null
-                              ? 'Créer le modèle'
-                              : 'Mettre à jour',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        child: Column(
+                          children: [
+                            _buildSwitch('Afficher le logo principal', _showLogo, primaryColor, textColor, (v) => setState(() => _showLogo = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            _buildSwitch('Détailler le calcul de la TVA', _showTaxDetails, primaryColor, textColor, (v) => setState(() => _showTaxDetails = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            _buildSwitch('Afficher les conditions de règlement', _showPaymentTerms, primaryColor, textColor, (v) => setState(() => _showPaymentTerms = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            _buildSwitch('Inclure le QR Code de paiement', _showPaymentQR, primaryColor, textColor, (v) => setState(() => _showPaymentQR = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            _buildSwitch('Ajouter une bordure de page', _showBorder, primaryColor, textColor, (v) => setState(() => _showBorder = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            _buildSwitch('Définir comme modèle Premium', _isPremium, primaryColor, textColor, (v) => setState(() => _isPremium = v)),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      
+                      const SizedBox(height: 24),
+                      _buildSectionLabel('Typographie & Structure', textColor),
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: _buildDropdown('Police de caractères', _fontFamily, _fontOptions, cardColor, textColor, subTextColor, isDark, (v) => setState(() => _fontFamily = v!)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 1,
+                            child: _buildField('Taille *', _fontSizeController, Icons.format_size_rounded, cardColor, textColor, subTextColor, primaryColor, isDark, keyboard: TextInputType.number),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 40),
+
+                      // Bouton d'action
+                      SizedBox(
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _save,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            widget.templateId == null ? 'Créer le modèle' : 'Mettre à jour',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
     );
   }
 
-  // ========== WIDGETS (inchangés) ==========
-  Widget _buildField(String label, TextEditingController c, IconData icon,
-      {int maxLines = 1, TextInputType? keyboard}) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-    final sub = theme.subTextColor;
-    final text = theme.textColor;
-    final primary = theme.primaryColor;
-
-    return TextFormField(
-      controller: c,
-      keyboardType: keyboard,
-      maxLines: maxLines,
-      style: TextStyle(color: text),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: sub),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.5)),
-        filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        isDense: true,
+  Widget _buildSectionLabel(String text, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.3,
+        ),
       ),
-      validator: (v) => v?.trim().isEmpty == true ? 'Requis' : null,
     );
   }
 
-  Widget _buildColorField(String label, TextEditingController c) {
-    return _buildField(label, c, Icons.color_lens);
+  // ========== WIDGETS DÉCOUPLÉS ET SÉCURISÉS ==========
+
+  Widget _buildField(
+    String label, 
+    TextEditingController controller, 
+    IconData icon,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor,
+    bool isDark, {
+    int maxLines = 1, 
+    TextInputType? keyboard,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboard,
+      maxLines: maxLines,
+      style: TextStyle(color: textColor, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
+        prefixIcon: Icon(icon, size: 20, color: primaryColor.withOpacity(0.5)),
+        filled: true,
+        fillColor: cardColor,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: primaryColor,
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) {
+          return 'Requis';
+        }
+        return null;
+      },
+    );
   }
 
-  Widget _buildSwitch(String label, bool value, ValueChanged<bool> onChanged) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-    final text = theme.textColor;
+  Widget _buildColorField(
+    String label, 
+    TextEditingController controller,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor,
+    bool isDark,
+  ) {
+    return TextFormField(
+      controller: controller,
+      style: TextStyle(color: textColor, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
+        prefixIcon: Icon(Icons.palette_outlined, size: 20, color: primaryColor.withOpacity(0.5)),
+        filled: true,
+        fillColor: cardColor,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: primaryColor,
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) {
+          return 'Requis';
+        }
+        final regExp = RegExp(r'^#?[0-9a-fA-F]{6}$');
+        if (!regExp.hasMatch(v.trim())) {
+          return 'Format Hexadécimal invalide (ex: #1976D2)';
+        }
+        return null;
+      },
+    );
+  }
 
+  Widget _buildSwitch(
+    String label, 
+    bool value, 
+    Color activeColor, 
+    Color textColor,
+    ValueChanged<bool> onChanged,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black87, fontSize: 14)),
+          Text(
+            label,
+            style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: theme.primaryColor,
+            activeThumbColor: activeColor,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ],
@@ -371,32 +513,43 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     );
   }
 
-  Widget _buildDropdown(String label, String value, List<String> items,
-      ValueChanged<String?> onChanged) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-    final text = theme.textColor;
-    final sub = theme.subTextColor;
-    final primary = theme.primaryColor;
-
+  Widget _buildDropdown(
+    String label, 
+    String value, 
+    List<String> items,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+    bool isDark,
+    ValueChanged<String?> onChanged,
+  ) {
     return DropdownButtonFormField<String>(
       initialValue: value,
       isExpanded: true,
-      style: TextStyle(color: text),
-      dropdownColor: isDark ? Colors.grey[850] : Colors.white,
+      style: TextStyle(color: textColor, fontSize: 14),
+      dropdownColor: cardColor,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: sub),
+        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
         filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        isDense: true,
+        fillColor: cardColor,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: Theme.of(context).primaryColor,
+            width: 1.5,
+          ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
-      items:
-          items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
       onChanged: onChanged,
     );
   }

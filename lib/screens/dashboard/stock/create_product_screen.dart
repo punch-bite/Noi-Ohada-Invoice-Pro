@@ -1,5 +1,5 @@
 // lib/screens/dashboard/stock/create_product_screen.dart
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+// ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -37,7 +37,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   bool _isLoading = false;
   bool _isLoadingSuppliers = true;
-  List<Supplier> _suppliers = [];
+  List<Supplier> _suppliers = []; // ✅ Toujours une liste, jamais null
   Supplier? _selectedSupplier;
 
   final List<String> _unitOptions = [
@@ -56,11 +56,22 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     _initializeData();
   }
 
+  // ===== INITIALISATION ROBUSTE =====
   Future<void> _initializeData() async {
     await _supplierService.init();
-    _suppliers = (await _supplierService.getActiveSupplier()) as List<Supplier>;
-    setState(() => _isLoadingSuppliers = false);
+    final activeSuppliers = await _supplierService.getActiveSupplier();
 
+    if (!mounted) return;
+
+    // ✅ Conversion sécurisée en List<Supplier>
+    final List<Supplier> supplierList = _safeCastToList(activeSuppliers);
+
+    setState(() {
+      _suppliers = supplierList;
+      _isLoadingSuppliers = false;
+    });
+
+    // Remplir les champs si modification
     if (widget.product != null) {
       _nameController.text = widget.product!.name;
       _descriptionController.text = widget.product!.description;
@@ -73,16 +84,32 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       _barcodeController.text = widget.product!.barcode ?? '';
 
       if (widget.product!.supplierId != null) {
-        _selectedSupplier = _suppliers.firstWhere(
-          (s) => s.id == widget.product!.supplierId,
-          orElse: () => _suppliers.firstOrNull ?? _suppliers.first,
-        );
+        setState(() {
+          _selectedSupplier = _suppliers.firstWhere(
+            (s) => s.id == widget.product!.supplierId,
+            orElse: () => null as Supplier,
+          );
+        });
       }
     } else {
       _unitController.text = 'pièce';
       _minStockController.text = '5';
       _selectedSupplier = null;
     }
+  }
+
+  // ===== UTILITAIRE DE CAST SÉCURISÉ =====
+  List<Supplier> _safeCastToList(dynamic data) {
+    if (data == null) return [];
+    if (data is List<Supplier>) return data;
+    if (data is Iterable) {
+      try {
+        return data.map((e) => e as Supplier).toList();
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
   }
 
   @override
@@ -141,6 +168,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
         await _stockService.addProduct(product);
       }
 
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -151,18 +180,25 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       );
       Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _refreshSuppliers() async {
     setState(() => _isLoadingSuppliers = true);
-    _suppliers = (await _supplierService.getActiveSupplier()) as List<Supplier>;
-    setState(() => _isLoadingSuppliers = false);
+    final activeSuppliers = await _supplierService.getActiveSupplier();
+    if (!mounted) return;
+    setState(() {
+      _suppliers = _safeCastToList(activeSuppliers);
+      _isLoadingSuppliers = false;
+    });
   }
 
   @override
@@ -173,7 +209,6 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     final text = theme.textColor;
     final sub = theme.subTextColor;
     final bg = theme.backgroundColor;
-    final cardColor = theme.cardColor;
 
     final isEditing = widget.product != null;
 
@@ -310,7 +345,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       keyboard: TextInputType.number,
                       validator: (v) {
                         if (v?.trim().isEmpty == true) return 'Requis';
-                        if (int.tryParse(v!) == null || int.parse(v) < 0) {
+                        final parsed = int.tryParse(v!);
+                        if (parsed == null || parsed < 0) {
                           return 'Nombre valide';
                         }
                         return null;
@@ -462,8 +498,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
             child: LinearProgressIndicator(),
           )
         else
-          DropdownButtonFormField<Supplier>(
-            initialValue: _selectedSupplier,
+          DropdownButtonFormField<Supplier?>(
+            value: _selectedSupplier,
             isExpanded: true,
             style: TextStyle(color: text, fontSize: 14),
             dropdownColor: isDark ? Colors.grey[850] : Colors.white,
@@ -496,11 +532,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
               ),
             ),
             items: [
-              const DropdownMenuItem<Supplier>(
+              const DropdownMenuItem<Supplier?>(
                 value: null,
                 child: Text('Aucun'),
               ),
-              ..._suppliers.map((s) => DropdownMenuItem<Supplier>(
+              ..._suppliers.map((s) => DropdownMenuItem<Supplier?>(
                     value: s,
                     child: Text(s.name, style: TextStyle(color: text)),
                   )),
@@ -523,11 +559,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     required Color sub,
     required Color primary,
   }) {
+    final String? currentValue =
+        options.contains(controller.text) ? controller.text : null;
+
     return DropdownButtonFormField<String>(
-      initialValue:
-          controller.text.isNotEmpty && options.contains(controller.text)
-              ? controller.text
-              : null,
+      value: currentValue,
       isExpanded: true,
       style: TextStyle(color: text, fontSize: 14),
       dropdownColor: isDark ? Colors.grey[850] : Colors.white,
@@ -549,7 +585,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       items: options
           .map((o) => DropdownMenuItem(value: o, child: Text(o)))
           .toList(),
-      onChanged: (v) => controller.text = v!,
+      onChanged: (v) {
+        if (v != null) {
+          setState(() => controller.text = v);
+        }
+      },
       validator: (v) => v == null ? 'Requis' : null,
     );
   }

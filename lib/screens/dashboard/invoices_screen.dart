@@ -30,20 +30,24 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _searchFocusNode.addListener(() {
-      setState(() {
-        _isSearchFocused = _searchFocusNode.hasFocus;
-      });
+    _searchFocusNode.addListener(_onSearchFocusChange);
+  }
+
+  void _onSearchFocusChange() {
+    setState(() {
+      _isSearchFocused = _searchFocusNode.hasFocus;
     });
   }
 
   @override
   void dispose() {
+    _searchFocusNode.removeListener(_onSearchFocusChange);
     _searchFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final results = await Future.wait([
@@ -59,7 +63,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       _clientNames = {};
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de chargement : $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erreur de chargement : $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     } finally {
@@ -81,7 +88,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         final clientName = _clientNames[i.clientId]?.toLowerCase() ?? '';
         final matchClient = clientName.contains(query);
         final matchAmount = i.totalAmount.toString().contains(query);
-        final matchDate = DateFormat('dd/MM/yyyy').format(i.issueDate).contains(query);
+        final formattedDate = DateFormat('dd/MM/yyyy').format(i.issueDate);
+        final matchDate = formattedDate.contains(query);
         return matchNumber || matchClient || matchAmount || matchDate;
       }).toList();
     }
@@ -91,7 +99,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   String _getClientName(String clientId) {
     if (clientId.isEmpty) return 'Client inconnu';
-    return _clientNames[clientId] ?? 'Client #${clientId.length > 6 ? clientId.substring(0, 6) : clientId}';
+    return _clientNames[clientId] ?? 
+        'Client #${clientId.length > 6 ? clientId.substring(0, 6) : clientId}';
   }
 
   @override
@@ -161,12 +170,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   size: 20,
                 ),
                 suffixIcon: _searchQuery.isNotEmpty
-                    ? GestureDetector(
-                        onTap: () {
-                          setState(() => _searchQuery = '');
-                          _searchFocusNode.unfocus();
-                        },
-                        child: Container(
+                    ? IconButton(
+                        icon: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
                             color: subTextColor.withOpacity(0.1),
@@ -175,9 +180,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           child: Icon(
                             Icons.close_rounded,
                             color: subTextColor,
-                            size: 16,
+                            size: 14,
                           ),
                         ),
+                        onPressed: () {
+                          setState(() => _searchQuery = '');
+                          _searchFocusNode.unfocus();
+                        },
                       )
                     : null,
                 border: InputBorder.none,
@@ -234,102 +243,114 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
           width: 0.5,
         ),
       ),
-      child: InkWell(
-        onTap: () => context.push('/dashboard/invoices/${invoice.id}'),
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.push('/dashboard/invoices/${invoice.id}'),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: invoice.isDevis ? Colors.orange[50] : Colors.blue[50],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    invoice.isDevis ? 'DEVIS' : 'FACT',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: invoice.isDevis ? Colors.orange[700] : Colors.blue[700],
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    invoice.invoiceNumber,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColors['bg']?.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getStatusLabel(invoice.status),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: statusColors['text'],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      clientName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: textColor,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: invoice.isDevis 
+                            ? Colors.orange.withOpacity(0.1) 
+                            : Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        invoice.isDevis ? 'DEVIS' : 'FACT',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: invoice.isDevis ? Colors.orange[700] : Colors.blue[700],
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                    Text(
-                      DateFormat('dd MMM yyyy').format(invoice.dueDate),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: subTextColor,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        invoice.invoiceNumber,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColors['bg']!.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getStatusLabel(invoice.status),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: statusColors['text'],
+                        ),
                       ),
                     ),
                   ],
                 ),
-                Text(
-                  '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: primaryColor,
-                  ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            clientName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: textColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            DateFormat('dd MMM yyyy').format(invoice.dueDate),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: subTextColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

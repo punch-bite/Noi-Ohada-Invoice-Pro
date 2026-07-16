@@ -8,7 +8,7 @@ part of 'product.dart';
 
 class ProductAdapter extends TypeAdapter<Product> {
   @override
-  final int typeId = 5;
+  final int typeId = 11;
 
   @override
   Product read(BinaryReader reader) {
@@ -81,3 +81,47 @@ class ProductAdapter extends TypeAdapter<Product> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Product _$ProductFromJson(Map<String, dynamic> json) => Product(
+      id: json['id'] as String?,
+      name: json['name'] as String,
+      description: json['description'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      price: (json['price'] as num).toDouble(),
+      costPrice: (json['costPrice'] as num?)?.toDouble() ?? 0.0,
+      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      minStock: (json['minStock'] as num?)?.toInt() ?? 5,
+      unit: json['unit'] as String? ?? 'pièce',
+      barcode: json['barcode'] as String?,
+      imagePath: json['imagePath'] as String?,
+      isActive: json['isActive'] as bool? ?? true,
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
+      supplierId: json['supplierId'] as String?,
+    );
+
+Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'description': instance.description,
+      'category': instance.category,
+      'price': instance.price,
+      'costPrice': instance.costPrice,
+      'quantity': instance.quantity,
+      'minStock': instance.minStock,
+      'unit': instance.unit,
+      'barcode': instance.barcode,
+      'imagePath': instance.imagePath,
+      'isActive': instance.isActive,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'supplierId': instance.supplierId,
+    };

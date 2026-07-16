@@ -30,9 +30,10 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
   late TextEditingController _legalTextController;
   late TextEditingController _websiteController;
   late TextEditingController _rccmController;
+  late TextEditingController _taxRateController; // ✅ Correctement déclaré ici
 
   String _currency = 'XAF';
-  double _defaultTaxRate = 18;
+  double _defaultTaxRate = 18.0;
   String? _logoPath;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -48,6 +49,7 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
     _legalTextController = TextEditingController();
     _websiteController = TextEditingController();
     _rccmController = TextEditingController();
+    _taxRateController = TextEditingController(text: _defaultTaxRate.toString()); // ✅ Initialisé
     _loadCompany();
   }
 
@@ -61,12 +63,15 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
     _legalTextController.dispose();
     _websiteController.dispose();
     _rccmController.dispose();
+    _taxRateController.dispose(); // ✅ Libéré
     super.dispose();
   }
 
   Future<void> _loadCompany() async {
     setState(() => _isLoading = true);
     final company = await _db.getCompany();
+    if (!mounted) return;
+
     if (company != null) {
       _nameController.text = company.name;
       _addressController.text = company.address;
@@ -78,6 +83,7 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
       _rccmController.text = company.rccm;
       _currency = company.currency;
       _defaultTaxRate = company.defaultTaxRate;
+      _taxRateController.text = _defaultTaxRate.toString(); // ✅ Met à jour le contrôleur
       _logoPath = company.logoPath;
     }
     setState(() => _isLoading = false);
@@ -98,6 +104,8 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
         final ext = image.path.split('.').last.toLowerCase();
         final mimeType = ext == 'jpg' || ext == 'jpeg' ? 'jpeg' : 'png';
         final dataUri = 'data:image/$mimeType;base64,$base64String';
+        
+        if (!mounted) return;
         setState(() => _logoPath = dataUri);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -110,6 +118,9 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
   Future<void> _saveCompany() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
+
+    // Récupération sécurisée du taux de taxe
+    _defaultTaxRate = double.tryParse(_taxRateController.text) ?? 18.0;
 
     final company = Company(
       name: _nameController.text.trim(),
@@ -126,7 +137,10 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
     );
 
     await _db.saveCompany(company);
+    
+    if (!mounted) return;
     setState(() => _isSaving = false);
+    
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
           content: Text('Entreprise configurée'),
@@ -235,16 +249,14 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
                     _currencyDropdown(isDark, text, sub, primary),
                     const SizedBox(height: 12),
                     _input(
-                      TextEditingController(text: _defaultTaxRate.toString()),
+                      _taxRateController, // ✅ Utilise désormais le contrôleur persistant
                       'TVA (%)',
                       Icons.percent_outlined,
                       isDark,
                       text,
                       sub,
                       primary,
-                      keyboard: TextInputType.number,
-                      onChanged: (v) =>
-                          _defaultTaxRate = double.tryParse(v) ?? 18,
+                      keyboard: const TextInputType.numberWithOptions(decimal: true),
                     ),
 
                     const SizedBox(height: 32),
@@ -377,7 +389,7 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
 
   Widget _currencyDropdown(bool isDark, Color text, Color sub, Color primary) {
     return DropdownButtonFormField<String>(
-      initialValue: _currency,
+      value: _currency, // Utilisation de 'value' au lieu de 'initialValue' pour un comportement dynamique robuste
       isExpanded: true,
       style: TextStyle(color: text, fontSize: 14),
       dropdownColor: isDark ? Colors.grey[850] : Colors.white,
@@ -401,7 +413,11 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
         DropdownMenuItem(value: 'USD', child: Text('Dollar (USD)')),
         DropdownMenuItem(value: 'EUR', child: Text('Euro (EUR)')),
       ],
-      onChanged: (v) => setState(() => _currency = v!),
+      onChanged: (v) {
+        if (v != null) {
+          setState(() => _currency = v);
+        }
+      },
     );
   }
 }

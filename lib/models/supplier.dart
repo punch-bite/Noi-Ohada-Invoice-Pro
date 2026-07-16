@@ -7,7 +7,7 @@ import 'package:uuid/uuid.dart';
 part 'supplier.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 8) // Modifié à 8 pour éviter la collision avec Reminder (typeId: 6) et Subscription (typeId: 7)
+@HiveType(typeId: 14) // Assurez-vous que l'ID est unique
 class Supplier {
   @HiveField(0)
   final String id;
@@ -57,7 +57,7 @@ class Supplier {
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
-  // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
+  // ===== SÉRIALISATION HIVE / FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {
@@ -86,10 +86,22 @@ class Supplier {
       contactPerson: map['contactPerson'] ?? '',
       notes: map['notes'] ?? '',
       isActive: map['isActive'] ?? true,
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
+      createdAt: _parseDateTime(map['createdAt']),
       updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
     );
   }
+
+  /// Constructeur dédié pour Firestore (plus clair)
+  factory Supplier.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Supplier.fromMap(data, documentId: doc.id);
+  }
+
+  // ===== JSON (pour sérialisation web / API) =====
+
+  Map<String, dynamic> toJson() => _$SupplierToJson(this);
+
+  factory Supplier.fromJson(Map<String, dynamic> json) => _$SupplierFromJson(json);
 
   // ===== CLONAGE (copyWith) =====
 
@@ -120,22 +132,22 @@ class Supplier {
     );
   }
 
-  // ===== GETTERS D'INTERFACE =====
+  // ===== GETTERS UTILITAIRES =====
 
   String get formattedPhone => phone.isNotEmpty ? phone : 'Non renseigné';
   String get formattedEmail => email.isNotEmpty ? email : 'Non renseigné';
 
-  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  /// Vérifie si le fournisseur est valide (au minimum un nom)
+  bool get isValid => name.isNotEmpty;
+
+  // ===== FONCTIONS DE PARSING ROBUSTE =====
+
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    } else if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
-    } else if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    } else if (value is DateTime) {
-      return value;
-    }
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is DateTime) return value;
     return DateTime.now();
   }
 }

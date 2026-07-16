@@ -6,7 +6,7 @@ import 'package:json_annotation/json_annotation.dart';
 part 'user.g.dart'; // Généré par Hive
 
 @JsonSerializable()
-@HiveType(typeId: 9) // Attribué à 9 pour suivre notre registre de modèles (Supplier: 8)
+@HiveType(typeId: 15) // Attribué à 9 pour suivre notre registre de modèles (Supplier: 8)
 class AppUser {
   @HiveField(0)
   final String id;

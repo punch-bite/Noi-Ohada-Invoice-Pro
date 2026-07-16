@@ -13,7 +13,7 @@ class SecurityService {
   static const String _twoFactorSecretKey = 'two_factor_secret';
   static const String _lockTimeoutKey = 'lock_timeout';
   static const String _lastActivityKey = 'last_activity';
-  
+
   static Box? _box;
   static final LocalAuthentication _localAuth = LocalAuthentication();
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
@@ -27,7 +27,8 @@ class SecurityService {
   }
 
   // Définir le contexte utilisateur (appeler après authentification)
-  static void setUserContext({required String userId, required String userEmail}) {
+  static void setUserContext(
+      {required String userId, required String userEmail}) {
     _currentUserId = userId;
     _currentUserEmail = userEmail;
   }
@@ -57,7 +58,7 @@ class SecurityService {
   }) async {
     // 1. Log local
     await _addLocalLog(action: action, details: details);
-    
+
     // 2. Log Firestore (si utilisateur connecté)
     if (_currentUserId != null && _currentUserEmail != null) {
       try {
@@ -68,7 +69,7 @@ class SecurityService {
           action: action,
           targetId: targetId,
           targetType: targetType,
-          details: details != null ? {'details': details} : null, limit: 200,
+          details: details != null ? {'details': details} : null,
         );
       } catch (e) {
         debugPrint('❌ Erreur log Firestore: $e');
@@ -81,31 +82,32 @@ class SecurityService {
     required String action,
     String? details,
   }) async {
-    assert(_box != null, 'SecurityService n\'a pas été initialisé. Appelez await SecurityService.init() d\'abord.');
-    
+    assert(_box != null,
+        'SecurityService n\'a pas été initialisé. Appelez await SecurityService.init() d\'abord.');
+
     final logs = await getActivityLogs();
-    
+
     // ✅ CORRECTION : Insertion dans une nouvelle liste mutable pour éviter l'erreur d'immuabilité
     final updatedLogs = List<Map<String, dynamic>>.from(logs);
-    
+
     updatedLogs.insert(0, {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'action': action,
       'details': details ?? '',
       'timestamp': DateTime.now().toIso8601String(),
     });
-    
+
     if (updatedLogs.length > 100) {
       updatedLogs.removeRange(100, updatedLogs.length);
     }
-    
+
     await _box!.put('activityLogs', updatedLogs);
   }
 
   static Future<List<Map<String, dynamic>>> getActivityLogs() async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     final rawLogs = _box!.get('activityLogs', defaultValue: []) as List;
-    
+
     // ✅ CORRECTION : Conversion sécurisée pour éviter les conflits Map<dynamic, dynamic>
     return rawLogs.map((log) {
       if (log is Map) {
@@ -156,12 +158,12 @@ class SecurityService {
 
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Authentifiez-vous pour accéder à l\'application',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-        ),
+        // Dans les anciennes versions, les options sont des paramètres directs
+        biometricOnly: true,
+        sensitiveTransaction: true,
+        persistAcrossBackgrounding: true,
       );
-      
+
       if (authenticated) {
         await _logActivity(
           action: 'biometric_authentication_success',
@@ -173,7 +175,7 @@ class SecurityService {
           details: 'Échec de l\'authentification biométrique',
         );
       }
-      
+
       return authenticated;
     } catch (e) {
       await _logActivity(
@@ -286,7 +288,8 @@ class SecurityService {
     if (locked) {
       await _logActivity(
         action: 'app_auto_locked',
-        details: 'Application verrouillée automatiquement (inactivité de $timeout minutes)',
+        details:
+            'Application verrouillée automatiquement (inactivité de $timeout minutes)',
       );
     }
     return locked;
@@ -296,10 +299,10 @@ class SecurityService {
   static Future<void> addSession(String deviceName) async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     final sessions = await getSessions();
-    
+
     // ✅ CORRECTION : Mutation d'une nouvelle liste pour éviter l'immuabilité
     final updatedSessions = List<Map<String, dynamic>>.from(sessions);
-    
+
     updatedSessions.add({
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'device': deviceName,
@@ -307,7 +310,7 @@ class SecurityService {
       'lastActive': DateTime.now().toIso8601String(),
       'current': true,
     });
-    
+
     await _box!.put('sessions', updatedSessions);
     await _logActivity(
       action: 'session_started',
@@ -318,7 +321,7 @@ class SecurityService {
   static Future<List<Map<String, dynamic>>> getSessions() async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     final rawSessions = _box!.get('sessions', defaultValue: []) as List;
-    
+
     return rawSessions.map((s) {
       if (s is Map) {
         return _castMap(s);
@@ -330,11 +333,11 @@ class SecurityService {
   static Future<void> revokeSession(String sessionId) async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     final sessions = await getSessions();
-    
+
     // ✅ CORRECTION : Mutation sécurisée
     final updated = sessions.where((s) => s['id'] != sessionId).toList();
     await _box!.put('sessions', updated);
-    
+
     await _logActivity(
       action: 'session_revoked',
       details: 'Session révoquée',
@@ -358,7 +361,8 @@ class SecurityService {
     await _box!.put('lock_timestamp', DateTime.now().toIso8601String());
     await _logActivity(
       action: 'account_locked',
-      details: 'Compte verrouillé pour cause de tentatives de connexion trop nombreuses',
+      details:
+          'Compte verrouillé pour cause de tentatives de connexion trop nombreuses',
     );
   }
 
@@ -366,19 +370,19 @@ class SecurityService {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     final locked = _box!.get('account_locked', defaultValue: false) as bool;
     if (!locked) return false;
-    
+
     final lockTimestampStr = _box!.get('lock_timestamp') as String?;
     if (lockTimestampStr == null) return true;
-    
+
     final lockTimestamp = DateTime.parse(lockTimestampStr);
     final difference = DateTime.now().difference(lockTimestamp);
-    
+
     // Déverrouiller automatiquement après 30 minutes
     if (difference.inMinutes >= 30) {
       await unlockAccount();
       return false;
     }
-    
+
     return true;
   }
 
@@ -411,7 +415,7 @@ class SecurityService {
       );
       throw Exception('Les mots de passe ne correspondent pas');
     }
-    
+
     if (newPassword.length < 6) {
       await _logActivity(
         action: 'password_change_failed',
@@ -419,15 +423,13 @@ class SecurityService {
       );
       throw Exception('Le mot de passe doit contenir au moins 6 caractères');
     }
-    
+
     // Note: L'authentification Firebase doit être gérée au niveau de votre AuthProvider
     await _logActivity(
       action: 'password_changed',
       details: 'Mot de passe modifié avec succès',
     );
-    
+
     return true;
   }
-
-  
 }

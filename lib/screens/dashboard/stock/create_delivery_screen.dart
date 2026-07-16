@@ -57,10 +57,23 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
     );
 
-    await _stockService.addDelivery(delivery);
-
-    setState(() => _isLoading = false);
-    Navigator.pop(context, true);
+    try {
+      await _stockService.addDelivery(delivery);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la validation : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -82,7 +95,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       appBar: AppBar(
         title: Text(
           isIncoming ? 'Réception de stock' : 'Livraison',
-          style: TextStyle(color: textColor),
+          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
@@ -92,11 +105,23 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: _saveDelivery,
-            child: Text(
-              'Valider',
-              style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
-            ),
+            onPressed: _isLoading ? null : _saveDelivery,
+            child: _isLoading
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.blue, // ou primaryColor
+                    ),
+                  )
+                : Text(
+                    'Valider',
+                    style: TextStyle(
+                      color: primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -112,7 +137,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
+                    color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
                     width: 1,
                   ),
                 ),
@@ -135,7 +160,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         textColor,
                         subTextColor,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       _buildTextField(
                         controller: _quantityController,
                         label: 'Quantité *',
@@ -220,7 +245,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Bouton Valider
+              // Bouton Valider principal
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -232,10 +257,17 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    elevation: 4,
+                    elevation: 0, // Optionnel : design plat moderne aligné sur le reste
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
                       : Text(
                           isIncoming ? 'Valider la réception' : 'Valider la livraison',
                           style: const TextStyle(
@@ -301,13 +333,13 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       keyboardType: keyboardType,
       validator: validator,
       maxLines: maxLines,
-      style: TextStyle(color: textColor),
+      style: TextStyle(color: textColor, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(color: subTextColor),
-        hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400]),
-        prefixIcon: Icon(icon, color: primaryColor),
+        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
+        hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400], fontSize: 13),
+        prefixIcon: Icon(icon, color: primaryColor, size: 20),
         filled: true,
         fillColor: inputFillColor,
         border: OutlineInputBorder(
@@ -320,9 +352,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryColor, width: 2),
+          borderSide: BorderSide(color: primaryColor, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        isDense: true,
       ),
     );
   }

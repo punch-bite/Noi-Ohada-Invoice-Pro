@@ -6,7 +6,7 @@ import 'package:uuid/uuid.dart';
 part 'company.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 10)
+@HiveType(typeId: 1)
 class Company {
   @HiveField(0)
   final String id;

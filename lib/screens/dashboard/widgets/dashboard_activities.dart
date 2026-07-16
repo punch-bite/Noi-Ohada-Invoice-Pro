@@ -1,5 +1,7 @@
 // lib/screens/dashboard/widgets/dashboard_activities.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/theme_provider.dart';
 import '../../../models/dashboard_stats.dart';
 
 class DashboardActivities extends StatelessWidget {
@@ -11,14 +13,15 @@ class DashboardActivities extends StatelessWidget {
     final isSmall = size.width < 600;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           flex: isSmall ? 1 : 2,
-          child: _NotificationsCard(),
+          child: const _NotificationsCard(),
         ),
         if (!isSmall) ...[
           const SizedBox(width: 16),
-          Expanded(
+          const Expanded(
             flex: 1,
             child: _ActivitiesCard(),
           ),
@@ -29,11 +32,28 @@ class DashboardActivities extends StatelessWidget {
 }
 
 class _NotificationsCard extends StatelessWidget {
+  const _NotificationsCard();
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDarkMode;
+    final textColor = themeProvider.textColor;
+    final subTextColor = themeProvider.subTextColor;
+    final cardColor = themeProvider.cardColor;
+
     final notifications = NotificationItem.sampleNotifications;
 
     return Card(
+      color: cardColor,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -41,11 +61,12 @@ class _NotificationsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   'Notifications',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
+                    color: textColor,
                   ),
                 ),
                 const Spacer(),
@@ -89,7 +110,7 @@ class _NotificationsCard extends StatelessWidget {
                       notification.title,
                       style: TextStyle(
                         fontWeight: notification.isUrgent ? FontWeight.w600 : FontWeight.normal,
-                        color: notification.isUrgent ? Colors.black87 : Colors.grey[700],
+                        color: notification.isUrgent ? textColor : subTextColor,
                         fontSize: 13,
                       ),
                     ),
@@ -114,21 +135,40 @@ class _NotificationsCard extends StatelessWidget {
 }
 
 class _ActivitiesCard extends StatelessWidget {
+  const _ActivitiesCard();
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDarkMode;
+    final textColor = themeProvider.textColor;
+    final subTextColor = themeProvider.subTextColor;
+    final cardColor = themeProvider.cardColor;
+    final primaryColor = themeProvider.primaryColor;
+
     final activities = ActivityItem.sampleActivities;
 
     return Card(
+      color: cardColor,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Activités récentes',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
+                color: textColor,
               ),
             ),
             const SizedBox(height: 12),
@@ -139,7 +179,7 @@ class _ActivitiesCard extends StatelessWidget {
                   Icon(
                     Icons.circle,
                     size: 4,
-                    color: Colors.blue[300],
+                    color: primaryColor.withOpacity(0.6),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -147,7 +187,7 @@ class _ActivitiesCard extends StatelessWidget {
                       activity.title,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey[700],
+                        color: subTextColor,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),

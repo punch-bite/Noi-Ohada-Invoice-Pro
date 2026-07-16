@@ -1,5 +1,4 @@
 // lib/screens/dashboard/suppliers/create_supplier_screen.dart
-// ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -33,16 +32,23 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
   @override
   void initState() {
     super.initState();
-    _supplierService.init();
+    _initServiceAndData();
+  }
+
+  Future<void> _initServiceAndData() async {
+    await _supplierService.init();
     if (widget.supplier != null) {
-      _nameController.text = widget.supplier!.name;
-      _emailController.text = widget.supplier!.email;
-      _phoneController.text = widget.supplier!.phone;
-      _addressController.text = widget.supplier!.address;
-      _taxIdController.text = widget.supplier!.taxId;
-      _contactPersonController.text = widget.supplier!.contactPerson;
-      _notesController.text = widget.supplier!.notes;
-      _isActive = widget.supplier!.isActive;
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = widget.supplier!.name;
+        _emailController.text = widget.supplier!.email;
+        _phoneController.text = widget.supplier!.phone;
+        _addressController.text = widget.supplier!.address;
+        _taxIdController.text = widget.supplier!.taxId;
+        _contactPersonController.text = widget.supplier!.contactPerson;
+        _notesController.text = widget.supplier!.notes;
+        _isActive = widget.supplier!.isActive;
+      });
     }
   }
 
@@ -77,6 +83,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           isActive: _isActive,
         );
         await _supplierService.addSupplier(supplier);
+        
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Fournisseur ajouté avec succès'),
@@ -96,6 +104,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           isActive: _isActive,
         );
         await _supplierService.updateSupplier(updated);
+        
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Fournisseur modifié avec succès'),
@@ -103,8 +113,11 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           ),
         );
       }
+      
+      if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur: $e'),
@@ -112,7 +125,9 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -124,23 +139,41 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
     final subTextColor = themeProvider.subTextColor;
     final bgColor = themeProvider.backgroundColor;
     final primaryColor = themeProvider.primaryColor;
+    final inputFillColor = themeProvider.inputFillColor;
+    final inputBorderColor = themeProvider.inputBorderColor;
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
           widget.supplier == null ? 'Nouveau fournisseur' : 'Modifier fournisseur',
-          style: TextStyle(color: textColor),
+          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.close, color: textColor),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _saveSupplier,
-            child: Text(
-              widget.supplier == null ? 'Ajouter' : 'Enregistrer',
-              style: TextStyle(color: primaryColor),
-            ),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.blue,
+                    ),
+                  )
+                : Text(
+                    widget.supplier == null ? 'Ajouter' : 'Enregistrer',
+                    style: TextStyle(
+                      color: primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -155,12 +188,24 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     _buildTextField(
                       label: 'Nom *',
                       controller: _nameController,
+                      icon: Icons.business,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                       validator: (v) => v?.trim().isEmpty ?? true ? 'Champ requis' : null,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       label: 'Email',
                       controller: _emailController,
+                      icon: Icons.email_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) {
                         if (v?.isNotEmpty == true && !v!.contains('@')) {
@@ -173,44 +218,100 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     _buildTextField(
                       label: 'Téléphone',
                       controller: _phoneController,
+                      icon: Icons.phone_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                       keyboardType: TextInputType.phone,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       label: 'Adresse',
                       controller: _addressController,
+                      icon: Icons.location_on_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       label: 'NUI / RCCM',
                       controller: _taxIdController,
+                      icon: Icons.assignment_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       label: 'Personne de contact',
                       controller: _contactPersonController,
+                      icon: Icons.person_outline,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(
                       label: 'Notes',
                       controller: _notesController,
+                      icon: Icons.note_outlined,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      primaryColor: primaryColor,
+                      inputFillColor: inputFillColor,
+                      inputBorderColor: inputBorderColor,
                       maxLines: 3,
                     ),
-                    const SizedBox(height: 16),
-                    // Switch actif/inactif
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Fournisseur actif',
-                          style: TextStyle(color: textColor),
-                        ),
-                        Switch(
-                          value: _isActive,
-                          onChanged: (value) => setState(() => _isActive = value),
-                          activeThumbColor: primaryColor,
-                        ),
-                      ],
+                    const SizedBox(height: 20),
+                    
+                    // Sélecteur d'état (Actif / Inactif) enveloppé pour l'esthétique
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: inputFillColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: inputBorderColor, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Statut du fournisseur',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _isActive ? 'Actif (Peut être associé aux produits)' : 'Inactif',
+                                style: TextStyle(
+                                  color: subTextColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Switch.adaptive(
+                            value: _isActive,
+                            onChanged: (value) => setState(() => _isActive = value),
+                            activeColor: primaryColor,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -223,43 +324,41 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
+    required IconData icon,
+    required Color textColor,
+    required Color subTextColor,
+    required Color primaryColor,
+    required Color inputFillColor,
+    required Color inputBorderColor,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     int maxLines = 1,
   }) {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: TextStyle(color: textColor),
+      style: TextStyle(color: textColor, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: subTextColor),
+        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
+        prefixIcon: Icon(icon, color: primaryColor, size: 20),
+        filled: true,
+        fillColor: inputFillColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide(color: inputBorderColor, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: themeProvider.primaryColor,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: primaryColor, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        isDense: true,
       ),
       validator: validator,
     );

@@ -1,3 +1,4 @@
+// lib/services/logger_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../services/admin_service.dart';
@@ -105,10 +106,10 @@ class LoggerService {
         targetId: log['targetId'],
         targetType: log['targetType'],
         details: {
-          'details': log['details'], 
-          'level': log['level'], 
-          'extra': log['extra']
-        }, limit: 200,
+          'details': log['details'],
+          'level': log['level'],
+          'extra': log['extra'],
+        },
       );
     } catch (e) {
       debugPrint('❌ Erreur log distant: $e');
@@ -118,8 +119,15 @@ class LoggerService {
   static bool _shouldSkipLog(LogLevel level) => level.index < _minLogLevel.index;
 
   // Méthodes raccourcies
-  static Future<void> debug(String a, {String? d, String? ti, String? tt}) => log(action: a, details: d, level: LogLevel.debug, targetId: ti, targetType: tt);
-  static Future<void> info(String a, {String? d, String? ti, String? tt, required String details, String? targetId, required String targetType}) => log(action: a, details: d, level: LogLevel.info, targetId: ti, targetType: tt);
-  static Future<void> warning(String a, {String? d, String? ti, String? tt, required String details}) => log(action: a, details: d, level: LogLevel.warning, targetId: ti, targetType: tt);
-  static Future<void> error(String a, {String? d, String? ti, String? tt, required String details}) => log(action: a, details: d, level: LogLevel.error, targetId: ti, targetType: tt);
+  static Future<void> debug(String action, {String? details, String? targetId, String? targetType}) =>
+      log(action: action, details: details, level: LogLevel.debug, targetId: targetId, targetType: targetType);
+
+  static Future<void> info(String action, {String? details, String? targetId, String? targetType}) =>
+      log(action: action, details: details, level: LogLevel.info, targetId: targetId, targetType: targetType);
+
+  static Future<void> warning(String action, {String? details, String? targetId, String? targetType}) =>
+      log(action: action, details: details, level: LogLevel.warning, targetId: targetId, targetType: targetType);
+
+  static Future<void> error(String action, {String? details, String? targetId, String? targetType}) =>
+      log(action: action, details: details, level: LogLevel.error, targetId: targetId, targetType: targetType);
 }

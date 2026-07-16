@@ -25,7 +25,7 @@ enum NotificationType {
 }
 
 @JsonSerializable()
-@HiveType(typeId: 4) // Ajuste le typeId selon ton registre Hive
+@HiveType(typeId: 9) // Ajuste le typeId selon ton registre Hive
 class AppNotification {
   @HiveField(0)
   final String id;

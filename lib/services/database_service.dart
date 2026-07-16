@@ -4,7 +4,6 @@ import '../models/user.dart';
 import '../models/invoice.dart';
 import '../models/client.dart';
 import '../models/company.dart';
-import '../models/line_item.dart';
 import '../models/product.dart';
 import '../models/supplier.dart';
 import '../models/reminder.dart';
@@ -21,48 +20,12 @@ class DatabaseService {
   static const String reminderBox = 'reminders';
   static const String subscriptionBox = 'subscriptions';
 
-  /// Initialisation globale de Hive et ouverture de toutes les boxes requises
+  /// Initialisation : ne fait plus rien car HiveService gère déjà tout
+  /// Cette méthode est conservée pour compatibilité, mais ne fait rien.
   static Future<void> init() async {
-    // ignore: invalid_use_of_visible_for_testing_member
-    Hive.resetAdapters();
-
-    await Hive.initFlutter();
-
-    // 2. Enregistrement des adaptateurs
-    _registerAdapters();
-
-    // 3. Ouverture des boxes
-    await Future.wait([
-      Hive.openBox<AppUser>(userBox),
-      Hive.openBox<Company>(companyBox),
-      Hive.openBox<Client>(clientBox),
-      Hive.openBox<Invoice>(invoiceBox),
-      Hive.openBox<Product>(productBox),
-      Hive.openBox<Supplier>(supplierBox),
-      Hive.openBox<Reminder>(reminderBox),
-      Hive.openBox<Subscription>(subscriptionBox),
-    ]);
-  }
-
-  static void _registerAdapters() {
-    // Liste des adaptateurs avec leur typeId
-    final Map<int, TypeAdapter> adapters = {
-      0: CompanyAdapter(),
-      1: ClientAdapter(),
-      2: InvoiceAdapter(),
-      3: LineItemAdapter(),
-      5: ProductAdapter(),
-      6: ReminderAdapter(),
-      7: SubscriptionAdapter(),
-      8: SupplierAdapter(),
-      9: AppUserAdapter(),
-    };
-
-    adapters.forEach((typeId, adapter) {
-      if (!Hive.isAdapterRegistered(typeId)) {
-        Hive.registerAdapter(adapter);
-      }
-    });
+    // Les boxes sont déjà ouvertes par HiveService.
+    // On peut juste vérifier qu'elles sont disponibles, mais ce n'est pas nécessaire.
+    print('✅ DatabaseService initialisé (Hive déjà prêt)');
   }
 
   // ==========================================
@@ -81,7 +44,6 @@ class DatabaseService {
 
   Future<void> updateUser(AppUser user) async {
     final box = Hive.box<AppUser>(userBox);
-    // On utilise la même clé que dans saveUser
     await box.put('current_user', user);
   }
 
@@ -119,18 +81,17 @@ class DatabaseService {
 
   Future<Client?> getClient(String id) async {
     final box = Hive.box<Client>(clientBox);
-    return box.get(id); // Récupération directe en O(1)
+    return box.get(id);
   }
 
   Future<void> addClient(Client client) async {
     final box = Hive.box<Client>(clientBox);
-    await box.put(client.id, client); // Utilisation de l'UUID en clé
+    await box.put(client.id, client);
   }
 
   Future<void> updateClient(Client client) async {
     final box = Hive.box<Client>(clientBox);
-    await box.put(
-        client.id, client); // Écrase l'ancienne valeur sans parcourir la liste
+    await box.put(client.id, client);
   }
 
   Future<void> deleteClient(String id) async {
@@ -149,7 +110,7 @@ class DatabaseService {
 
   Future<Invoice?> getInvoice(String id) async {
     final box = Hive.box<Invoice>(invoiceBox);
-    return box.get(id); // Récupération directe en O(1)
+    return box.get(id);
   }
 
   Future<void> addInvoice(Invoice invoice) async {
@@ -208,7 +169,7 @@ class DatabaseService {
   }
 
   // ==========================================
-  // ---- PRODUCTS (Ajouté pour le workflow) ----
+  // ---- PRODUCTS ----
   // ==========================================
 
   Future<List<Product>> getProducts() async {

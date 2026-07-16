@@ -8,7 +8,7 @@ part of 'notification.dart';
 
 class AppNotificationAdapter extends TypeAdapter<AppNotification> {
   @override
-  final int typeId = 4;
+  final int typeId = 9;
 
   @override
   AppNotification read(BinaryReader reader) {
@@ -63,3 +63,35 @@ class AppNotificationAdapter extends TypeAdapter<AppNotification> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+AppNotification _$AppNotificationFromJson(Map<String, dynamic> json) =>
+    AppNotification(
+      id: json['id'] as String?,
+      title: json['title'] as String,
+      body: json['body'] as String,
+      type: json['type'] as String,
+      timestamp: json['timestamp'] == null
+          ? null
+          : DateTime.parse(json['timestamp'] as String),
+      isRead: json['isRead'] as bool? ?? false,
+      referenceId: json['referenceId'] as String?,
+      referenceType: json['referenceType'] as String?,
+      data: json['data'] as Map<String, dynamic>?,
+    );
+
+Map<String, dynamic> _$AppNotificationToJson(AppNotification instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'body': instance.body,
+      'type': instance.type,
+      'timestamp': instance.timestamp.toIso8601String(),
+      'isRead': instance.isRead,
+      'referenceId': instance.referenceId,
+      'referenceType': instance.referenceType,
+      'data': instance.data,
+    };

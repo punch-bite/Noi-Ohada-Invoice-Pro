@@ -8,7 +8,7 @@ part of 'invoice.dart';
 
 class InvoiceAdapter extends TypeAdapter<Invoice> {
   @override
-  final int typeId = 2;
+  final int typeId = 7;
 
   @override
   Invoice read(BinaryReader reader) {
@@ -90,3 +90,55 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Invoice _$InvoiceFromJson(Map<String, dynamic> json) => Invoice(
+      id: json['id'] as String?,
+      companyId: json['companyId'] as String,
+      clientId: json['clientId'] as String,
+      invoiceNumber: json['invoiceNumber'] as String,
+      issueDate: DateTime.parse(json['issueDate'] as String),
+      dueDate: DateTime.parse(json['dueDate'] as String),
+      status: json['status'] as String? ?? 'draft',
+      items: (json['items'] as List<dynamic>)
+          .map((e) => LineItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      subtotal: (json['subtotal'] as num).toDouble(),
+      taxRate: (json['taxRate'] as num).toDouble(),
+      taxAmount: (json['taxAmount'] as num).toDouble(),
+      discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
+      totalAmount: (json['totalAmount'] as num).toDouble(),
+      terms: json['terms'] as String? ?? 'Paiement à 30 jours',
+      isDevis: json['isDevis'] as bool? ?? false,
+      notes: json['notes'] as String? ?? '',
+      syncedAt: json['syncedAt'] == null
+          ? null
+          : DateTime.parse(json['syncedAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
+    );
+
+Map<String, dynamic> _$InvoiceToJson(Invoice instance) => <String, dynamic>{
+      'id': instance.id,
+      'companyId': instance.companyId,
+      'clientId': instance.clientId,
+      'invoiceNumber': instance.invoiceNumber,
+      'issueDate': instance.issueDate.toIso8601String(),
+      'dueDate': instance.dueDate.toIso8601String(),
+      'status': instance.status,
+      'items': instance.items,
+      'subtotal': instance.subtotal,
+      'taxRate': instance.taxRate,
+      'taxAmount': instance.taxAmount,
+      'discount': instance.discount,
+      'totalAmount': instance.totalAmount,
+      'terms': instance.terms,
+      'isDevis': instance.isDevis,
+      'notes': instance.notes,
+      'syncedAt': instance.syncedAt?.toIso8601String(),
+      'updatedAt': instance.updatedAt.toIso8601String(),
+    };

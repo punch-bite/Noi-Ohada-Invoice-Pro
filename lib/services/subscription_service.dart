@@ -73,7 +73,7 @@ class SubscriptionService {
           paymentId: paymentId,
           amount: amount,
           currency: currency,
-          autoRenew: true, isActive: false, createdAt: DateTime.now(),
+          autoRenew: true, isActive: true, createdAt: DateTime.now(),
         );
 
         transaction.set(subRef, sub.toMap());
@@ -91,7 +91,6 @@ class SubscriptionService {
     }
   }
 
-// Ajoutez cette méthode à votre classe SubscriptionService
   Future<List<Subscription>> getActiveSubscriptions() async {
     try {
       final querySnapshot = await _db

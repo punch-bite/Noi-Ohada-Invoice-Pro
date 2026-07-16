@@ -17,49 +17,48 @@ class SettingsScreen extends StatelessWidget {
     final themeProvider = context.watch<ThemeProvider>();
     final subscriptionProvider = context.watch<SubscriptionProvider>();
     final user = authProvider.user;
+
+    // 🔒 Sécurisation maximale des couleurs
     final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final primaryColor = themeProvider.primaryColor;
-    final bgColor = themeProvider.backgroundColor;
+    final textColor = themeProvider.textColor ?? Colors.black;
+    final subTextColor = themeProvider.subTextColor ?? Colors.grey;
+    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
+    final bgColor = themeProvider.backgroundColor ?? Colors.white;
+    final cardColor = themeProvider.cardColor ?? Colors.white;
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: textColor),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         title: Text(
           'Paramètres',
           style: TextStyle(
             color: textColor,
-            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ===== PROFIL =====
             _buildProfileTile(
+              context,
               user,
               textColor,
               subTextColor,
               primaryColor,
+              cardColor,
               isDark,
-            ),
-            const SizedBox(height: 8),
-            // 🔥 Lien vers la modification du profil
-            _buildProfileEditTile(
-              context,
-              isDark,
-              textColor,
-              subTextColor,
-              primaryColor,
             ),
             const SizedBox(height: 24),
 
@@ -67,12 +66,13 @@ class SettingsScreen extends StatelessWidget {
             _buildSectionTitle('Compte', isDark, subTextColor),
             const SizedBox(height: 8),
             _buildSettingsCard(
+              cardColor: cardColor,
               isDark: isDark,
               children: [
                 _SettingsTile(
                   icon: Icons.payment_outlined,
                   title: 'Abonnement',
-                  subtitle: subscriptionProvider.currentPlan.name ?? 'Gratuit',
+                  subtitle: subscriptionProvider.currentPlan?.name ?? 'Gratuit',
                   onTap: () => context.push('/subscription'),
                   isDark: isDark,
                   textColor: textColor,
@@ -100,12 +100,13 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // ===== SECTION PERSONNALISATION =====
             _buildSectionTitle('Personnalisation', isDark, subTextColor),
             const SizedBox(height: 8),
             _buildSettingsCard(
+              cardColor: cardColor,
               isDark: isDark,
               children: [
                 _SettingsTile(
@@ -139,12 +140,13 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // ===== SECTION SUPPORT =====
             _buildSectionTitle('Support', isDark, subTextColor),
             const SizedBox(height: 8),
             _buildSettingsCard(
+              cardColor: cardColor,
               isDark: isDark,
               children: [
                 _SettingsTile(
@@ -178,19 +180,26 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // ===== SECTION À PROPOS =====
             _buildSectionTitle('À propos', isDark, subTextColor),
             const SizedBox(height: 8),
             _buildSettingsCard(
+              cardColor: cardColor,
               isDark: isDark,
               children: [
                 _SettingsTile(
                   icon: Icons.info_outline,
                   title: 'OHADA Invoice Pro',
                   subtitle: 'Version 1.0.0',
-                  onTap: () => _showAboutDialog(context),
+                  onTap: () => _showAboutDialog(
+                    context,
+                    cardColor,
+                    primaryColor,
+                    textColor,
+                    subTextColor,
+                  ),
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
@@ -200,7 +209,13 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.logout,
                   title: 'Déconnexion',
                   subtitle: 'Se déconnecter de l\'application',
-                  onTap: () => _showLogoutDialog(context, authProvider),
+                  onTap: () => _showLogoutDialog(
+                    context,
+                    authProvider,
+                    cardColor,
+                    textColor,
+                    subTextColor,
+                  ),
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
@@ -208,7 +223,6 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 32),
           ],
         ),
@@ -216,115 +230,99 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // ===== PROFIL TILE =====
+  // ===== PROFIL TILE (sécurisé) =====
   Widget _buildProfileTile(
+    BuildContext context,
     AppUser? user,
     Color textColor,
     Color subTextColor,
     Color primaryColor,
+    Color cardColor,
     bool isDark,
   ) {
+    if (user == null) {
+      return const SizedBox.shrink();
+    }
+
+    final String displayName = user.displayName ?? 'Utilisateur';
+    final String email = user.email ?? 'Compte non configuré';
+    final String initial = displayName.trim().isNotEmpty
+        ? displayName.trim()[0].toUpperCase()
+        : 'U';
+
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey[850]! : Colors.grey[150]!,
+          width: 0.5,
+        ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [primaryColor, primaryColor.withOpacity(0.7)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                user?.displayName.substring(0, 1).toUpperCase() ?? 'U',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.push('/dashboard/profile'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  user?.displayName ?? 'Utilisateur',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primaryColor, primaryColor.withOpacity(0.8)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
-                Text(
-                  user?.email ?? 'user@email.com',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: subTextColor,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        email,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: subTextColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: subTextColor.withOpacity(0.7),
+                  size: 20,
                 ),
               ],
             ),
           ),
-          Icon(
-            Icons.chevron_right,
-            color: subTextColor,
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===== PROFIL EDIT TILE (lien vers la modification) =====
-  Widget _buildProfileEditTile(
-    BuildContext context,
-    bool isDark,
-    Color textColor,
-    Color subTextColor,
-    Color primaryColor,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(top: 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ListTile(
-        leading: Icon(
-          Icons.edit_outlined,
-          color: primaryColor,
         ),
-        title: Text(
-          'Modifier le profil',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        subtitle: Text(
-          'Mettre à jour vos informations',
-          style: TextStyle(
-            color: subTextColor,
-            fontSize: 13,
-          ),
-        ),
-        trailing: Icon(
-          Icons.chevron_right,
-          color: subTextColor,
-          size: 20,
-        ),
-        onTap: () => context.push('/dashboard/profile'),
       ),
     );
   }
@@ -332,14 +330,14 @@ class SettingsScreen extends StatelessWidget {
   // ===== SECTION TITLE =====
   Widget _buildSectionTitle(String title, bool isDark, Color subTextColor) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Text(
-        title,
+        title.toUpperCase(),
         style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: isDark ? Colors.grey[400] : Colors.grey[500],
-          letterSpacing: 0.5,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.grey[400] : Colors.grey[600],
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -347,13 +345,18 @@ class SettingsScreen extends StatelessWidget {
 
   // ===== SETTINGS CARD =====
   Widget _buildSettingsCard({
+    required Color cardColor,
     required bool isDark,
     required List<Widget> children,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey[850]! : Colors.grey[150]!,
+          width: 0.5,
+        ),
       ),
       child: Column(
         children: children,
@@ -376,28 +379,33 @@ class SettingsScreen extends StatelessWidget {
   // ===== THEME DIALOG =====
   void _showThemeDialog(BuildContext context, ThemeProvider themeProvider) {
     final isDark = themeProvider.isDarkMode;
+    final textColor = themeProvider.textColor ?? Colors.black;
+    final cardColor = themeProvider.cardColor ?? Colors.white;
+    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Choisir un thème',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                color: textColor,
               ),
             ),
             const SizedBox(height: 16),
             _ThemeOption(
               label: 'Clair',
-              icon: Icons.light_mode,
+              icon: Icons.light_mode_outlined,
               isSelected: themeProvider.currentTheme == AppTheme.light,
               onTap: () {
                 themeProvider.setLightTheme();
@@ -406,7 +414,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             _ThemeOption(
               label: 'Sombre',
-              icon: Icons.dark_mode,
+              icon: Icons.dark_mode_outlined,
               isSelected: themeProvider.currentTheme == AppTheme.dark,
               onTap: () {
                 themeProvider.setDarkTheme();
@@ -415,7 +423,7 @@ class SettingsScreen extends StatelessWidget {
             ),
             _ThemeOption(
               label: 'Système',
-              icon: Icons.settings_suggest,
+              icon: Icons.settings_suggest_outlined,
               isSelected: themeProvider.currentTheme == AppTheme.system,
               onTap: () {
                 themeProvider.setSystemTheme();
@@ -429,53 +437,77 @@ class SettingsScreen extends StatelessWidget {
   }
 
   // ===== ABOUT DIALOG =====
-  void _showAboutDialog(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  void _showAboutDialog(
+    BuildContext context,
+    Color cardColor,
+    Color primaryColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('À propos'),
+        backgroundColor: cardColor,
+        title: Text(
+          'À propos',
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.receipt_long,
-              size: 48,
-              color: isDark ? Colors.blue[300] : Colors.blue,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.receipt_long,
+                size: 40,
+                color: primaryColor,
+              ),
             ),
-            const SizedBox(height: 12),
-            const Text(
+            const SizedBox(height: 16),
+            Text(
               'OHADA Invoice Pro',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Text(
-              'Version 1.0.0',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
+                color: textColor,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
+              'Version 1.0.0',
+              style: TextStyle(
+                fontSize: 14,
+                color: subTextColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
               'Gestion de factures conforme OHADA',
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.grey,
+                color: subTextColor,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
+            child: Text(
+              'Fermer',
+              style: TextStyle(
+                color: primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -483,21 +515,35 @@ class SettingsScreen extends StatelessWidget {
   }
 
   // ===== LOGOUT DIALOG =====
-  void _showLogoutDialog(BuildContext context, AppAuthProvider authProvider) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  void _showLogoutDialog(
+    BuildContext context,
+    AppAuthProvider authProvider,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('Déconnexion'),
-        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
+        backgroundColor: cardColor,
+        title: Text(
+          'Déconnexion',
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Voulez-vous vraiment vous déconnecter ?',
+          style: TextStyle(color: subTextColor),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
+            child: Text(
+              'Annuler',
+              style: TextStyle(color: textColor.withOpacity(0.7)),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -505,8 +551,11 @@ class SettingsScreen extends StatelessWidget {
               Navigator.pop(context);
               context.go('/');
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Se déconnecter'),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text(
+              'Se déconnecter',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -514,7 +563,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// ===== WIDGETS INTERNES =====
+// ===== WIDGETS INTERNES (sécurisés) =====
 
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
@@ -542,14 +591,15 @@ class _SettingsTile extends StatelessWidget {
     return ListTile(
       leading: Icon(
         icon,
-        color: isDanger ? Colors.red : textColor,
+        color: isDanger ? Colors.redAccent : textColor.withOpacity(0.8),
         size: 22,
       ),
       title: Text(
         title,
         style: TextStyle(
-          color: isDanger ? Colors.red : textColor,
+          color: isDanger ? Colors.redAccent : textColor,
           fontWeight: FontWeight.w500,
+          fontSize: 15,
         ),
       ),
       subtitle: Text(
@@ -560,8 +610,10 @@ class _SettingsTile extends StatelessWidget {
         ),
       ),
       trailing: Icon(
-        Icons.chevron_right,
-        color: isDanger ? Colors.red : (isDark ? Colors.grey[500] : Colors.grey[400]),
+        Icons.chevron_right_rounded,
+        color: isDanger
+            ? Colors.redAccent
+            : (isDark ? Colors.grey[500] : Colors.grey[400]),
         size: 20,
       ),
       onTap: onTap,
@@ -578,7 +630,7 @@ class _SettingsDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Divider(
       height: 1,
-      color: isDark ? Colors.grey[800] : Colors.grey[100],
+      color: isDark ? Colors.grey[850] : Colors.grey[100],
       indent: 16,
       endIndent: 16,
     );
@@ -600,20 +652,27 @@ class _ThemeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDarkMode;
+    final textColor = themeProvider.textColor ?? Colors.black;
+    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
+
     return ListTile(
       leading: Icon(
         icon,
-        color: isSelected ? Colors.blue : (isDark ? Colors.grey[400] : Colors.grey[500]),
+        color: isSelected
+            ? primaryColor
+            : (isDark ? Colors.grey[400] : Colors.grey[600]),
       ),
       title: Text(
         label,
         style: TextStyle(
-          color: isDark ? Colors.white : Colors.black87,
+          color: isSelected ? primaryColor : textColor,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       trailing: isSelected
-          ? const Icon(Icons.check_circle, color: Colors.blue, size: 20)
+          ? Icon(Icons.check_circle, color: primaryColor, size: 20)
           : null,
       onTap: onTap,
     );

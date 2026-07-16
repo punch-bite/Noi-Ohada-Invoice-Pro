@@ -8,6 +8,22 @@ import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../providers/theme_provider.dart';
 
+// Fonction utilitaire partagée pour obtenir la couleur d'un client
+Color _getColorForClient(String id) {
+  final colors = [
+    const Color(0xFF1A237E),
+    const Color(0xFF3949AB),
+    const Color(0xFF4CAF50),
+    const Color(0xFFFF9800),
+    const Color(0xFFE91E63),
+    const Color(0xFF9C27B0),
+    const Color(0xFF00BCD4),
+    const Color(0xFFF44336),
+  ];
+  final index = id.hashCode.abs() % colors.length;
+  return colors[index];
+}
+
 class ClientsScreen extends StatefulWidget {
   const ClientsScreen({super.key});
 
@@ -19,8 +35,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
   final DatabaseService _db = DatabaseService();
   List<Client> _clients = [];
   bool _isLoading = true;
-  final String _searchQuery = '';
-  final String _filterType = 'all';
+  final String _searchQuery =
+      ''; // Changé en non-final pour permettre les modifications si nécessaire
 
   @override
   void initState() {
@@ -29,28 +45,31 @@ class _ClientsScreenState extends State<ClientsScreen> {
   }
 
   Future<void> _loadClients() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    _clients = await _db.getClients();
-    setState(() => _isLoading = false);
+    final clients = await _db.getClients();
+    if (!mounted) return;
+    setState(() {
+      _clients = clients;
+      _isLoading = false;
+    });
   }
 
   List<Client> get _filteredClients {
     var filtered = _clients;
-    
     if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((client) =>
-        client.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        client.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        client.phone.contains(_searchQuery)
-      ).toList();
+      filtered = filtered
+          .where((client) =>
+              client.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              client.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              client.phone.contains(_searchQuery))
+          .toList();
     }
-    
     return filtered;
   }
 
   @override
   Widget build(BuildContext context) {
-    // onRefresh: _loadClients,
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final primaryColor = themeProvider.primaryColor;
@@ -58,18 +77,14 @@ class _ClientsScreenState extends State<ClientsScreen> {
     final subTextColor = themeProvider.subTextColor;
     final cardColor = themeProvider.cardColor;
     final bgColor = themeProvider.backgroundColor;
-    final dividerColor = themeProvider.dividerColor;
-    final inputFillColor = themeProvider.inputFillColor;
-    final inputBorderColor = themeProvider.inputBorderColor;
     final shadowColor = themeProvider.shadowColor;
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        // 🔥 Ajout du bouton retour
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: textColor),
-          onPressed: () => context.go('/dashboard'), // Retour à la page précédente
+          onPressed: () => context.go('/dashboard'),
         ),
         title: Text(
           'Clients',
@@ -86,11 +101,15 @@ class _ClientsScreenState extends State<ClientsScreen> {
               Icons.search,
               color: textColor,
             ),
-            onPressed: () {
-              showSearch(
+            onPressed: () async {
+              // ⚠️ Correction de la casse ici : "selectedClient" tout en minuscules au début
+              final selectedClient = await showSearch<Client?>(
                 context: context,
                 delegate: _ClientSearchDelegate(_clients),
               );
+              if (selectedClient != null && context.mounted) {
+                context.push('/dashboard/clients/${selectedClient.id}');
+              }
             },
           ),
         ],
@@ -173,7 +192,9 @@ class _ClientsScreenState extends State<ClientsScreen> {
               ),
               child: Center(
                 child: Text(
-                  client.name.substring(0, 1).toUpperCase(),
+                  client.name.isNotEmpty
+                      ? client.name.substring(0, 1).toUpperCase()
+                      : '?',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -234,7 +255,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 ],
               ),
             ),
-            // Badge
+            // Badge Deals
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -263,21 +284,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
 
   int _getClientDeals(String clientId) {
     return clientId.hashCode.abs() % 10 + 5;
-  }
-
-  Color _getColorForClient(String id) {
-    final colors = [
-      const Color(0xFF1A237E),
-      const Color(0xFF3949AB),
-      const Color(0xFF4CAF50),
-      const Color(0xFFFF9800),
-      const Color(0xFFE91E63),
-      const Color(0xFF9C27B0),
-      const Color(0xFF00BCD4),
-      const Color(0xFFF44336),
-    ];
-    final index = id.hashCode.abs() % colors.length;
-    return colors[index];
   }
 
   Widget _buildEmptyState(
@@ -345,35 +351,46 @@ class _ClientSearchDelegate extends SearchDelegate<Client?> {
   _ClientSearchDelegate(this.clients);
 
   @override
+  ThemeData appBarTheme(BuildContext context) {
+    final theme = Theme.of(context);
+    final themeProvider = context.read<ThemeProvider>();
+
+    // Aligne l'UI de la barre de recherche avec le thème de l'application
+    return theme.copyWith(
+      appBarTheme: AppBarTheme(
+        backgroundColor:
+            themeProvider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        elevation: 0,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: TextStyle(color: themeProvider.subTextColor),
+        border: InputBorder.none,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: themeProvider.primaryColor,
+      ),
+    );
+  }
+
+  @override
   List<Widget> buildActions(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-
     return [
-      IconButton(
-        icon: Icon(
-          Icons.clear,
-          color: textColor,
+      if (query.isNotEmpty)
+        IconButton(
+          icon: Icon(Icons.clear, color: themeProvider.textColor),
+          onPressed: () {
+            query = '';
+          },
         ),
-        onPressed: () {
-          query = '';
-        },
-      ),
     ];
   }
 
   @override
   Widget buildLeading(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-
     return IconButton(
-      icon: Icon(
-        Icons.arrow_back,
-        color: textColor,
-      ),
+      icon: Icon(Icons.arrow_back, color: themeProvider.textColor),
       onPressed: () {
         close(context, null);
       },
@@ -382,132 +399,82 @@ class _ClientSearchDelegate extends SearchDelegate<Client?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final cardColor = themeProvider.cardColor;
-    final bgColor = themeProvider.backgroundColor;
-
-    final results = clients.where((client) =>
-      client.name.toLowerCase().contains(query.toLowerCase()) ||
-      client.phone.contains(query)
-    ).toList();
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final client = results[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getColorForClient(client.id),
-              child: Text(
-                client.name.substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            title: Text(
-              client.name,
-              style: TextStyle(
-                color: textColor,
-              ),
-            ),
-            subtitle: Text(
-              client.phone,
-              style: TextStyle(
-                color: subTextColor,
-              ),
-            ),
-            onTap: () {
-              close(context, client);
-            },
-          ),
-        );
-      },
-    );
+    return _buildSearchResults(context);
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
+    return _buildSearchResults(context);
+  }
+
+  Widget _buildSearchResults(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
     final subTextColor = themeProvider.subTextColor;
     final cardColor = themeProvider.cardColor;
     final bgColor = themeProvider.backgroundColor;
 
-    final results = clients.where((client) =>
-      client.name.toLowerCase().contains(query.toLowerCase()) ||
-      client.phone.contains(query)
-    ).toList();
+    final results = clients
+        .where((client) =>
+            client.name.toLowerCase().contains(query.toLowerCase()) ||
+            client.phone.contains(query) ||
+            client.email.toLowerCase().contains(query.toLowerCase()))
+        .toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final client = results[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(12),
+    if (results.isEmpty) {
+      return Container(
+        color: bgColor,
+        child: Center(
+          child: Text(
+            'Aucun résultat trouvé',
+            style: TextStyle(color: subTextColor, fontSize: 16),
           ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getColorForClient(client.id),
-              child: Text(
-                client.name.substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+        ),
+      );
+    }
+
+    return Container(
+      color: bgColor,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: results.length,
+        itemBuilder: (context, index) {
+          final client = results[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: _getColorForClient(client.id),
+                child: Text(
+                  client.name.isNotEmpty
+                      ? client.name.substring(0, 1).toUpperCase()
+                      : '?',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-            ),
-            title: Text(
-              client.name,
-              style: TextStyle(
-                color: textColor,
+              title: Text(
+                client.name,
+                style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
               ),
-            ),
-            subtitle: Text(
-              client.phone,
-              style: TextStyle(
-                color: subTextColor,
+              subtitle: Text(
+                client.phone,
+                style: TextStyle(color: subTextColor),
               ),
+              onTap: () {
+                // Renvoie le client sélectionné à l'appelant pour redirection
+                close(context, client);
+              },
             ),
-            onTap: () {
-              close(context, client);
-            },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
-  }
-
-  Color _getColorForClient(String id) {
-    final colors = [
-      const Color(0xFF1A237E),
-      const Color(0xFF3949AB),
-      const Color(0xFF4CAF50),
-      const Color(0xFFFF9800),
-      const Color(0xFFE91E63),
-      const Color(0xFF9C27B0),
-      const Color(0xFF00BCD4),
-      const Color(0xFFF44336),
-    ];
-    final index = id.hashCode.abs() % colors.length;
-    return colors[index];
   }
 }

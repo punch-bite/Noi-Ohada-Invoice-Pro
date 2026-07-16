@@ -62,6 +62,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    // Ferme le clavier virtuel proprement avant de lancer la requête
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -73,18 +77,20 @@ class _LoginScreenState extends State<LoginScreen> {
       password: _passwordController.text,
     );
 
+    if (!mounted) return;
+
     setState(() => _isLoading = false);
 
-    if (success && mounted) {
+    if (success) {
       await _saveEmailPreference();
       
-      //  Vérifier si l'utilisateur a besoin de valider le 2FA d'abord
+      // Vérifier si l'utilisateur a configuré/besoin de valider la double authentification (2FA)
       if (authProvider.needsTwoFactor) {
-        context.push('/auth/verify-2fa'); // Redirige vers l'écran de saisie OTP
+        context.push('/auth/verify-2fa'); 
       } else {
-        context.go('/dashboard'); // Connexion directe
+        context.go('/dashboard'); 
       }
-    } else if (mounted) {
+    } else {
       setState(() {
         _errorMessage = authProvider.error ?? 'Échec de connexion';
       });
@@ -105,70 +111,88 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo
+                  // Logo de la marque
                   Container(
-                    width: 64,
-                    height: 64,
+                    width: 68,
+                    height: 68,
                     decoration: BoxDecoration(
                       color: primary.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.receipt_long, color: primary, size: 32),
+                    child: Icon(Icons.receipt_long_rounded, color: primary, size: 34),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'OHADA Invoice Pro',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: text,
+                      letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Connexion',
-                    style: TextStyle(color: sub, fontSize: 13),
+                    'Facturation conforme SYSCOHADA',
+                    style: TextStyle(color: sub, fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 32),
 
-                  // Email
+                  // Saisie Email
                   TextFormField(
                     controller: _emailController,
                     focusNode: _emailFocus,
                     textInputAction: TextInputAction.next,
                     onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
                     keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
                     enabled: !_isLoading,
-                    style: TextStyle(color: text),
+                    style: TextStyle(color: text, fontSize: 14),
                     decoration: InputDecoration(
                       labelText: 'Email',
                       hintText: 'exemple@email.com',
-                      labelStyle: TextStyle(color: sub),
-                      hintStyle: TextStyle(color: sub.withOpacity(0.6)),
+                      labelStyle: TextStyle(color: sub, fontSize: 14),
+                      hintStyle: TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
                       prefixIcon: Icon(Icons.email_outlined, color: primary, size: 20),
                       filled: true,
-                      fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                      fillColor: theme.cardColor,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          width: 1,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          width: 1,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primary, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.trim().isEmpty == true) return 'Email requis';
-                      if (!v!.contains('@')) return 'Email invalide';
+                      if (v?.trim().isEmpty == true) return 'Veuillez saisir votre email';
+                      if (!v!.contains('@') || !v.contains('.')) return 'Adresse email non valide';
                       return null;
                     },
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
 
-                  // Mot de passe
+                  // Saisie Mot de passe
                   TextFormField(
                     controller: _passwordController,
                     focusNode: _passwordFocus,
@@ -176,77 +200,120 @@ class _LoginScreenState extends State<LoginScreen> {
                     onFieldSubmitted: (_) => _login(),
                     obscureText: _obscurePassword,
                     enabled: !_isLoading,
-                    style: TextStyle(color: text),
+                    style: TextStyle(color: text, fontSize: 14),
                     decoration: InputDecoration(
                       labelText: 'Mot de passe',
                       hintText: '••••••••',
-                      labelStyle: TextStyle(color: sub),
-                      hintStyle: TextStyle(color: sub.withOpacity(0.6)),
-                      prefixIcon: Icon(Icons.lock_outline, color: primary, size: 20),
+                      labelStyle: TextStyle(color: sub, fontSize: 14),
+                      hintStyle: TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
+                      prefixIcon: Icon(Icons.lock_outline_rounded, color: primary, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                          color: sub,
+                          _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          color: sub.withOpacity(0.7),
                           size: 20,
                         ),
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                       ),
                       filled: true,
-                      fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                      fillColor: theme.cardColor,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          width: 1,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          width: 1,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primary, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.isEmpty == true) return 'Mot de passe requis';
-                      if (v!.length < 6) return '6 caractères min.';
+                      if (v?.isEmpty == true) return 'Veuillez renseigner votre mot de passe';
+                      if (v!.length < 6) return 'Le mot de passe doit faire 6 caractères minimum';
                       return null;
                     },
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
 
-                  // Options
+                  // Mémorisation et mot de passe oublié
                   Row(
                     children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _rememberMe,
-                            onChanged: _isLoading ? null : (v) => setState(() => _rememberMe = v!),
-                            activeColor: primary,
-                            visualDensity: VisualDensity.compact,
+                      InkWell(
+                        onTap: _isLoading ? null : () => setState(() => _rememberMe = !_rememberMe),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: _rememberMe,
+                                  onChanged: _isLoading ? null : (v) => setState(() => _rememberMe = v!),
+                                  activeColor: primary,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Se souvenir', 
+                                style: TextStyle(fontSize: 13, color: sub, fontWeight: FontWeight.w500),
+                              ),
+                            ],
                           ),
-                          Text('Se souvenir', style: TextStyle(fontSize: 13, color: sub)),
-                        ],
+                        ),
                       ),
                       const Spacer(),
                       TextButton(
                         onPressed: _isLoading ? null : () => context.push('/auth/forgot-password'),
-                        style: TextButton.styleFrom(foregroundColor: primary),
-                        child: const Text('Mot de passe oublié ?', style: TextStyle(fontSize: 13)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 30),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Mot de passe oublié ?', 
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ],
                   ),
 
-                  // Affichage des erreurs (dont blocages et tentatives restantes)
+                  // Bannière dynamique de notification d'erreur
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.red.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.withOpacity(0.2)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[700], size: 18),
+                          Icon(Icons.error_outline_rounded, color: Colors.red[700], size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red[700], fontSize: 12, height: 1.3),
+                              style: TextStyle(
+                                color: Colors.red[850], 
+                                fontSize: 12.5, 
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
@@ -254,40 +321,56 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
-                  // Bouton
+                  // Bouton Soumission
                   SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: 52,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primary,
                         foregroundColor: Colors.white,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5, 
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
                             )
-                          : const Text('Se connecter', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                          : const Text(
+                              'Se connecter', 
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
-                  // Inscription
+                  // Option d'inscription
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Pas de compte ?', style: TextStyle(color: sub, fontSize: 13)),
+                      Text('Pas encore de compte ?', style: TextStyle(color: sub, fontSize: 13)),
+                      const SizedBox(width: 4),
                       TextButton(
                         onPressed: _isLoading ? null : () => context.push('/auth/register'),
-                        style: TextButton.styleFrom(foregroundColor: primary),
-                        child: const Text('S\'inscrire', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: primary,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 30),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'S\'inscrire', 
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),

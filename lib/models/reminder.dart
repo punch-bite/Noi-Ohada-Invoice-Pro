@@ -20,7 +20,7 @@ enum ReminderType {
 }
 
 @JsonSerializable()
-@HiveType(typeId: 6) // Modifié à 6 pour éviter la collision avec Product (typeId: 5)
+@HiveType(typeId: 12) // Modifié à 6 pour éviter la collision avec Product (typeId: 5)
 class Reminder {
   @HiveField(0)
   final String id;

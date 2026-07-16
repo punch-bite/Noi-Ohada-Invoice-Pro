@@ -45,6 +45,8 @@ class Client {
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
 
+  // ===== SÉRIALISATION =====
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -71,6 +73,20 @@ class Client {
     );
   }
 
+  /// Constructeur dédié pour Firestore (plus clair)
+  factory Client.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Client.fromMap(data, documentId: doc.id);
+  }
+
+  // ===== JSON (pour API) =====
+
+  Map<String, dynamic> toJson() => _$ClientToJson(this);
+
+  factory Client.fromJson(Map<String, dynamic> json) => _$ClientFromJson(json);
+
+  // ===== COPY =====
+
   Client copyWith({
     String? name,
     String? address,
@@ -87,21 +103,45 @@ class Client {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(), // Met à jour automatiquement la date de modification
+      updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 
-  /// Fonction d'aide pour parser les dates de manière ultra-robuste
+  // ===== GETTERS UTILITAIRES =====
+
+  String get formattedPhone => phone.isNotEmpty ? phone : 'Non renseigné';
+  String get formattedEmail => email.isNotEmpty ? email : 'Non renseigné';
+  String get formattedTaxId => taxId.isNotEmpty ? taxId : 'Non renseigné';
+
+  /// Vérifie si le client est valide (nom non vide)
+  bool get isValid => name.isNotEmpty;
+
+  /// Date de création formatée
+  String get formattedCreatedAt => 
+      '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+
+  /// Date de mise à jour formatée (si disponible)
+  String get formattedUpdatedAt => 
+      updatedAt != null ? '${updatedAt!.day}/${updatedAt!.month}/${updatedAt!.year}' : 'Jamais';
+
+  /// Nom complet (alias pour affichage)
+  String get displayName => name;
+
+  // ===== VALIDATION =====
+
+  /// Vérifie si le client a toutes les informations minimales
+  bool get hasRequiredInfo => 
+      name.isNotEmpty && 
+      (phone.isNotEmpty || email.isNotEmpty);
+
+  // ===== FONCTIONS DE PARSING ROBUSTE =====
+
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    } else if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
-    } else if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    } else if (value is DateTime) {
-      return value;
-    }
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is DateTime) return value;
     return DateTime.now();
   }
 }

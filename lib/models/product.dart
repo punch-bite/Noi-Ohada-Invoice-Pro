@@ -8,7 +8,9 @@ import 'package:uuid/uuid.dart';
 part 'product.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 5) // Modifié à 5 pour éviter le conflit avec Notification (typeId: 4)
+@HiveType(
+    typeId:
+        11) // Modifié à 5 pour éviter le conflit avec Notification (typeId: 4)
 class Product {
   @HiveField(0)
   final String id;
@@ -74,6 +76,25 @@ class Product {
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
+  // Ajout du constructeur Firestore
+  factory Product.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Product.fromMap(data, documentId: doc.id);
+  }
+
+// _parseDateTime renforcée
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is DateTime) return value;
+    return DateTime.now();
+  }
+
+// Getter supplémentaire
+  bool get isValidForSale => isActive && quantity > 0 && price > 0;
+
   // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
   Map<String, dynamic> toMap() {
@@ -110,8 +131,11 @@ class Product {
       barcode: map['barcode'],
       imagePath: map['imagePath'],
       isActive: map['isActive'] ?? true,
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : DateTime.now(),
+      updatedAt:
+          map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
       supplierId: map['supplierId'],
     );
   }
@@ -200,16 +224,16 @@ class Product {
   }
 
   /// Fonction d'aide pour parser les dates de manière ultra-robuste
-  static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    } else if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
-    } else if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    } else if (value is DateTime) {
-      return value;
-    }
-    return DateTime.now();
-  }
+  // static DateTime _parseDateTime(dynamic value) {
+  //   if (value is Timestamp) {
+  //     return value.toDate();
+  //   } else if (value is String) {
+  //     return DateTime.tryParse(value) ?? DateTime.now();
+  //   } else if (value is int) {
+  //     return DateTime.fromMillisecondsSinceEpoch(value);
+  //   } else if (value is DateTime) {
+  //     return value;
+  //   }
+  //   return DateTime.now();
+  // }
 }

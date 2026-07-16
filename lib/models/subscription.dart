@@ -6,7 +6,7 @@ import 'package:json_annotation/json_annotation.dart';
 part 'subscription.g.dart'; // Généré par Hive
 
 @JsonSerializable()
-@HiveType(typeId: 7) // Ajout de l'annotation Hive avec un typeId dédié
+@HiveType(typeId: 13) // Ajout de l'annotation Hive avec un typeId dédié
 class Subscription {
   @HiveField(0)
   final String id;

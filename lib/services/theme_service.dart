@@ -27,8 +27,13 @@ class ThemeService {
   }
 
   static Future<void> setThemeMode(AppTheme theme) async {
-    if (_box == null) return;
-    await _box!.put(_themeKey, theme.toString());
+    if (_box == null) {
+      // Si la box n'est pas encore ouverte, on l'ouvre au vol
+      await init();
+    }
+    if (_box != null) {
+      await _box!.put(_themeKey, theme.toString());
+    }
   }
 
   // ===== THÈME CLAIR =====
@@ -88,7 +93,6 @@ class ThemeService {
           foregroundColor: const Color(0xFF1A237E),
         ),
       ),
-      // ===== STYLES DES FORMULAIRES =====
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
@@ -234,7 +238,6 @@ class ThemeService {
           foregroundColor: const Color(0xFF3949AB),
         ),
       ),
-      // ===== STYLES DES FORMULAIRES (SOMBRE) =====
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFF2C2C2C),

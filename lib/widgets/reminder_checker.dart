@@ -1,4 +1,6 @@
 // lib/widgets/reminder_checker.dart
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/reminder_service.dart';
@@ -13,15 +15,24 @@ class ReminderChecker extends StatefulWidget {
 }
 
 class _ReminderCheckerState extends State<ReminderChecker> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
+    // Vérification immédiate
     _checkReminders();
     
-    // Vérifier toutes les 6 heures
-    Future.delayed(const Duration(hours: 6), () {
+    // Vérification toutes les 6 heures (Timer périodique)
+    _timer = Timer.periodic(const Duration(hours: 6), (_) {
       if (mounted) _checkReminders();
     });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkReminders() async {
@@ -29,7 +40,10 @@ class _ReminderCheckerState extends State<ReminderChecker> {
       final reminderService = context.read<ReminderService>();
       await reminderService.checkAndSendReminders();
     } catch (e) {
-      print('❌ Erreur vérification rappels: $e');
+      // Silencieux pour ne pas polluer la console en production
+      if (kDebugMode) {
+        print('❌ Erreur vérification rappels: $e');
+      }
     }
   }
 

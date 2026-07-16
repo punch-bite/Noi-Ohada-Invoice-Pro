@@ -21,7 +21,7 @@ enum DeliveryStatus {
 }
 
 @JsonSerializable()
-@HiveType(typeId: 1)
+@HiveType(typeId: 3)
 class Delivery {
   @HiveField(0)
   final String id;

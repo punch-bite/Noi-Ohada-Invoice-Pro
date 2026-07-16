@@ -1,6 +1,4 @@
 // lib/screens/admin/user_detail_screen.dart
-// ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -29,26 +27,68 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   }
 
   Future<void> _loadUser() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    _user = await _adminService.getUserById(widget.userId);
-    setState(() => _isLoading = false);
+
+    try {
+      final user = await _adminService.getUserById(widget.userId);
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erreur lors de la récupération de l'utilisateur : $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _toggleActive() async {
-    if (_user == null) return;
+    if (_user == null || _isUpdating) return;
     setState(() => _isUpdating = true);
-    await _adminService.toggleUserActive(_user!.id, !_user!.isActive);
-    await _loadUser();
-    setState(() => _isUpdating = false);
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      await _adminService.toggleUserActive(_user!.id, !_user!.isActive);
+      await _loadUser();
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la modification du statut : $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdating = false);
+      }
+    }
   }
 
   Future<void> _toggleAdmin() async {
-    if (_user == null) return;
+    if (_user == null || _isUpdating) return;
     setState(() => _isUpdating = true);
-    final newRoles = _user!.isAdmin ? ['user'] : ['user', 'admin'];
-    await _adminService.updateUserRoles(_user!.id, newRoles);
-    await _loadUser();
-    setState(() => _isUpdating = false);
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      final newRoles = _user!.isAdmin ? ['user'] : ['user', 'admin'];
+      await _adminService.updateUserRoles(_user!.id, newRoles);
+      await _loadUser();
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la modification des rôles : $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdating = false);
+      }
+    }
   }
 
   @override
@@ -66,7 +106,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         backgroundColor: bg,
         appBar: AppBar(
           title: const Text('Détail utilisateur'),
-          backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
             icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
@@ -80,18 +120,46 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     if (_user == null) {
       return Scaffold(
         backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+            onPressed: () => context.go('/admin/users'),
+          ),
+        ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('Utilisateur non trouvé', style: TextStyle(color: text)),
-              TextButton(
-                onPressed: () => context.go('/admin/users'),
-                child: const Text('Retour'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 60, color: Colors.redAccent),
+                const SizedBox(height: 16),
+                Text(
+                  'Utilisateur introuvable',
+                  style: TextStyle(color: text, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Le compte utilisateur recherché n\'existe pas ou a été supprimé.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: sub, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => context.go('/admin/users'),
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Retourner à la liste'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -102,9 +170,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: Text(user.displayName, style: TextStyle(color: text)),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Profil Utilisateur',
+          style: TextStyle(color: text, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
           onPressed: () => context.go('/admin/users'),
@@ -112,20 +184,23 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         actions: [
           if (_isUpdating)
             const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Center(
+                child: SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar
+            // Entête d'identité (Avatar, Nom, Email)
             Center(
               child: Column(
                 children: [
@@ -134,112 +209,141 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     height: 80,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primary, primary.withOpacity(0.7)],
+                        colors: [primary, primary.withOpacity(0.75)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withOpacity(0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
                     ),
                     child: Center(
                       child: Text(
-                        user.displayName[0].toUpperCase(),
+                        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
                         style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Text(
                     user.displayName,
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold, color: text),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: text),
                   ),
-                  Text(user.email, style: TextStyle(fontSize: 14, color: sub)),
-                  if (user.companyName != null && user.companyName!.isNotEmpty)
-                    Text(user.companyName!,
-                        style: TextStyle(fontSize: 14, color: sub)),
+                  const SizedBox(height: 2),
+                  Text(
+                    user.email,
+                    style: TextStyle(fontSize: 13, color: sub),
+                  ),
+                  if (user.companyName != null && user.companyName!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        user.companyName!,
+                        style: TextStyle(fontSize: 11, color: primary, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ]
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
 
-            // Infos
+            // Infos Section
             _infoSection(
-              title: 'Informations',
+              title: 'Informations de compte',
+              textColor: text,
+              cardColor: card,
+              isDark: isDark,
               children: [
                 _infoRow('Email', user.email, text, sub),
-                if (user.phone != null)
+                if (user.phone != null && user.phone!.trim().isNotEmpty)
                   _infoRow('Téléphone', user.phone!, text, sub),
                 if (user.companyName != null && user.companyName!.isNotEmpty)
                   _infoRow('Entreprise', user.companyName!, text, sub),
-                if (user.companyAddress != null &&
-                    user.companyAddress!.isNotEmpty)
+                if (user.companyAddress != null && user.companyAddress!.isNotEmpty)
                   _infoRow('Adresse', user.companyAddress!, text, sub),
                 if (user.taxId != null && user.taxId!.isNotEmpty)
-                  _infoRow('NUI', user.taxId!, text, sub),
-                _infoRow('Rôle',
-                    user.isAdmin ? 'Administrateur' : 'Utilisateur', text, sub),
+                  _infoRow('NUI / Identifiant fiscal', user.taxId!, text, sub),
+                _infoRow('Droits d\'accès', user.isAdmin ? 'Administrateur' : 'Utilisateur standard', text, sub),
+                _infoRow('Statut d\'activité', user.isActive ? 'Actif' : 'Désactivé', user.isActive ? Colors.green : Colors.red, sub),
                 _infoRow(
-                    'Statut', user.isActive ? 'Actif' : 'Inactif', text, sub),
-                _infoRow(
-                    'Inscrit le',
-                    '${user.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}',
-                    text,
-                    sub),
+                  'Inscrit le',
+                  '${user.createdAt.day.toString().padLeft(2, '0')}/${user.createdAt.month.toString().padLeft(2, '0')}/${user.createdAt.year}',
+                  text,
+                  sub,
+                ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 28),
 
-            // Actions
-            Text(
-              'Actions',
-              style: TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w600, color: text),
+            // Actions Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                'Actions d\'administration',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: text),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            
             _actionTile(
-              icon: user.isActive ? Icons.block : Icons.check_circle,
-              title: user.isActive
-                  ? 'Désactiver l\'utilisateur'
-                  : 'Activer l\'utilisateur',
-              color: user.isActive ? Colors.red : Colors.green,
+              icon: user.isActive ? Icons.block_rounded : Icons.check_circle_rounded,
+              title: user.isActive ? 'Désactiver le compte' : 'Activer le compte',
+              color: user.isActive ? Colors.redAccent : Colors.green,
+              cardColor: card,
+              textColor: text,
+              isDark: isDark,
               onTap: _toggleActive,
             ),
             _actionTile(
-              icon: user.isAdmin ? Icons.admin_panel_settings : Icons.person,
-              title: user.isAdmin
-                  ? 'Retirer les droits admin'
-                  : 'Donner les droits admin',
-              color: user.isAdmin ? Colors.orange : Colors.purple,
+              icon: user.isAdmin ? Icons.admin_panel_settings_rounded : Icons.person_add_alt_rounded,
+              title: user.isAdmin ? 'Retirer les droits administrateur' : 'Promouvoir au rôle administrateur',
+              color: user.isAdmin ? Colors.orangeAccent : Colors.purple,
+              cardColor: card,
+              textColor: text,
+              isDark: isDark,
               onTap: _toggleAdmin,
             ),
             _actionTile(
-              icon: Icons.subscriptions,
-              title: 'Voir l\'abonnement',
-              color: Colors.blue,
-              onTap: () {
-                // Navigation vers l'abonnement
-              },
-            ),
-            _actionTile(
-              icon: Icons.subscriptions,
+              icon: Icons.subscriptions_rounded,
               title: 'Gérer les abonnements',
-              color: Colors.indigo,
-              onTap: () =>
-                  context.push('/admin/users/${user.id}/subscriptions'),
+              color: Colors.indigoAccent,
+              cardColor: card,
+              textColor: text,
+              isDark: isDark,
+              onTap: () => context.push('/admin/users/${user.id}/subscriptions'),
             ),
             _actionTile(
-              icon: Icons.history,
-              title: 'Voir les logs de cet utilisateur',
+              icon: Icons.history_rounded,
+              title: 'Consulter l\'historique d\'activité',
               color: Colors.teal,
+              cardColor: card,
+              textColor: text,
+              isDark: isDark,
               onTap: () => context.push('/admin/logs?userId=${user.id}'),
             ),
             _actionTile(
-              icon: Icons.add_circle_outline,
-              title: 'Ajouter un abonnement',
+              icon: Icons.add_circle_outline_rounded,
+              title: 'Ajouter un abonnement manuel',
               color: Colors.green,
-              onTap: () =>
-                  context.push('/admin/users/${user.id}/add-subscription'),
+              cardColor: card,
+              textColor: text,
+              isDark: isDark,
+              onTap: () => context.push('/admin/users/${user.id}/add-subscription'),
             ),
           ],
         ),
@@ -247,32 +351,61 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     );
   }
 
-  Widget _infoSection({required String title, required List<Widget> children}) {
+  Widget _infoSection({
+    required String title, 
+    required List<Widget> children,
+    required Color textColor,
+    required Color cardColor,
+    required bool isDark,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            title,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
+          ),
         ),
-        const SizedBox(height: 8),
-        ...children,
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+              width: 0.5,
+            ),
+          ),
+          child: Column(
+            children: children,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _infoRow(String label, String value, Color text, Color sub) {
+  Widget _infoRow(String label, String value, Color valueColor, Color subColor) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
-            child: Text(label, style: TextStyle(fontSize: 13, color: sub)),
+            width: 110,
+            child: Text(
+              label, 
+              style: TextStyle(fontSize: 12, color: subColor, fontWeight: FontWeight.w500),
+            ),
           ),
+          const SizedBox(width: 8),
           Expanded(
-            child: Text(value, style: TextStyle(fontSize: 13, color: text)),
+            child: Text(
+              value, 
+              style: TextStyle(fontSize: 12, color: valueColor, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -283,24 +416,37 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     required IconData icon,
     required String title,
     required Color color,
+    required Color cardColor,
+    required Color textColor,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
-    final theme = context.watch<ThemeProvider>();
-    final card = theme.cardColor;
-
     return Card(
-      color: card,
+      color: cardColor,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!, width: 0.5),
+        side: BorderSide(
+          color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+          width: 0.5,
+        ),
       ),
       child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title),
-        trailing:
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+        dense: true,
+        leading: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? Colors.grey[600] : Colors.grey[400]),
         onTap: onTap,
       ),
     );

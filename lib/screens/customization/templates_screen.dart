@@ -20,6 +20,7 @@ class TemplatesScreen extends StatelessWidget {
       backgroundColor: theme.backgroundColor,
       appBar: _buildAppBar(context, theme, canAccessPremium),
       body: GridView.builder(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -34,7 +35,7 @@ class TemplatesScreen extends StatelessWidget {
           return TemplateCard(
             template: template,
             isLocked: isLocked,
-            onTap: () => _handleTemplateTap(context, template, isLocked),
+            onTap: () => _handleTemplateTap(context, template, isLocked, theme),
           );
         },
       ),
@@ -43,24 +44,35 @@ class TemplatesScreen extends StatelessWidget {
 
   PreferredSizeWidget _buildAppBar(BuildContext context, ThemeProvider theme, bool canAccess) {
     return AppBar(
-      title: Text('Modèles', style: TextStyle(color: theme.textColor, fontWeight: FontWeight.bold)),
+      title: Text(
+        'Modèles de Facture', 
+        style: TextStyle(color: theme.textColor, fontWeight: FontWeight.bold, fontSize: 18),
+      ),
       backgroundColor: theme.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
       elevation: 0,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: theme.textColor),
+        icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
         onPressed: () => context.pop(),
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(40),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Row(
             children: [
-              Icon(canAccess ? Icons.star : Icons.lock, size: 16, color: canAccess ? Colors.green : Colors.orange),
+              Icon(
+                canAccess ? Icons.stars_rounded : Icons.lock_outline_rounded, 
+                size: 18, 
+                color: canAccess ? Colors.green : Colors.orange,
+              ),
               const SizedBox(width: 8),
               Text(
                 canAccess ? 'Accès Premium activé' : 'Modèles Premium verrouillés',
-                style: TextStyle(fontSize: 12, color: canAccess ? Colors.green : Colors.orange),
+                style: TextStyle(
+                  fontSize: 12, 
+                  fontWeight: FontWeight.w600,
+                  color: canAccess ? Colors.green : Colors.orange,
+                ),
               ),
             ],
           ),
@@ -69,30 +81,53 @@ class TemplatesScreen extends StatelessWidget {
     );
   }
 
-  void _handleTemplateTap(BuildContext context, InvoiceTemplate template, bool isLocked) {
+  void _handleTemplateTap(BuildContext context, InvoiceTemplate template, bool isLocked, ThemeProvider theme) {
     if (isLocked) {
-      _showUpgradeDialog(context);
+      _showUpgradeDialog(context, theme);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${template.name} sélectionné'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text('${template.name} sélectionné comme modèle actif'), 
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
 
-  void _showUpgradeDialog(BuildContext context) {
+  void _showUpgradeDialog(BuildContext context, ThemeProvider theme) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Accès Premium requis'),
-        content: const Text('Passez à un abonnement supérieur pour débloquer tous les modèles.'),
+        backgroundColor: theme.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          '⭐ Accès Premium requis',
+          style: TextStyle(color: theme.textColor, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Passez à la formule supérieure pour débloquer l\'intégralité des designs exclusifs.',
+          style: TextStyle(color: theme.subTextColor, fontSize: 14, height: 1.4),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Annuler',
+              style: TextStyle(color: theme.subTextColor, fontWeight: FontWeight.w600),
+            ),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               context.push('/subscription');
             },
-            child: const Text('Voir les offres'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.primaryColor,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Voir les offres', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -105,41 +140,93 @@ class TemplateCard extends StatelessWidget {
   final bool isLocked;
   final VoidCallback onTap;
 
-  const TemplateCard({super.key, required this.template, required this.isLocked, required this.onTap});
+  const TemplateCard({
+    super.key, 
+    required this.template, 
+    required this.isLocked, 
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.isDarkMode ? Colors.grey[850] : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.primaryColor.withOpacity(isLocked ? 0.1 : 0.3)),
+    final isDark = theme.isDarkMode;
+
+    return Card(
+      color: theme.cardColor,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          width: 1,
         ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
                       color: template.backgroundColor,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: template.primaryColor.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.description_outlined, 
+                            color: template.primaryColor, 
+                            size: 32,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: Center(child: Icon(Icons.receipt_long, color: template.primaryColor, size: 40)),
-                  ),
-                  if (isLocked)
-                    Container(color: Colors.black45, child: const Center(child: Icon(Icons.lock, color: Colors.white, size: 30))),
-                ],
+                    if (isLocked)
+                      Container(
+                        color: Colors.black.withOpacity(0.4),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Colors.amber,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.lock_rounded, 
+                              color: Colors.white, 
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(10),
-              child: Text(template.name, style: TextStyle(fontWeight: FontWeight.bold, color: theme.textColor)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Text(
+                template.name, 
+                style: TextStyle(
+                  fontWeight: FontWeight.w600, 
+                  color: theme.textColor,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             )
           ],
         ),

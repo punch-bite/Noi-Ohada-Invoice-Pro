@@ -6,23 +6,23 @@ import 'package:uuid/uuid.dart';
 part 'line_item.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 3)
+@HiveType(typeId: 8)
 class LineItem {
   @HiveField(0)
   final String id;
-  
+
   @HiveField(1)
   final String description;
-  
+
   @HiveField(2)
   final int quantity;
-  
+
   @HiveField(3)
   final double unitPrice; // Prix unitaire Hors Taxes (HT)
-  
+
   @HiveField(4)
   final double taxRate; // Taux de TVA en pourcentage brut (ex: 18.0 ou 19.25)
-  
+
   @HiveField(5)
   final double total; // Montant global Toutes Taxes Comprises (TTC) pour cette ligne
 
@@ -40,6 +40,8 @@ class LineItem {
 
   /// Montant de la taxe appliquée uniquement à cette ligne
   double get taxAmount => totalPrice * (taxRate / 100);
+
+  // ===== SÉRIALISATION =====
 
   Map<String, dynamic> toMap() {
     return {
@@ -65,6 +67,16 @@ class LineItem {
       taxRate: tRate,
     );
   }
+
+  // ===== JSON (pour les APIs) =====
+
+  /// Convertit l'objet en JSON
+  Map<String, dynamic> toJson() => _$LineItemToJson(this);
+
+  /// Crée un LineItem depuis un JSON
+  factory LineItem.fromJson(Map<String, dynamic> json) => _$LineItemFromJson(json);
+
+  // ===== COPY =====
 
   LineItem copyWith({
     String? id,

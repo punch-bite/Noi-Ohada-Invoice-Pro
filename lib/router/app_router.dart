@@ -11,7 +11,7 @@ import '../models/plan.dart';
 import '../providers/auth_provider.dart';
 
 // Écrans - Auth / Landing
-import '../screens/landing/landing_screen_carousel.dart'; // Assure-toi que la classe s'appelle bien LandingScreen ou LandingScreenCarousel
+import '../screens/landing/landing_screen_carousel.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
@@ -62,14 +62,14 @@ import '../screens/admin/user_subscription_screen.dart';
 import '../screens/admin/activity_logs_screen.dart';
 import '../screens/admin/admin_add_subscription_screen.dart';
 import '../screens/admin/admin_template_form_screen.dart';
+import '../screens/admin/admin_plan_form_screen.dart';
+import '../screens/admin/admin_assign_plan_screen.dart';
 
 class AppRouter {
-  // Un ValueNotifier pour écouter les changements d'auth et forcer la redirection
   static final Listenable authChangeNotifier = ValueNotifier<void>(null);
 
   static final GoRouter router = GoRouter(
     initialLocation: '/',
-    // On force la réévaluation du redirect dès que l'état d'authentification change
     refreshListenable: authChangeNotifier,
     redirect: (context, state) {
       final authProvider = Provider.of<AppAuthProvider>(context, listen: false);
@@ -77,25 +77,24 @@ class AppRouter {
       final needs2Fa = authProvider.needsTwoFactor;
       final location = state.uri.path;
 
-      // 🛡️ SÉCURITÉ : Si la double authentification est requise, on verrouille l'utilisateur sur l'écran 2FA
       if (needs2Fa) {
         if (location != '/auth/verify-2fa') {
           return '/auth/verify-2fa';
         }
-        return null; // On le laisse sur la page de vérification
+        return null;
       }
 
-      // 1. Redirection si authentifié : on quitte l'auth ou la landing vers le dashboard
       if (isAuthenticated && (location == '/' || location.startsWith('/auth'))) {
         return '/dashboard';
       }
 
-      // 2. Redirection si non authentifié : accès interdit aux zones privées
-      if (!isAuthenticated && (location.startsWith('/dashboard') || location.startsWith('/admin') || location.startsWith('/security'))) {
+      if (!isAuthenticated &&
+          (location.startsWith('/dashboard') ||
+              location.startsWith('/admin') ||
+              location.startsWith('/security'))) {
         return '/';
       }
 
-      // 3. Redirection si non authentifié pour s'abonner
       if (!isAuthenticated && location == '/subscription') {
         return '/auth/login';
       }
@@ -106,7 +105,7 @@ class AppRouter {
       // Landing / Accueil
       GoRoute(
         path: '/',
-        builder: (context, state) => const LandingScreen(), // ✅ CORRECTION : Utilisation de la classe du fichier importé
+        builder: (context, state) => const LandingScreen(),
       ),
 
       // Auth group
@@ -196,7 +195,9 @@ class AppRouter {
       // Erreur réseau
       GoRoute(
         path: '/no-internet',
-        builder: (context, state) => const NoInternetScreen(),
+        builder: (context, state) => const NoInternetScreen(
+          onRetry: null, // onRetry sera géré par le wrapper
+        ),
       ),
 
       // ========== ESPACE DASHBOARD ==========
@@ -208,7 +209,7 @@ class AppRouter {
         path: '/dashboard/profile',
         builder: (context, state) => const ProfileUpdateScreen(),
       ),
-      
+
       // Stock & Produits
       GoRoute(
         path: '/dashboard/stock',
@@ -365,6 +366,26 @@ class AppRouter {
               final id = state.pathParameters['id']!;
               return AdminTemplateFormScreen(templateId: id);
             },
+          ),
+
+          // ✅ Gestion des plans personnalisés
+          GoRoute(
+            path: 'plans/create',
+            name: 'admin-plan-create',
+            builder: (context, state) => const AdminPlanFormScreen(),
+          ),
+          GoRoute(
+            path: 'plans/edit/:id',
+            name: 'admin-plan-edit',
+            builder: (context, state) {
+              final id = state.pathParameters['id']!;
+              return AdminPlanFormScreen(planId: id);
+            },
+          ),
+          GoRoute(
+            path: 'assign-plan',
+            name: 'admin-assign-plan',
+            builder: (context, state) => const AdminAssignPlanScreen(),
           ),
         ],
       ),

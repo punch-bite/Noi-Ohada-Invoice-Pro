@@ -1,6 +1,4 @@
 // lib/screens/admin/admin_add_subscription_screen.dart
-// ignore_for_file: duplicate_ignore, use_build_context_synchronously, unused_local_variable
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -39,28 +37,60 @@ class _AdminAddSubscriptionScreenState
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    _users = await _adminService.getAllUsers();
-    _plans = await _subscriptionService.getPlans();
-    if (widget.userId != null) {
-      _selectedUser = _users.firstWhere((u) => u.id == widget.userId,
-          orElse: () => _users.first);
+
+    try {
+      final loadedUsers = await _adminService.getAllUsers();
+      final loadedPlans = await _subscriptionService.getPlans();
+
+      if (mounted) {
+        setState(() {
+          _users = loadedUsers;
+          _plans = loadedPlans;
+
+          if (widget.userId != null && _users.isNotEmpty) {
+            // Recherche sécurisée de l'utilisateur concerné
+            final index = _users.indexWhere((u) => u.id == widget.userId);
+            _selectedUser = index != -1 ? _users[index] : _users.first;
+          } else if (_users.isNotEmpty) {
+            _selectedUser = _users.first;
+          }
+
+          if (_plans.isNotEmpty) {
+            _selectedPlan = _plans.first;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du chargement des données: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
-    if (_plans.isNotEmpty) _selectedPlan = _plans.first;
-    setState(() => _isLoading = false);
   }
 
   Future<void> _submit() async {
     if (_selectedUser == null || _selectedPlan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Veuillez sélectionner un utilisateur et un plan'),
-            backgroundColor: Colors.orange),
+          content: Text('Veuillez sélectionner un utilisateur et un plan'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
     setState(() => _isSubmitting = true);
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       await _adminService.createSubscriptionForUser(
         userId: _selectedUser!.id,
@@ -68,21 +98,31 @@ class _AdminAddSubscriptionScreenState
         paymentMethod: _paymentMethod,
         amount: _selectedPlan!.price,
         currency: _selectedPlan!.currency,
-        interval: _selectedPlan!.interval, durationMonths: 1,
+        interval: _selectedPlan!.interval,
+        durationMonths: 1,
       );
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
+
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
-            content: Text('Abonnement créé avec succès'),
-            backgroundColor: Colors.green),
+          content: Text('Abonnement créé avec succès'),
+          backgroundColor: Colors.green,
+        ),
       );
-      Navigator.pop(context, true);
+      
+      if (mounted) {
+        navigator.pop(true);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Erreur d\'enregistrement: $e'), 
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -90,145 +130,223 @@ class _AdminAddSubscriptionScreenState
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
-    final text = theme.textColor;
-    final sub = theme.subTextColor;
-    final bg = theme.backgroundColor;
-    final card = theme.cardColor;
-    final primary = theme.primaryColor;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final bgColor = theme.backgroundColor;
+    final cardColor = theme.cardColor;
+    final primaryColor = theme.primaryColor;
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: const Text('Ajouter un abonnement'),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Ajouter un abonnement',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          TextButton(
-            onPressed: _isSubmitting ? null : _submit,
-            child: Text(
-              'Créer',
-              style: TextStyle(color: primary, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Utilisateur
-                  DropdownButtonFormField<AppUser>(
-                    initialValue: _selectedUser,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Utilisateur *',
-                      labelStyle: TextStyle(color: sub),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
+          : GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Utilisateur Dropdown
+                    _buildLabel('Utilisateur *', textColor),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<AppUser>(
+                      initialValue: _selectedUser,
+                      isExpanded: true,
+                      dropdownColor: cardColor,
+                      style: TextStyle(color: textColor, fontSize: 15),
+                      decoration: _buildInputDecoration(cardColor, isDark),
+                      items: _users.map((u) {
+                        return DropdownMenuItem<AppUser>(
+                          value: u,
+                          child: Text(
+                            u.displayName.isNotEmpty ? u.displayName : 'Sans nom (${u.email})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: _isSubmitting ? null : (v) => setState(() => _selectedUser = v),
                     ),
-                    items: _users.map((u) {
-                      return DropdownMenuItem<AppUser>(
-                        value: u,
-                        child: Text(u.displayName),
-                      );
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedUser = v),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
-                  // Plan
-                  DropdownButtonFormField<Plan>(
-                    initialValue: _selectedPlan,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Plan *',
-                      labelStyle: TextStyle(color: sub),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                    // Plan Dropdown
+                    _buildLabel('Plan d\'abonnement *', textColor),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<Plan>(
+                      initialValue: _selectedPlan,
+                      isExpanded: true,
+                      dropdownColor: cardColor,
+                      style: TextStyle(color: textColor, fontSize: 15),
+                      decoration: _buildInputDecoration(cardColor, isDark),
+                      items: _plans.map((p) {
+                        return DropdownMenuItem<Plan>(
+                          value: p,
+                          child: Text('${p.name} - ${p.getFormattedPrice()}'),
+                        );
+                      }).toList(),
+                      onChanged: _isSubmitting ? null : (v) => setState(() => _selectedPlan = v),
                     ),
-                    items: _plans.map((p) {
-                      return DropdownMenuItem<Plan>(
-                        value: p,
-                        child: Text('${p.name} - ${p.getFormattedPrice()}'),
-                      );
-                    }).toList(),
-                    onChanged: (v) => setState(() => _selectedPlan = v),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
-                  // Méthode de paiement
-                  DropdownButtonFormField<String>(
-                    initialValue: _paymentMethod,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Méthode de paiement',
-                      labelStyle: TextStyle(color: sub),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'orange_money', child: Text('Orange Money')),
-                      DropdownMenuItem(
-                          value: 'mtn_money', child: Text('MTN Mobile Money')),
-                      DropdownMenuItem(value: 'wave', child: Text('Wave')),
-                      DropdownMenuItem(
-                          value: 'stripe', child: Text('Carte bancaire')),
-                    ],
-                    onChanged: (v) => setState(() => _paymentMethod = v!),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Résumé
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[850] : Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Utilisateur', style: TextStyle(color: sub)),
-                            Text(
-                                _selectedUser?.displayName ?? 'Non sélectionné',
-                                style: TextStyle(color: text)),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Plan', style: TextStyle(color: sub)),
-                            Text(_selectedPlan?.name ?? 'Non sélectionné',
-                                style: TextStyle(color: text)),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Montant', style: TextStyle(color: sub)),
-                            Text(_selectedPlan?.getFormattedPrice() ?? '0 FCFA',
-                                style: TextStyle(
-                                    color: primary,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
+                    // Méthode de paiement Dropdown
+                    _buildLabel('Mode de règlement', textColor),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      initialValue: _paymentMethod,
+                      isExpanded: true,
+                      dropdownColor: cardColor,
+                      style: TextStyle(color: textColor, fontSize: 15),
+                      decoration: _buildInputDecoration(cardColor, isDark),
+                      items: const [
+                        DropdownMenuItem(value: 'orange_money', child: Text('Orange Money')),
+                        DropdownMenuItem(value: 'mtn_money', child: Text('MTN Mobile Money')),
+                        DropdownMenuItem(value: 'wave', child: Text('Wave')),
+                        DropdownMenuItem(value: 'stripe', child: Text('Carte bancaire (Stripe)')),
+                        DropdownMenuItem(value: 'cash', child: Text('Espèces / Manuel')),
                       ],
+                      onChanged: _isSubmitting ? null : (v) => setState(() => _paymentMethod = v!),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 28),
+
+                    // Résumé Récapitulatif
+                    _buildLabel('Récapitulatif de la transaction', textColor),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSummaryRow('Bénéficiaire', _selectedUser?.displayName ?? 'Non sélectionné', textColor, subTextColor),
+                          const Divider(height: 20, thickness: 0.5),
+                          _buildSummaryRow('Formule d\'accès', _selectedPlan?.name ?? 'Non sélectionné', textColor, subTextColor),
+                          const Divider(height: 20, thickness: 0.5),
+                          _buildSummaryRow(
+                            'Montant à facturer',
+                            _selectedPlan?.getFormattedPrice() ?? '0 FCFA',
+                            primaryColor,
+                            subTextColor,
+                            isPrice: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Bouton de validation
+                    SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Text(
+                                'Enregistrer l\'abonnement',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+    );
+  }
+
+  Widget _buildLabel(String text, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(Color cardColor, bool isDark) {
+    return InputDecoration(
+      fillColor: cardColor,
+      filled: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+          width: 1,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: Theme.of(context).primaryColor,
+          width: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, Color valueColor, Color labelColor, {bool isPrice = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: labelColor, fontSize: 13),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: isPrice ? 15 : 14,
+            fontWeight: isPrice ? FontWeight.bold : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

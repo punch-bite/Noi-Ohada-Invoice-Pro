@@ -1,34 +1,78 @@
 // lib/models/invoice_template.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
+part 'invoice_template.g.dart';
+
+@HiveType(typeId: 6)
 class InvoiceTemplate {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String name;
+
+  @HiveField(2)
   final String description;
-  final Color primaryColor;
-  final Color textColor;
-  final Color backgroundColor;
+
+  @HiveField(3)
+  final int primaryColorValue;
+
+  @HiveField(4)
+  final int textColorValue;
+
+  @HiveField(5)
+  final int backgroundColorValue;
+
+  @HiveField(6)
   final bool showLogo;
+
+  @HiveField(7)
   final bool showTaxDetails;
+
+  @HiveField(8)
   final bool showPaymentTerms;
+
+  @HiveField(9)
   final bool showPaymentQR;
+
+  @HiveField(10)
   final bool isPremium;
+
+  @HiveField(11)
   final bool isDefault;
+
+  @HiveField(12)
   final String fontFamily;
+
+  @HiveField(13)
   final double fontSize;
+
+  @HiveField(14)
   final bool showBorder;
+
+  @HiveField(15)
   final String? createdBy;
+
+  @HiveField(16)
   final bool isActive;
+
+  @HiveField(17)
   final DateTime? createdAt;
+
+  // Getters pour les couleurs
+  Color get primaryColor => Color(primaryColorValue);
+  Color get textColor => Color(textColorValue);
+  Color get backgroundColor => Color(backgroundColorValue);
 
   InvoiceTemplate({
     required this.id,
     required this.name,
     required this.description,
-    required this.primaryColor,
-    required this.textColor,
-    required this.backgroundColor,
+    Color? primaryColor,
+    Color? textColor,
+    Color? backgroundColor,
     this.showLogo = true,
     this.showTaxDetails = true,
     this.showPaymentTerms = true,
@@ -41,31 +85,36 @@ class InvoiceTemplate {
     this.createdBy,
     this.isActive = true,
     this.createdAt,
-  });
+  })  : primaryColorValue = primaryColor?.value ?? 0xFF1976D2,
+        textColorValue = textColor?.value ?? 0xFF000000,
+        backgroundColorValue = backgroundColor?.value ?? 0xFFFFFFFF;
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'description': description,
-      'primaryColor': primaryColor.value,
-      'textColor': textColor.value,
-      'backgroundColor': backgroundColor.value,
-      'showLogo': showLogo,
-      'showTaxDetails': showTaxDetails,
-      'showPaymentTerms': showPaymentTerms,
-      'showPaymentQR': showPaymentQR,
-      'isPremium': isPremium,
-      'isDefault': isDefault,
-      'fontFamily': fontFamily,
-      'fontSize': fontSize,
-      'showBorder': showBorder,
-      'createdBy': createdBy,
-      'isActive': isActive,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
-    };
+  // Constructeur Firestore
+  factory InvoiceTemplate.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return InvoiceTemplate(
+      id: doc.id,
+      name: data['name'] ?? '',
+      description: data['description'] ?? '',
+      primaryColor: Color((data['primaryColor'] as num?)?.toInt() ?? 0xFF1976D2),
+      textColor: Color((data['textColor'] as num?)?.toInt() ?? 0xFF000000),
+      backgroundColor: Color((data['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
+      showLogo: data['showLogo'] ?? true,
+      showTaxDetails: data['showTaxDetails'] ?? true,
+      showPaymentTerms: data['showPaymentTerms'] ?? true,
+      showPaymentQR: data['showPaymentQR'] ?? false,
+      isPremium: data['isPremium'] ?? false,
+      isDefault: data['isDefault'] ?? false,
+      fontFamily: data['fontFamily'] ?? 'Roboto',
+      fontSize: (data['fontSize'] as num?)?.toDouble() ?? 12.0,
+      showBorder: data['showBorder'] ?? true,
+      createdBy: data['createdBy'],
+      isActive: data['isActive'] ?? true,
+      createdAt: data['createdAt'] != null ? _parseDateTime(data['createdAt']) : null,
+    );
   }
 
+  // Constructeur depuis Map (Firestore)
   factory InvoiceTemplate.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return InvoiceTemplate(
       id: documentId ?? map['id'] ?? '',
@@ -87,6 +136,29 @@ class InvoiceTemplate {
       isActive: map['isActive'] ?? true,
       createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : null,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'primaryColor': primaryColorValue,
+      'textColor': textColorValue,
+      'backgroundColor': backgroundColorValue,
+      'showLogo': showLogo,
+      'showTaxDetails': showTaxDetails,
+      'showPaymentTerms': showPaymentTerms,
+      'showPaymentQR': showPaymentQR,
+      'isPremium': isPremium,
+      'isDefault': isDefault,
+      'fontFamily': fontFamily,
+      'fontSize': fontSize,
+      'showBorder': showBorder,
+      'createdBy': createdBy,
+      'isActive': isActive,
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+    };
   }
 
   static List<InvoiceTemplate> getDefaultTemplates() {
@@ -167,17 +239,11 @@ class InvoiceTemplate {
     );
   }
 
-  /// Fonction d'aide pour parser les dates de manière ultra-robuste
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    } else if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
-    } else if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    } else if (value is DateTime) {
-      return value;
-    }
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is DateTime) return value;
     return DateTime.now();
   }
 }

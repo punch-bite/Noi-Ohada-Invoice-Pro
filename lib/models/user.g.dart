@@ -8,7 +8,7 @@ part of 'user.dart';
 
 class AppUserAdapter extends TypeAdapter<AppUser> {
   @override
-  final int typeId = 9;
+  final int typeId = 15;
 
   @override
   AppUser read(BinaryReader reader) {
@@ -72,3 +72,41 @@ class AppUserAdapter extends TypeAdapter<AppUser> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+AppUser _$AppUserFromJson(Map<String, dynamic> json) => AppUser(
+      id: json['id'] as String,
+      email: json['email'] as String,
+      displayName: json['displayName'] as String,
+      phone: json['phone'] as String?,
+      companyName: json['companyName'] as String?,
+      companyAddress: json['companyAddress'] as String?,
+      taxId: json['taxId'] as String?,
+      subscriptionId: json['subscriptionId'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      lastLoginAt: json['lastLoginAt'] == null
+          ? null
+          : DateTime.parse(json['lastLoginAt'] as String),
+      isActive: json['isActive'] as bool? ?? true,
+      roles:
+          (json['roles'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+              const ['user'],
+    );
+
+Map<String, dynamic> _$AppUserToJson(AppUser instance) => <String, dynamic>{
+      'id': instance.id,
+      'email': instance.email,
+      'displayName': instance.displayName,
+      'phone': instance.phone,
+      'companyName': instance.companyName,
+      'companyAddress': instance.companyAddress,
+      'taxId': instance.taxId,
+      'subscriptionId': instance.subscriptionId,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'lastLoginAt': instance.lastLoginAt?.toIso8601String(),
+      'isActive': instance.isActive,
+      'roles': instance.roles,
+    };

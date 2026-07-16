@@ -1,5 +1,5 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
-// ignore_for_file: deprecated_member_use, use_build_context_synchronously
+// ignore_for_file: deprecated_member_use
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -29,6 +29,8 @@ class InvoiceDetailScreen extends StatefulWidget {
 
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   final DatabaseService _db = DatabaseService();
+  final GlobalKey _menuKey = GlobalKey(); // Permet d'ouvrir le menu par programmation
+  
   Invoice? _invoice;
   Client? _client;
   Company? _company;
@@ -50,7 +52,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       _client = await _db.getClient(_invoice!.clientId);
       _company = await _db.getCompany();
     }
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _loadTemplates() async {
@@ -59,7 +63,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       (t) => t.isDefault,
       orElse: () => _templates.first,
     );
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // ===== LOGO WIDGET =====
@@ -70,10 +76,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       width: 80,
       height: 80,
     );
-  }
-
-  Widget _buildPlaceholderLogo() {
-    return const LogoImage(path: null, width: 80, height: 80);
   }
 
   // ===== EN-TÊTE AVEC LOGO =====
@@ -148,6 +150,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         template: _selectedTemplate!,
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur d\'impression: $e'),
@@ -170,8 +173,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
 
       final tempDir = await getTemporaryDirectory();
-      final file =
-          File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
+      final file = File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
       await file.writeAsBytes(pdfData);
 
       await Share.shareXFiles(
@@ -179,6 +181,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         text: 'Facture ${_invoice!.invoiceNumber} - OHADA Invoice Pro',
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur de partage: $e'),
@@ -188,55 +191,56 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-Future<void> _sendInvoiceByEmail() async {
-  if (_invoice == null || _client == null || _company == null) return;
-  if (_selectedTemplate == null) return;
+  Future<void> _sendInvoiceByEmail() async {
+    if (_invoice == null || _client == null || _company == null) return;
+    if (_selectedTemplate == null) return;
 
-  try {
-    // Générer le PDF
-    final pdfData = await PrintingService.generateInvoicePdf(
-      invoice: _invoice!,
-      client: _client!,
-      company: _company!,
-      template: _selectedTemplate!,
-    );
-
-    // TODO: Uploader le PDF quelque part (Firebase Storage, etc.) pour obtenir un lien
-    const pdfLink = '#'; // Remplacer par le vrai lien
-
-    final htmlBody = MailService.getInvoiceTemplate(
-      _client!.name,
-      _invoice!.invoiceNumber,
-      pdfLink,
-    );
-
-    final sent = await MailService.sendHtmlEmail(
-      to: _client!.email,
-      subject: 'Facture ${_invoice!.invoiceNumber}',
-      htmlBody: htmlBody,
-    );
-
-    if (sent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Facture envoyée par email avec succès'),
-          backgroundColor: Colors.green,
-        ),
+    try {
+      final pdfData = await PrintingService.generateInvoicePdf(
+        invoice: _invoice!,
+        client: _client!,
+        company: _company!,
+        template: _selectedTemplate!,
       );
-    } else {
+
+      // TODO: Uploader le PDF quelque part (Firebase Storage, etc.) pour obtenir un lien
+      const pdfLink = '#'; 
+
+      final htmlBody = MailService.getInvoiceTemplate(
+        _client!.name,
+        _invoice!.invoiceNumber,
+        pdfLink,
+      );
+
+      final sent = await MailService.sendHtmlEmail(
+        to: _client!.email,
+        subject: 'Facture ${_invoice!.invoiceNumber}',
+        htmlBody: htmlBody,
+      );
+
+      if (!mounted) return;
+      if (sent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Facture envoyée par email avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erreur lors de l\'envoi de l\'email'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erreur lors de l\'envoi de l\'email'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
       );
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
-    );
   }
-}
 
   void _showUpgradeDialog(BuildContext context) {
     showDialog(
@@ -334,6 +338,7 @@ Future<void> _sendInvoiceByEmail() async {
         actions: [
           // Sélection du modèle
           PopupMenuButton<InvoiceTemplate>(
+            key: _menuKey,
             icon: Icon(Icons.style, color: textColor),
             onSelected: (template) {
               if (template.isPremium && !canAccessPremium) {
@@ -348,8 +353,7 @@ Future<void> _sendInvoiceByEmail() async {
                 final isSelected = _selectedTemplate?.id == template.id;
 
                 return PopupMenuItem<InvoiceTemplate>(
-                  value: isLocked ? null : template,
-                  enabled: !isLocked,
+                  value: template, // On transmet l'objet pour gérer le dialog de verrouillage
                   child: Row(
                     children: [
                       Container(
@@ -365,9 +369,7 @@ Future<void> _sendInvoiceByEmail() async {
                         child: Text(
                           template.name,
                           style: TextStyle(
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             color: isLocked ? Colors.grey : textColor,
                           ),
                         ),
@@ -379,8 +381,7 @@ Future<void> _sendInvoiceByEmail() async {
                       if (template.isPremium && !isLocked)
                         const Padding(
                           padding: EdgeInsets.only(left: 4),
-                          child:
-                              Icon(Icons.star, color: Colors.amber, size: 14),
+                          child: Icon(Icons.star, color: Colors.amber, size: 14),
                         ),
                     ],
                   ),
@@ -409,12 +410,20 @@ Future<void> _sendInvoiceByEmail() async {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _buildTemplatePreview(
-              isDark,
-              textColor,
-              subTextColor,
-              primaryColor,
-              canAccessPremium,
+            // Rendu de la prévisualisation cliquable pour changer de modèle
+            GestureDetector(
+              onTap: () {
+                // Déclenche dynamiquement l'ouverture du menu PopupButton de l'AppBar
+                final dynamic state = _menuKey.currentState;
+                state?.showButtonMenu();
+              },
+              child: _buildTemplatePreview(
+                isDark,
+                textColor,
+                subTextColor,
+                primaryColor,
+                canAccessPremium,
+              ),
             ),
             const SizedBox(height: 16),
             Container(
@@ -432,7 +441,6 @@ Future<void> _sendInvoiceByEmail() async {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ===== EN-TÊTE AVEC LOGO =====
                   _buildCompanyHeader(),
                   const Divider(height: 24),
                   Row(

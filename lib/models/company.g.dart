@@ -8,7 +8,7 @@ part of 'company.dart';
 
 class CompanyAdapter extends TypeAdapter<Company> {
   @override
-  final int typeId = 10;
+  final int typeId = 1;
 
   @override
   Company read(BinaryReader reader) {
@@ -72,3 +72,38 @@ class CompanyAdapter extends TypeAdapter<Company> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Company _$CompanyFromJson(Map<String, dynamic> json) => Company(
+      id: json['id'] as String?,
+      name: json['name'] as String,
+      address: json['address'] as String,
+      taxId: json['taxId'] as String,
+      phone: json['phone'] as String,
+      email: json['email'] as String,
+      logoPath: json['logoPath'] as String? ?? '',
+      currency: json['currency'] as String? ?? 'XAF',
+      defaultTaxRate: (json['defaultTaxRate'] as num?)?.toDouble() ?? 18.0,
+      legalText: json['legalText'] as String? ??
+          'Conforme aux dispositions du SYSCOHADA révisé',
+      website: json['website'] as String? ?? '',
+      rccm: json['rccm'] as String? ?? '',
+    );
+
+Map<String, dynamic> _$CompanyToJson(Company instance) => <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'address': instance.address,
+      'taxId': instance.taxId,
+      'phone': instance.phone,
+      'email': instance.email,
+      'logoPath': instance.logoPath,
+      'currency': instance.currency,
+      'defaultTaxRate': instance.defaultTaxRate,
+      'legalText': instance.legalText,
+      'website': instance.website,
+      'rccm': instance.rccm,
+    };

@@ -29,25 +29,35 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   Future<void> _loadSuppliers() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+    
     await _supplierService.init();
     await _stockService.init();
-    _suppliers = await _supplierService.getSuppliers();
-    setState(() => _isLoading = false);
+    final suppliers = await _supplierService.getSuppliers();
+    
+    if (!mounted) return;
+    setState(() {
+      _suppliers = suppliers;
+      _isLoading = false;
+    });
   }
 
   List<Supplier> get _filteredSuppliers {
     if (_searchQuery.isEmpty) return _suppliers;
+    final query = _searchQuery.toLowerCase().trim();
     return _suppliers.where((s) =>
-      s.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      s.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-      s.phone.contains(_searchQuery)
+      s.name.toLowerCase().contains(query) ||
+      s.email.toLowerCase().contains(query) ||
+      s.phone.contains(query)
     ).toList();
   }
 
   Future<void> _deleteSupplier(Supplier supplier) async {
     // Vérifier si le fournisseur a des produits
     final hasProducts = await _stockService.hasProductsForSupplier(supplier.id);
+    if (!mounted) return;
+
     if (hasProducts) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -81,6 +91,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     if (confirm == true) {
       await _supplierService.deleteSupplier(supplier.id);
       await _loadSuppliers();
+      
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Fournisseur supprimé'),
@@ -194,7 +206,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               ),
               child: Center(
                 child: Text(
-                  supplier.name[0].toUpperCase(),
+                  supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -210,12 +222,15 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        supplier.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
+                      Flexible(
+                        child: Text(
+                          supplier.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -237,16 +252,20 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         ),
                     ],
                   ),
-                  if (supplier.phone.isNotEmpty)
+                  if (supplier.phone.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
                       'Tél: ${supplier.phone}',
                       style: TextStyle(fontSize: 13, color: subTextColor),
                     ),
-                  if (supplier.email.isNotEmpty)
+                  ],
+                  if (supplier.email.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       'Email: ${supplier.email}',
                       style: TextStyle(fontSize: 13, color: subTextColor),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -278,40 +297,50 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
   Widget _buildEmptyState(bool isDark, Color textColor, Color subTextColor, Color primaryColor) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.business, size: 80, color: primaryColor),
-          const SizedBox(height: 16),
-          Text(
-            'Aucun fournisseur',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.business, size: 80, color: primaryColor.withOpacity(0.8)),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun fournisseur',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Ajoutez votre premier fournisseur pour l\'associer à vos produits.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: subTextColor),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CreateSupplierScreen()),
+                  ).then((_) => _loadSuppliers());
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Ajouter un fournisseur'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Ajoutez votre premier fournisseur',
-            style: TextStyle(fontSize: 14, color: subTextColor),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CreateSupplierScreen()),
-              ).then((_) => _loadSuppliers());
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Ajouter un fournisseur'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

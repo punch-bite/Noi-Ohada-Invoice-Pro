@@ -8,7 +8,7 @@ part of 'delivery.dart';
 
 class DeliveryAdapter extends TypeAdapter<Delivery> {
   @override
-  final int typeId = 1;
+  final int typeId = 3;
 
   @override
   Delivery read(BinaryReader reader) {
@@ -72,3 +72,41 @@ class DeliveryAdapter extends TypeAdapter<Delivery> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Delivery _$DeliveryFromJson(Map<String, dynamic> json) => Delivery(
+      id: json['id'] as String?,
+      productId: json['productId'] as String,
+      productName: json['productName'] as String,
+      quantity: (json['quantity'] as num).toInt(),
+      type: json['type'] as String,
+      status: json['status'] as String? ?? 'pending',
+      reference: json['reference'] as String?,
+      clientName: json['clientName'] as String?,
+      notes: json['notes'] as String?,
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.parse(json['createdAt'] as String),
+      completedAt: json['completedAt'] == null
+          ? null
+          : DateTime.parse(json['completedAt'] as String),
+      createdBy: json['createdBy'] as String?,
+    );
+
+Map<String, dynamic> _$DeliveryToJson(Delivery instance) => <String, dynamic>{
+      'id': instance.id,
+      'productId': instance.productId,
+      'productName': instance.productName,
+      'quantity': instance.quantity,
+      'type': instance.type,
+      'status': instance.status,
+      'reference': instance.reference,
+      'clientName': instance.clientName,
+      'notes': instance.notes,
+      'createdAt': instance.createdAt.toIso8601String(),
+      'completedAt': instance.completedAt?.toIso8601String(),
+      'createdBy': instance.createdBy,
+    };

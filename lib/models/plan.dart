@@ -1,18 +1,52 @@
 // lib/models/plan.dart
+import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
+
+part 'plan.g.dart';
+
+@JsonSerializable()
+@HiveType(typeId: 10) // Assure-toi que c'est unique
 class Plan {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String name;
+
+  @HiveField(2)
   final String description;
+
+  @HiveField(3)
   final double price;
+
+  @HiveField(4)
   final String currency;
-  final String interval; // ex: 'month', 'year'
-  final int maxInvoices; // -1 pour illimité
-  final int maxClients;  // -1 pour illimité
+
+  @HiveField(5)
+  final String interval;
+
+  @HiveField(6)
+  final int maxInvoices;
+
+  @HiveField(7)
+  final int maxClients;
+
+  @HiveField(8)
   final bool hasPdfExport;
+
+  @HiveField(9)
   final bool hasCloudSync;
+
+  @HiveField(10)
   final bool hasTeamAccess;
+
+  @HiveField(11)
   final List<String> features;
+
+  @HiveField(12)
   final bool isPopular;
+
+  @HiveField(13)
   final bool isActive;
 
   Plan({
@@ -31,8 +65,6 @@ class Plan {
     this.isPopular = false,
     this.isActive = true,
   });
-
-  // ===== SÉRIALISATION =====
 
   Map<String, dynamic> toMap() {
     return {
@@ -72,8 +104,6 @@ class Plan {
     );
   }
 
-  // ===== CLONAGE (copyWith) =====
-
   Plan copyWith({
     String? id,
     String? name,
@@ -108,7 +138,7 @@ class Plan {
     );
   }
 
-  // ===== LOGIQUE APPLICATIVE =====
+  // ===== LOGIQUE =====
 
   String getFormattedPrice() {
     if (price == 0) return 'Gratuit';
@@ -120,7 +150,7 @@ class Plan {
   bool get hasInvoiceLimit => maxInvoices > 0;
   bool get hasClientLimit => maxClients > 0;
 
-  // ===== JEUX DE DONNÉES PAR DÉFAUT =====
+  // ===== PLANS PAR DÉFAUT =====
 
   static Plan getFreePlan() {
     return Plan(
@@ -161,7 +191,6 @@ class Plan {
         hasPdfExport: true,
         hasCloudSync: true,
         hasTeamAccess: false,
-        isPopular: true,
         features: [
           'Factures illimitées',
           'Clients illimités',
@@ -169,6 +198,7 @@ class Plan {
           'Synchronisation cloud',
           'Support prioritaire',
         ],
+        isPopular: true,
       ),
       Plan(
         id: 'business',
