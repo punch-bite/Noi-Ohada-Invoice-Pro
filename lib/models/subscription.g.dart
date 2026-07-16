@@ -29,14 +29,16 @@ class SubscriptionAdapter extends TypeAdapter<Subscription> {
       currency: fields[9] as String,
       autoRenew: fields[10] as bool,
       canceledAt: fields[11] as DateTime?,
-      metadata: (fields[12] as Map).cast<String, dynamic>(), isActive: true, createdAt: DateTime.now(),
+      metadata: (fields[14] as Map).cast<String, dynamic>(),
+      isActive: fields[12] as bool,
+      createdAt: fields[13] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Subscription obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,6 +64,10 @@ class SubscriptionAdapter extends TypeAdapter<Subscription> {
       ..writeByte(11)
       ..write(obj.canceledAt)
       ..writeByte(12)
+      ..write(obj.isActive)
+      ..writeByte(13)
+      ..write(obj.createdAt)
+      ..writeByte(14)
       ..write(obj.metadata);
   }
 

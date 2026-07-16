@@ -146,7 +146,7 @@ class AdminService {
       ]);
     }
 
-    final csv = const ListToCsvConverter().convert(rows);
+    final csv = ListToCsvConverter().convert(rows);
     final dir = await getTemporaryDirectory();
     final file =
         File('${dir.path}/users_${DateTime.now().millisecondsSinceEpoch}.csv');

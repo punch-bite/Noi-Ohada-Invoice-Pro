@@ -45,27 +45,30 @@ class Subscription {
   final DateTime? canceledAt;
 
   @HiveField(12)
+  final bool isActive;
+
+  @HiveField(13)
+  final DateTime? createdAt;
+
+  @HiveField(14)
   final Map<String, dynamic> metadata;
 
-
-
-  Subscription({
-    required this.id,
-    required this.userId,
-    required this.planId,
-    required this.startDate,
-    required this.endDate,
-    required this.status,
-    required this.paymentMethod,
-    required this.paymentId,
-    required this.amount,
-    required this.currency,
-    this.autoRenew = true,
-    this.canceledAt,
-    this.metadata = const {},
-    required bool isActive,
-    required DateTime createdAt
-  });
+  Subscription(
+      {required this.id,
+      required this.userId,
+      required this.planId,
+      required this.startDate,
+      required this.endDate,
+      required this.status,
+      required this.paymentMethod,
+      required this.paymentId,
+      required this.amount,
+      required this.currency,
+      this.autoRenew = true,
+      this.canceledAt,
+      this.metadata = const {}, 
+      required this.isActive, 
+      this.createdAt,});
 
   // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
@@ -84,6 +87,8 @@ class Subscription {
       'autoRenew': autoRenew,
       'canceledAt': canceledAt != null ? Timestamp.fromDate(canceledAt!) : null,
       'metadata': metadata,
+      'isActive': isActive,
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
     };
   }
 
@@ -116,7 +121,7 @@ class Subscription {
 
   // ===== GETTERS APPLICATIFS =====
 
-  bool get isActive => status == 'active' && !isExpired;
+  bool get _isActive => status == 'active' && !isExpired;
   bool get isExpired => status == 'expired' || endDate.isBefore(DateTime.now());
   bool get isCanceled => status == 'canceled';
 
@@ -143,6 +148,8 @@ class Subscription {
     String? currency,
     bool? autoRenew,
     DateTime? canceledAt,
+    bool? isActive,
+    DateTime? createdAt,
     Map<String, dynamic>? metadata,
   }) {
     return Subscription(
