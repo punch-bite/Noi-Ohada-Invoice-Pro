@@ -1,4 +1,4 @@
-name: noi_ohada_invoice_pro
+name: NOI OHADA INVOICE Pro
 description: Gestion de factures conforme OHADA
 publish_to: 'none'
 version: 1.0.0+1
@@ -47,7 +47,7 @@ dependencies:
   permission_handler: ^11.3.1
   connectivity_plus: ^5.0.2
   flutter_secure_storage: ^9.2.2
-  flutter_dotenv: ^5.1.0
+  flutter_dotenv: ^6.0.1
   
   # Charts (charts_flutter obsolète supprimé, on garde fl_chart)
   fl_chart: ^0.68.0
@@ -74,7 +74,6 @@ dev_dependencies:
   hive_generator: ^2.0.1
   mockito: ^5.4.0 
   json_annotation: ^4.8.1
-  flutter_dotenv: ^5.1.0
 
 flutter:
   uses-material-design: true
