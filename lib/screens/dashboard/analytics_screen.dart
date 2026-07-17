@@ -257,7 +257,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 enabled: true,
                                 touchTooltipData: BarTouchTooltipData(
                                   getTooltipColor: (_) => isDark ? Colors.grey[850]! : Colors.grey[100]!,
-                                  tooltipRoundedRadius: 8,
+                                  // tool: BorderRadius.circular(8),
                                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                                     return BarTooltipItem(
                                       '${_sortedMonths[group.x]}\n',
