@@ -2,8 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:contacts_service/contacts_service.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart'
+    hide PermissionStatus;
 import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../providers/theme_provider.dart';
@@ -19,7 +20,7 @@ class CreateClientScreen extends StatefulWidget {
 class _CreateClientScreenState extends State<CreateClientScreen> {
   final DatabaseService _db = DatabaseService();
   final _formKey = GlobalKey<FormState>();
-  
+
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _taxIdController = TextEditingController();
@@ -76,14 +77,13 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         );
         await _db.addClient(client);
       }
-      
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget.client != null ? 'Client modifié !' : 'Client ajouté !'
-          ),
+              widget.client != null ? 'Client modifié !' : 'Client ajouté !'),
           backgroundColor: Colors.green,
         ),
       );
@@ -97,11 +97,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     }
   }
 
-  // ===== IMPORTER DEPUIS LE RÉPERTOIRE =====
+  // ===== IMPORTER DEPUIS LE RÉPERTOIRE (flutter_contacts) =====
 
   Future<void> _importFromContacts() async {
     // Vérifier les permissions
-    final status = await Permission.contacts.request();
+    final status =
+        await FlutterContacts.permissions.request(PermissionType.readWrite);
     if (status != PermissionStatus.granted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -115,8 +116,10 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     setState(() => _isLoadingContacts = true);
 
     try {
-      final contacts = await ContactsService.getContacts(
-        withThumbnails: false,
+      final List<Contact> contacts = await FlutterContacts.getAll(
+        properties: {ContactProperty.name, ContactProperty.photoThumbnail, ContactProperty.phone, ContactProperty.email},
+        // filter: ContactFilter.name('John'),
+        // limit: 100,
       );
 
       if (contacts.isEmpty) {
@@ -130,7 +133,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         return;
       }
 
-      // Afficher la liste des contacts dans un dialogue
       _showContactsDialog(contacts);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -179,14 +181,17 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                   itemBuilder: (context, index) {
                     final contact = contacts[index];
                     final displayName = contact.displayName ?? 'Sans nom';
-                    final phones = contact.phones ?? [];
-                    final emails = contact.emails ?? [];
-                    
+                    final phones = contact.phones;
+                    final emails = contact.emails;
+                    final addresses = contact.addresses;
+
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: theme.primaryColor.withOpacity(0.1),
                         child: Text(
-                          displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : '?',
                           style: TextStyle(
                             color: theme.primaryColor,
                             fontWeight: FontWeight.bold,
@@ -202,13 +207,15 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                         children: [
                           if (phones.isNotEmpty)
                             Text(
-                              phones.first.value ?? '',
-                              style: TextStyle(color: subTextColor, fontSize: 12),
+                              phones.first.number ?? '',
+                              style:
+                                  TextStyle(color: subTextColor, fontSize: 12),
                             ),
                           if (emails.isNotEmpty)
                             Text(
-                              emails.first.value ?? '',
-                              style: TextStyle(color: subTextColor, fontSize: 12),
+                              emails.first.address ?? '',
+                              style:
+                                  TextStyle(color: subTextColor, fontSize: 12),
                             ),
                         ],
                       ),
@@ -237,22 +244,22 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
 
   void _fillClientFromContact(Contact contact) {
     final displayName = contact.displayName ?? '';
-    final phones = contact.phones ?? [];
-    final emails = contact.emails ?? [];
-    final addresses = contact.postalAddresses ?? [];
+    final phones = contact.phones;
+    final emails = contact.emails;
+    final addresses = contact.addresses;
 
     setState(() {
       if (displayName.isNotEmpty) {
         _nameController.text = displayName;
       }
-      if (phones.isNotEmpty && phones.first.value != null) {
-        _phoneController.text = phones.first.value!;
+      if (phones.isNotEmpty) {
+        _phoneController.text = phones.first.number;
       }
-      if (emails.isNotEmpty && emails.first.value != null) {
-        _emailController.text = emails.first.value!;
+      if (emails.isNotEmpty) {
+        _emailController.text = emails.first.address;
       }
-      if (addresses.isNotEmpty && addresses.first.label != null) {
-        _addressController.text = addresses.first.label ?? '';
+      if (addresses.isNotEmpty && addresses.first.formatted != null) {
+        _addressController.text = addresses.first.formatted ?? '';
       }
     });
 
@@ -280,7 +287,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       appBar: AppBar(
         title: Text(
           isEditing ? 'Modifier le client' : 'Nouveau client',
-          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
@@ -321,7 +329,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               onPressed: _saveClient,
               child: Text(
                 'Enregistrer',
-                style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                style:
+                    TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
               ),
             ),
         ],
@@ -337,7 +346,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 if (!isEditing)
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                     decoration: BoxDecoration(
                       color: primaryColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(12),
@@ -448,8 +458,10 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       style: TextStyle(color: textColor, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
-        prefixIcon: Icon(icon, color: isDark ? Colors.grey[400] : Colors.grey[600], size: 20),
+        labelStyle: TextStyle(
+            color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
+        prefixIcon: Icon(icon,
+            color: isDark ? Colors.grey[400] : Colors.grey[600], size: 20),
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
         border: OutlineInputBorder(
@@ -467,7 +479,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF1A237E), width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

@@ -4,7 +4,7 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<key>NSContactsUsageDescription</key>
-    <string>Pour importer vos contacts en tant que clients</string>
+    <string>Cette application nécessite l'accès à vos contacts pour importer les informations de vos clients.</string>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
