@@ -15,19 +15,28 @@ class PlansScreen extends StatefulWidget {
 }
 
 class _PlansScreenState extends State<PlansScreen> {
+  bool _isInitialLoading = true;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    _loadData();
   }
 
   Future<void> _loadData() async {
+    setState(() => _isInitialLoading = true);
     final subProvider = context.read<SubscriptionProvider>();
     final authProvider = context.read<AppAuthProvider>();
     
-    await subProvider.loadPlans();
-    if (authProvider.user != null) {
-      await subProvider.refresh();
+    try {
+      await subProvider.loadPlans();
+      if (authProvider.user != null) {
+        await subProvider.refresh();
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur chargement: $e');
+    } finally {
+      if (mounted) setState(() => _isInitialLoading = false);
     }
   }
 
@@ -36,13 +45,19 @@ class _PlansScreenState extends State<PlansScreen> {
     final subProvider = context.watch<SubscriptionProvider>();
     final authProvider = context.watch<AppAuthProvider>();
     
-    if (subProvider.isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isInitialLoading || subProvider.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final plans = subProvider.plans;
     final currentSub = subProvider.subscription;
     final isAdmin = authProvider.user?.isAdmin ?? false;
+
+    // Debug
+    debugPrint('📦 Plans chargés: ${plans.length}');
+    debugPrint('📦 Plans: ${plans.map((p) => p.name).join(', ')}');
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -56,20 +71,48 @@ class _PlansScreenState extends State<PlansScreen> {
         children: [
           _buildHeader(currentSub, plans, isAdmin),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: plans.length,
-              itemBuilder: (context, index) {
-                final plan = plans[index];
-                final isCurrent = currentSub != null && currentSub.planId == plan.id && currentSub.isActive;
-                return PlanCard(
-                  plan: plan,
-                  isCurrentPlan: isCurrent,
-                  isAdmin: isAdmin,
-                  onSelect: () => isCurrent ? _showSubscriptionDetails(subProvider) : _selectPlan(plan),
-                );
-              },
-            ),
+            child: plans.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: plans.length,
+                    itemBuilder: (context, index) {
+                      final plan = plans[index];
+                      final isCurrent = currentSub != null && currentSub.planId == plan.id && currentSub.isActive;
+                      return PlanCard(
+                        plan: plan,
+                        isCurrentPlan: isCurrent,
+                        isAdmin: isAdmin,
+                        onSelect: () => isCurrent ? _showSubscriptionDetails(subProvider) : _selectPlan(plan),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          const Text(
+            'Aucun plan disponible',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Veuillez réessayer plus tard',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadData,
+            child: const Text('Réessayer'),
           ),
         ],
       ),

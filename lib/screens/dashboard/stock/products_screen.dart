@@ -87,7 +87,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 height: 42,
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey[900] : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: TextField(
                   controller: _searchController,
@@ -129,7 +129,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             ),
           PopupMenuButton<String>(
             icon: Icon(Icons.filter_list_rounded, color: textColor),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             onSelected: (value) => setState(() => _filter = value),
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -183,7 +183,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ).then((_) => _loadProducts());
         },
         backgroundColor: primaryColor,
-        elevation: 3,
+        elevation: 0,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: const Text(
           'Créer',
@@ -232,132 +232,124 @@ class _ProductsScreenState extends State<ProductsScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? Colors.black.withOpacity(0.25) : Colors.grey.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(0), // ✅ angles droits
         border: Border.all(
-          color: isDark ? Colors.grey[900]! : Colors.grey[100]!,
+          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+          width: 1.0,
         ),
+        // ❌ boxShadow supprimé
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProductDetailScreen(productId: product.id),
-              ),
-            ).then((_) => _loadProducts());
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                // Avatar stylisé avec dégradé doux de statut
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        statusColor.withOpacity(0.2),
-                        statusColor.withOpacity(0.06),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: Text(
-                      product.name.substring(0, 1).toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: statusColor,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // Détails textuels principaux
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey[900] : Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                          ),
-                        ),
-                        child: Text(
-                          product.category.isNotEmpty ? product.category.toUpperCase() : 'SANS CATÉGORIE',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: subTextColor,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProductDetailScreen(productId: product.id),
+            ),
+          ).then((_) => _loadProducts());
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              // Avatar stylisé avec dégradé doux de statut
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      statusColor.withOpacity(0.2),
+                      statusColor.withOpacity(0.06),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    product.name.substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Section quantité et badge de statut
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+              ),
+              const SizedBox(width: 14),
+              // Détails textuels principaux
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${product.quantity} ${product.unit}',
+                      product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.bold,
                         color: textColor,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 3),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
+                        color: isDark ? Colors.grey[900] : Colors.grey[50],
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                        ),
                       ),
                       child: Text(
-                        isOut ? 'RUPTURE' : (isLow ? 'STOCK FAIBLE' : 'EN STOCK'),
+                        product.category.isNotEmpty ? product.category.toUpperCase() : 'SANS CATÉGORIE',
                         style: TextStyle(
                           fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: statusColor,
+                          color: subTextColor,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
                         ),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              // Section quantité et badge de statut
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${product.quantity} ${product.unit}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isOut ? 'RUPTURE' : (isLow ? 'STOCK FAIBLE' : 'EN STOCK'),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -424,7 +416,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
                 ),
               ),
