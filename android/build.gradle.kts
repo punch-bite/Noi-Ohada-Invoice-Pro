@@ -23,17 +23,19 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Fixed: Corrected Kotlin DSL syntax for setting namespaces on dependencies
 subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library") || plugins.hasPlugin("com.android.application")) {
+            extensions.findByType(com.android.build.api.dsl.CommonExtension::class.java)?.apply {
                 if (namespace == null) {
-                    namespace project.group
+                    namespace = project.group.toString()
                 }
             }
         }
     }
 }
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

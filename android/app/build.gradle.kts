@@ -7,12 +7,10 @@ plugins {
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    // compileSdk = 35 // Optionnel mais recommandé en 2026 pour cibler les API récentes
-    compileSdkVersion 36
+    compileSdk = 36 // Fixed: Changed from 'compileSdkVersion 36' to correct Kotlin DSL syntax
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
-        // Récupère automatiquement la version minimale requise par Flutter
         minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = 1
@@ -26,16 +24,17 @@ android {
 
     kotlin {
         compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
-kotlinOptions {
-    jvmTarget = "17"
-}
+    // Fixed: Moved inside the android block and updated syntax
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     buildTypes {
         release {
-            // Note : Pensez à remplacer par une vraie clé de production (.jks) avant de publier sur le Play Store !
             signingConfig = signingConfigs.getByName("debug")
         }
     }
