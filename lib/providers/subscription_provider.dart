@@ -1,82 +1,90 @@
+// lib/providers/subscription_provider.dart
 import 'package:flutter/material.dart';
-import '../services/subscription_service.dart';
 import '../models/subscription.dart';
 import '../models/plan.dart';
+import '../services/subscription_service.dart';
+import '../providers/auth_provider.dart';
+import '../services/logger_service.dart';
 
 class SubscriptionProvider extends ChangeNotifier {
   final SubscriptionService _subscriptionService = SubscriptionService();
+  final AppAuthProvider _authProvider;
 
   Subscription? _subscription;
+  Plan? _currentPlan;
   List<Plan> _plans = [];
   bool _isLoading = false;
-  String? _error;
 
-  // --- Getters ---
+  SubscriptionProvider(this._authProvider) {
+    _loadSubscription();
+    loadPlans();
+  }
+
+  // ===== GETTERS =====
   Subscription? get subscription => _subscription;
+  Plan? get currentPlan => _currentPlan;
   List<Plan> get plans => _plans;
   bool get isLoading => _isLoading;
-  String? get error => _error;
 
-  bool get hasActiveSubscription => _subscription?.isActive ?? false;
-  bool get isPremium => ['pro', 'business'].contains(_subscription?.planId);
-
-  Plan get currentPlan {
-    return _plans.firstWhere(
-      (p) => p.id == _subscription?.planId,
-      orElse: () => Plan.getFreePlan(),
-    );
-  }
-
+  // ===== ACCÈS PREMIUM =====
   bool get canAccessPremiumTemplates {
-    final can = (_subscription?.isActive ?? false);
-    debugPrint("Debug Access: Abonnement actif ? $can");
-    return can;
+    if (_authProvider.user?.isAdmin == true) {
+      debugPrint("🔥 Admin détecté, accès premium accordé");
+      return true;
+    }
+    final isActive = _subscription?.isActive ?? false;
+    debugPrint("🔔 Abonnement actif ? $isActive");
+    return isActive;
   }
 
-  bool get hasCloudAccess {
-    final sub = subscription;
-    if (sub == null || !sub.isActive) return false;
-    return sub.planId == 'pro' || sub.planId == 'business';
+  bool get hasUnlimitedAccess {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return _subscription?.planId == 'unlimited';
   }
 
-// C'est ici que la logique doit être centralisée
-  // bool get canAccessPremiumTemplates {
-  //   if (_subscription == null) return false;
-  //   // Vérifie si l'abonnement est actif et n'est pas le plan gratuit
-  //   return _subscription!.isActive && !_subscription!.isTrial;
-  // }
-
-  // N'oubliez pas d'appeler notifyListeners() après chaque mise à jour de _subscription
-  void updateSubscription(Subscription newSub) {
-    _subscription = newSub;
-    notifyListeners(); // Crucial pour que le .watch() dans l'UI réagisse
+  int get maxInvoices {
+    if (_authProvider.user?.isAdmin == true) return -1;
+    return _currentPlan?.maxInvoices ?? 3;
   }
-  // --- Logique métier ---
 
-  /// Initialise les données de l'utilisateur
-  Future<void> initialize(String userId) async {
-    _isLoading = true;
-    notifyListeners();
+  int get maxClients {
+    if (_authProvider.user?.isAdmin == true) return -1;
+    return _currentPlan?.maxClients ?? 5;
+  }
 
+  bool get canSyncToCloud {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return _currentPlan?.hasCloudSync ?? false;
+  }
+
+  // ===== LOAD PLANS =====
+  Future<void> loadPlans() async {
     try {
-      final results = await Future.wait([
-        _subscriptionService.getUserSubscription(userId),
-        _subscriptionService
-            .getPlan(userId), // Assurez-vous d'avoir cette méthode
-      ]);
+      _isLoading = true;
+      notifyListeners();
 
-      _subscription = results[0] as Subscription?;
-      _plans = results[1] as List<Plan>;
-      _error = null;
+      // Récupérer les plans depuis Firestore via SubscriptionService
+      final fetchedPlans = await _subscriptionService.getPlans();
+
+      if (fetchedPlans.isEmpty) {
+        // Fallback sur les plans par défaut si rien en base
+        _plans = Plan.getDefaultPlans();
+      } else {
+        _plans = fetchedPlans;
+      }
+
+      _isLoading = false;
+      notifyListeners();
     } catch (e) {
-      _error = "Erreur de chargement: ${e.toString()}";
-    } finally {
+      debugPrint('❌ Erreur chargement plans: $e');
+      // En cas d'erreur, on utilise les plans par défaut
+      _plans = Plan.getDefaultPlans();
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Crée un nouvel abonnement
+  // ===== CRÉATION D'ABONNEMENT =====
   Future<bool> createSubscription({
     required String userId,
     required String planId,
@@ -86,11 +94,11 @@ class SubscriptionProvider extends ChangeNotifier {
     required String currency,
     required String interval,
   }) async {
-    _isLoading = true;
-    notifyListeners();
-
     try {
-      _subscription = await _subscriptionService.createSubscription(
+      _isLoading = true;
+      notifyListeners();
+
+      final subscription = await _subscriptionService.createSubscription(
         userId: userId,
         planId: planId,
         paymentMethod: paymentMethod,
@@ -99,66 +107,139 @@ class SubscriptionProvider extends ChangeNotifier {
         currency: currency,
         interval: interval,
       );
-      _error = null;
+
+      _subscription = subscription;
+      _currentPlan = await _subscriptionService.getPlan(planId);
+
+      await LoggerService.info(
+        'create_subscription',
+        details: 'Abonnement ${_currentPlan?.name} créé pour $userId',
+        targetId: subscription.id,
+        targetType: 'subscription',
+      );
+
+      _isLoading = false;
+      notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString();
+      debugPrint('❌ Erreur création abonnement: $e');
+      await LoggerService.error(
+        'create_subscription_failed',
+        details: e.toString(),
+      );
+      _isLoading = false;
+      notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  /// Annule l'abonnement en cours
-  Future<void> cancelSubscription() async {
-    if (_subscription == null) return;
-
-    _isLoading = true;
-    notifyListeners();
+  // ===== ANNULATION =====
+  Future<bool> cancelSubscription() async {
+    if (_subscription == null) {
+      debugPrint('❌ Aucun abonnement actif à annuler');
+      return false;
+    }
 
     try {
+      _isLoading = true;
+      notifyListeners();
+
       await _subscriptionService.cancelSubscription(_subscription!.id);
-      _subscription = _subscription!.copyWith(status: 'canceled');
-      _error = null;
-    } catch (e) {
-      _error = e.toString();
-    } finally {
+
+      // Recharger l'abonnement
+      await _loadSubscription();
+
+      await LoggerService.info(
+        'cancel_subscription',
+        details: 'Abonnement ${_currentPlan?.name} annulé',
+        targetId: _subscription?.id,
+        targetType: 'subscription',
+      );
+
       _isLoading = false;
       notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur annulation abonnement: $e');
+      await LoggerService.error(
+        'cancel_subscription_failed',
+        details: e.toString(),
+      );
+      _isLoading = false;
+      notifyListeners();
+      return false;
     }
   }
 
-  void clearError() {
-    _error = null;
-    notifyListeners();
+  // ===== RENOUVELLEMENT =====
+  Future<bool> renewSubscription() async {
+    if (_subscription == null) {
+      debugPrint('❌ Aucun abonnement à renouveler');
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _subscriptionService.renewSubscription(_subscription!.id);
+
+      // Recharger l'abonnement
+      await _loadSubscription();
+
+      await LoggerService.info(
+        'renew_subscription',
+        details: 'Abonnement ${_currentPlan?.name} renouvelé',
+        targetId: _subscription?.id,
+        targetType: 'subscription',
+      );
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur renouvellement abonnement: $e');
+      await LoggerService.error(
+        'renew_subscription_failed',
+        details: e.toString(),
+      );
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
-  /// Charge les plans depuis la base de données
-  Future<void> loadPlans() async {
+  // ===== CHARGEMENT ABONNEMENT =====
+  Future<void> _loadSubscription() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Si vous avez une méthode getPlans dans DatabaseService ou AdminService
-      _plans = await _subscriptionService.getPlans();
+      final userId = _authProvider.user?.id;
+      if (userId == null) {
+        _subscription = null;
+        _currentPlan = null;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      _subscription = await _subscriptionService.getUserSubscription(userId);
+      if (_subscription != null) {
+        _currentPlan = await _subscriptionService.getPlan(_subscription!.planId);
+      } else {
+        _currentPlan = Plan.getFreePlan();
+      }
     } catch (e) {
-      debugPrint("Erreur lors du chargement des plans : $e");
+      debugPrint('❌ Erreur chargement abonnement: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Charge les abonnements depuis la base de données
-  Future<void> loadSubscriptions(String id) async {
-    try {
-      // Si vous avez une méthode getSubscriptions dans DatabaseService
-      _subscription = (await _subscriptionService.getActiveSubscriptions())
-          as Subscription?;
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Erreur lors du chargement des abonnements : $e");
-    }
+  Future<void> refresh() async {
+    await _loadSubscription();
+    await loadPlans();
   }
 }

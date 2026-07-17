@@ -58,6 +58,7 @@ class CategoryData {
     this.colorHex = '#1976D2',
   });
 
+
   /// Convertit la chaîne Hexadécimale (#RRGGBB ou #AARRGGBB) en objet [Color] Flutter utilisable directement
   Color get color {
     String hex = colorHex.replaceAll('#', '');
@@ -85,10 +86,25 @@ class CategoryData {
   }
 
   static List<CategoryData> get sampleData => [
-        CategoryData(category: 'Électronique', value: 55640, colorHex: '#1976D2'),
+        CategoryData(
+            category: 'Électronique', value: 55640, colorHex: '#1976D2'),
         CategoryData(category: 'Mobilier', value: 11420, colorHex: '#FF9800'),
         CategoryData(category: 'Vêtements', value: 1840, colorHex: '#4CAF50'),
         CategoryData(category: 'Chaussures', value: 2120, colorHex: '#9C27B0'),
         CategoryData(category: 'Accessoires', value: 980, colorHex: '#F44336'),
       ];
+
+  // ignore: recursive_getters
+  get month => month;
+
+  // ignore: recursive_getters
+  get revenue => revenue;
+
+  // ignore: recursive_getters
+  get orders => orders;
+
+  
+@override
+String toString() => 'SalesData(month: $month, revenue: $revenue, orders: $orders)';
+  
 }

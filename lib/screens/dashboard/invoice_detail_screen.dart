@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/mail_service.dart';
 import '../../services/printing_service.dart';
@@ -17,6 +18,7 @@ import '../../models/company.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../services/team_service.dart';
 import '../../widgets/logo_image.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -29,14 +31,20 @@ class InvoiceDetailScreen extends StatefulWidget {
 
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   final DatabaseService _db = DatabaseService();
-  final GlobalKey _menuKey = GlobalKey(); // Permet d'ouvrir le menu par programmation
-  
+  final GlobalKey _menuKey =
+      GlobalKey(); // Permet d'ouvrir le menu par programmation
+
   Invoice? _invoice;
   Client? _client;
   Company? _company;
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
   List<InvoiceTemplate> _templates = [];
+
+   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
+    bool get isDark => themeProvider.isDarkMode;
+    late final textColor = themeProvider.textColor ?? Colors.black;
+    Color get primaryColor => themeProvider.primaryColor ?? Colors.blue;
 
   @override
   void initState() {
@@ -173,7 +181,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
 
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
+      final file =
+          File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
       await file.writeAsBytes(pdfData);
 
       await Share.shareXFiles(
@@ -204,7 +213,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
 
       // TODO: Uploader le PDF quelque part (Firebase Storage, etc.) pour obtenir un lien
-      const pdfLink = '#'; 
+      const pdfLink = '#';
 
       final htmlBody = MailService.getInvoiceTemplate(
         _client!.name,
@@ -240,6 +249,140 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  Future<void> _showShareDialog() async {
+    if (_invoice == null) return;
+
+    final teamService = TeamService();
+    final auth = context.read<AppAuthProvider>();
+    final teams = await teamService.getUserTeams(auth.user!.id);
+
+    if (teams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vous n\'appartenez à aucune équipe'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        String? selectedTeamId;
+        String permissionLevel = 'read';
+        bool shareWithAll = true;
+        List<String> selectedMembers = [];
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Partager la facture',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  // Sélection de l'équipe
+                  DropdownButtonFormField<String>(
+                    value: selectedTeamId,
+                    hint: const Text('Sélectionner une équipe'),
+                    items: teams.map((team) {
+                      return DropdownMenuItem(
+                        value: team.id,
+                        child: Text(team.name),
+                      );
+                    }).toList(),
+                    onChanged: (value) =>
+                        setState(() => selectedTeamId = value),
+                  ),
+                  const SizedBox(height: 12),
+                  // Permission
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('Lecture seule'),
+                          value: 'read',
+                          groupValue: permissionLevel,
+                          onChanged: (v) =>
+                              setState(() => permissionLevel = v!),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('Écriture'),
+                          value: 'write',
+                          groupValue: permissionLevel,
+                          onChanged: (v) =>
+                              setState(() => permissionLevel = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Bouton Partager
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: selectedTeamId == null
+                          ? null
+                          : () async {
+                              // Récupérer les membres de l'équipe
+                              final team =
+                                  await teamService.getTeam(selectedTeamId!);
+                              if (team == null) return;
+
+                              // Partager avec tous les membres (sauf le propriétaire)
+                              final members = team.memberIds
+                                  .where((id) => id != auth.user!.id)
+                                  .toList();
+
+                              await teamService.shareInvoice(
+                                invoiceId: _invoice!.id,
+                                teamId: selectedTeamId!,
+                                sharedBy: auth.user!.id,
+                                sharedWith: members,
+                                permissionLevel: permissionLevel,
+                              );
+
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Facture partagée avec succès !'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Partager'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showUpgradeDialog(BuildContext context) {
@@ -353,7 +496,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 final isSelected = _selectedTemplate?.id == template.id;
 
                 return PopupMenuItem<InvoiceTemplate>(
-                  value: template, // On transmet l'objet pour gérer le dialog de verrouillage
+                  value:
+                      template, // On transmet l'objet pour gérer le dialog de verrouillage
                   child: Row(
                     children: [
                       Container(
@@ -369,7 +513,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                         child: Text(
                           template.name,
                           style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isLocked ? Colors.grey : textColor,
                           ),
                         ),
@@ -381,7 +527,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       if (template.isPremium && !isLocked)
                         const Padding(
                           padding: EdgeInsets.only(left: 4),
-                          child: Icon(Icons.star, color: Colors.amber, size: 14),
+                          child:
+                              Icon(Icons.star, color: Colors.amber, size: 14),
                         ),
                     ],
                   ),
@@ -403,6 +550,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             icon: Icon(Icons.email_outlined, color: textColor),
             onPressed: _sendInvoiceByEmail,
             tooltip: 'Envoyer par email',
+          ),
+          IconButton(
+            icon: Icon(Icons.share_outlined, color: textColor),
+            onPressed: _showShareDialog,
+            tooltip: 'Partager avec l\'équipe',
           ),
         ],
       ),

@@ -72,7 +72,8 @@ class AppUser {
       'taxId': taxId,
       'subscriptionId': subscriptionId,
       'createdAt': Timestamp.fromDate(createdAt),
-      'lastLoginAt': lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
+      'lastLoginAt':
+          lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'isActive': isActive,
       'roles': roles,
     };
@@ -88,8 +89,12 @@ class AppUser {
       companyAddress: map['companyAddress'],
       taxId: map['taxId'],
       subscriptionId: map['subscriptionId'],
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
-      lastLoginAt: map['lastLoginAt'] != null ? _parseDateTime(map['lastLoginAt']) : null,
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : DateTime.now(),
+      lastLoginAt: map['lastLoginAt'] != null
+          ? _parseDateTime(map['lastLoginAt'])
+          : null,
       isActive: map['isActive'] ?? true,
       roles: List<String>.from(map['roles'] ?? ['user']),
     );
@@ -99,7 +104,8 @@ class AppUser {
 
   Map<String, dynamic> toJson() => _$AppUserToJson(this);
 
-  factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
+  factory AppUser.fromJson(Map<String, dynamic> json) =>
+      _$AppUserFromJson(json);
 
   // ===== CLONAGE (copyWith) =====
 
@@ -132,21 +138,26 @@ class AppUser {
   }
 
   // ===== GETTERS APPLICATIFS =====
-
-  bool get isAdmin => roles.contains('admin');
-  bool get hasActiveSubscription => subscriptionId != null && subscriptionId!.isNotEmpty;
+// lib/models/user.dart
+  bool get isAdmin => roles.contains('admin') || roles.contains('super-admin');
+  // bool get isAdmin => roles.contains('admin');
+  bool get hasActiveSubscription =>
+      subscriptionId != null && subscriptionId!.isNotEmpty;
 
   /// Retourne le nom d'affichage ou 'Utilisateur' par défaut
-  String get displayNameOrDefault => displayName.isNotEmpty ? displayName : 'Utilisateur';
+  String get displayNameOrDefault =>
+      displayName.isNotEmpty ? displayName : 'Utilisateur';
 
   /// Retourne l'email ou 'Non renseigné' par défaut
   String get emailOrDefault => email.isNotEmpty ? email : 'Non renseigné';
 
   /// Retourne le téléphone ou 'Non renseigné' par défaut
-  String get phoneOrDefault => phone?.isNotEmpty == true ? phone! : 'Non renseigné';
+  String get phoneOrDefault =>
+      phone?.isNotEmpty == true ? phone! : 'Non renseigné';
 
   /// Retourne le nom de l'entreprise ou 'Non renseignée' par défaut
-  String get companyNameOrDefault => companyName?.isNotEmpty == true ? companyName! : 'Non renseignée';
+  String get companyNameOrDefault =>
+      companyName?.isNotEmpty == true ? companyName! : 'Non renseignée';
 
   /// Fonction d'aide pour parser les dates de manière ultra-robuste (Firestore, Hive et JSON)
   static DateTime _parseDateTime(dynamic value) {

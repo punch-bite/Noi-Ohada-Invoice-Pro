@@ -32,13 +32,14 @@ class SubscriptionAdapter extends TypeAdapter<Subscription> {
       metadata: (fields[14] as Map).cast<String, dynamic>(),
       isActive: fields[12] as bool,
       createdAt: fields[13] as DateTime?,
+      interval: fields[15] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, Subscription obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -68,7 +69,9 @@ class SubscriptionAdapter extends TypeAdapter<Subscription> {
       ..writeByte(13)
       ..write(obj.createdAt)
       ..writeByte(14)
-      ..write(obj.metadata);
+      ..write(obj.metadata)
+      ..writeByte(15)
+      ..write(obj.interval);
   }
 
   @override
@@ -106,6 +109,7 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.parse(json['createdAt'] as String),
+      interval: json['interval'] as String,
     );
 
 Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
@@ -125,4 +129,5 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
       'isActive': instance.isActive,
       'createdAt': instance.createdAt?.toIso8601String(),
       'metadata': instance.metadata,
+      'interval': instance.interval,
     };

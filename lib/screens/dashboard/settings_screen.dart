@@ -245,9 +245,8 @@ class SettingsScreen extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // ✅ Utilisation des getters sécurisés du modèle AppUser
-    final String displayName = user.displayNameOrDefault;
-    final String email = user.emailOrDefault;
+    final String displayName = user.displayName ?? 'Utilisateur';
+    final String email = user.email ?? 'Compte non configuré';
     final String initial = displayName.trim().isNotEmpty
         ? displayName.trim()[0].toUpperCase()
         : 'U';
@@ -338,7 +337,7 @@ class SettingsScreen extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
-          color: isDark ? Colors.grey[400] : Colors.grey[600],
+          color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
           letterSpacing: 0.8,
         ),
       ),
@@ -391,50 +390,56 @@ class SettingsScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Choisir un thème',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+      builder: (BuildContext context) {
+        final theme = context.watch<ThemeProvider>();
+        final localTextColor = theme.textColor ?? Colors.black;
+        final localPrimaryColor = theme.primaryColor ?? Colors.blue;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Choisir un thème',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: localTextColor,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            _ThemeOption(
-              label: 'Clair',
-              icon: Icons.light_mode_outlined,
-              isSelected: themeProvider.currentTheme == AppTheme.light,
-              onTap: () {
-                themeProvider.setLightTheme();
-                Navigator.pop(context);
-              },
-            ),
-            _ThemeOption(
-              label: 'Sombre',
-              icon: Icons.dark_mode_outlined,
-              isSelected: themeProvider.currentTheme == AppTheme.dark,
-              onTap: () {
-                themeProvider.setDarkTheme();
-                Navigator.pop(context);
-              },
-            ),
-            _ThemeOption(
-              label: 'Système',
-              icon: Icons.settings_suggest_outlined,
-              isSelected: themeProvider.currentTheme == AppTheme.system,
-              onTap: () {
-                themeProvider.setSystemTheme();
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 16),
+              _ThemeOption(
+                label: 'Clair',
+                icon: Icons.light_mode_outlined,
+                isSelected: theme.currentTheme == AppTheme.light,
+                onTap: () {
+                  themeProvider.setLightTheme();
+                  Navigator.pop(context);
+                },
+              ),
+              _ThemeOption(
+                label: 'Sombre',
+                icon: Icons.dark_mode_outlined,
+                isSelected: theme.currentTheme == AppTheme.dark,
+                onTap: () {
+                  themeProvider.setDarkTheme();
+                  Navigator.pop(context);
+                },
+              ),
+              _ThemeOption(
+                label: 'Système',
+                icon: Icons.settings_suggest_outlined,
+                isSelected: theme.currentTheme == AppTheme.system,
+                onTap: () {
+                  themeProvider.setSystemTheme();
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -615,7 +620,7 @@ class _SettingsTile extends StatelessWidget {
         Icons.chevron_right_rounded,
         color: isDanger
             ? Colors.redAccent
-            : (isDark ? Colors.grey[500] : Colors.grey[400]),
+            : (isDark ? Colors.grey[500]! : Colors.grey[400]!),
         size: 20,
       ),
       onTap: onTap,
@@ -632,7 +637,7 @@ class _SettingsDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Divider(
       height: 1,
-      color: isDark ? Colors.grey[850] : Colors.grey[100],
+      color: isDark ? Colors.grey[850]! : Colors.grey[100]!,
       indent: 16,
       endIndent: 16,
     );
@@ -664,7 +669,7 @@ class _ThemeOption extends StatelessWidget {
         icon,
         color: isSelected
             ? primaryColor
-            : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            : (isDark ? Colors.grey[400]! : Colors.grey[600]!),
       ),
       title: Text(
         label,

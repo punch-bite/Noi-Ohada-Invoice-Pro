@@ -1,10 +1,10 @@
+// lib/services/subscription_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/notification.dart';
 import '../models/subscription.dart';
 import '../models/plan.dart';
 import '../services/notification_service.dart';
-
 
 class SubscriptionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -41,6 +41,17 @@ class SubscriptionService {
         : null;
   }
 
+  Future<bool> hasUnlimitedAccess(String userId) async {
+    // Vérifier si l'utilisateur est admin
+    final user = await _db.collection('users').doc(userId).get();
+    final roles = List<String>.from(user.data()?['roles'] ?? ['user']);
+    if (roles.contains('admin')) return true;
+
+    // Vérifier si l'abonnement est "unlimited"
+    final subscription = await getUserSubscription(userId);
+    return subscription?.planId == 'unlimited';
+  }
+
   // --- Écritures sécurisées ---
   Future<Subscription> createSubscription({
     required String userId,
@@ -73,7 +84,9 @@ class SubscriptionService {
           paymentId: paymentId,
           amount: amount,
           currency: currency,
-          autoRenew: true, isActive: true, createdAt: DateTime.now(),
+          autoRenew: true,
+          isActive: true,
+          createdAt: DateTime.now(), interval: '',
         );
 
         transaction.set(subRef, sub.toMap());
@@ -91,6 +104,95 @@ class SubscriptionService {
     }
   }
 
+  // ===== RENOUVELLEMENT D'ABONNEMENT =====
+
+  /// Renouvelle un abonnement existant
+  Future<void> renewSubscription(String subscriptionId) async {
+    try {
+      // Récupérer l'abonnement actuel
+      final doc = await _db.collection('subscriptions').doc(subscriptionId).get();
+      if (!doc.exists) {
+        throw Exception('Abonnement non trouvé');
+      }
+
+      final subscription = Subscription.fromMap({...doc.data()!, 'id': doc.id});
+      final plan = await getPlan(subscription.planId);
+      if (plan == null) {
+        throw Exception('Plan non trouvé');
+      }
+
+      // Calculer la nouvelle date de fin
+      final now = DateTime.now();
+      final newEndDate = now.add(
+        Duration(days: subscription.interval == 'year' ? 365 : 30),
+      );
+
+      // Mettre à jour l'abonnement
+      await _db.collection('subscriptions').doc(subscriptionId).update({
+        'endDate': newEndDate,
+        'status': 'active',
+        'isActive': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'metadata': {
+          'renewedAt': FieldValue.serverTimestamp(),
+          'renewedFrom': subscription.endDate.toIso8601String(),
+        },
+      });
+
+      // Notification de renouvellement
+      await _notifications.addNotification(_buildNotif(
+        '🔄 Abonnement renouvelé',
+        'Votre abonnement ${plan.name} a été renouvelé jusqu\'au ${_formatDate(newEndDate)}.',
+        subscriptionId,
+      ));
+
+      debugPrint('✅ Abonnement $subscriptionId renouvelé avec succès');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du renouvellement: $e');
+      throw Exception('Impossible de renouveler l\'abonnement: $e');
+    }
+  }
+
+  // ===== ANNULATION =====
+
+  /// Annule un abonnement
+  Future<void> cancelSubscription(String subscriptionId) async {
+    try {
+      // Récupérer l'abonnement pour avoir des infos pour la notification
+      final doc = await _db.collection('subscriptions').doc(subscriptionId).get();
+      if (!doc.exists) {
+        throw Exception('Abonnement non trouvé');
+      }
+
+      final subscription = Subscription.fromMap({...doc.data()!, 'id': doc.id});
+      final plan = await getPlan(subscription.planId);
+
+      await _db.collection('subscriptions').doc(subscriptionId).update({
+        'status': 'canceled',
+        'autoRenew': false,
+        'isActive': false,
+        'canceledAt': FieldValue.serverTimestamp(),
+        'metadata': {
+          'canceledAt': FieldValue.serverTimestamp(),
+          'canceledBy': 'user',
+        },
+      });
+
+      await _notifications.addNotification(_buildNotif(
+        '📌 Abonnement annulé',
+        'Votre abonnement ${plan?.name ?? ''} a été annulé avec succès.',
+        subscriptionId,
+      ));
+
+      debugPrint('✅ Abonnement $subscriptionId annulé avec succès');
+    } catch (e) {
+      debugPrint('❌ Erreur lors de l\'annulation: $e');
+      throw Exception('Impossible d\'annuler l\'abonnement: $e');
+    }
+  }
+
+  // ===== LISTE DES ABONNEMENTS ACTIFS =====
+
   Future<List<Subscription>> getActiveSubscriptions() async {
     try {
       final querySnapshot = await _db
@@ -104,24 +206,6 @@ class SubscriptionService {
     } catch (e) {
       debugPrint('❌ Erreur lors de la récupération des abonnements actifs: $e');
       return [];
-    }
-  }
-
-  /// Annule un abonnement dans Firestore
-  Future<void> cancelSubscription(String subscriptionId) async {
-    try {
-      await _db.collection('subscriptions').doc(subscriptionId).update({
-        'status': 'canceled',
-        'autoRenew': false,
-        'canceledAt': FieldValue.serverTimestamp(),
-      });
-
-      // Optionnel : ajouter une notification de confirmation
-      await _notifications.addNotification(_buildNotif('Abonnement annulé',
-          'Votre abonnement a été annulé avec succès.', subscriptionId));
-    } catch (e) {
-      debugPrint('❌ Erreur lors de l\'annulation: $e');
-      throw Exception('Impossible d\'annuler l\'abonnement.');
     }
   }
 
@@ -146,6 +230,24 @@ class SubscriptionService {
     return (snapshot.count ?? 0) >= plan.maxInvoices;
   }
 
+  // ===== MÉTHODE POUR RÉCUPÉRER TOUS LES PLANS =====
+
+  /// Récupère la liste des plans d'abonnement disponibles
+  Future<List<Plan>> getPlans() async {
+    try {
+      final snapshot = await _firestore
+          .collection('plans')
+          .orderBy('price') // Tri par prix par exemple
+          .get();
+      return snapshot.docs.map((doc) => Plan.fromMap(doc.data())).toList();
+    } catch (e) {
+      debugPrint("Erreur récupération plans : $e");
+      return [];
+    }
+  }
+
+  // ===== UTILITAIRES =====
+
   AppNotification _buildNotif(String title, String body, [String? refId]) =>
       AppNotification(
         title: title,
@@ -155,16 +257,25 @@ class SubscriptionService {
         referenceType: 'subscription',
       );
 
-  /// Récupère la liste des plans d'abonnement disponibles
-  Future<List<Plan>> getPlans() async {
-    try {
-      final snapshot = await _firestore.collection('plans')
-          .orderBy('price') // Tri par prix par exemple
-          .get();
-      return snapshot.docs.map((doc) => Plan.fromMap(doc.data())).toList();
-    } catch (e) {
-      debugPrint("Erreur récupération plans : $e");
-      return [];
-    }
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  // ===== VÉRIFICATION DES LIMITES =====
+
+  Future<bool> hasReachedClientLimit(String userId) async {
+    final sub = await getUserSubscription(userId);
+    if (sub == null) return true;
+
+    final plan = await getPlan(sub.planId);
+    if (plan == null || !plan.hasClientLimit) return false;
+
+    final snapshot = await _db
+        .collection('clients')
+        .where('userId', isEqualTo: userId)
+        .count()
+        .get();
+
+    return (snapshot.count ?? 0) >= plan.maxClients;
   }
 }

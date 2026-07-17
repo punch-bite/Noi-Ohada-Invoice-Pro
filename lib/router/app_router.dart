@@ -1,6 +1,10 @@
 // lib/router/app_router.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/invitations_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/invite_member_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/team_detail_screen.dart';
 import 'package:provider/provider.dart';
 
 // Modèles
@@ -64,6 +68,7 @@ import '../screens/admin/admin_add_subscription_screen.dart';
 import '../screens/admin/admin_template_form_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
+import '../screens/teams/teams_screen.dart';
 
 class AppRouter {
   static final Listenable authChangeNotifier = ValueNotifier<void>(null);
@@ -84,7 +89,8 @@ class AppRouter {
         return null;
       }
 
-      if (isAuthenticated && (location == '/' || location.startsWith('/auth'))) {
+      if (isAuthenticated &&
+          (location == '/' || location.startsWith('/auth'))) {
         return '/dashboard';
       }
 
@@ -145,7 +151,32 @@ class AppRouter {
           );
         },
       ),
-
+      GoRoute(
+        path: '/teams',
+        builder: (context, state) => const TeamsScreen(),
+      ),
+      GoRoute(
+        path: '/teams/create',
+        builder: (context, state) => const CreateTeamScreen(),
+      ),
+      GoRoute(
+        path: '/teams/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return TeamDetailScreen(teamId: id);
+        },
+      ),
+      GoRoute(
+        path: '/teams/:id/invite',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          return InviteMemberScreen(teamId: id);
+        },
+      ),
+      GoRoute(
+        path: '/teams/invitations',
+        builder: (context, state) => const InvitationsScreen(),
+      ),
       // Support
       GoRoute(
         path: '/support',

@@ -52,7 +52,7 @@ class AdminPlanService {
       autoRenew: false,
       isActive: true,
       createdAt: DateTime.now(),
-      metadata: {'assignedByAdmin': true, 'adminId': '...'},
+      metadata: {'assignedByAdmin': true, 'adminId': '...'}, interval: '',
     );
     await _firestore.collection('subscriptions').doc(subscription.id).set(subscription.toMap());
 

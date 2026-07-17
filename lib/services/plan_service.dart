@@ -90,7 +90,7 @@ class PlanService {
         autoRenew: false, // Les plans personnalisés ne se renouvellent pas automatiquement
         isActive: true,
         createdAt: DateTime.now(),
-        metadata: {'assignedByAdmin': true, 'durationMonths': durationMonths},
+        metadata: {'assignedByAdmin': true, 'durationMonths': durationMonths}, interval: '',
       );
 
       await _firestore

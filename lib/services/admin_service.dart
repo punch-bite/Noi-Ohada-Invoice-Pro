@@ -182,7 +182,7 @@ class AdminService {
       autoRenew: true,
       isActive: true,
       createdAt: now,
-      metadata: {'createdByAdmin': true},
+      metadata: {'createdByAdmin': true}, interval: '',
     );
     await _firestore
         .collection('subscriptions')

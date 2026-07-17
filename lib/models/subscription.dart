@@ -53,22 +53,27 @@ class Subscription {
   @HiveField(14)
   final Map<String, dynamic> metadata;
 
-  Subscription(
-      {required this.id,
-      required this.userId,
-      required this.planId,
-      required this.startDate,
-      required this.endDate,
-      required this.status,
-      required this.paymentMethod,
-      required this.paymentId,
-      required this.amount,
-      required this.currency,
-      this.autoRenew = true,
-      this.canceledAt,
-      this.metadata = const {}, 
-      required this.isActive, 
-      this.createdAt,});
+  @HiveField(15) // 🔥 NOUVEAU : Intervalle de l'abonnement
+  final String interval; // 'month' ou 'year'
+
+  Subscription({
+    required this.id,
+    required this.userId,
+    required this.planId,
+    required this.startDate,
+    required this.endDate,
+    required this.status,
+    required this.paymentMethod,
+    required this.paymentId,
+    required this.amount,
+    required this.currency,
+    this.autoRenew = true,
+    this.canceledAt,
+    this.metadata = const {},
+    required this.isActive,
+    this.createdAt,
+    required this.interval, // 🔥 NOUVEAU : rendu obligatoire
+  });
 
   // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
@@ -89,6 +94,7 @@ class Subscription {
       'metadata': metadata,
       'isActive': isActive,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'interval': interval, // 🔥 NOUVEAU
     };
   }
 
@@ -109,13 +115,17 @@ class Subscription {
       amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       currency: map['currency'] ?? 'XAF',
       autoRenew: map['autoRenew'] ?? true,
-      canceledAt:
-          map['canceledAt'] != null ? _parseDateTime(map['canceledAt']) : null,
+      canceledAt: map['canceledAt'] != null
+          ? _parseDateTime(map['canceledAt'])
+          : null,
       metadata: map['metadata'] != null
           ? Map<String, dynamic>.from(map['metadata'])
           : const {},
-      isActive: false,
-      createdAt: DateTime.now(),
+      isActive: map['isActive'] ?? false,
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : null,
+      interval: map['interval'] ?? 'month', // 🔥 NOUVEAU : fallback à 'month'
     );
   }
 
@@ -151,6 +161,7 @@ class Subscription {
     bool? isActive,
     DateTime? createdAt,
     Map<String, dynamic>? metadata,
+    String? interval, // 🔥 NOUVEAU
   }) {
     return Subscription(
       id: id ?? this.id,
@@ -166,8 +177,9 @@ class Subscription {
       autoRenew: autoRenew ?? this.autoRenew,
       canceledAt: canceledAt ?? this.canceledAt,
       metadata: metadata ?? this.metadata,
-      isActive: false,
-      createdAt: DateTime.now(),
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      interval: interval ?? this.interval, // 🔥 NOUVEAU
     );
   }
 

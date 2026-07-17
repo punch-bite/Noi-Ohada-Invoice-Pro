@@ -6,7 +6,6 @@ import 'package:uuid/uuid.dart';
 import '../../models/plan.dart';
 import '../../services/admin_service.dart';
 import '../../providers/theme_provider.dart';
-import '../../providers/auth_provider.dart';
 
 class AdminPlanFormScreen extends StatefulWidget {
   final String? planId; // L'ID du plan à modifier (null pour création)

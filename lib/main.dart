@@ -51,7 +51,12 @@ void main() async {
   );
 
   // ===== ÉTAPE 4 : Initialisation Firestore (création des collections) =====
-  await FirestoreInitializer.initialize();
+  // Ignorer les erreurs de permission sur le Web en développement
+  try {
+    await FirestoreInitializer.initialize();
+  } catch (e) {
+    debugPrint('⚠️ Firestore initialisation ignorée: $e');
+  }
 
   // ===== ÉTAPE 5 : Services =====
   final notificationService = NotificationService();
@@ -67,7 +72,6 @@ void main() async {
     SecurityService.init(),
   ]);
 
-  // DatabaseService.init() pour les éventuelles migrations ou vérifications
   await DatabaseService.init();
 
   // ===== ÉTAPE 6 : Vérificateur d'abonnements =====
@@ -102,7 +106,19 @@ class MyApp extends StatelessWidget {
       providers: [
         // Providers avec ChangeNotifier
         ChangeNotifierProvider(create: (_) => AppAuthProvider()),
-        ChangeNotifierProvider(create: (_) => SubscriptionProvider()),
+        ChangeNotifierProxyProvider<AppAuthProvider, SubscriptionProvider>(
+          create: (context) => SubscriptionProvider(
+            context.read<AppAuthProvider>(),
+          ),
+          update: (context, authProvider, previous) {
+            // Mettre à jour l'instance existante ou en créer une nouvelle
+            if (previous != null) {
+              // On ne peut pas recréer l'instance, on la garde
+              return previous;
+            }
+            return SubscriptionProvider(authProvider);
+          },
+        ),
         ChangeNotifierProvider(create: (_) => FirestoreService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider.value(value: notificationService),

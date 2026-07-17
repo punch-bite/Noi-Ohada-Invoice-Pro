@@ -1,16 +1,37 @@
 // lib/models/activity_log.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
+part 'activity_log.g.dart'; // Généré par Hive
+
+@JsonSerializable()
+@HiveType(typeId: 17) // Utiliser un ID unique (17)
 class ActivityLog {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String userId;
+
+  @HiveField(2)
   final String userEmail;
-  final String action; // 'login', 'logout', 'create_invoice', 'update_invoice', 'delete_invoice', etc.
+
+  @HiveField(3)
+  final String action; // 'login', 'logout', 'create_invoice', etc.
+
+  @HiveField(4)
   final String? targetId;
-  final String? targetType; // 'invoice', 'client', 'user', 'subscription', 'product', etc.
-  final Map<String, dynamic>? details;
+
+  @HiveField(5)
+  final String? targetType;
+
+  @HiveField(6)
+  final Map<String, dynamic>? details; // Hive supporte les Map<String, dynamic> avec les adaptateurs appropriés
+
+  @HiveField(7)
   final DateTime timestamp;
 
   ActivityLog({
@@ -24,7 +45,7 @@ class ActivityLog {
     required this.timestamp,
   });
 
-  // ===== SÉRIALISATION =====
+  // ===== SÉRIALISATION FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {

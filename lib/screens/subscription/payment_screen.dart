@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:noi_ohada_invoice_pro/models/notification.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
@@ -11,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/nochpay_service.dart';
 import '../../services/notification_service.dart';
+import '../../models/notification.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Plan plan;
@@ -78,28 +78,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final primaryColor = themeProvider.primaryColor;
-    final bgColor = themeProvider.backgroundColor;
-    final cardColor = themeProvider.cardColor;
+    final textColor = themeProvider.textColor ?? Colors.black;
+    final subTextColor = themeProvider.subTextColor ?? Colors.grey;
+    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
+    final bgColor = themeProvider.backgroundColor ?? Colors.white;
+    final cardColor = themeProvider.cardColor ?? Colors.white;
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
           'Paiement',
-          style: TextStyle(
-            color: textColor,
-          ),
+          style: TextStyle(color: textColor),
         ),
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: textColor,
-          ),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => context.pop(),
         ),
       ),
@@ -124,49 +119,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   const Text(
                     'Résumé de votre abonnement',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     widget.plan.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     widget.plan.description,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
                   ),
-                  const Divider(
-                    color: Colors.white24,
-                    height: 24,
-                  ),
+                  const Divider(color: Colors.white24, height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         'Total à payer',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
                       ),
                       Text(
                         widget.plan.getFormattedPrice(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -207,18 +182,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Méthode de paiement
         Text(
           'Méthode de paiement',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
         ),
         const SizedBox(height: 12),
-        ..._paymentMethods.map((method) =>
-            _buildPaymentMethodTile(method, isDark, textColor, primaryColor)),
+        ..._paymentMethods.map((method) => _buildPaymentMethodTile(method, isDark, textColor, primaryColor)),
         const SizedBox(height: 16),
 
         // Numéro de téléphone
@@ -250,13 +219,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           ),
-          onChanged: (value) {
-            setState(() => _phoneNumber = value);
-          },
+          onChanged: (value) => setState(() => _phoneNumber = value),
         ),
         const SizedBox(height: 16),
 
-        // Erreur
         if (_error.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(12),
@@ -270,17 +236,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 const Icon(Icons.error_outline, color: Colors.red, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    _error,
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
-                  ),
+                  child: Text(_error, style: const TextStyle(color: Colors.red, fontSize: 13)),
                 ),
               ],
             ),
           ),
         if (_error.isNotEmpty) const SizedBox(height: 16),
 
-        // Bouton Payer
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -289,39 +251,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 4,
             ),
             child: _isProcessing
                 ? const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      ),
+                      SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
                       SizedBox(width: 12),
                       Text('Traitement en cours...'),
                     ],
                   )
                 : Text(
                     'Payer ${widget.plan.getFormattedPrice()}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
           ),
         ),
         const SizedBox(height: 16),
-
-        // Sécurité
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -347,31 +295,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
-          Icons.hourglass_empty,
-          size: 48,
-          color: Colors.orange,
-        ),
+        const Icon(Icons.hourglass_empty, size: 48, color: Colors.orange),
         const SizedBox(height: 16),
         Text(
           'En attente de confirmation...',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
         ),
         const SizedBox(height: 8),
         Text(
           'Veuillez confirmer le paiement sur votre téléphone',
-          style: TextStyle(
-            fontSize: 14,
-            color: subTextColor,
-          ),
+          style: TextStyle(fontSize: 14, color: subTextColor),
         ),
         const SizedBox(height: 16),
 
-        // Détails
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -386,10 +322,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   Text('Montant:', style: TextStyle(color: subTextColor)),
                   Text(
                     widget.plan.getFormattedPrice(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
                   ),
                 ],
               ),
@@ -398,10 +331,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Téléphone:', style: TextStyle(color: subTextColor)),
-                  Text(
-                    _phoneNumber,
-                    style: TextStyle(fontWeight: FontWeight.w500, color: textColor),
-                  ),
+                  Text(_phoneNumber, style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -409,10 +339,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Transaction:', style: TextStyle(color: subTextColor)),
-                  Text(
-                    '#${_transactionId.substring(0, 8)}',
-                    style: TextStyle(fontWeight: FontWeight.w500, color: textColor),
-                  ),
+                  Text('#${_transactionId.substring(0, 8)}', style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),
             ],
@@ -436,11 +363,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     SizedBox(width: 8),
                     Text(
                       'Code de confirmation envoyé par SMS',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500, fontSize: 13),
                     ),
                   ],
                 ),
@@ -449,21 +372,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   children: [
                     Expanded(
                       child: TextField(
-                        onChanged: (value) {
-                          setState(() => _userConfirmationCode = value);
-                        },
+                        onChanged: (value) => setState(() => _userConfirmationCode = value),
                         decoration: InputDecoration(
                           hintText: 'Entrez le code reçu',
-                          hintStyle: TextStyle(
-                            color: isDark ? Colors.grey[500] : Colors.grey[400],
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
+                          hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400]),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           filled: true,
                           fillColor: isDark ? Colors.grey[800] : Colors.white,
                         ),
@@ -477,19 +391,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       child: _isProcessing
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Text('Confirmer'),
                     ),
                   ],
@@ -499,10 +404,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           const SizedBox(height: 8),
           TextButton(
-            onPressed: () {
-              // Réenvoyer le code
-              _showSnackBar('Un nouveau code a été envoyé', Colors.blue);
-            },
+            onPressed: () => _showSnackBar('Un nouveau code a été envoyé', Colors.blue),
             child: Text('Renvoyer le code', style: TextStyle(color: primaryColor)),
           ),
         ],
@@ -532,21 +434,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final isSelected = _selectedMethod == method.id;
 
     return GestureDetector(
-      onTap: () {
-        setState(() => _selectedMethod = method.id);
-      },
+      onTap: () => setState(() => _selectedMethod = method.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected
-              ? method.color.withOpacity(0.1)
-              : (isDark ? Colors.grey[800] : Colors.grey[50]),
+          color: isSelected ? method.color.withOpacity(0.1) : (isDark ? Colors.grey[800] : Colors.grey[50]),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? method.color
-                : (isDark ? Colors.grey[700]! : Colors.grey[200]!),
+            color: isSelected ? method.color : (isDark ? Colors.grey[700]! : Colors.grey[200]!),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -601,8 +497,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
         await _nochPayService.savePendingTransaction(
           transactionId: _transactionId,
           invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
+          invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
           phoneNumber: _phoneNumber,
-          amount: widget.plan.price, invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
+          amount: widget.plan.price,
         );
 
         _startAutoCheck();
@@ -647,12 +544,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _isConfirming = false;
         _error = 'Le paiement a échoué';
       });
-      // Notification d'échec
       await _notificationService.addNotification(
         AppNotification(
           title: '⚠️ Paiement échoué',
           body: 'Le paiement pour l\'abonnement ${widget.plan.name} a échoué. Veuillez réessayer.',
-          type: NotificationType.payment_received.toString(),
+          type: NotificationType.system_update.toString(),
         ),
       );
       _showSnackBar(_error, Colors.red);
@@ -689,7 +585,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _completeSubscription() async {
-    // Mettre à jour l'abonnement dans Firestore / base de données
     final authProvider = context.read<AppAuthProvider>();
     final subscriptionProvider = context.read<SubscriptionProvider>();
 
@@ -716,7 +611,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     if (success) {
-      // Notification de succès
       await _notificationService.addNotification(
         AppNotification(
           title: '🎉 Abonnement activé',
@@ -724,12 +618,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           type: NotificationType.system_update.toString(),
         ),
       );
-      
       _showSnackBar('Abonnement ${widget.plan.name} activé avec succès ! ✅', Colors.green);
       widget.onPaymentComplete();
       Navigator.pop(context, true);
     } else {
-      // Notification d'erreur d'activation
       await _notificationService.addNotification(
         AppNotification(
           title: '⚠️ Erreur d\'activation',

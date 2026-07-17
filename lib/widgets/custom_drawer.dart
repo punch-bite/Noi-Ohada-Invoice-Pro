@@ -24,7 +24,7 @@ class CustomDrawer extends StatelessWidget {
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       child: Column(
         children: [
-          // Header du drawer (avatar + nom + email + badge)
+          // Header du drawer (avatar + nom + email + badge) - CENTRÉ
           Container(
             padding: const EdgeInsets.all(24),
             width: double.infinity,
@@ -34,14 +34,17 @@ class CustomDrawer extends StatelessWidget {
               ),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center, // ✅ Centré
               children: [
                 const SizedBox(height: 20),
+                // Avatar centré
                 CircleAvatar(
                   radius: 32,
                   backgroundColor: Colors.white.withOpacity(0.3),
                   child: Text(
-                    user?.displayName.substring(0, 1).toUpperCase() ?? 'U',
+                    user?.displayName.isNotEmpty == true
+                        ? user!.displayName[0].toUpperCase()
+                        : 'U',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -50,6 +53,7 @@ class CustomDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Nom centré
                 Text(
                   user?.displayName ?? 'Utilisateur',
                   style: const TextStyle(
@@ -57,28 +61,36 @@ class CustomDrawer extends StatelessWidget {
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
+                  textAlign: TextAlign.center, // ✅ Centré
                 ),
+                const SizedBox(height: 2),
+                // Email centré
                 Text(
                   user?.email ?? 'user@email.com',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.8),
                     fontSize: 13,
                   ),
+                  textAlign: TextAlign.center, // ✅ Centré
                 ),
                 const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    subscriptionProvider.currentPlan.name ?? 'Gratuit',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                // Badge centré
+                Center(
+                  // ✅ Centré
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      subscriptionProvider.currentPlan?.name ?? 'Gratuit',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
@@ -123,7 +135,6 @@ class CustomDrawer extends StatelessWidget {
                   textColor: textColor,
                   subTextColor: subTextColor,
                 ),
-                // 🔥 NOUVEAU : Fournisseurs
                 _buildTile(
                   icon: Icons.business_outlined,
                   label: 'Fournisseurs',
@@ -135,7 +146,29 @@ class CustomDrawer extends StatelessWidget {
                   textColor: textColor,
                   subTextColor: subTextColor,
                 ),
-                // 🔥 NOUVEAU : Rappels
+                // Dans CustomDrawer
+                _buildTile(
+                  icon: Icons.groups_outlined,
+                  label: 'Équipes',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/teams');
+                  },
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
+                _buildTile(
+                  icon: Icons.mail_outline,
+                  label: 'Invitations',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/teams/invitations');
+                  },
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
                 _buildTile(
                   icon: Icons.alarm_outlined,
                   label: 'Rappels',
@@ -147,21 +180,19 @@ class CustomDrawer extends StatelessWidget {
                   textColor: textColor,
                   subTextColor: subTextColor,
                 ),
-
                 // Condition pour afficher le menu admin
                 if (authProvider.user?.isAdmin == true)
-                _buildTile(
-                  icon: Icons.admin_panel_settings_outlined,
-                  label: 'Administration',
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push('/admin');
-                  },
-                  isDark: isDark,
-                  textColor: textColor,
-                  subTextColor: subTextColor,
-                ),
-                
+                  _buildTile(
+                    icon: Icons.admin_panel_settings_outlined,
+                    label: 'Administration',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/admin');
+                    },
+                    isDark: isDark,
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                  ),
                 const Divider(),
                 _buildTile(
                   icon: Icons.settings_outlined,

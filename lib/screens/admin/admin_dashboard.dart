@@ -21,6 +21,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _loadStats();
+    // print('👑 Utilisateur admin ? ${auth.user?.isAdmin}');
+    // print('👑 Rôles : ${auth.user?.roles}');
   }
 
   Future<void> _loadStats() async {
