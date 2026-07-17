@@ -6,10 +6,18 @@ workflows:
         FLUTTER_VERSION: 3.41.9  # Ajustez si nécessaire
       flutter: stable
     scripts:
+      - name: Décoder le Keystore JKS
+        script: |
+          echo "Recréation du fichier de clé..."
+          echo $KEYSTORE_BASE64 | base64 --decode > android/app/upload-keystore.jks
+
       - name: Générer local.properties pour Gradle
         script: |
           echo "Génération de local.properties..."
           echo "flutter.sdk=$FCI_FLUTTER_HOME" > android/local.properties
+          echo "release.keystore.password=$KEYSTORE_PASSWORD" >> android/local.properties
+          echo "release.key.alias=$KEY_ALIAS" >> android/local.properties
+          echo "release.key.password=$KEY_PASSWORD" >> android/local.properties
 
       - name: Créer le fichier .env
         script: |
