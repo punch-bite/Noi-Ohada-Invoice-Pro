@@ -22,7 +22,6 @@ class AdminService {
   //  UTILISATEURS
   // ============================================================
 
-  // lib/services/admin_service.dart
   Future<List<AppUser>> getAllUsers() async {
     try {
       final snapshot = await _firestore.collection('users').get();
@@ -154,7 +153,6 @@ class AdminService {
         details: 'Sub $subscriptionId -> plan $newPlanId');
   }
 
-  /// Crée un abonnement pour un utilisateur (admin)
   Future<void> createSubscriptionForUser({
     required String userId,
     required String planId,
@@ -182,7 +180,8 @@ class AdminService {
       autoRenew: true,
       isActive: true,
       createdAt: now,
-      metadata: {'createdByAdmin': true}, interval: '',
+      metadata: {'createdByAdmin': true},
+      interval: '',
     );
     await _firestore
         .collection('subscriptions')
@@ -197,10 +196,9 @@ class AdminService {
   }
 
   // ============================================================
-  //  PLANS PERSONNALISÉS (NOUVEAU)
+  //  PLANS PERSONNALISÉS
   // ============================================================
 
-  /// Récupère tous les plans (par défaut + personnalisés)
   Future<List<Plan>> getAllPlans() async {
     try {
       final snapshot = await _firestore.collection('plans').get();
@@ -216,20 +214,17 @@ class AdminService {
     }
   }
 
-  /// Crée un plan personnalisé
   Future<void> createPlan(Plan plan) async {
     await _firestore.collection('plans').doc(plan.id).set(plan.toMap());
     await LoggerService.info('create_plan', details: 'Plan ${plan.name} créé');
   }
 
-  /// Met à jour un plan
   Future<void> updatePlan(Plan plan) async {
     await _firestore.collection('plans').doc(plan.id).update(plan.toMap());
     await LoggerService.info('update_plan',
         details: 'Plan ${plan.name} mis à jour');
   }
 
-  /// Supprime un plan (soft delete)
   Future<void> deletePlan(String planId) async {
     await _firestore
         .collection('plans')
@@ -238,7 +233,6 @@ class AdminService {
     await LoggerService.info('delete_plan', details: 'Plan $planId désactivé');
   }
 
-  /// Supprime définitivement un plan
   Future<void> deletePlanPermanently(String planId) async {
     await _firestore.collection('plans').doc(planId).delete();
     await LoggerService.info('delete_plan_permanent',
@@ -318,7 +312,8 @@ class AdminService {
         u.isActive ? 'Actif' : 'Inactif'
       ]);
     }
-    final csv = ListToCsvConverter().convert(rows);
+    // Nettoyage de l'expression d'instanciation de la classe
+    final csv = const ListToCsvConverter().convert(rows);
     final dir = await getTemporaryDirectory();
     final file =
         File('${dir.path}/users_${DateTime.now().millisecondsSinceEpoch}.csv');
@@ -357,22 +352,11 @@ class AdminService {
 
   Future<Plan?> getPlan(String id) async {
     final doc = await _firestore.collection('plans').doc(id).get();
-    if (doc.exists) return Plan.fromMap(doc.data()!, documentId: doc.id);
+    if (doc.exists && doc.data() != null) {
+      // On caste explicitement le data() pour éviter l'erreur de typage
+      return Plan.fromMap(doc.data() as Map<String, dynamic>,
+          documentId: doc.id);
+    }
     return null;
   }
-
-//   Future<List<Plan>> getAllPlans() async {
-//   try {
-//     final snapshot = await _firestore.collection('plans').get();
-//     if (snapshot.docs.isEmpty) return Plan.getDefaultPlans();
-//     return snapshot.docs.map((doc) {
-//       final data = doc.data();
-//       data['id'] = doc.id;
-//       return Plan.fromMap(data);
-//     }).toList();
-//   } catch (e) {
-//     debugPrint("❌ Erreur getAllPlans: $e");
-//     return Plan.getDefaultPlans();
-//   }
-// }
 }

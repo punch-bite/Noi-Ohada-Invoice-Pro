@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart'
-    hide PermissionStatus;
 import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../providers/theme_provider.dart';
