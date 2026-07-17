@@ -7,7 +7,8 @@ plugins {
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    compileSdk = 35 // Optionnel mais recommandé en 2026 pour cibler les API récentes
+    // compileSdk = 35 // Optionnel mais recommandé en 2026 pour cibler les API récentes
+    compileSdkVersion 36
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
