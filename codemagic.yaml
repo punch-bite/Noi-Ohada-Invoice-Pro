@@ -17,7 +17,11 @@ workflows:
           echo "flutter.sdk=$FCI_FLUTTER_HOME" > android/local.properties
           echo "release.keystore.password=$KEYSTORE_PASSWORD" >> android/local.properties
           echo "release.key.alias=$KEY_ALIAS" >> android/local.properties
-          echo "release.key.password=$KEY_PASSWORD" >> android/local.properties
+          echo "release.key.password=$KEY_PASSWORD" >> android/local.properties"
+
+      - name: Set up google-services.json
+        script: |
+          echo $ANDROID_FIREBASE_JSON | base64 --decode > $CM_BUILD_DIR/android/app/google-services.json
 
       - name: Créer le fichier .env
         script: |
