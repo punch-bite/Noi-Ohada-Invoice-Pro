@@ -10,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
     cupertino_icons: ^1.0.8
-    uses-material-design: true
   # --- Architecture & State Management ---
   provider: ^6.1.2
   go_router: ^14.6.0
