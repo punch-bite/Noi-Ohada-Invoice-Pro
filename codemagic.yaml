@@ -21,7 +21,7 @@ workflows:
 
       - name: Set up google-services.json
         script: |
-          echo "$ANDROID_FIREBASE_JSON" | base64 --decode > android/app/google-services.json
+          cp $GOOGLE_SERVICES_JSON $CM_BUILD_DIR/android/app/google-services.json
 
           # Vérification : affiche les premières lignes dans les logs de build
           head -n 5 android/app/google-services.json
