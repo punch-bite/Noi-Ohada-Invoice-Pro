@@ -297,28 +297,28 @@ class AdminService {
   //  EXPORT CSV
   // ============================================================
 
-  Future<File> exportUsersCsvToFile() async {
-    final users = await _firestore.collection('users').get();
-    final rows = <List<dynamic>>[
-      ['ID', 'Nom', 'Email', 'Rôle', 'Statut']
-    ];
-    for (final doc in users.docs) {
-      final u = AppUser.fromMap(doc.data());
-      rows.add([
-        u.id,
-        u.displayName,
-        u.email,
-        u.isAdmin ? 'Admin' : 'User',
-        u.isActive ? 'Actif' : 'Inactif'
-      ]);
-    }
-    // Nettoyage de l'expression d'instanciation de la classe
-    final csv = ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
-    final file =
-        File('${dir.path}/users_${DateTime.now().millisecondsSinceEpoch}.csv');
-    return await file.writeAsString('\uFEFF$csv', encoding: utf8);
-  }
+  // Future<File> exportUsersCsvToFile() async {
+  //   final users = await _firestore.collection('users').get();
+  //   final rows = <List<dynamic>>[
+  //     ['ID', 'Nom', 'Email', 'Rôle', 'Statut']
+  //   ];
+  //   for (final doc in users.docs) {
+  //     final u = AppUser.fromMap(doc.data());
+  //     rows.add([
+  //       u.id,
+  //       u.displayName,
+  //       u.email,
+  //       u.isAdmin ? 'Admin' : 'User',
+  //       u.isActive ? 'Actif' : 'Inactif'
+  //     ]);
+  //   }
+  //   // Nettoyage de l'expression d'instanciation de la classe
+  //   final csv = ListToCsvConverter().convert(rows);
+  //   final dir = await getTemporaryDirectory();
+  //   final file =
+  //       File('${dir.path}/users_${DateTime.now().millisecondsSinceEpoch}.csv');
+  //   return await file.writeAsString('\uFEFF$csv', encoding: utf8);
+  // }
 
   // ============================================================
   //  STATISTIQUES

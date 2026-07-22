@@ -89,7 +89,7 @@ class _UsersListScreenState extends State<UsersListScreen> {
           onPressed: () => context.go('/admin'),
         ),
         actions: [
-          IconButton(icon: Icon(Icons.download, color: text), onPressed: _exportCsv),
+          // IconButton(icon: Icon(Icons.download, color: text), onPressed: _exportCsv),
           IconButton(icon: Icon(Icons.add, color: text), onPressed: () => context.push('/admin/add-subscription')),
           PopupMenuButton<String>(
             icon: Icon(Icons.filter_list, color: text),
@@ -191,18 +191,18 @@ class _UsersListScreenState extends State<UsersListScreen> {
     );
   }
 
-  Future<void> _exportCsv() async {
-    try {
-      final file = await _adminService.exportUsersCsvToFile();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export réussi : ${file.path.split('/').last}'), backgroundColor: Colors.green),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur export: $e'), backgroundColor: Colors.redAccent),
-      );
-    }
-  }
+  // Future<void> _exportCsv() async {
+  //   try {
+  //     final file = await _adminService.exportUsersCsvToFile();
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Export réussi : ${file.path.split('/').last}'), backgroundColor: Colors.green),
+  //     );
+  //   } catch (e) {
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Erreur export: $e'), backgroundColor: Colors.redAccent),
+  //     );
+  //   }
+  // }
 }
