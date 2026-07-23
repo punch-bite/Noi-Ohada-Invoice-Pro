@@ -21,10 +21,13 @@ workflows:
 
       - name: Set up google-services.json
         script: |
-          cp $GOOGLE_SERVICES_JSON $CM_BUILD_DIR/android/app/google-services.json
+          # 1. Décoder en utilisant 'printf' et la flag '-D' ou '-d' propre à macOS
+          printf "%s" "$ANDROID_FIREBASE_JSON" | base64 --decode > android/app/google-services.json 2>/dev/null || printf "%s" "$ANDROID_FIREBASE_JSON" | base64 -D > android/app/google-services.json
 
-          # Vérification : affiche les premières lignes dans les logs de build
+          # 2. VÉRIFICATION : Affiche les 5 premières lignes dans vos logs de build
+          echo "=== VÉRIFICATION DU FICHIER JSON ==="
           head -n 5 android/app/google-services.json
+          echo "===================================="
 
       - name: Créer le fichier .env
         script: |
