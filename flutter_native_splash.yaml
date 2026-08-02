@@ -1,0 +1,26 @@
+# flutter_native_splash.yaml
+flutter_native_splash:
+  color: "#1A237E"                    # Couleur de fond
+  image: assets/images/splash_logo.png # Votre logo (png avec transparence)
+  
+  # Android
+  android: true
+  android_gravity: center
+  android_screen_orientation: portrait
+  
+  # iOS
+  # ios: true
+  # ios_content_mode: center
+  # ios_device_orientation: portrait
+  
+  # Web
+  web: true
+  web_image_mode: center
+  
+  # Dimensions du logo (optionnel)
+  # logo_width: 200
+  # logo_height: 200
+  
+  # Couleur du fond pour le dark mode (optionnel)
+  # color_dark: "#0D1445"
+  # image_dark: assets/images/splash_logo_dark.png

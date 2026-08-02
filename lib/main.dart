@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 // Services
 import 'services/config_service.dart';
 import 'services/logger_service.dart';
+import 'services/permission_service.dart';
 import 'services/theme_service.dart';
 import 'services/security_service.dart';
 import 'services/database_service.dart';
@@ -30,7 +31,9 @@ import 'widgets/connectivity_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  
+  // Demander les permissions
+  await PermissionService.requestPermissions();
   // ===== ÉTAPE 1 : Configuration =====
   await ConfigService.init();
   await LoggerService.init();

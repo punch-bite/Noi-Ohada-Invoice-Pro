@@ -1,0 +1,5 @@
+<!-- android/app/src/main/res/values/colors.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="launch_background">#1A237E</color>
+</resources>
