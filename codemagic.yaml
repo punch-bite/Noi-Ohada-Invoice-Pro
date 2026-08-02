@@ -29,7 +29,7 @@ workflows:
           # Remplacez par les variables que vous avez définies dans l'interface Codemagic
           echo "API_URL=$API_URL" > .env
           echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
-          scripts:
+
       - name: Fix Android SDK 37 directory path
         script: |
           ln -s /usr/local/share/android-sdk/platforms/android-37.0 /usr/local/share/android-sdk/platforms/android-37
