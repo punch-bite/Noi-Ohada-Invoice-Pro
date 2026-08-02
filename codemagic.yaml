@@ -29,10 +29,17 @@ workflows:
           # Remplacez par les variables que vous avez définies dans l'interface Codemagic
           echo "API_URL=$API_URL" > .env
           echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
+          scripts:
+      - name: Fix Android SDK 37 directory path
+        script: |
+          ln -s /usr/local/share/android-sdk/platforms/android-37.0 /usr/local/share/android-sdk/platforms/android-37
           
+      # - name: Builder l'APK Release
+      #   script: |
+      #     flutter build apk --release
       - name: Nettoyer le projet
         script: flutter clean
-        
+          
       - name: Installer les dépendances
         script: |
            flutter pub pub cache clean --force # Nettoie le cache de Codemagic
@@ -43,7 +50,7 @@ workflows:
         script: flutter pub run build_runner build --delete-conflicting-outputs
       
       - name: Builder l'APK Release
-        script: flutter build apk --release --split-per-abi
+        script: flutter build apk --release
       
       - name: Builder l'App Bundle (AAB)
         script: flutter build appbundle --release
