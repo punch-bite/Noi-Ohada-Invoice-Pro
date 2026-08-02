@@ -77,6 +77,7 @@ class CompanyAdapter extends TypeAdapter<Company> {
 // JsonSerializableGenerator
 // **************************************************************************
 
+// ignore: unused_element
 Company _$CompanyFromJson(Map<String, dynamic> json) => Company(
       id: json['id'] as String?,
       name: json['name'] as String,
@@ -93,6 +94,7 @@ Company _$CompanyFromJson(Map<String, dynamic> json) => Company(
       rccm: json['rccm'] as String? ?? '',
     );
 
+// ignore: unused_element
 Map<String, dynamic> _$CompanyToJson(Company instance) => <String, dynamic>{
       'id': instance.id,
       'name': instance.name,

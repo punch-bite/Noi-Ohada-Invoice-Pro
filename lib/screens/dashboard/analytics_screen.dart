@@ -1,5 +1,5 @@
 // lib/screens/dashboard/analytics_screen.dart
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: unused_field, deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';

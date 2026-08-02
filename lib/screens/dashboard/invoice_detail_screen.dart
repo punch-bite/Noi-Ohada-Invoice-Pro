@@ -1,5 +1,5 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
 import 'dart:io';
 import 'package:flutter/material.dart';

@@ -1,4 +1,6 @@
 // lib/models/notification.dart
+// ignore_for_file: unreachable_switch_default
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';

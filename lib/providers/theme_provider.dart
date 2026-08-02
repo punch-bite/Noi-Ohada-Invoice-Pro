@@ -1,4 +1,6 @@
 // lib/providers/theme_provider.dart
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 import '../services/theme_service.dart';
 
