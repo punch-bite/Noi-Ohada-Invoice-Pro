@@ -52,7 +52,7 @@ dependencies:
   flutter_contacts: ^2.0.0
 
   # --- UI ---
-  fluttertoast: ^8.2.8
+  fluttertoast: ^8.2.14
   flutter_slidable: ^3.1.1
   shimmer: ^3.0.0
   webview_flutter: ^4.8.0
