@@ -48,7 +48,11 @@ android {
         }
     }
 }
-
+configurations.all {
+    resolutionStrategy {
+        force("androidx.constraintlayout:constraintlayout:2.1.4")
+    }
+}
 flutter {
     source = "../.."
 }
