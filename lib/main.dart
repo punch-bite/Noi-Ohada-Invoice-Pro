@@ -31,7 +31,19 @@ import 'widgets/connectivity_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Timeout pour éviter le blocage infini
+  // try {
+  //   await Future.any([
+  //     _initializeApp(),
+  //     Future.delayed(const Duration(seconds: 10), () {
+  //       throw Exception('⏱️ Initialisation trop longue');
+  //     }),
+  //   ]);
+  // } catch (e) {
+  //   debugPrint('❌ Erreur initialisation: $e');
+  //   // Afficher un écran d'erreur
+  // }
   // Demander les permissions
   await PermissionService.requestPermissions();
   // ===== ÉTAPE 1 : Configuration =====
@@ -126,7 +138,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider.value(value: notificationService),
         ChangeNotifierProvider.value(value: connectivityService),
-        
+
         // Services simples (sans notification)
         Provider<StockService>.value(value: stockService),
         Provider<NochPayService>.value(value: nochPayService),
