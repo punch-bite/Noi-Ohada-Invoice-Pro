@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "942740787802",
+    "project_id": "facture-ohada",
+    "storage_bucket": "facture-ohada.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:942740787802:android:8051a7fc714414a6683e63",
+        "android_client_info": {
+          "package_name": "com.noi.noi_ohada_invoice_pro"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "942740787802-gcj2b4salf43h3au5l7n0vs5fd7hf9e6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvSY8rOv-VyLycD2DZjeB7BM4CmDKsfZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "942740787802-gcj2b4salf43h3au5l7n0vs5fd7hf9e6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "942740787802-a5e4djanel0fk1edu1umdi1h3qm4l3e2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.noi.NoiOhadaInvoicePro"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

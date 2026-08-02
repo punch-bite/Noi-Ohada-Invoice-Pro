@@ -48,7 +48,7 @@ app.*.map.json
 android/.gradle/
 android/app/.gradle/
 android/app/build/
-android/app/google-services.json
+# android/app/google-services.json
 
 # ---------- IOS ----------
 ios/Pods/
