@@ -21,7 +21,8 @@ workflows:
 
       - name: Set up google-services.json
         script: |
-          echo "$ANDROID_FIREBASE_JSON" > android/app/google-services.json
+          echo "Génération de google-services.json..."
+          echo $ANDROID_FIREBASE_JSON_BASE64 | base64 --decode > android/app/google-services.json
 
       - name: Créer le fichier .env
         script: |
