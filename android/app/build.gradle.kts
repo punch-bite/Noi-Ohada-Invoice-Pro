@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    compileSdk = 36 // Fixed: Changed from 'compileSdkVersion 36' to correct Kotlin DSL syntax
+    compileSdk = 35 // Fixed: Changed from 'compileSdkVersion 36' to correct Kotlin DSL syntax
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
         minSdk = flutter.minSdkVersion
-        targetSdk = 34
+        targetSdkVersion = 35
         versionCode = 1
         versionName = "1.0"
     }
