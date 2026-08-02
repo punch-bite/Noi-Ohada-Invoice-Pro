@@ -7,12 +7,13 @@ plugins {
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    compileSdk = 35
-
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
+    
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
