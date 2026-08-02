@@ -26,35 +26,29 @@ workflows:
       - name: Créer le fichier .env
         script: |
           echo "Génération du fichier .env pour le build..."
-          # Remplacez par les variables que vous avez définies dans l'interface Codemagic
           echo "API_URL=$API_URL" > .env
           echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
 
       - name: Fix Android SDK 37 directory path
         script: |
           ln -s /usr/local/share/android-sdk/platforms/android-37.0 /usr/local/share/android-sdk/platforms/android-37
-          
-      # - name: Builder l'APK Release
-      #   script: |
-      #     flutter build apk --release
-      - name: Nettoyer le projet
-        script: flutter clean
-          
+
       - name: Installer les dépendances
         script: |
-           flutter pub pub cache clean --force # Nettoie le cache de Codemagic
-           flutter pub upgrade --major-versions # Force l'alignement sur les dernières versions compatibles
-           flutter pub get
-      
-      - name: Générer les fichiers de build
-        script: flutter pub run build_runner build --delete-conflicting-outputs
-      
+          flutter pub get
+
+      - name: Générer les fichiers de build (Build Runner)
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
       - name: Builder l'APK Release
-        script: flutter build apk --release
-      
+        script: |
+          flutter build apk --release
+
       - name: Builder l'App Bundle (AAB)
-        script: flutter build appbundle --release
-      
+        script: |
+          flutter build appbundle --release
+
       - name: Vérifier la signature
         script: |
           if [ -f "android/app/upload-keystore.jks" ]; then
@@ -62,9 +56,11 @@ workflows:
           else
             echo "⚠️ Keystore non trouvé, APK non signé"
           fi
+
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/bundle/release/*.aab
+
     publishing:
       email:
         recipients:

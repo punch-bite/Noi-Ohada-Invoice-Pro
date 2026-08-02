@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    compileSdk = 35 // Fixed: Changed from 'compileSdkVersion 36' to correct Kotlin DSL syntax
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
