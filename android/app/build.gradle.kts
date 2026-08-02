@@ -12,7 +12,7 @@ android {
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
         minSdk = flutter.minSdkVersion
-        targetSdkVersion = 35
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
     }
