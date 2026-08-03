@@ -25,10 +25,10 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   Invoice? _selectedInvoice;
   String _selectedMethod = NochPayService.methodOrangeMoney;
   String _phoneNumber = '';
-  bool _isLoading = true;
-    bool _isProcessing = false;
+    bool _isLoading = true;
+  bool _isProcessing = false;
 
-    static const List<PaymentMethod> _paymentMethods = [
+  static const List<PaymentMethod> _paymentMethods = [
     PaymentMethod(
       id: NochPayService.methodOrangeMoney,
       name: 'Orange Money',
@@ -88,21 +88,20 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       return;
     }
 
-        setState(() => _isProcessing = false);
-
-    // 🔥 Lancer le vrai workflow de paiement NochPay (dialogue de confirmation)
+            // 🔥 Lancer le vrai workflow de paiement NochPay (dialogue de confirmation)
     // Le NochPayPaymentDialog gère l'initiation, le polling, la confirmation
     // par code, puis marque la facture comme payée en cas de succès.
     final invoice = _selectedInvoice!;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-            builder: (context) => NochPayPaymentDialog(
+      builder: (context) => NochPayPaymentDialog(
         invoice: invoice,
         phoneNumber: _phoneNumber,
         paymentMethod: _selectedMethod,
         onSuccess: () {
           widget.onPaymentComplete();
+          Navigator.pop(context);
         },
         onCancel: () {},
       ),
@@ -400,7 +399,7 @@ class PaymentMethod {
   final IconData icon;
   final Color color;
 
-    const PaymentMethod({
+      const PaymentMethod({
     required this.id,
     required this.name,
     required this.icon,

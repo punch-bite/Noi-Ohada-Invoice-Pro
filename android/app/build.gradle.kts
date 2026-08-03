@@ -53,6 +53,31 @@ android {
     }
 }
 
+// ⚠️ Forcer des versions AndroidX compatibles avec AGP 8.7.3.
+// Les dépendances transitives récentes (activity 1.12.x, core 1.18.x)
+// exigent AGP >= 8.9.1 ; on les épingle donc à des versions compatibles.
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "androidx.core:core:1.13.1",
+            "androidx.core:core-ktx:1.13.1",
+            "androidx.activity:activity:1.9.3",
+            "androidx.activity:activity-ktx:1.9.3",
+            "androidx.lifecycle:lifecycle-runtime:2.8.7",
+            "androidx.lifecycle:lifecycle-runtime-ktx:2.8.7",
+            "androidx.lifecycle:lifecycle-viewmodel:2.8.7",
+            "androidx.navigation:navigation-common:2.8.4",
+            "androidx.navigation:navigation-common-ktx:2.8.4",
+            "androidx.navigation:navigation-runtime:2.8.4",
+            "androidx.navigation:navigation-runtime-ktx:2.8.4",
+            "androidx.navigation:navigation-fragment:2.8.4",
+            "androidx.navigation:navigation-fragment-ktx:2.8.4",
+            "androidx.navigation:navigation-ui:2.8.4",
+            "androidx.navigation:navigation-ui-ktx:2.8.4"
+        )
+    }
+}
+
 flutter {
     source = "../.."
 }

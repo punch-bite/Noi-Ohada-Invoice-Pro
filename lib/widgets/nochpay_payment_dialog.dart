@@ -33,19 +33,19 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
   final DatabaseService _db = DatabaseService();
   final NotificationService _notificationService = NotificationService();
 
-    Timer? _statusTimer;
-    String _status = 'initializing';
-    String _transactionId = '';
-    String _error = '';
-    bool _isLoading = false;
-    String _userConfirmationCode = '';
+  Timer? _statusTimer;
+  String _status = 'initializing';
+  String _transactionId = '';
+  String _error = '';
+  bool _isLoading = false;
+  String _userConfirmationCode = '';
 
-    @override
-    void initState() {
-      super.initState();
-      _notificationService.init();
-      _initiatePayment();
-    }
+  @override
+  void initState() {
+    super.initState();
+    _notificationService.init();
+    _initiatePayment();
+  }
 
   @override
   void dispose() {
@@ -63,7 +63,7 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
     });
 
     try {
-            final result = await _nochPayService.initiatePayment(
+      final result = await _nochPayService.initiatePayment(
         amount: widget.invoice.totalAmount,
         currency: 'XAF',
         phoneNumber: widget.phoneNumber,
@@ -74,8 +74,8 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
 
       if (!mounted) return;
 
-            if (result['success'] == true) {
-                setState(() {
+      if (result['success'] == true) {
+        setState(() {
           _transactionId = result['transaction_id'];
           _status = 'pending';
           _isLoading = false;
@@ -125,12 +125,15 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
     int checks = 0;
     const maxChecks = 12;
 
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      if (!mounted || _status == 'success' || _status == 'failed' || checks >= maxChecks) {
+        _statusTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!mounted ||
+          _status == 'success' ||
+          _status == 'failed' ||
+          checks >= maxChecks) {
         timer.cancel();
         return;
       }
-            checks++;
+      checks++;
       await _checkPaymentStatus();
     });
   }
@@ -207,11 +210,13 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
 
   Future<void> _completePayment() async {
     _statusTimer?.cancel();
-    
-    final updatedInvoice = widget.invoice.copyWith(status: 'paid', isSynced: false);
+
+    final updatedInvoice =
+        widget.invoice.copyWith(status: 'paid', isSynced: false);
     await _db.updateInvoice(updatedInvoice);
     await _notificationService.notifyInvoicePaid(widget.invoice.invoiceNumber);
-    await _notificationService.notifyPaymentReceived(widget.invoice.totalAmount);
+    await _notificationService
+        .notifyPaymentReceived(widget.invoice.totalAmount);
     await _nochPayService.removePendingTransaction(_transactionId);
 
     if (!mounted) return;
@@ -224,7 +229,7 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       backgroundColor: themeProvider.cardColor,
@@ -234,7 +239,11 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text("Paiement NochPay", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeProvider.textColor)),
+            Text("Paiement NochPay",
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: themeProvider.textColor)),
             const SizedBox(height: 20),
             _buildStatusContent(),
           ],
@@ -245,11 +254,16 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
 
   Widget _buildStatusContent() {
     switch (_status) {
-      case 'initializing': return const CircularProgressIndicator();
-      case 'pending': return _buildPendingView();
-      case 'success': return const Icon(Icons.check_circle, color: Colors.green, size: 50);
-      case 'failed': return const Icon(Icons.error, color: Colors.red, size: 50);
-      default: return const CircularProgressIndicator();
+      case 'initializing':
+        return const CircularProgressIndicator();
+      case 'pending':
+        return _buildPendingView();
+      case 'success':
+        return const Icon(Icons.check_circle, color: Colors.green, size: 50);
+      case 'failed':
+        return const Icon(Icons.error, color: Colors.red, size: 50);
+      default:
+        return const CircularProgressIndicator();
     }
   }
 
@@ -258,7 +272,8 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
       children: [
         const Text("Veuillez confirmer sur votre téléphone"),
         TextField(onChanged: (v) => _userConfirmationCode = v),
-        ElevatedButton(onPressed: _confirmWithCode, child: const Text("Confirmer"))
+        ElevatedButton(
+            onPressed: _confirmWithCode, child: const Text("Confirmer"))
       ],
     );
   }
