@@ -339,7 +339,7 @@ class _MobileMoneyWebViewState extends State<MobileMoneyWebView> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${_pollingAttempts}/$_maxPollingAttempts',
+                      '$_pollingAttempts/$_maxPollingAttempts',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 12,
