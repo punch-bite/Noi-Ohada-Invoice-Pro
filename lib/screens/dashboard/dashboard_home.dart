@@ -82,9 +82,8 @@ class _DashboardHomeState extends State<DashboardHome> {
     }
 
     final totalInvoices = invoices.length;
-    final averageInvoiceValue = totalInvoices > 0
-        ? (totalRevenue / totalInvoices).toDouble()
-        : 0.0;
+    final averageInvoiceValue =
+        totalInvoices > 0 ? (totalRevenue / totalInvoices).toDouble() : 0.0;
 
     return FinancialStats(
       totalRevenue: totalRevenue,
@@ -160,13 +159,17 @@ class _DashboardHomeState extends State<DashboardHome> {
                         height: 36,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [primaryColor, primaryColor.withOpacity(0.7)],
+                            colors: [
+                              primaryColor,
+                              primaryColor.withOpacity(0.7)
+                            ],
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Center(
                           child: Text(
-                            user?.displayName.substring(0, 1).toUpperCase() ?? 'U',
+                            user?.displayName.substring(0, 1).toUpperCase() ??
+                                'U',
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -280,9 +283,11 @@ class _DashboardHomeState extends State<DashboardHome> {
   }) {
     final user = authProvider.user;
     final subscription = subscriptionProvider.subscription;
-    final planName = subscription?.planId == 'pro' ? 'Pro'
-        : subscription?.planId == 'business' ? 'Business'
-        : 'Gratuit';
+    final planName = subscription?.planId == 'pro'
+        ? 'Pro'
+        : subscription?.planId == 'business'
+            ? 'Business'
+            : 'Gratuit';
     final isActive = subscription?.isActive ?? false;
 
     return Row(
@@ -308,7 +313,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             child: Center(
               child: Text(
-                user?.displayName?.substring(0, 1).toUpperCase() ?? 'U',
+                (user?.displayName?.isNotEmpty == true) ? user!.displayName![0].toUpperCase() : 'U',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -344,7 +349,8 @@ class _DashboardHomeState extends State<DashboardHome> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: isActive
                           ? Colors.green.withOpacity(0.15)
@@ -990,9 +996,10 @@ class _DashboardHomeState extends State<DashboardHome> {
                 ),
               )
             : Column(
-                children: _recentInvoices.map((invoice) =>
-                    _buildTransactionItem(invoice, isDark, cardColor, textColor, subTextColor)
-                ).toList(),
+                children: _recentInvoices
+                    .map((invoice) => _buildTransactionItem(
+                        invoice, isDark, cardColor, textColor, subTextColor))
+                    .toList(),
               ),
       ],
     );
@@ -1035,7 +1042,9 @@ class _DashboardHomeState extends State<DashboardHome> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                invoice.isDevis ? Icons.description_outlined : Icons.receipt_long,
+                invoice.isDevis
+                    ? Icons.description_outlined
+                    : Icons.receipt_long,
                 color: invoice.isDevis ? Colors.orange[700] : Colors.blue[700],
                 size: 20,
               ),
@@ -1077,7 +1086,8 @@ class _DashboardHomeState extends State<DashboardHome> {
                 ),
                 const SizedBox(height: 2),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: statusColors['bg'],
                     borderRadius: BorderRadius.circular(8),
@@ -1131,11 +1141,16 @@ class _DashboardHomeState extends State<DashboardHome> {
 
   String _getStatusLabel(String status) {
     switch (status) {
-      case 'paid': return 'Payée';
-      case 'sent': return 'En attente';
-      case 'overdue': return 'En retard';
-      case 'cancelled': return 'Annulée';
-      default: return 'Brouillon';
+      case 'paid':
+        return 'Payée';
+      case 'sent':
+        return 'En attente';
+      case 'overdue':
+        return 'En retard';
+      case 'cancelled':
+        return 'Annulée';
+      default:
+        return 'Brouillon';
     }
   }
 
