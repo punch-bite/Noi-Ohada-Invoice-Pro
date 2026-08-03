@@ -375,7 +375,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             color: cardColor,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+              color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
               width: 0.5,
             ),
           ),
@@ -428,7 +428,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
           width: 0.5,
         ),
       ),

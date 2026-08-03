@@ -256,7 +256,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               barTouchData: BarTouchData(
                                 enabled: true,
                                 touchTooltipData: BarTouchTooltipData(
-                                  getTooltipColor: (_) => isDark ? Colors.grey[850]! : Colors.grey[100]!,
+                                  getTooltipColor: (_) => isDark ? Colors.grey[800]! : Colors.grey[100]!,
                                   // tool: BorderRadius.circular(8),
                                   getTooltipItem: (group, groupIndex, rod, rodIndex) {
                                     return BarTooltipItem(
@@ -327,7 +327,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 drawVerticalLine: false,
                                 getDrawingHorizontalLine: (value) {
                                   return FlLine(
-                                    color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
                                     strokeWidth: 1,
                                     dashArray: [4, 4],
                                   );

@@ -234,7 +234,6 @@ class _AdminAddSubscriptionScreenState
                         color: cardColor,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
                           width: 0.5,
                         ),
                       ),

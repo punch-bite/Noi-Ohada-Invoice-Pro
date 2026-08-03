@@ -372,7 +372,6 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
           width: 0.5,
         ),
       ),

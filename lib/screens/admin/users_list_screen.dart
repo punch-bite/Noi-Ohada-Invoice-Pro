@@ -148,7 +148,7 @@ class _UsersListScreenState extends State<UsersListScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: isDark ? Colors.grey[850]! : Colors.grey[200]!, width: 0.5),
+        side: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 0.5),
       ),
       child: ListTile(
         leading: CircleAvatar(

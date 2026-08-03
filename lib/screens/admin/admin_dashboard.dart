@@ -270,7 +270,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           color: card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+            color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
             width: 0.5,
           ),
         ),

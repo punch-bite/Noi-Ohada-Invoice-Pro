@@ -256,7 +256,7 @@ class SettingsScreen extends StatelessWidget {
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.grey[850]! : Colors.grey[150]!,
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
           width: 0.5,
         ),
       ),
@@ -355,7 +355,7 @@ class SettingsScreen extends StatelessWidget {
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.grey[850]! : Colors.grey[150]!,
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
           width: 0.5,
         ),
       ),
@@ -377,25 +377,25 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  // ===== THEME DIALOG =====
+    // ===== THEME DIALOG =====
   void _showThemeDialog(BuildContext context, ThemeProvider themeProvider) {
-    final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor ?? Colors.black;
-    final cardColor = themeProvider.cardColor ?? Colors.white;
-    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
-
+    // NB : toutes les couleurs sont lues DANS le builder (via context.watch)
+    // afin d'être re-calculées après le changement de thème. Aucune valeur
+    // n'est capturée avant le rebuild (source d'écrans "gelés" ou obsolètes).
     showModalBottomSheet(
       context: context,
-      backgroundColor: cardColor,
+      isDismissible: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (BuildContext context) {
-        final theme = context.watch<ThemeProvider>();
-        final localTextColor = theme.textColor ?? Colors.black;
-        final localPrimaryColor = theme.primaryColor ?? Colors.blue;
+      builder: (bottomContext) {
+        final theme = bottomContext.watch<ThemeProvider>();
+        final cardColor = theme.cardColor;
+        final textColor = theme.textColor;
+        final primaryColor = theme.primaryColor;
 
         return Container(
+          color: cardColor,
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -405,7 +405,7 @@ class SettingsScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: localTextColor,
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 16),
@@ -415,7 +415,7 @@ class SettingsScreen extends StatelessWidget {
                 isSelected: theme.currentTheme == AppTheme.light,
                 onTap: () {
                   themeProvider.setLightTheme();
-                  Navigator.pop(context);
+                  Navigator.of(bottomContext).pop();
                 },
               ),
               _ThemeOption(
@@ -424,7 +424,7 @@ class SettingsScreen extends StatelessWidget {
                 isSelected: theme.currentTheme == AppTheme.dark,
                 onTap: () {
                   themeProvider.setDarkTheme();
-                  Navigator.pop(context);
+                  Navigator.of(bottomContext).pop();
                 },
               ),
               _ThemeOption(
@@ -433,7 +433,7 @@ class SettingsScreen extends StatelessWidget {
                 isSelected: theme.currentTheme == AppTheme.system,
                 onTap: () {
                   themeProvider.setSystemTheme();
-                  Navigator.pop(context);
+                  Navigator.of(bottomContext).pop();
                 },
               ),
             ],
@@ -637,7 +637,7 @@ class _SettingsDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Divider(
       height: 1,
-      color: isDark ? Colors.grey[850]! : Colors.grey[100]!,
+      color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
       indent: 16,
       endIndent: 16,
     );

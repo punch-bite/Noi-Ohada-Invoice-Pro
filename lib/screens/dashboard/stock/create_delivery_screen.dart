@@ -137,7 +137,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: isDark ? Colors.grey[850]! : Colors.grey[200]!,
+                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
                     width: 1,
                   ),
                 ),
