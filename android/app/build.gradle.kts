@@ -29,7 +29,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        multiDexEnabled true
+        multiDexEnabled = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
