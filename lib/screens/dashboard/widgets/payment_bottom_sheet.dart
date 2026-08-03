@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/database_service.dart';
+import '../../../services/nochpay_service.dart';
+import '../../../widgets/nochpay_payment_dialog.dart';
 import '../../../models/invoice.dart';
 
 class PaymentBottomSheet extends StatefulWidget {
@@ -21,29 +23,35 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   final DatabaseService _db = DatabaseService();
   List<Invoice> _invoices = [];
   Invoice? _selectedInvoice;
-  String _selectedMethod = 'orange_money';
+  String _selectedMethod = NochPayService.methodOrangeMoney;
   String _phoneNumber = '';
   bool _isLoading = true;
-  bool _isProcessing = false;
+    bool _isProcessing = false;
 
-  final List<PaymentMethod> _paymentMethods = [
+    static const List<PaymentMethod> _paymentMethods = [
     PaymentMethod(
-      id: 'orange_money',
+      id: NochPayService.methodOrangeMoney,
       name: 'Orange Money',
       icon: Icons.phone_android,
       color: Colors.orange,
     ),
     PaymentMethod(
-      id: 'mtn_money',
+      id: NochPayService.methodMtnMoney,
       name: 'MTN Mobile Money',
       icon: Icons.phone_android,
-      color: const Color(0xFFFBC02D), // Jaune/Ambre contrasté pour le dark mode
+      color: Color(0xFFFBC02D), // Jaune/Ambre contrasté pour le dark mode
     ),
     PaymentMethod(
-      id: 'wave',
+      id: NochPayService.methodWave,
       name: 'Wave',
       icon: Icons.waves,
       color: Colors.blue,
+    ),
+    PaymentMethod(
+      id: NochPayService.methodCard,
+      name: 'Carte bancaire',
+      icon: Icons.credit_card,
+      color: Colors.purple,
     ),
   ];
 
@@ -80,30 +88,25 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       return;
     }
 
-    setState(() => _isProcessing = true);
+        setState(() => _isProcessing = false);
 
-    // Simuler le paiement
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Mettre à jour le statut de la facture
-    final updatedInvoice = _selectedInvoice!.copyWith(status: 'paid', isSynced: false);
-    await _db.updateInvoice(updatedInvoice);
-
-    if (mounted) {
-      setState(() => _isProcessing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '✅ Paiement de ${_selectedInvoice!.invoiceNumber} effectué avec succès',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      widget.onPaymentComplete();
-      Navigator.pop(context);
-    }
+    // 🔥 Lancer le vrai workflow de paiement NochPay (dialogue de confirmation)
+    // Le NochPayPaymentDialog gère l'initiation, le polling, la confirmation
+    // par code, puis marque la facture comme payée en cas de succès.
+    final invoice = _selectedInvoice!;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+            builder: (context) => NochPayPaymentDialog(
+        invoice: invoice,
+        phoneNumber: _phoneNumber,
+        paymentMethod: _selectedMethod,
+        onSuccess: () {
+          widget.onPaymentComplete();
+        },
+        onCancel: () {},
+      ),
+    );
   }
 
   @override
@@ -397,7 +400,7 @@ class PaymentMethod {
   final IconData icon;
   final Color color;
 
-  PaymentMethod({
+    const PaymentMethod({
     required this.id,
     required this.name,
     required this.icon,

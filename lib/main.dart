@@ -13,7 +13,6 @@ import 'services/logger_service.dart';
 import 'services/permission_service.dart';
 import 'services/theme_service.dart';
 import 'services/security_service.dart';
-import 'services/database_service.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
 import 'services/reminder_service.dart';
@@ -32,45 +31,100 @@ import 'providers/theme_provider.dart';
 // Router & Widgets
 import 'router/app_router.dart';
 import 'widgets/connectivity_wrapper.dart';
+import 'widgets/app_bootstrap.dart';
 
 // 📝 Fonction de log vers un fichier
 Future<void> _writeLog(String message) async {
   try {
-    final dir = await getExternalStorageDirectory();
-    final file = File('${dir?.path}/app_log.txt');
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/app_log.txt');
     await file.writeAsString('${DateTime.now()}: $message\n',
         mode: FileMode.append);
   } catch (_) {}
 }
 
+/// Services créés lors de l'initialisation (globales pour être partagées)
+NotificationService? gNotificationService;
+ConnectivityService? gConnectivityService;
+StockService? gStockService;
+NochPayService? gNochPayService;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // ⚠️ À placer en tout premier
 
+  // NB : on N'attend plus AUCUNE initialisation lourde ici.
+  // On appelle runApp immédiatement, l'écran de démarrage (splash)
+  // gère toutes les initialisations en arrière-plan de manière non-bloquante.
+  runApp(
+    AppBootstrap(
+      onReady: _initServices,
+      child: const MyAppHost(),
+    ),
+  );
+}
+
+/// Host qui construit MyApp avec les services disponibles.
+/// Les services sont créés pendant l'initialisation du splash.
+class MyAppHost extends StatelessWidget {
+  const MyAppHost({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final notificationService = gNotificationService ?? NotificationService();
+    final connectivityService = gConnectivityService ?? ConnectivityService();
+    final stockService = gStockService ?? StockService();
+    final nochPayService = gNochPayService ?? NochPayService();
+
+    return MyApp(
+      notificationService: notificationService,
+      connectivityService: connectivityService,
+      stockService: stockService,
+      nochPayService: nochPayService,
+    );
+  }
+}
+
+/// Initialisation "best-effort" de tous les services.
+/// Chaque étape est protégée par un try/catch individuel, de sorte qu'une
+/// erreur ne bloque JAMAIS l'affichage de l'application.
+Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
   await _writeLog('🚀 === DÉMARRAGE APPLICATION ===');
 
+  // ===== PERMISSIONS =====
+  bootstrapContext.onStatusChange('Demande des permissions...');
+  await _writeLog('📱 Demande des permissions...');
   try {
-    // ===== PERMISSIONS =====
-    await _writeLog('📱 Demande des permissions...');
-    try {
-      await PermissionService.requestPermissions();
-      await _writeLog('✅ Permissions OK');
-    } catch (e) {
-      await _writeLog('⚠️ Permissions: $e');
-    }
+    await PermissionService.requestPermissions();
+    await _writeLog('✅ Permissions OK');
+  } catch (e) {
+    await _writeLog('⚠️ Permissions: $e');
+  }
 
-    // ===== CONFIGURATION =====
-    await _writeLog('⚙️ Configuration...');
+  // ===== CONFIGURATION =====
+  bootstrapContext.onStatusChange('Configuration...');
+  await _writeLog('⚙️ Configuration...');
+  try {
     await ConfigService.init();
     await LoggerService.init();
     await _writeLog('✅ Configuration OK');
+  } catch (e) {
+    await _writeLog('⚠️ Configuration: $e');
+  }
 
-    // ===== HIVE =====
-    await _writeLog('📦 Hive...');
+  // ===== HIVE =====
+  bootstrapContext.onStatusChange('Base de données locale...');
+  await _writeLog('📦 Hive...');
+  try {
     await HiveService.init();
     await _writeLog('✅ Hive OK');
+  } catch (e) {
+    await _writeLog('⚠️ Hive: $e');
+  }
 
-    // ===== FIREBASE =====
-    await _writeLog('🔥 Firebase...');
+  // ===== FIREBASE =====
+  bootstrapContext.onStatusChange('Connexion au serveur...');
+  await _writeLog('🔥 Firebase...');
+  try {
     await Firebase.initializeApp(
       options: FirebaseOptions(
         apiKey: ConfigService.firebaseApiKey,
@@ -82,62 +136,63 @@ void main() async {
       ),
     );
     await _writeLog('✅ Firebase OK');
+  } catch (e) {
+    await _writeLog('⚠️ Firebase: $e');
+  }
 
-    // ===== FIRESTORE (NON BLOQUANT) =====
-    await _writeLog('☁️ Firestore (arrière-plan)...');
+  // ===== FIRESTORE (NON BLOQUANT) =====
+  bootstrapContext.onStatusChange('Préparation du cloud...');
+  await _writeLog('☁️ Firestore (arrière-plan)...');
+  try {
     FirestoreInitializer.initialize().catchError((e) {
       _writeLog('⚠️ Firestore init ignorée: $e');
     });
     await _writeLog('✅ Firestore lancé en arrière-plan');
+  } catch (e) {
+    await _writeLog('⚠️ Firestore: $e');
+  }
 
-    // ===== SERVICES =====
-    await _writeLog('🛠️ Services...');
-    final notificationService = NotificationService();
-    final connectivityService = ConnectivityService();
-    final stockService = StockService();
-    final nochPayService = NochPayService();
+  // ===== SERVICES =====
+  bootstrapContext.onStatusChange('Initialisation des services...');
+  await _writeLog('🛠️ Services...');
+  final notificationService = NotificationService();
+  final connectivityService = ConnectivityService();
+  final stockService = StockService();
+  final nochPayService = NochPayService();
 
-    try {
-      await Future.any([
-        Future.wait([
-          notificationService.init(),
-          ReminderService().init(),
-          stockService.init(),
-          ThemeService.init(),
-          SecurityService.init(),
-          DatabaseService.init(),
-        ]),
-        Future.delayed(const Duration(seconds: 8)),
-      ]);
-      await _writeLog('✅ Services OK (ou timeout)');
-    } catch (e) {
-      await _writeLog('⚠️ Services: $e (continue)');
-    }
+  gNotificationService = notificationService;
+  gConnectivityService = connectivityService;
+  gStockService = stockService;
+  gNochPayService = nochPayService;
 
-    // ===== SUBSCRIPTION CHECKER =====
-    await _writeLog('🔄 SubscriptionChecker...');
+  try {
+    await Future.any([
+      Future.wait([
+        notificationService.init(),
+        ReminderService().init(),
+        stockService.init(),
+        ThemeService.init(),
+        SecurityService.init(),
+      ]),
+      Future.delayed(const Duration(seconds: 8)),
+    ]);
+    await _writeLog('✅ Services OK (ou timeout)');
+  } catch (e) {
+    await _writeLog('⚠️ Services: $e (continue)');
+  }
+
+  // ===== SUBSCRIPTION CHECKER =====
+  bootstrapContext.onStatusChange('Préparation des rappels...');
+  await _writeLog('🔄 SubscriptionChecker...');
+  try {
     SubscriptionCheckerService().start().ignore();
     await _writeLog('✅ SubscriptionChecker lancé');
-
-    // ===== LANCEMENT =====
-    await _writeLog('🚀 Lancement de l\'application...');
-    runApp(
-      MyApp(
-        notificationService: notificationService,
-        connectivityService: connectivityService,
-        stockService: stockService,
-        nochPayService: nochPayService,
-      ),
-    );
-    await _writeLog('✅ Application lancée');
-
-    // 🔥 Synchronisation après lancement (en arrière-plan)
-    _syncAfterStartup();
-  } catch (e, stack) {
-    await _writeLog('❌ ERREUR GLOBALE: $e');
-    await _writeLog('📚 Stack: $stack');
-    rethrow;
+  } catch (e) {
+    await _writeLog('⚠️ SubscriptionChecker: $e');
   }
+
+  // 🔥 Synchronisation après lancement (en arrière-plan)
+  _syncAfterStartup();
 }
 
 // 🔥 Fonction de synchronisation différée

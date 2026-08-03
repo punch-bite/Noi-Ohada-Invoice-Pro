@@ -168,8 +168,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                         ),
                         child: Center(
                           child: Text(
-                            user?.displayName.substring(0, 1).toUpperCase() ??
-                                'U',
+                            (user?.displayName.isNotEmpty == true) ? user!.displayName[0].toUpperCase() : 'U',
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,

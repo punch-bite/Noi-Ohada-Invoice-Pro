@@ -128,8 +128,9 @@ class Invoice {
       terms: terms,
       isDevis: isDevis,
       notes: notes,
-      syncedAt: syncedAt,
-      updatedAt: updatedAt ?? DateTime.now(), isSynced: false,
+            syncedAt: syncedAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+      isSynced: isSynced,
     );
   }
 }

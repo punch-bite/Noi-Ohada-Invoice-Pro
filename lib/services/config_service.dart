@@ -60,7 +60,7 @@ class ConfigService {
   static bool get isProduction => dotenv.env['NOCHPAY_MODE'] == 'production';
 
   // App
-  static String get appName => _get('APP_NAME', def: 'OHADA Invoice Pro');
+  static String get appName => _get('APP_NAME', def: 'Noi OHADA Invoice Pro');
   static String get appVersion => _get('APP_VERSION', def: '1.0.0');
   static String get appEnvironment =>
       _get('APP_ENVIRONMENT', def: 'development');

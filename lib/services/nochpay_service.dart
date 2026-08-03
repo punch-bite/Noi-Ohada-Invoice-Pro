@@ -6,6 +6,20 @@ import '../services/notification_service.dart';
 import '../services/config_service.dart';
 
 class NochPayService {
+  // ===== Constantes des méthodes de paiement supportées =====
+  static const String methodOrangeMoney = 'orange_money';
+  static const String methodMtnMoney = 'mtn_money';
+  static const String methodWave = 'wave';
+  static const String methodCard = 'card';
+
+  /// Liste de toutes les méthodes de paiement supportées.
+  static const List<String> supportedMethods = [
+    methodOrangeMoney,
+    methodMtnMoney,
+    methodWave,
+    methodCard,
+  ];
+
   // 🔥 URL de base (sandbox ou production)
   static String get _baseUrl => ConfigService.isProduction
       ? 'https://api.nochpay.co'
@@ -27,19 +41,31 @@ class NochPayService {
   //  1. INITIATION DU PAIEMENT (AVEC MÉTADONNÉES)
   // ============================================================
 
-  Future<Map<String, dynamic>> initiatePayment({
+    Future<Map<String, dynamic>> initiatePayment({
     required double amount,
     required String currency,
     required String phoneNumber,
     required String invoiceNumber,
     required String description,
+    String paymentMethod = methodOrangeMoney,
     String? customerName,
     String? customerEmail,
     Map<String, dynamic>? metadata,
     List<Map<String, dynamic>>? items,
   }) async {
     if (!isConfigured) {
-      return {'success': false, 'error': 'Configuration API manquante.'};
+      return {
+        'success': false,
+        'error': 'Configuration API manquante. Vérifiez vos clés NochPay.',
+      };
+    }
+
+    // Validation de la méthode de paiement
+    if (!supportedMethods.contains(paymentMethod)) {
+      return {
+        'success': false,
+        'error': 'Méthode de paiement non supportée : $paymentMethod',
+      };
     }
 
     try {
@@ -47,6 +73,7 @@ class NochPayService {
       final payload = {
         'amount': amount,
         'currency': currency,
+        'payment_method': paymentMethod,
         'customer': {
           'name': customerName ?? 'Client',
           'email': customerEmail ?? 'client@email.com',
@@ -59,6 +86,7 @@ class NochPayService {
         'customer_meta': {
           'invoice_number': invoiceNumber,
           'source': 'noi_ohada_invoice_app',
+          'payment_method': paymentMethod,
           if (metadata != null) ...metadata,
         },
         // 🔥 Détails des articles (si fournis)
@@ -84,11 +112,12 @@ class NochPayService {
         final transaction = data['transaction'] as Map<String, dynamic>;
         return {
           'success': true,
-          'transaction_id': transaction['id'],
+          'transaction_id': (transaction['id'] ?? transaction['reference']),
           'reference': transaction['reference'],
           'authorization_url': data['authorization_url'],
           'status': transaction['status'],
           'message': data['message'] ?? 'Paiement initialisé',
+          'payment_method': paymentMethod,
         };
       } else {
         return {
@@ -158,39 +187,47 @@ class NochPayService {
   //  4. GESTION DES TRANSACTIONS EN ATTENTE
   // ============================================================
 
-  Future<void> savePendingTransaction({
-    required String reference,
+    Future<void> savePendingTransaction({
+    required String transactionId,
     required String invoiceId,
     required String invoiceNumber,
     required String phoneNumber,
     required double amount,
-    required String authorizationUrl,
-    required String transactionId,
+    String? authorizationUrl,
+    String? reference,
+    String? paymentMethod,
   }) async {
+    // Utilise `transactionId` comme clé unique (plus fiable que `reference`
+    // qui peut être vide dans certains flux d'appel).
+    final key = 'pending_transaction_$transactionId';
     await _storage.write(
-      key: 'pending_transaction_$reference',
+      key: key,
       value: json.encode({
-        'reference': reference,
+        'transaction_id': transactionId,
+        'reference': reference ?? transactionId,
         'invoice_id': invoiceId,
         'invoice_number': invoiceNumber,
         'phone_number': phoneNumber,
         'amount': amount,
-        'authorization_url': authorizationUrl,
+        'authorization_url': authorizationUrl ?? '',
+        'payment_method': paymentMethod ?? NochPayService.methodOrangeMoney,
         'timestamp': DateTime.now().toIso8601String(),
       }),
     );
   }
 
-  Future<Map<String, dynamic>?> getPendingTransaction(String reference) async {
-    final value = await _storage.read(key: 'pending_transaction_$reference');
+  Future<Map<String, dynamic>?> getPendingTransaction(String transactionId) async {
+    final value = await _storage.read(
+      key: 'pending_transaction_$transactionId',
+    );
     if (value != null) {
       return json.decode(value);
     }
     return null;
   }
 
-  Future<void> removePendingTransaction(String reference) async {
-    await _storage.delete(key: 'pending_transaction_$reference');
+  Future<void> removePendingTransaction(String transactionId) async {
+    await _storage.delete(key: 'pending_transaction_$transactionId');
   }
 
   Future<List<Map<String, dynamic>>> getAllPendingTransactions() async {
@@ -227,13 +264,13 @@ class NochPayService {
   //  5. TRAITEMENT DU PAIEMENT RÉUSSI
   // ============================================================
 
-  Future<void> _processSuccessfulPayment(String reference) async {
-    final pending = await getPendingTransaction(reference);
+    Future<void> _processSuccessfulPayment(String transactionId) async {
+    final pending = await getPendingTransaction(transactionId);
     if (pending != null) {
       await _notificationService.notifyInvoicePaid(pending['invoice_number']);
       await _notificationService
           .notifyPaymentReceived((pending['amount'] as num).toDouble());
-      await removePendingTransaction(reference);
+      await removePendingTransaction(transactionId);
     }
   }
 

@@ -478,12 +478,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
-      final result = await _nochPayService.initiatePayment(
+            final result = await _nochPayService.initiatePayment(
         amount: widget.plan.price,
         currency: widget.plan.currency,
         phoneNumber: _phoneNumber,
         invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
         description: 'Abonnement ${widget.plan.name}',
+        paymentMethod: _selectedMethod,
       );
 
       if (result['success'] == true) {
@@ -499,7 +500,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
           invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
           phoneNumber: _phoneNumber,
-          amount: widget.plan.price, reference: '', authorizationUrl: '',
+          amount: widget.plan.price, 
+          reference: _transactionId, 
+          authorizationUrl: '',
         );
 
         _startAutoCheck();

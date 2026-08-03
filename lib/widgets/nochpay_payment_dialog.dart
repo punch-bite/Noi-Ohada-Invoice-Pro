@@ -6,12 +6,14 @@ import '../services/nochpay_service.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
 import '../models/invoice.dart';
+import '../screens/payment/mobile_money_webview.dart';
 
 class NochPayPaymentDialog extends StatefulWidget {
   final Invoice invoice;
   final String phoneNumber;
   final VoidCallback onSuccess;
   final VoidCallback onCancel;
+  final String paymentMethod;
 
   const NochPayPaymentDialog({
     super.key,
@@ -19,6 +21,7 @@ class NochPayPaymentDialog extends StatefulWidget {
     required this.phoneNumber,
     required this.onSuccess,
     required this.onCancel,
+    this.paymentMethod = NochPayService.methodOrangeMoney,
   });
 
   @override
@@ -30,22 +33,19 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
   final DatabaseService _db = DatabaseService();
   final NotificationService _notificationService = NotificationService();
 
-  Timer? _statusTimer;
-  String _status = 'initializing';
-  String _transactionId = '';
-  String _confirmationCode = '';
-  String _error = '';
-  bool _isLoading = false;
-  String _userConfirmationCode = '';
-  final int _retryCount = 0;
-  final int _maxRetries = 3;
+    Timer? _statusTimer;
+    String _status = 'initializing';
+    String _transactionId = '';
+    String _error = '';
+    bool _isLoading = false;
+    String _userConfirmationCode = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _notificationService.init();
-    _initiatePayment();
-  }
+    @override
+    void initState() {
+      super.initState();
+      _notificationService.init();
+      _initiatePayment();
+    }
 
   @override
   void dispose() {
@@ -63,20 +63,20 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
     });
 
     try {
-      final result = await _nochPayService.initiatePayment(
+            final result = await _nochPayService.initiatePayment(
         amount: widget.invoice.totalAmount,
         currency: 'XAF',
         phoneNumber: widget.phoneNumber,
         invoiceNumber: widget.invoice.invoiceNumber,
         description: 'Paiement facture ${widget.invoice.invoiceNumber}',
+        paymentMethod: widget.paymentMethod,
       );
 
       if (!mounted) return;
 
-      if (result['success'] == true) {
-        setState(() {
+            if (result['success'] == true) {
+                setState(() {
           _transactionId = result['transaction_id'];
-          _confirmationCode = result['confirmation_code'] ?? '';
           _status = 'pending';
           _isLoading = false;
         });
@@ -86,8 +86,22 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
           invoiceId: widget.invoice.id,
           phoneNumber: widget.phoneNumber,
           amount: widget.invoice.totalAmount,
-          invoiceNumber: widget.invoice.invoiceNumber, reference: '', authorizationUrl: '',
+          invoiceNumber: widget.invoice.invoiceNumber,
+          paymentMethod: widget.paymentMethod,
         );
+
+        // 🔥 Si l'API retourne une URL d'autorisation (WebView mobile money),
+        // on bascule vers le flux de paiement webview.
+        final authorizationUrl = result['authorization_url'] as String?;
+        if (authorizationUrl != null && authorizationUrl.isNotEmpty) {
+          if (mounted) {
+            await _openMobileMoneyWebView(
+              authorizationUrl,
+              widget.paymentMethod,
+            );
+          }
+          return;
+        }
 
         _startAutoCheck();
       } else {
@@ -116,9 +130,36 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
         timer.cancel();
         return;
       }
-      checks++;
+            checks++;
       await _checkPaymentStatus();
     });
+  }
+
+  /// Ouvre le flux de paiement WebView (Mobile Money) quand l'API fournit
+  /// une URL d'autorisation. À la réussite, le paiement est finalisé.
+  Future<void> _openMobileMoneyWebView(
+    String authorizationUrl,
+    String provider,
+  ) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MobileMoneyWebView(
+          paymentUrl: authorizationUrl,
+          provider: provider,
+          transactionReference: _transactionId,
+          onSuccess: () async {
+            await _completePayment();
+          },
+          onCancel: () {
+            setState(() {
+              _status = 'failed';
+              _error = 'Paiement annulé par l\'utilisateur';
+            });
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _checkPaymentStatus() async {
