@@ -32,16 +32,29 @@ import 'widgets/connectivity_wrapper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Demander les permissions
-  await PermissionService.requestPermissions();
-  // ===== ÉTAPE 1 : Configuration =====
+  debugPrint('🚀 === DÉMARRAGE APPLICATION ===');
+
+  // ===== PERMISSIONS =====
+  debugPrint('📱 Demande des permissions...');
+  try {
+    await PermissionService.requestPermissions();
+  } catch (e) {
+    debugPrint('⚠️ Permissions: $e');
+  }
+
+  // ===== CONFIGURATION =====
+  debugPrint('⚙️ Configuration...');
   await ConfigService.init();
   await LoggerService.init();
+  debugPrint('✅ Configuration OK');
 
-  // ===== ÉTAPE 2 : Hive (stockage local) =====
+  // ===== HIVE =====
+  debugPrint('📦 Hive...');
   await HiveService.init();
+  debugPrint('✅ Hive OK');
 
-  // ===== ÉTAPE 3 : Firebase =====
+  // ===== FIREBASE =====
+  debugPrint('🔥 Firebase...');
   await Firebase.initializeApp(
     options: FirebaseOptions(
       apiKey: ConfigService.firebaseApiKey,
@@ -52,44 +65,58 @@ void main() async {
       storageBucket: ConfigService.firebaseStorageBucket,
     ),
   );
+  debugPrint('✅ Firebase OK');
 
+  // ===== FIRESTORE (NON BLOQUANT) =====
+  debugPrint('☁️ Firestore (arrière-plan)...');
   FirestoreInitializer.initialize().catchError((e) {
     debugPrint('⚠️ Firestore init ignorée: $e');
   });
-  
-  // Ignorer les erreurs de permission sur le Web en développement
-  try {
-    await FirestoreInitializer.initialize();
-  } catch (e) {
-    debugPrint('⚠️ Firestore initialisation ignorée: $e');
-  }
+  debugPrint('✅ Firestore lancé en arrière-plan');
 
-  // ===== ÉTAPE 5 : Services =====
+  // ===== SERVICES =====
+  debugPrint('🛠️ Services...');
+  
+  // ⚠️ Les services doivent être déclarés AVANT d'être utilisés dans runApp
   final notificationService = NotificationService();
   final connectivityService = ConnectivityService();
   final stockService = StockService();
   final nochPayService = NochPayService();
 
-  await Future.wait([
-    notificationService.init(),
-    ReminderService().init(),
-    stockService.init(),
-    ThemeService.init(),
-    SecurityService.init(),
-  ]);
+  try {
+    await Future.any([
+      Future.wait([
+        notificationService.init(),
+        ReminderService().init(),
+        stockService.init(),
+        ThemeService.init(),
+        SecurityService.init(),
+        DatabaseService.init(),
+      ]),
+      Future.delayed(const Duration(seconds: 8)),
+    ]);
+    debugPrint('✅ Services OK (ou timeout)');
+  } catch (e) {
+    debugPrint('⚠️ Services: $e (continue)');
+  }
 
-  await DatabaseService.init();
-
-  // ===== ÉTAPE 6 : Vérificateur d'abonnements =====
+  // ===== SUBSCRIPTION CHECKER =====
+  debugPrint('🔄 SubscriptionChecker...');
   SubscriptionCheckerService().start().ignore();
+  debugPrint('✅ SubscriptionChecker lancé');
 
-  // ===== ÉTAPE 7 : Lancement de l'application =====
-  runApp(MyApp(
-    notificationService: notificationService,
-    connectivityService: connectivityService,
-    stockService: stockService,
-    nochPayService: nochPayService,
-  ));
+  // ===== LANCEMENT =====
+  debugPrint('🚀 Lancement de l\'application...');
+  
+  // ✅ Vérifier que tous les services sont passés correctement
+  runApp(
+    MyApp(
+      notificationService: notificationService,
+      connectivityService: connectivityService,
+      stockService: stockService,
+      nochPayService: nochPayService,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -110,27 +137,25 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Providers avec ChangeNotifier
+        // 🔥 AUTH
         ChangeNotifierProvider(create: (_) => AppAuthProvider()),
+        
+        // 🔥 SUBSCRIPTION (dépend de AUTH)
         ChangeNotifierProxyProvider<AppAuthProvider, SubscriptionProvider>(
           create: (context) => SubscriptionProvider(
             context.read<AppAuthProvider>(),
           ),
           update: (context, authProvider, previous) {
-            // Mettre à jour l'instance existante ou en créer une nouvelle
-            if (previous != null) {
-              // On ne peut pas recréer l'instance, on la garde
-              return previous;
-            }
+            if (previous != null) return previous;
             return SubscriptionProvider(authProvider);
           },
         ),
+        
+        // 🔥 AUTRES PROVIDERS
         ChangeNotifierProvider(create: (_) => FirestoreService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider.value(value: notificationService),
         ChangeNotifierProvider.value(value: connectivityService),
-
-        // Services simples (sans notification)
         Provider<StockService>.value(value: stockService),
         Provider<NochPayService>.value(value: nochPayService),
       ],

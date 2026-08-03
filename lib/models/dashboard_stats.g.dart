@@ -1,7 +1,5 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-// ignore_for_file: unused_element
-
 part of 'dashboard_stats.dart';
 
 // **************************************************************************
@@ -113,7 +111,6 @@ class CustomerAdapter extends TypeAdapter<Customer> {
 // JsonSerializableGenerator
 // **************************************************************************
 
-// ignore: unused_element
 DashboardStats _$DashboardStatsFromJson(Map<String, dynamic> json) =>
     DashboardStats(
       netRevenue: (json['netRevenue'] as num?)?.toDouble() ?? 3131021,

@@ -1,7 +1,5 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-// ignore_for_file: unused_element
-
 part of 'activity_log.dart';
 
 // **************************************************************************
@@ -78,7 +76,6 @@ ActivityLog _$ActivityLogFromJson(Map<String, dynamic> json) => ActivityLog(
       timestamp: DateTime.parse(json['timestamp'] as String),
     );
 
-// ignore: unused_element
 Map<String, dynamic> _$ActivityLogToJson(ActivityLog instance) =>
     <String, dynamic>{
       'id': instance.id,
