@@ -18,7 +18,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("androidx.multidex:multidex:2.0.1")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    // implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 }
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
@@ -51,7 +51,7 @@ android {
     }
     configurations.all {
     resolutionStrategy {
-        force 'androidx.constraintlayout:constraintlayout:2.1.4'
+        force ("androidx.constraintlayout:constraintlayout:2.1.4")
     }
 }
 
