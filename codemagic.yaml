@@ -30,10 +30,6 @@ workflows:
           echo "API_URL=$API_URL" > .env
           echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
 
-      - name: Update Gradle Wrapper
-        script: |
-          cd android && ./gradlew wrapper --gradle-version 8.13
-
       - name: Fix Android SDK 37 directory path
         script: |
           ln -s /usr/local/share/android-sdk/platforms/android-37.0 /usr/local/share/android-sdk/platforms/android-37
