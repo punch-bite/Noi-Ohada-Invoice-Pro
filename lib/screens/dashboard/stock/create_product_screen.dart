@@ -146,7 +146,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       barcode: _barcodeController.text.trim().isEmpty
           ? null
           : _barcodeController.text.trim(),
-      supplierId: _selectedSupplier?.id,
+      supplierId: _selectedSupplier?.id, userId: '',
     );
 
     try {
@@ -161,7 +161,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
           category: product.category,
           unit: product.unit,
           barcode: product.barcode,
-          supplierId: product.supplierId,
+          supplierId: product.supplierId, updatedAt: DateTime.now(),
         );
         await _stockService.updateProduct(updated);
       } else {

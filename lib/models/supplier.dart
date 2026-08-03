@@ -1,49 +1,28 @@
-// lib/models/supplier.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'supplier.g.dart';
 
-@JsonSerializable()
-@HiveType(typeId: 14) // Assurez-vous que l'ID est unique
+@HiveType(typeId: 8)
 class Supplier {
-  @HiveField(0)
-  final String id;
-
-  @HiveField(1)
-  final String name;
-
-  @HiveField(2)
-  final String email;
-
-  @HiveField(3)
-  final String phone;
-
-  @HiveField(4)
-  final String address;
-
-  @HiveField(5)
-  final String taxId; // NUI / RCCM (Normes fiscales locales)
-
-  @HiveField(6)
-  final String contactPerson;
-
-  @HiveField(7)
-  final String notes;
-
-  @HiveField(8)
-  final bool isActive;
-
-  @HiveField(9)
-  final DateTime createdAt;
-
-  @HiveField(10)
-  final DateTime? updatedAt;
+  @HiveField(0) final String id;
+  @HiveField(1) final String userId;
+  @HiveField(2) final String name;
+  @HiveField(3) final String email;
+  @HiveField(4) final String phone;
+  @HiveField(5) final String address;
+  @HiveField(6) final String taxId;
+  @HiveField(7) final String contactPerson;
+  @HiveField(8) final String notes;
+  @HiveField(9) final bool isActive;
+  @HiveField(10) final DateTime createdAt;
+  @HiveField(11) final DateTime? updatedAt;
+  @HiveField(12) final bool isSynced;
 
   Supplier({
     String? id,
+    required this.userId,
     required this.name,
     this.email = '',
     this.phone = '',
@@ -54,14 +33,14 @@ class Supplier {
     this.isActive = true,
     DateTime? createdAt,
     this.updatedAt,
+    this.isSynced = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
-
-  // ===== SÉRIALISATION HIVE / FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': userId,
       'name': name,
       'email': email,
       'phone': phone,
@@ -72,12 +51,14 @@ class Supplier {
       'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'isSynced': isSynced,
     };
   }
 
   factory Supplier.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Supplier(
       id: documentId ?? map['id'] ?? const Uuid().v4(),
+      userId: map['userId'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
@@ -86,39 +67,24 @@ class Supplier {
       contactPerson: map['contactPerson'] ?? '',
       notes: map['notes'] ?? '',
       isActive: map['isActive'] ?? true,
-      createdAt: _parseDateTime(map['createdAt']),
+      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
       updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      isSynced: map['isSynced'] ?? false,
     );
   }
 
-  /// Constructeur dédié pour Firestore (plus clair)
-  factory Supplier.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Supplier.fromMap(data, documentId: doc.id);
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is DateTime) return value;
+    return DateTime.now();
   }
 
-  // ===== JSON (pour sérialisation web / API) =====
-
-  Map<String, dynamic> toJson() => _$SupplierToJson(this);
-
-  factory Supplier.fromJson(Map<String, dynamic> json) => _$SupplierFromJson(json);
-
-  // ===== CLONAGE (copyWith) =====
-
-  Supplier copyWith({
-    String? id,
-    String? name,
-    String? email,
-    String? phone,
-    String? address,
-    String? taxId,
-    String? contactPerson,
-    String? notes,
-    bool? isActive,
-    DateTime? updatedAt,
-  }) {
+  Supplier copyWith({String? name, String? email, String? phone, String? address, String? taxId, String? contactPerson, String? notes, bool? isActive, bool? isSynced, required DateTime updatedAt}) {
     return Supplier(
-      id: id ?? this.id,
+      id: id,
+      userId: userId,
       name: name ?? this.name,
       email: email ?? this.email,
       phone: phone ?? this.phone,
@@ -128,26 +94,8 @@ class Supplier {
       notes: notes ?? this.notes,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+      isSynced: isSynced ?? this.isSynced,
     );
-  }
-
-  // ===== GETTERS UTILITAIRES =====
-
-  String get formattedPhone => phone.isNotEmpty ? phone : 'Non renseigné';
-  String get formattedEmail => email.isNotEmpty ? email : 'Non renseigné';
-
-  /// Vérifie si le fournisseur est valide (au minimum un nom)
-  bool get isValid => name.isNotEmpty;
-
-  // ===== FONCTIONS DE PARSING ROBUSTE =====
-
-  static DateTime _parseDateTime(dynamic value) {
-    if (value == null) return DateTime.now();
-    if (value is Timestamp) return value.toDate();
-    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
-    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-    if (value is DateTime) return value;
-    return DateTime.now();
   }
 }

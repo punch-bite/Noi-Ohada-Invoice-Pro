@@ -133,7 +133,7 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
       defaultTaxRate: _defaultTaxRate,
       legalText: _legalTextController.text.trim(),
       website: _websiteController.text.trim(),
-      rccm: _rccmController.text.trim(),
+      rccm: _rccmController.text.trim(), userId: '',
     );
 
     await _db.saveCompany(company);

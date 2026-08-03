@@ -35,13 +35,14 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       notes: fields[15] as String,
       syncedAt: fields[16] as DateTime?,
       updatedAt: fields[17] as DateTime?,
+      isSynced: fields[19] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Invoice obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,6 +75,8 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       ..write(obj.isDevis)
       ..writeByte(15)
       ..write(obj.notes)
+      ..writeByte(19)
+      ..write(obj.isSynced)
       ..writeByte(16)
       ..write(obj.syncedAt)
       ..writeByte(17)
@@ -120,6 +123,7 @@ Invoice _$InvoiceFromJson(Map<String, dynamic> json) => Invoice(
       updatedAt: json['updatedAt'] == null
           ? null
           : DateTime.parse(json['updatedAt'] as String),
+      isSynced: json['isSynced'] as bool,
     );
 
 Map<String, dynamic> _$InvoiceToJson(Invoice instance) => <String, dynamic>{
@@ -139,6 +143,7 @@ Map<String, dynamic> _$InvoiceToJson(Invoice instance) => <String, dynamic>{
       'terms': instance.terms,
       'isDevis': instance.isDevis,
       'notes': instance.notes,
+      'isSynced': instance.isSynced,
       'syncedAt': instance.syncedAt?.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
     };

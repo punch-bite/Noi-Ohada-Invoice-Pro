@@ -1,69 +1,55 @@
-// lib/models/product.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'product.g.dart';
 
-@JsonSerializable()
-@HiveType(
-    typeId:
-        11) // Modifié à 5 pour éviter le conflit avec Notification (typeId: 4)
+@HiveType(typeId: 5)
 class Product {
   @HiveField(0)
   final String id;
-
   @HiveField(1)
-  final String name;
-
+  final String userId;
   @HiveField(2)
-  final String description;
-
+  final String name;
   @HiveField(3)
-  final String category;
-
+  final String description;
   @HiveField(4)
-  final double price; // Prix de vente HT / TTC
-
+  final String category;
   @HiveField(5)
-  final double costPrice; // Prix d'achat / de revient
-
+  final double price;
   @HiveField(6)
-  final int quantity;
-
+  final double costPrice;
   @HiveField(7)
-  final int minStock;
-
+  final int quantity;
   @HiveField(8)
-  final String unit;
-
+  final int minStock;
   @HiveField(9)
-  final String? barcode;
-
+  final String unit;
   @HiveField(10)
-  final String? imagePath;
-
+  final String? barcode;
   @HiveField(11)
-  final bool isActive;
-
+  final String? imagePath;
   @HiveField(12)
-  final DateTime createdAt;
-
+  final bool isActive;
   @HiveField(13)
-  final DateTime? updatedAt;
-
+  final DateTime createdAt;
   @HiveField(14)
-  final String? supplierId; // Référence vers un fournisseur
+  final DateTime? updatedAt;
+  @HiveField(15)
+  final String? supplierId;
+  @HiveField(16)
+  final bool isSynced;
 
   Product({
     String? id,
+    required this.userId,
     required this.name,
     this.description = '',
     this.category = '',
     required this.price,
-    this.costPrice = 0.0,
+    this.costPrice = 0,
     this.quantity = 0,
     this.minStock = 5,
     this.unit = 'pièce',
@@ -73,33 +59,14 @@ class Product {
     DateTime? createdAt,
     this.updatedAt,
     this.supplierId,
+    this.isSynced = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
-
-  // Ajout du constructeur Firestore
-  factory Product.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Product.fromMap(data, documentId: doc.id);
-  }
-
-// _parseDateTime renforcée
-  static DateTime _parseDateTime(dynamic value) {
-    if (value == null) return DateTime.now();
-    if (value is Timestamp) return value.toDate();
-    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
-    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-    if (value is DateTime) return value;
-    return DateTime.now();
-  }
-
-// Getter supplémentaire
-  bool get isValidForSale => isActive && quantity > 0 && price > 0;
-
-  // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': userId,
       'name': name,
       'description': description,
       'category': category,
@@ -114,17 +81,19 @@ class Product {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'supplierId': supplierId,
+      'isSynced': isSynced,
     };
   }
 
   factory Product.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return Product(
       id: documentId ?? map['id'] ?? const Uuid().v4(),
+      userId: map['userId'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
-      price: (map['price'] as num?)?.toDouble() ?? 0.0,
-      costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0.0,
+      price: (map['price'] as num?)?.toDouble() ?? 0,
+      costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
       quantity: (map['quantity'] as num?)?.toInt() ?? 0,
       minStock: (map['minStock'] as num?)?.toInt() ?? 5,
       unit: map['unit'] ?? 'pièce',
@@ -137,20 +106,57 @@ class Product {
       updatedAt:
           map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
       supplierId: map['supplierId'],
+      isSynced: map['isSynced'] ?? false,
     );
   }
 
-  // ===== GETTERS METIER & RENTABILITE =====
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    if (value is DateTime) return value;
+    return DateTime.now();
+  }
 
   bool get isLowStock => quantity <= minStock;
   bool get isOutOfStock => quantity <= 0;
   double get stockValue => quantity * price;
 
-  /// Calcul de la marge brute par unité
-  double get margin => price - costPrice;
-
-  /// Pourcentage de marge brute sur le prix de vente
-  double get marginPercentage => price > 0 ? (margin / price) * 100 : 0.0;
+  Product copyWith(
+      {String? name,
+      String? description,
+      String? category,
+      double? price,
+      double? costPrice,
+      int? quantity,
+      int? minStock,
+      String? unit,
+      String? barcode,
+      String? imagePath,
+      bool? isActive,
+      String? supplierId,
+      bool? isSynced,
+      required DateTime updatedAt}) {
+    return Product(
+      id: id,
+      userId: userId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      price: price ?? this.price,
+      costPrice: costPrice ?? this.costPrice,
+      quantity: quantity ?? this.quantity,
+      minStock: minStock ?? this.minStock,
+      unit: unit ?? this.unit,
+      barcode: barcode ?? this.barcode,
+      imagePath: imagePath ?? this.imagePath,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+      supplierId: supplierId ?? this.supplierId,
+      isSynced: isSynced ?? this.isSynced,
+    );
+  }
 
   String get formattedPrice => '$price FCFA';
   String get formattedCostPrice => '$costPrice FCFA';
@@ -168,72 +174,9 @@ class Product {
     return Colors.green;
   }
 
-  bool get isValid {
-    return name.isNotEmpty && price > 0 && quantity >= 0 && minStock >= 0;
+  IconData get statusIcon {
+    if (isOutOfStock) return Icons.dangerous;
+    if (isLowStock) return Icons.warning_amber;
+    return Icons.check_circle;
   }
-
-  // ===== CLONAGE (copyWith) =====
-
-  Product copyWith({
-    String? name,
-    String? description,
-    String? category,
-    double? price,
-    double? costPrice,
-    int? quantity,
-    int? minStock,
-    String? unit,
-    String? barcode,
-    String? imagePath,
-    bool? isActive,
-    DateTime? updatedAt,
-    String? supplierId,
-  }) {
-    return Product(
-      id: id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      category: category ?? this.category,
-      price: price ?? this.price,
-      costPrice: costPrice ?? this.costPrice,
-      quantity: quantity ?? this.quantity,
-      minStock: minStock ?? this.minStock,
-      unit: unit ?? this.unit,
-      barcode: barcode ?? this.barcode,
-      imagePath: imagePath ?? this.imagePath,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
-      supplierId: supplierId ?? this.supplierId,
-    );
-  }
-
-  // ===== FACTORIES & MOCKS =====
-
-  factory Product.mock() {
-    return Product(
-      name: 'Produit exemple',
-      description: 'Description du produit',
-      category: 'Électronique',
-      price: 1500.0,
-      costPrice: 1000.0,
-      quantity: 10,
-      minStock: 3,
-      unit: 'pièce',
-    );
-  }
-
-  /// Fonction d'aide pour parser les dates de manière ultra-robuste
-  // static DateTime _parseDateTime(dynamic value) {
-  //   if (value is Timestamp) {
-  //     return value.toDate();
-  //   } else if (value is String) {
-  //     return DateTime.tryParse(value) ?? DateTime.now();
-  //   } else if (value is int) {
-  //     return DateTime.fromMillisecondsSinceEpoch(value);
-  //   } else if (value is DateTime) {
-  //     return value;
-  //   }
-  //   return DateTime.now();
-  // }
 }

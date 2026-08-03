@@ -86,7 +86,8 @@ class SubscriptionService {
           currency: currency,
           autoRenew: true,
           isActive: true,
-          createdAt: DateTime.now(), interval: '',
+          createdAt: DateTime.now(),
+          interval: interval,
         );
 
         transaction.set(subRef, sub.toMap());
@@ -204,6 +205,10 @@ class SubscriptionService {
         return Subscription.fromMap({...doc.data(), 'id': doc.id});
       }).toList();
     } catch (e) {
+      // Ignorer les erreurs de permission (l'utilisateur n'est pas admin)
+      if (e.toString().contains('permission-denied')) {
+        return [];
+      }
       debugPrint('❌ Erreur lors de la récupération des abonnements actifs: $e');
       return [];
     }

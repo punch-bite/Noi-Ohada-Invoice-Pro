@@ -80,7 +80,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           taxId: _taxIdController.text.trim(),
           contactPerson: _contactPersonController.text.trim(),
           notes: _notesController.text.trim(),
-          isActive: _isActive,
+          isActive: _isActive, userId: '',
         );
         await _supplierService.addSupplier(supplier);
         
@@ -101,7 +101,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           taxId: _taxIdController.text.trim(),
           contactPerson: _contactPersonController.text.trim(),
           notes: _notesController.text.trim(),
-          isActive: _isActive,
+          isActive: _isActive, updatedAt: DateTime.now(),
         );
         await _supplierService.updateSupplier(updated);
         

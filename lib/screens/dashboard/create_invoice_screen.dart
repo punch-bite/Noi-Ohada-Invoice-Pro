@@ -762,7 +762,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         totalAmount: _total,
         terms: _terms,
         isDevis: _isDevis,
-        notes: _notesController.text.trim(),
+        notes: _notesController.text.trim(), isSynced: false,
       );
 
       await _db.addInvoice(invoice);

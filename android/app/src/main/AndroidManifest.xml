@@ -1,4 +1,3 @@
-<!-- android/app/src/main/AndroidManifest.xml -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.noi.noi_ohada_invoice_pro">
     <!-- ===== PERMISSIONS DE BASE ===== -->
@@ -46,8 +45,8 @@
         android:name="android.permission.CALL_PHONE"/>
     <!-- ===== LOCALISATION (optionnel) ===== -->
     <!-- Pour les adresses ou la géolocalisation -->
-    <!-- <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /> -->
-    <!-- <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- ===== QUERY ALL PACKAGES ===== -->
     <!-- Pour détecter les applications installées (ex: partage) -->
     <uses-permission

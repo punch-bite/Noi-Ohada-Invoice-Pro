@@ -307,7 +307,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       child: Text(
                         product.category.isNotEmpty ? product.category.toUpperCase() : 'SANS CATÉGORIE',
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 7,
                           color: subTextColor,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
@@ -340,7 +340,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: Text(
                       isOut ? 'RUPTURE' : (isLow ? 'STOCK FAIBLE' : 'EN STOCK'),
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 7,
                         fontWeight: FontWeight.w800,
                         color: statusColor,
                         letterSpacing: 0.5,

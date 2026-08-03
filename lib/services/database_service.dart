@@ -72,6 +72,27 @@ class DatabaseService {
     }
   }
 
+// // dans DatabaseService
+
+//   /// Marque un élément comme synchronisé (isSynced = true)
+//   Future<void> markSynced(String boxName, String id) async {
+//     final box = Hive.box(boxName);
+//     final item = box.get(id);
+//     if (item != null && (item as dynamic).isSynced != null) {
+//       final updated = (item as dynamic).copyWith(isSynced: true);
+//       await box.put(id, updated);
+//     }
+//   }
+
+  /// Marque l'entreprise comme synchronisée
+  Future<void> markCompanySynced() async {
+    final box = Hive.box<Company>(companyBox);
+    final company = box.getAt(0);
+    if (company != null) {
+      final updated = company.copyWith(isSynced: true);
+      await box.putAt(0, updated);
+    }
+  }
   // ==========================================
   // ---- CLIENTS ----
   // ==========================================
@@ -164,7 +185,7 @@ class DatabaseService {
   Future<void> updateInvoiceStatus(String id, String status) async {
     final invoice = await getInvoice(id);
     if (invoice != null) {
-      final updatedInvoice = invoice.copyWith(status: status);
+      final updatedInvoice = invoice.copyWith(status: status, isSynced: false);
       await updateInvoice(updatedInvoice);
     }
   }
@@ -220,8 +241,21 @@ class DatabaseService {
     return Hive.box<Subscription>(subscriptionBox).get(id);
   }
 
+// dans DatabaseService
+  Future<Subscription?> getUserActiveSubscription(String userId) async {
+    final box = Hive.box<Subscription>(subscriptionBox);
+    try {
+      return box.values.firstWhere(
+        (sub) => sub.userId == userId && sub.status == 'active' && sub.isActive,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> saveSubscription(Subscription subscription) async {
-    await Hive.box<Subscription>(subscriptionBox).put(subscription.id, subscription);
+    await Hive.box<Subscription>(subscriptionBox)
+        .put(subscription.id, subscription);
   }
 
   Future<void> deleteSubscription(String id) async {
@@ -270,7 +304,8 @@ class DatabaseService {
   }
 
   Future<void> saveNotification(AppNotification notification) async {
-    await Hive.box<AppNotification>(notificationBox).put(notification.id, notification);
+    await Hive.box<AppNotification>(notificationBox)
+        .put(notification.id, notification);
   }
 
   Future<void> deleteNotification(String id) async {
@@ -282,7 +317,78 @@ class DatabaseService {
   }
 
   // ==========================================
-  // ---- NETTOYAGE ----
+  // ---- MÉTHODES GÉNÉRIQUES (CRUD) ----
+  // ==========================================
+
+  /// Récupère tous les éléments d'une box
+  Future<List<T>> getAll<T>(String boxName) async {
+    final box = Hive.box<T>(boxName);
+    return box.values.toList();
+  }
+
+  /// Récupère un élément par son ID dans une box
+  Future<T?> getById<T>(String boxName, String id) async {
+    final box = Hive.box<T>(boxName);
+    return box.get(id);
+  }
+
+  /// Sauvegarde ou met à jour un élément (utilisation de l'ID comme clé)
+  Future<void> save<T>(String boxName, T item) async {
+    final box = Hive.box<T>(boxName);
+    await box.put(_getId(item), item);
+  }
+
+  /// Supprime un élément par son ID
+  Future<void> delete<T>(String boxName, String id) async {
+    final box = Hive.box<T>(boxName);
+    await box.delete(id);
+  }
+
+  /// Supprime tous les éléments d'une box
+  Future<void> clearBox(String boxName) async {
+    final box = Hive.box(boxName);
+    await box.clear();
+  }
+
+  /// Vérifie si un élément existe dans une box
+  Future<bool> exists<T>(String boxName, String id) async {
+    final box = Hive.box<T>(boxName);
+    return box.containsKey(id);
+  }
+
+  /// Récupère l'ID d'un objet (suppose que l'objet a un champ 'id')
+  String _getId(dynamic item) {
+    // Tous nos modèles ont un champ 'id' de type String
+    return (item as dynamic).id as String;
+  }
+
+  Future<void> markSynced(String boxName, String id) async {
+    final box = Hive.box(boxName);
+    final item = box.get(id);
+    if (item != null) {
+      // Utiliser copyWith si disponible, sinon créer un nouvel objet
+      if (item is Client) {
+        final updated = item.copyWith(isSynced: true, taxId: '');
+        await box.put(id, updated);
+      } else if (item is Product) {
+        final updated =
+            item.copyWith(isSynced: true, updatedAt: DateTime.now());
+        await box.put(id, updated);
+      } else if (item is Supplier) {
+        final updated =
+            item.copyWith(isSynced: true, updatedAt: DateTime.now());
+        await box.put(id, updated);
+      } else if (item is Invoice) {
+        final updated =
+            item.copyWith(isSynced: true, updatedAt: DateTime.now());
+        await box.put(id, updated);
+      } else if (item is Company) {
+        // Pour Company, nous avons besoin d'une méthode spécifique (pas encore implémentée)
+      }
+    }
+  }
+  // ==========================================
+  // ---- NETTOYAGE GLOBAL ----
   // ==========================================
 
   Future<void> clearAllData() async {

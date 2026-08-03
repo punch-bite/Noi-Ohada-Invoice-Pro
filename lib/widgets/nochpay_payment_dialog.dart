@@ -167,7 +167,7 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
   Future<void> _completePayment() async {
     _statusTimer?.cancel();
     
-    final updatedInvoice = widget.invoice.copyWith(status: 'paid');
+    final updatedInvoice = widget.invoice.copyWith(status: 'paid', isSynced: false);
     await _db.updateInvoice(updatedInvoice);
     await _notificationService.notifyInvoicePaid(widget.invoice.invoiceNumber);
     await _notificationService.notifyPaymentReceived(widget.invoice.totalAmount);

@@ -8,7 +8,7 @@ part of 'product.dart';
 
 class ProductAdapter extends TypeAdapter<Product> {
   @override
-  final int typeId = 11;
+  final int typeId = 5;
 
   @override
   Product read(BinaryReader reader) {
@@ -18,57 +18,63 @@ class ProductAdapter extends TypeAdapter<Product> {
     };
     return Product(
       id: fields[0] as String?,
-      name: fields[1] as String,
-      description: fields[2] as String,
-      category: fields[3] as String,
-      price: fields[4] as double,
-      costPrice: fields[5] as double,
-      quantity: fields[6] as int,
-      minStock: fields[7] as int,
-      unit: fields[8] as String,
-      barcode: fields[9] as String?,
-      imagePath: fields[10] as String?,
-      isActive: fields[11] as bool,
-      createdAt: fields[12] as DateTime?,
-      updatedAt: fields[13] as DateTime?,
-      supplierId: fields[14] as String?,
+      userId: fields[1] as String,
+      name: fields[2] as String,
+      description: fields[3] as String,
+      category: fields[4] as String,
+      price: fields[5] as double,
+      costPrice: fields[6] as double,
+      quantity: fields[7] as int,
+      minStock: fields[8] as int,
+      unit: fields[9] as String,
+      barcode: fields[10] as String?,
+      imagePath: fields[11] as String?,
+      isActive: fields[12] as bool,
+      createdAt: fields[13] as DateTime?,
+      updatedAt: fields[14] as DateTime?,
+      supplierId: fields[15] as String?,
+      isSynced: fields[16] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.name)
+      ..write(obj.userId)
       ..writeByte(2)
-      ..write(obj.description)
+      ..write(obj.name)
       ..writeByte(3)
-      ..write(obj.category)
+      ..write(obj.description)
       ..writeByte(4)
-      ..write(obj.price)
+      ..write(obj.category)
       ..writeByte(5)
-      ..write(obj.costPrice)
+      ..write(obj.price)
       ..writeByte(6)
-      ..write(obj.quantity)
+      ..write(obj.costPrice)
       ..writeByte(7)
-      ..write(obj.minStock)
+      ..write(obj.quantity)
       ..writeByte(8)
-      ..write(obj.unit)
+      ..write(obj.minStock)
       ..writeByte(9)
-      ..write(obj.barcode)
+      ..write(obj.unit)
       ..writeByte(10)
-      ..write(obj.imagePath)
+      ..write(obj.barcode)
       ..writeByte(11)
-      ..write(obj.isActive)
+      ..write(obj.imagePath)
       ..writeByte(12)
-      ..write(obj.createdAt)
+      ..write(obj.isActive)
       ..writeByte(13)
-      ..write(obj.updatedAt)
+      ..write(obj.createdAt)
       ..writeByte(14)
-      ..write(obj.supplierId);
+      ..write(obj.updatedAt)
+      ..writeByte(15)
+      ..write(obj.supplierId)
+      ..writeByte(16)
+      ..write(obj.isSynced);
   }
 
   @override
@@ -81,47 +87,3 @@ class ProductAdapter extends TypeAdapter<Product> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-Product _$ProductFromJson(Map<String, dynamic> json) => Product(
-      id: json['id'] as String?,
-      name: json['name'] as String,
-      description: json['description'] as String? ?? '',
-      category: json['category'] as String? ?? '',
-      price: (json['price'] as num).toDouble(),
-      costPrice: (json['costPrice'] as num?)?.toDouble() ?? 0.0,
-      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
-      minStock: (json['minStock'] as num?)?.toInt() ?? 5,
-      unit: json['unit'] as String? ?? 'pièce',
-      barcode: json['barcode'] as String?,
-      imagePath: json['imagePath'] as String?,
-      isActive: json['isActive'] as bool? ?? true,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
-      supplierId: json['supplierId'] as String?,
-    );
-
-Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'description': instance.description,
-      'category': instance.category,
-      'price': instance.price,
-      'costPrice': instance.costPrice,
-      'quantity': instance.quantity,
-      'minStock': instance.minStock,
-      'unit': instance.unit,
-      'barcode': instance.barcode,
-      'imagePath': instance.imagePath,
-      'isActive': instance.isActive,
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt?.toIso8601String(),
-      'supplierId': instance.supplierId,
-    };

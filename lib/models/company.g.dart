@@ -18,48 +18,63 @@ class CompanyAdapter extends TypeAdapter<Company> {
     };
     return Company(
       id: fields[0] as String?,
-      name: fields[1] as String,
-      address: fields[2] as String,
-      taxId: fields[3] as String,
-      phone: fields[4] as String,
-      email: fields[5] as String,
-      logoPath: fields[6] as String,
-      currency: fields[7] as String,
-      defaultTaxRate: fields[8] as double,
-      legalText: fields[9] as String,
-      website: fields[10] as String,
-      rccm: fields[11] as String,
+      userId: fields[1] as String,
+      name: fields[2] as String,
+      address: fields[3] as String,
+      taxId: fields[4] as String,
+      phone: fields[5] as String,
+      email: fields[6] as String,
+      logoPath: fields[7] as String,
+      currency: fields[8] as String,
+      defaultTaxRate: fields[9] as double,
+      legalText: fields[10] as String,
+      website: fields[11] as String,
+      rccm: fields[12] as String,
+      createdAt: fields[13] as DateTime?,
+      updatedAt: fields[14] as DateTime?,
+      isActive: fields[15] as bool,
+      isSynced: fields[16] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Company obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.name)
+      ..write(obj.userId)
       ..writeByte(2)
-      ..write(obj.address)
+      ..write(obj.name)
       ..writeByte(3)
-      ..write(obj.taxId)
+      ..write(obj.address)
       ..writeByte(4)
-      ..write(obj.phone)
+      ..write(obj.taxId)
       ..writeByte(5)
-      ..write(obj.email)
+      ..write(obj.phone)
       ..writeByte(6)
-      ..write(obj.logoPath)
+      ..write(obj.email)
       ..writeByte(7)
-      ..write(obj.currency)
+      ..write(obj.logoPath)
       ..writeByte(8)
-      ..write(obj.defaultTaxRate)
+      ..write(obj.currency)
       ..writeByte(9)
-      ..write(obj.legalText)
+      ..write(obj.defaultTaxRate)
       ..writeByte(10)
-      ..write(obj.website)
+      ..write(obj.legalText)
       ..writeByte(11)
-      ..write(obj.rccm);
+      ..write(obj.website)
+      ..writeByte(12)
+      ..write(obj.rccm)
+      ..writeByte(13)
+      ..write(obj.createdAt)
+      ..writeByte(14)
+      ..write(obj.updatedAt)
+      ..writeByte(15)
+      ..write(obj.isActive)
+      ..writeByte(16)
+      ..write(obj.isSynced);
   }
 
   @override
@@ -72,38 +87,3 @@ class CompanyAdapter extends TypeAdapter<Company> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-Company _$CompanyFromJson(Map<String, dynamic> json) => Company(
-      id: json['id'] as String?,
-      name: json['name'] as String,
-      address: json['address'] as String,
-      taxId: json['taxId'] as String,
-      phone: json['phone'] as String,
-      email: json['email'] as String,
-      logoPath: json['logoPath'] as String? ?? '',
-      currency: json['currency'] as String? ?? 'XAF',
-      defaultTaxRate: (json['defaultTaxRate'] as num?)?.toDouble() ?? 18.0,
-      legalText: json['legalText'] as String? ??
-          'Conforme aux dispositions du SYSCOHADA révisé',
-      website: json['website'] as String? ?? '',
-      rccm: json['rccm'] as String? ?? '',
-    );
-
-Map<String, dynamic> _$CompanyToJson(Company instance) => <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'address': instance.address,
-      'taxId': instance.taxId,
-      'phone': instance.phone,
-      'email': instance.email,
-      'logoPath': instance.logoPath,
-      'currency': instance.currency,
-      'defaultTaxRate': instance.defaultTaxRate,
-      'legalText': instance.legalText,
-      'website': instance.website,
-      'rccm': instance.rccm,
-    };

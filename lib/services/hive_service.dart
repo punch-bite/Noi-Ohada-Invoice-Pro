@@ -55,27 +55,27 @@ class HiveService {
       }
     }
 
-    registerAdapter(ClientAdapter()); // typeId: 0
-    registerAdapter(CompanyAdapter()); // typeId: 1
-    registerAdapter(InvoiceAdapter()); // typeId: 2
-    registerAdapter(LineItemAdapter()); // typeId: 3
-    registerAdapter(DeliveryAdapter()); // typeId: 4
-    registerAdapter(ProductAdapter()); // typeId: 5
-    registerAdapter(ReminderAdapter()); // typeId: 6
-    registerAdapter(SubscriptionAdapter()); // typeId: 7
-    registerAdapter(SupplierAdapter()); // typeId: 8
-    registerAdapter(PlanAdapter()); // typeId: 9
-    registerAdapter(InvoiceTemplateAdapter()); // typeId: 10
-    registerAdapter(InvoiceSettingsAdapter()); // typeId: 11
-    registerAdapter(DashboardStatsAdapter()); // typeId: 12
-    registerAdapter(CustomerAdapter()); // typeId: 13
-    registerAdapter(FinancialStatsAdapter()); // typeId: 14
-    registerAdapter(AppNotificationAdapter()); // typeId: 15
-    registerAdapter(AppUserAdapter()); // typeId: 16
-    registerAdapter(ActivityLogAdapter()); // typeId: 17 (à créer si besoin)
-    registerAdapter(TeamAdapter()); // typeId: 18 (à créer si besoin)
-    registerAdapter(TeamInvitationAdapter()); // typeId: 19
-    registerAdapter(SharedInvoiceAdapter()); // typeId: 20
+    registerAdapter(ClientAdapter());
+    registerAdapter(CompanyAdapter());
+    registerAdapter(InvoiceAdapter());
+    registerAdapter(LineItemAdapter());
+    registerAdapter(DeliveryAdapter());
+    registerAdapter(ProductAdapter());
+    registerAdapter(ReminderAdapter());
+    registerAdapter(SubscriptionAdapter());
+    registerAdapter(SupplierAdapter());
+    registerAdapter(PlanAdapter());
+    registerAdapter(InvoiceTemplateAdapter());
+    registerAdapter(InvoiceSettingsAdapter());
+    registerAdapter(DashboardStatsAdapter());
+    registerAdapter(CustomerAdapter());
+    registerAdapter(FinancialStatsAdapter());
+    registerAdapter(AppUserAdapter());
+    registerAdapter(AppNotificationAdapter()); // typeId 16
+    registerAdapter(ActivityLogAdapter()); // typeId 17
+    registerAdapter(TeamAdapter()); // typeId 18
+    registerAdapter(TeamInvitationAdapter()); // typeId 19
+    registerAdapter(SharedInvoiceAdapter()); // typeId 20
   }
 
   static Future<void> _openAllBoxes() async {
@@ -109,7 +109,8 @@ class HiveService {
   /// Vérifie que Hive est prêt
   static void ensureInitialized() {
     if (!_initialized) {
-      throw Exception('HiveService n\'est pas initialisé. Appelez HiveService.init() d\'abord.');
+      throw Exception(
+          'HiveService n\'est pas initialisé. Appelez HiveService.init() d\'abord.');
     }
   }
 

@@ -71,7 +71,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           address: _addressController.text.trim(),
           phone: _phoneController.text.trim(),
           email: _emailController.text.trim(),
-          taxId: _taxIdController.text.trim(),
+          taxId: _taxIdController.text.trim(), userId: '',
         );
         await _db.addClient(client);
       }

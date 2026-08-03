@@ -86,7 +86,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     await Future.delayed(const Duration(seconds: 2));
 
     // Mettre à jour le statut de la facture
-    final updatedInvoice = _selectedInvoice!.copyWith(status: 'paid');
+    final updatedInvoice = _selectedInvoice!.copyWith(status: 'paid', isSynced: false);
     await _db.updateInvoice(updatedInvoice);
 
     if (mounted) {

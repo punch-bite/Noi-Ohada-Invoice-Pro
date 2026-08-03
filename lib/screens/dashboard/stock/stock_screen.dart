@@ -619,7 +619,7 @@ class _StockScreenState extends State<StockScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Valeur : ${product.formattedStockValue}',
+                    'T: ${product.formattedStockValue}',
                     style: TextStyle(fontSize: 11, color: subTextColor),
                   ),
                   const SizedBox(height: 10),

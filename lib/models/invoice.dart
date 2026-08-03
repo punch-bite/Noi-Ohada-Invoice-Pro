@@ -26,6 +26,7 @@ class Invoice {
   @HiveField(13) final String terms;
   @HiveField(14) final bool isDevis;
   @HiveField(15) final String notes;
+  @HiveField(19) final bool isSynced; // 🔥 Flag local/cloud
   @HiveField(16) final DateTime? syncedAt;
   @HiveField(17) final DateTime updatedAt; // Champ critique pour la synchro
 
@@ -47,7 +48,7 @@ class Invoice {
     this.isDevis = false,
     this.notes = '',
     this.syncedAt,
-    DateTime? updatedAt,
+    DateTime? updatedAt, required this.isSynced,
   }) : id = id ?? const Uuid().v4(),
        updatedAt = updatedAt ?? DateTime.now();
 
@@ -93,7 +94,7 @@ class Invoice {
       isDevis: map['isDevis'] ?? false,
       notes: map['notes'] ?? '',
       syncedAt: map['syncedAt'] != null ? _parseDateTime(map['syncedAt']) : null,
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(),
+      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(), isSynced: false,
     );
   }
 
@@ -107,7 +108,7 @@ class Invoice {
 
   Invoice copyWith({
     String? status,
-    DateTime? updatedAt,
+    DateTime? updatedAt, required bool isSynced,
     // ... autres champs
   }) {
     return Invoice(
@@ -128,7 +129,7 @@ class Invoice {
       isDevis: isDevis,
       notes: notes,
       syncedAt: syncedAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      updatedAt: updatedAt ?? DateTime.now(), isSynced: false,
     );
   }
 }
