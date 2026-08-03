@@ -72,3 +72,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+serviceAccountKey.json
+base64.txt
+node_modules/

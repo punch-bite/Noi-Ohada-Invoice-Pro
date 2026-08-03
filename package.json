@@ -1,0 +1,28 @@
+{
+  "name": "noi_ohada_invoice_pro",
+  "version": "1.0.0",
+  "description": "Application SaaS de génération de factures conformes aux normes OHADA pour les PME d'Afrique francophone.",
+  "main": "firestore_init.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/punch-bite/Noi-Ohada-Invoice-Pro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/punch-bite/Noi-Ohada-Invoice-Pro/issues"
+  },
+  "homepage": "https://github.com/punch-bite/Noi-Ohada-Invoice-Pro#readme",
+  "dependencies": {
+    "firebase-admin": "^14.2.0"
+  }
+}

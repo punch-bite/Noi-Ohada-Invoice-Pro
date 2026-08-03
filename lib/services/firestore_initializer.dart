@@ -7,8 +7,6 @@ import '../models/plan.dart';
 class FirestoreInitializer {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Initialise Firestore UNIQUEMENT si l'utilisateur est authentifié et admin.
-  /// Sinon, ignore silencieusement les erreurs de permission.
   static Future<void> initialize() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -25,22 +23,16 @@ class FirestoreInitializer {
         return;
       }
 
-      // Seul un admin peut créer/modifier les données globales
-      await _ensurePlans();
-      await _ensureCompany();
-      await _ensureSettings();
-      await _ensureTemplates();
-      await _ensureLogsPlaceholder();
+      // ⚠️ NE PAS BLOQUER : exécuter en arrière-plan
+      _ensurePlans().catchError((e) => debugPrint('⚠️ Erreur plans: $e'));
+      _ensureCompany().catchError((e) => debugPrint('⚠️ Erreur company: $e'));
+      _ensureSettings().catchError((e) => debugPrint('⚠️ Erreur settings: $e'));
+      _ensureTemplates().catchError((e) => debugPrint('⚠️ Erreur templates: $e'));
+      _ensureLogsPlaceholder().catchError((e) => debugPrint('⚠️ Erreur logs: $e'));
 
-      debugPrint('✅ Firestore initialisé avec succès');
+      debugPrint('✅ Firestore initialisé (non bloquant)');
     } catch (e) {
-      // Ignorer les erreurs de permission (l'application fonctionne en mode local)
-      if (e.toString().contains('permission-denied')) {
-        debugPrint('⚠️ Permission Firestore refusée (mode hors ligne/local).');
-      } else {
-        debugPrint('❌ Erreur initialisation Firestore: $e');
-      }
-      // Ne pas relancer l'exception pour ne pas bloquer le démarrage
+      debugPrint('⚠️ Erreur initialisation Firestore: $e');
     }
   }
 

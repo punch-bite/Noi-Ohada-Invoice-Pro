@@ -32,18 +32,6 @@ import 'widgets/connectivity_wrapper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Timeout pour éviter le blocage infini
-  // try {
-  //   await Future.any([
-  //     _initializeApp(),
-  //     Future.delayed(const Duration(seconds: 10), () {
-  //       throw Exception('⏱️ Initialisation trop longue');
-  //     }),
-  //   ]);
-  // } catch (e) {
-  //   debugPrint('❌ Erreur initialisation: $e');
-  //   // Afficher un écran d'erreur
-  // }
   // Demander les permissions
   await PermissionService.requestPermissions();
   // ===== ÉTAPE 1 : Configuration =====
@@ -65,7 +53,10 @@ void main() async {
     ),
   );
 
-  // ===== ÉTAPE 4 : Initialisation Firestore (création des collections) =====
+  FirestoreInitializer.initialize().catchError((e) {
+    debugPrint('⚠️ Firestore init ignorée: $e');
+  });
+  
   // Ignorer les erreurs de permission sur le Web en développement
   try {
     await FirestoreInitializer.initialize();
