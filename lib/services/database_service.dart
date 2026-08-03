@@ -1,4 +1,5 @@
 // lib/services/database_service.dart
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/user.dart';
 import '../models/invoice.dart';
@@ -8,6 +9,8 @@ import '../models/product.dart';
 import '../models/supplier.dart';
 import '../models/reminder.dart';
 import '../models/subscription.dart';
+import '../models/plan.dart';
+import '../models/notification.dart';
 
 class DatabaseService {
   // Noms des Boxes
@@ -19,13 +22,12 @@ class DatabaseService {
   static const String supplierBox = 'suppliers';
   static const String reminderBox = 'reminders';
   static const String subscriptionBox = 'subscriptions';
+  static const String planBox = 'plans';
+  static const String notificationBox = 'notifications';
 
   /// Initialisation : ne fait plus rien car HiveService gère déjà tout
-  /// Cette méthode est conservée pour compatibilité, mais ne fait rien.
   static Future<void> init() async {
-    // Les boxes sont déjà ouvertes par HiveService.
-    // On peut juste vérifier qu'elles sont disponibles, mais ce n'est pas nécessaire.
-    print('✅ DatabaseService initialisé (Hive déjà prêt)');
+    debugPrint('✅ DatabaseService initialisé (Hive déjà prêt)');
   }
 
   // ==========================================
@@ -71,7 +73,7 @@ class DatabaseService {
   }
 
   // ==========================================
-  // ---- CLIENTS (Optimisés avec clé unique) ----
+  // ---- CLIENTS ----
   // ==========================================
 
   Future<List<Client>> getClients() async {
@@ -100,7 +102,7 @@ class DatabaseService {
   }
 
   // ==========================================
-  // ---- INVOICES (Optimisés avec clé unique) ----
+  // ---- INVOICES ----
   // ==========================================
 
   Future<List<Invoice>> getInvoices() async {
@@ -128,7 +130,6 @@ class DatabaseService {
     await box.delete(id);
   }
 
-  // Génération dynamique du numéro de facture ou devis
   Future<String> getNextInvoiceNumber(bool isDevis) async {
     final box = Hive.box<Invoice>(invoiceBox);
     final prefix = isDevis ? 'DEV' : 'FA';
@@ -190,7 +191,45 @@ class DatabaseService {
   }
 
   // ==========================================
-  // ---- SUPPLIERS & REMINDERS ----
+  // ---- PLANS ----
+  // ==========================================
+
+  Future<List<Plan>> getPlans() async {
+    final box = Hive.box<Plan>(planBox);
+    return box.values.toList();
+  }
+
+  Future<Plan?> getPlan(String id) async {
+    return Hive.box<Plan>(planBox).get(id);
+  }
+
+  Future<void> savePlan(Plan plan) async {
+    await Hive.box<Plan>(planBox).put(plan.id, plan);
+  }
+
+  // ==========================================
+  // ---- SUBSCRIPTIONS ----
+  // ==========================================
+
+  Future<List<Subscription>> getSubscriptions() async {
+    final box = Hive.box<Subscription>(subscriptionBox);
+    return box.values.toList();
+  }
+
+  Future<Subscription?> getSubscription(String id) async {
+    return Hive.box<Subscription>(subscriptionBox).get(id);
+  }
+
+  Future<void> saveSubscription(Subscription subscription) async {
+    await Hive.box<Subscription>(subscriptionBox).put(subscription.id, subscription);
+  }
+
+  Future<void> deleteSubscription(String id) async {
+    await Hive.box<Subscription>(subscriptionBox).delete(id);
+  }
+
+  // ==========================================
+  // ---- SUPPLIERS ----
   // ==========================================
 
   Future<List<Supplier>> getSuppliers() async {
@@ -201,6 +240,14 @@ class DatabaseService {
     await Hive.box<Supplier>(supplierBox).put(supplier.id, supplier);
   }
 
+  Future<void> deleteSupplier(String id) async {
+    await Hive.box<Supplier>(supplierBox).delete(id);
+  }
+
+  // ==========================================
+  // ---- REMINDERS ----
+  // ==========================================
+
   Future<List<Reminder>> getReminders() async {
     return Hive.box<Reminder>(reminderBox).values.toList();
   }
@@ -209,8 +256,33 @@ class DatabaseService {
     await Hive.box<Reminder>(reminderBox).put(reminder.id, reminder);
   }
 
+  Future<void> deleteReminder(String id) async {
+    await Hive.box<Reminder>(reminderBox).delete(id);
+  }
+
   // ==========================================
-  // ---- NETTOYAGE ABSOLU (Déconnexion) ----
+  // ---- NOTIFICATIONS ----
+  // ==========================================
+
+  Future<List<AppNotification>> getNotifications() async {
+    final box = Hive.box<AppNotification>(notificationBox);
+    return box.values.toList();
+  }
+
+  Future<void> saveNotification(AppNotification notification) async {
+    await Hive.box<AppNotification>(notificationBox).put(notification.id, notification);
+  }
+
+  Future<void> deleteNotification(String id) async {
+    await Hive.box<AppNotification>(notificationBox).delete(id);
+  }
+
+  Future<void> clearNotifications() async {
+    await Hive.box<AppNotification>(notificationBox).clear();
+  }
+
+  // ==========================================
+  // ---- NETTOYAGE ----
   // ==========================================
 
   Future<void> clearAllData() async {
@@ -223,6 +295,8 @@ class DatabaseService {
       Hive.box<Supplier>(supplierBox).clear(),
       Hive.box<Reminder>(reminderBox).clear(),
       Hive.box<Subscription>(subscriptionBox).clear(),
+      Hive.box<Plan>(planBox).clear(),
+      Hive.box<AppNotification>(notificationBox).clear(),
     ]);
   }
 }

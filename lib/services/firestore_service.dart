@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/plan.dart';
+import '../models/user.dart';
 import '../services/database_service.dart';
 import '../models/invoice.dart';
 import '../models/subscription.dart';
@@ -21,8 +22,15 @@ class FirestoreService extends ChangeNotifier {
 
   // ===== USERS =====
   Future<void> saveUser(Map<String, dynamic> userData) async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+    
+    // ✅ Vérification de l'accès cloud
+    if (!await _cloudAccess.hasAccess()) {
+      // Stockage local uniquement
+      await DatabaseService().saveUser(AppUser.fromMap(userData));
+      return;
+    }
+
     await _db.collection('users').doc(currentUserId).set(
       {...userData, 'updatedAt': FieldValue.serverTimestamp()},
       SetOptions(merge: true),
@@ -34,7 +42,6 @@ class FirestoreService extends ChangeNotifier {
   Stream<List<Invoice>> getInvoicesStream() {
     if (!isAuthenticated) return Stream.value([]);
 
-    // On utilise un StreamController pour vérifier l'accès au préalable
     final controller = StreamController<List<Invoice>>();
 
     _cloudAccess.hasAccess().then((hasAccess) {
@@ -68,8 +75,14 @@ class FirestoreService extends ChangeNotifier {
   }
 
   Future<void> saveInvoice(Invoice invoice) async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+
+    if (!await _cloudAccess.hasAccess()) {
+      // ✅ Stockage local uniquement (pas de cloud)
+      await DatabaseService().addInvoice(invoice);
+      await LoggerService.info('save_invoice_local', details: 'Facture ${invoice.invoiceNumber} sauvegardée en local');
+      return;
+    }
 
     await _db.collection('invoices').doc(invoice.id).set({
       ...invoice.toMap(),
@@ -83,8 +96,11 @@ class FirestoreService extends ChangeNotifier {
 
   // ===== SYNCHRONISATION =====
   Future<void> syncLocalToCloud() async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+
+    if (!await _cloudAccess.hasAccess()) {
+      throw Exception('Abonnement Pro requis pour la synchronisation cloud');
+    }
 
     try {
       final localInvoices = await DatabaseService().getInvoices();
@@ -120,8 +136,11 @@ class FirestoreService extends ChangeNotifier {
 
   // ===== ABONNEMENTS =====
   Future<Subscription?> getActiveSubscription() async {
-    // Pour lire un abonnement, on vérifie juste l'authentification, pas l'accès cloud (car c'est public)
     if (!isAuthenticated) return null;
+
+    if (!await _cloudAccess.hasAccess()) {
+      return null;
+    }
 
     final query = await _db
         .collection('subscriptions')
@@ -138,8 +157,14 @@ class FirestoreService extends ChangeNotifier {
   }
 
   Future<void> saveSubscription(Subscription subscription) async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+
+    if (!await _cloudAccess.hasAccess()) {
+      // ✅ Stockage local seulement
+      await DatabaseService().saveSubscription(subscription);
+      await LoggerService.info('save_subscription_local', details: 'Abonnement sauvegardé en local');
+      return;
+    }
 
     try {
       await _db.collection('subscriptions').doc(subscription.id).set({
@@ -160,7 +185,6 @@ class FirestoreService extends ChangeNotifier {
   Stream<Subscription?> watchActiveSubscription() {
     if (!isAuthenticated) return Stream.value(null);
 
-    // On ne vérifie pas l'accès ici car c'est une lecture publique de son propre abonnement
     return _db
         .collection('subscriptions')
         .where('userId', isEqualTo: currentUserId)
@@ -192,7 +216,6 @@ class FirestoreService extends ChangeNotifier {
 
   // ===== UTILITAIRES =====
   Future<Map<String, dynamic>?> getDocument(String collectionPath, String docId) async {
-    // Lecture d'un document spécifique – on vérifie l'accès si c'est une collection sécurisée, mais ici on laisse
     if (await _cloudAccess.hasAccess()) {
       try {
         final doc = await _db.collection(collectionPath).doc(docId).get();
@@ -206,15 +229,25 @@ class FirestoreService extends ChangeNotifier {
   }
 
   Future<void> updateDocument(String collectionPath, String docId, Map<String, dynamic> data) async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+
+    if (!await _cloudAccess.hasAccess()) {
+      await LoggerService.info('update_document_local', details: 'Document $docId mis à jour en local');
+      return;
+    }
+
     await _db.collection(collectionPath).doc(docId).update(data);
     await LoggerService.info('update_document', details: 'Document $docId mis à jour dans le cloud');
   }
 
   Future<void> deleteDocument(String collectionPath, String docId) async {
-    await _cloudAccess.requireAccess();
     if (!isAuthenticated) throw Exception('Non authentifié');
+
+    if (!await _cloudAccess.hasAccess()) {
+      await LoggerService.info('delete_document_local', details: 'Document $docId supprimé en local');
+      return;
+    }
+
     await _db.collection(collectionPath).doc(docId).delete();
     await LoggerService.info('delete_document', details: 'Document $docId supprimé du cloud');
   }
