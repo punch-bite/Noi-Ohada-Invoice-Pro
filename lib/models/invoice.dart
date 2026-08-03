@@ -125,10 +125,10 @@ class Invoice {
       taxAmount: taxAmount,
       discount: discount,
       totalAmount: totalAmount,
-      terms: terms,
+            terms: terms,
       isDevis: isDevis,
       notes: notes,
-            syncedAt: syncedAt,
+      syncedAt: syncedAt,
       updatedAt: updatedAt ?? DateTime.now(),
       isSynced: isSynced,
     );

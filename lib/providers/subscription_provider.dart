@@ -224,14 +224,19 @@ class SubscriptionProvider extends ChangeNotifier {
         return;
       }
 
-      _subscription = await _subscriptionService.getUserSubscription(userId);
+            _subscription = await _subscriptionService.getUserSubscription(userId);
       if (_subscription != null) {
         _currentPlan = await _subscriptionService.getPlan(_subscription!.planId);
+        // Si le plan distant est introuvable (permission/offline), plan gratuit
+        _currentPlan ??= Plan.getFreePlan();
       } else {
         _currentPlan = Plan.getFreePlan();
       }
     } catch (e) {
-      debugPrint('❌ Erreur chargement abonnement: $e');
+      // Défaillance Firestore (permission-denied, réseau…) → mode hors-ligne.
+      debugPrint('⚠️ Chargement abonnement dégradé: $e');
+      _subscription = null;
+      _currentPlan = Plan.getFreePlan();
     } finally {
       _isLoading = false;
       notifyListeners();

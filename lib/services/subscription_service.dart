@@ -13,32 +13,45 @@ class SubscriptionService {
   // Cache mémoire pour éviter les lectures Firestore inutiles
   final Map<String, Plan> _planCache = {};
 
-  // --- Lecture optimisée avec support du cache ---
+    // --- Lecture optimisée avec support du cache ---
   Future<Plan?> getPlan(String planId) async {
     if (_planCache.containsKey(planId)) return _planCache[planId];
-
-    final doc = await _db.collection('plans').doc(planId).get();
-    if (doc.exists) {
-      final plan = Plan.fromMap({...doc.data()!, 'id': doc.id});
-      _planCache[planId] = plan;
-      return plan;
+    try {
+      final doc = await _db.collection('plans').doc(planId).get();
+      if (doc.exists) {
+        final plan = Plan.fromMap({...doc.data()!, 'id': doc.id});
+        _planCache[planId] = plan;
+        return plan;
+      }
+    } on FirebaseException catch (e) {
+      // Permission manquante ou réseau indisponible → on retombe sur le plan local
+      debugPrint("⚠️ getPlan($planId) impossible: $e");
     }
     return null;
   }
 
   // --- Lecture optimisée (Indexée) ---
   Future<Subscription?> getUserSubscription(String userId) async {
-    final query = await _db
-        .collection('subscriptions')
-        .where('userId', isEqualTo: userId)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
+    try {
+      final query = await _db
+          .collection('subscriptions')
+          .where('userId', isEqualTo: userId)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
 
-    return query.docs.isNotEmpty
-        ? Subscription.fromMap(
-            {...query.docs.first.data(), 'id': query.docs.first.id})
-        : null;
+      return query.docs.isNotEmpty
+          ? Subscription.fromMap(
+              {...query.docs.first.data(), 'id': query.docs.first.id})
+          : null;
+    } on FirebaseException catch (e) {
+      // Permission manquante → l'utilisateur n'a pas (ou pas encore) d'abonnement
+      // actif côté cloud. On retourne null pour basculer sur le plan gratuit.
+      if (!e.toString().contains('permission-denied')) {
+        debugPrint("⚠️ getUserSubscription($userId): $e");
+      }
+      return null;
+    }
   }
 
   Future<bool> hasUnlimitedAccess(String userId) async {
