@@ -20,12 +20,12 @@ dependencies {
 }
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
-    compileSdk = 35
+    compileSdk = 36
     
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
         minSdk = 23
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
