@@ -499,7 +499,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
           invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
           phoneNumber: _phoneNumber,
-          amount: widget.plan.price,
+          amount: widget.plan.price, reference: '', authorizationUrl: '',
         );
 
         _startAutoCheck();

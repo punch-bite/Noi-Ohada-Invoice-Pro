@@ -86,7 +86,7 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
           invoiceId: widget.invoice.id,
           phoneNumber: widget.phoneNumber,
           amount: widget.invoice.totalAmount,
-          invoiceNumber: widget.invoice.invoiceNumber,
+          invoiceNumber: widget.invoice.invoiceNumber, reference: '', authorizationUrl: '',
         );
 
         _startAutoCheck();

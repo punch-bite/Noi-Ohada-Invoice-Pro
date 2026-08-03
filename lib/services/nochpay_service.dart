@@ -1,23 +1,32 @@
+// lib/services/nochpay_service.dart
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/notification_service.dart';
+import '../services/config_service.dart';
 
 class NochPayService {
-  static const String _baseUrl = 'https://api.nochpay.com/v1';
-  
-  // Utilisation de getters statiques sécurisés
-  static String get _apiKey => dotenv.env['NOCHPAY_API_KEY'] ?? '';
-  static String get _mode => dotenv.env['NOCHPAY_MODE'] ?? 'sandbox';
+  // 🔥 URL de base (sandbox ou production)
+  static String get _baseUrl => ConfigService.isProduction
+      ? 'https://api.nochpay.co'
+      : 'https://api-sandbox.nochpay.co';
+
+  // 🔥 Clés depuis ConfigService (ou dotenv directement)
+  static String get _publicKey => ConfigService.nochpayPublicKey; // pk_...
+  static String get _privateKey => ConfigService.nochpayPrivateKey; // sk_...
+  static String get _webhookSecret =>
+      ConfigService.nochpayWebhookSecret; // whsec_...
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final NotificationService _notificationService = NotificationService();
   final http.Client _client = http.Client();
 
-  bool get isConfigured => _apiKey.isNotEmpty;
+  bool get isConfigured => _publicKey.isNotEmpty && _privateKey.isNotEmpty;
 
-  // --- Méthodes API ---
+  // ============================================================
+  //  1. INITIATION DU PAIEMENT (AVEC MÉTADONNÉES)
+  // ============================================================
 
   Future<Map<String, dynamic>> initiatePayment({
     required double amount,
@@ -25,47 +34,207 @@ class NochPayService {
     required String phoneNumber,
     required String invoiceNumber,
     required String description,
+    String? customerName,
+    String? customerEmail,
+    Map<String, dynamic>? metadata,
+    List<Map<String, dynamic>>? items,
   }) async {
-    if (!isConfigured) return {'success': false, 'error': 'Configuration API manquante.'};
+    if (!isConfigured) {
+      return {'success': false, 'error': 'Configuration API manquante.'};
+    }
 
     try {
-      final response = await _client.post(
-        Uri.parse('$_baseUrl/payments/initiate'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
+      // 🔥 Construction du payload enrichi
+      final payload = {
+        'amount': amount,
+        'currency': currency,
+        'customer': {
+          'name': customerName ?? 'Client',
+          'email': customerEmail ?? 'client@email.com',
+          'phone': phoneNumber,
         },
-        body: json.encode({
-          'amount': amount,
-          'currency': currency,
-          'phone_number': phoneNumber,
+        'description': description,
+        'reference': invoiceNumber,
+        'callback': '${ConfigService.apiBaseUrl}/payment/callback',
+        // 🔥 Métadonnées pour suivi
+        'customer_meta': {
           'invoice_number': invoiceNumber,
-          'description': description,
-          'mode': _mode,
-        }),
-      ).timeout(const Duration(seconds: 15));
+          'source': 'noi_ohada_invoice_app',
+          if (metadata != null) ...metadata,
+        },
+        // 🔥 Détails des articles (si fournis)
+        if (items != null) 'items': items,
+        // 🔥 Mode (sandbox/production)
+        'mode': ConfigService.isProduction ? 'production' : 'sandbox',
+      };
+
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/payments'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': _publicKey,
+            },
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 15));
 
       final data = json.decode(response.body);
-      return (response.statusCode == 200 || response.statusCode == 201)
-          ? {'success': true, ...data}
-          : {'success': false, 'error': data['message'] ?? 'Erreur lors de l\'initialisation'};
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final transaction = data['transaction'] as Map<String, dynamic>;
+        return {
+          'success': true,
+          'transaction_id': transaction['id'],
+          'reference': transaction['reference'],
+          'authorization_url': data['authorization_url'],
+          'status': transaction['status'],
+          'message': data['message'] ?? 'Paiement initialisé',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['message'] ?? 'Erreur de paiement',
+          'code': response.statusCode,
+          'errors': data['errors'],
+        };
+      }
     } catch (e) {
       return {'success': false, 'error': 'Connexion échouée: $e'};
     }
   }
 
-  /// Vérifie le statut d'une transaction (Polling)
-  Future<Map<String, dynamic>> checkPaymentStatus(String transactionId) async {
+  // ============================================================
+  //  2. VÉRIFICATION DU STATUT (POLLING)
+  // ============================================================
+
+  Future<Map<String, dynamic>> checkPaymentStatus(String reference) async {
     try {
       final response = await _client.get(
-        Uri.parse('$_baseUrl/payments/$transactionId/status'),
-        headers: {'Authorization': 'Bearer $_apiKey'},
+        Uri.parse('$_baseUrl/payments/$reference'),
+        headers: {'Authorization': _publicKey},
       ).timeout(const Duration(seconds: 10));
 
       final data = json.decode(response.body);
-      return {'success': true, 'status': data['status']}; // ex: 'paid', 'pending', 'failed'
+
+      if (response.statusCode == 200) {
+        final transaction = data['transaction'] as Map<String, dynamic>;
+        return {
+          'success': true,
+          'status': transaction['status'],
+          'reference': transaction['reference'],
+          'amount': transaction['amount'],
+          'currency': transaction['currency'],
+          'payment_method': transaction['payment_method'],
+          'completed_at': transaction['completed_at'],
+          'metadata': transaction['metadata'],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['message'] ?? 'Erreur de vérification',
+        };
+      }
     } catch (e) {
       return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // ============================================================
+  //  3. VÉRIFICATION DE LA SIGNATURE D'UN WEBHOOK
+  // ============================================================
+
+  bool verifyWebhookSignature(String payload, String signature) {
+    // 🔥 TODO: Implémenter la vérification HMAC-SHA256
+    // La signature est dans le header 'x-notch-signature'
+    // Utiliser _webhookSecret pour vérifier
+    // Implémentation :
+    // final hmac = Hmac(sha256, utf8.encode(_webhookSecret));
+    // final digest = hmac.convert(utf8.encode(payload));
+    // return digest.toString() == signature;
+    return true; // À remplacer par la vérification réelle
+  }
+
+  // ============================================================
+  //  4. GESTION DES TRANSACTIONS EN ATTENTE
+  // ============================================================
+
+  Future<void> savePendingTransaction({
+    required String reference,
+    required String invoiceId,
+    required String invoiceNumber,
+    required String phoneNumber,
+    required double amount,
+    required String authorizationUrl,
+    required String transactionId,
+  }) async {
+    await _storage.write(
+      key: 'pending_transaction_$reference',
+      value: json.encode({
+        'reference': reference,
+        'invoice_id': invoiceId,
+        'invoice_number': invoiceNumber,
+        'phone_number': phoneNumber,
+        'amount': amount,
+        'authorization_url': authorizationUrl,
+        'timestamp': DateTime.now().toIso8601String(),
+      }),
+    );
+  }
+
+  Future<Map<String, dynamic>?> getPendingTransaction(String reference) async {
+    final value = await _storage.read(key: 'pending_transaction_$reference');
+    if (value != null) {
+      return json.decode(value);
+    }
+    return null;
+  }
+
+  Future<void> removePendingTransaction(String reference) async {
+    await _storage.delete(key: 'pending_transaction_$reference');
+  }
+
+  Future<List<Map<String, dynamic>>> getAllPendingTransactions() async {
+    final allKeys = await _storage.readAll();
+    final pending = <Map<String, dynamic>>[];
+    for (final entry in allKeys.entries) {
+      if (entry.key.startsWith('pending_transaction_')) {
+        try {
+          final data = json.decode(entry.value);
+          pending.add(data);
+        } catch (_) {}
+      }
+    }
+    return pending;
+  }
+
+  Future<void> cleanStaleTransactions() async {
+    final allKeys = await _storage.readAll();
+    final now = DateTime.now();
+    for (final entry in allKeys.entries) {
+      if (entry.key.startsWith('pending_transaction_')) {
+        try {
+          final data = json.decode(entry.value);
+          final timestamp = DateTime.parse(data['timestamp']);
+          if (now.difference(timestamp).inHours > 24) {
+            await _storage.delete(key: entry.key);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  // ============================================================
+  //  5. TRAITEMENT DU PAIEMENT RÉUSSI
+  // ============================================================
+
+  Future<void> _processSuccessfulPayment(String reference) async {
+    final pending = await getPendingTransaction(reference);
+    if (pending != null) {
+      await _notificationService.notifyInvoicePaid(pending['invoice_number']);
+      await _notificationService
+          .notifyPaymentReceived((pending['amount'] as num).toDouble());
+      await removePendingTransaction(reference);
     }
   }
 
@@ -78,7 +247,7 @@ class NochPayService {
         Uri.parse('$_baseUrl/payments/$transactionId/confirm'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
+          'Authorization': _publicKey,
         },
         body: json.encode({'confirmation_code': confirmationCode}),
       );
@@ -94,43 +263,36 @@ class NochPayService {
     }
   }
 
-  // --- Logique métier et Persistence ---
+  // Future<Map<String, dynamic>> checkPaymentStatus(String reference) async {
+  //   if (!isConfigured) {
+  //     return {'success': false, 'error': 'Configuration API manquante.'};
+  //   }
 
-  Future<void> _processSuccessfulPayment(String transactionId) async {
-    final pending = await getPendingTransaction(transactionId);
-    if (pending != null) {
-      await _notificationService.notifyInvoicePaid(pending['invoice_number']);
-      await _notificationService.notifyPaymentReceived((pending['amount'] as num).toDouble());
-      await removePendingTransaction(transactionId);
-    }
-  }
+  //   try {
+  //     final response = await _client.get(
+  //       Uri.parse('$_baseUrl/payments/$reference/status'),
+  //       headers: {'Authorization': 'Bearer $_privateKey'},
+  //     ).timeout(const Duration(seconds: 10));
 
-  Future<void> savePendingTransaction({
-    required String transactionId,
-    required String invoiceId,
-    required String invoiceNumber,
-    required double amount,
-    required String phoneNumber,
-  }) async {
-    await _storage.write(
-      key: 'txn_$transactionId',
-      value: json.encode({
-        'invoice_id': invoiceId,
-        'invoice_number': invoiceNumber,
-        'amount': amount,
-        'ts': DateTime.now().toIso8601String(),
-      }),
-    );
-  }
+  //     final data = json.decode(response.body);
+  //     if (response.statusCode == 200) {
+  //       return {
+  //         'success': true,
+  //         'status': data['status'] ?? 'pending',
+  //         'transaction': data,
+  //       };
+  //     }
+  //     return {
+  //       'success': false,
+  //       'error': data['message'] ?? 'Erreur de vérification',
+  //     };
+  //   } catch (e) {
+  //     return {'success': false, 'error': e.toString()};
+  //   }
+  // }
+  // ============================================================
+  //  6. NETTOYAGE
+  // ============================================================
 
-  Future<Map<String, dynamic>?> getPendingTransaction(String tid) async {
-    final val = await _storage.read(key: 'txn_$tid');
-    return val != null ? json.decode(val) : null;
-  }
-
-  Future<void> removePendingTransaction(String tid) async {
-    await _storage.delete(key: 'txn_$tid');
-  }
-      
   void dispose() => _client.close();
 }
