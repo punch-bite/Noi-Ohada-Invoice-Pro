@@ -15,9 +15,34 @@ class SubscriptionProvider extends ChangeNotifier {
   List<Plan> _plans = [];
   bool _isLoading = false;
 
+  /// Cache l'userId actuellement chargé pour détecter les changements
+  /// d'utilisateur (déconnexion / connexion d'un autre compte).
+  String? _loadedUserId;
+
   SubscriptionProvider(this._authProvider) {
+    _authProvider.addListener(_onAuthChanged);
     _loadSubscription();
     loadPlans();
+  }
+
+  /// Réagit aux notifications d'AppAuthProvider. Quand l'utilisateur change
+  /// (ou se déconnecte), on recharge l'abonnement pour ne jamais conserver
+  /// les données d'un utilisateur précédent en mémoire.
+  void _onAuthChanged() {
+    final currentUserId = _authProvider.user?.id;
+    if (currentUserId != _loadedUserId) {
+      // ⭐ Utilisateur changé ou déconnecté → on recharge.
+      // Empêche l'utilisateur B de voir les droits/plans de l'utilisateur A.
+      _subscription = null;
+      _currentPlan = null;
+      _loadSubscription();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authProvider.removeListener(_onAuthChanged);
+    super.dispose();
   }
 
   // ===== GETTERS =====
@@ -209,7 +234,7 @@ class SubscriptionProvider extends ChangeNotifier {
     }
   }
 
-  // ===== CHARGEMENT ABONNEMENT =====
+    // ===== CHARGEMENT ABONNEMENT =====
   Future<void> _loadSubscription() async {
     _isLoading = true;
     notifyListeners();
@@ -219,12 +244,15 @@ class SubscriptionProvider extends ChangeNotifier {
       if (userId == null) {
         _subscription = null;
         _currentPlan = null;
+        _loadedUserId = null;
         _isLoading = false;
         notifyListeners();
         return;
       }
 
-            _subscription = await _subscriptionService.getUserSubscription(userId);
+      _loadedUserId = userId; // Mémorise l'utilisateur chargé
+
+      _subscription = await _subscriptionService.getUserSubscription(userId);
       if (_subscription != null) {
         _currentPlan = await _subscriptionService.getPlan(_subscription!.planId);
         // Si le plan distant est introuvable (permission/offline), plan gratuit

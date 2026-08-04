@@ -299,15 +299,20 @@ class CustomDrawer extends StatelessWidget {
         title: const Text('Déconnexion'),
         content: const Text('Voulez-vous vraiment vous déconnecter ?'),
         actions: [
-          TextButton(
+                    TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () {
-              authProvider.logout();
-              Navigator.pop(context);
-              context.go('/');
+            onPressed: () async {
+              // ✅ Attendre la déconnexion complète (incluant la purge des
+              // données locales) avant de naviguer, pour éviter que
+              // l'écran suivant affiche des données de l'utilisateur précédent.
+              Navigator.pop(context); // ferme la boîte de dialogue
+              await authProvider.logout();
+              if (context.mounted) {
+                context.go('/');
+              }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Se déconnecter'),

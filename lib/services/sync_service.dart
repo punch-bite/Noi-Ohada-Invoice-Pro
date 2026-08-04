@@ -49,18 +49,17 @@ class SyncService {
     debugPrint('✅ SyncService: synchronisation terminée');
   }
 
-  Future<void> _syncCollection(String collectionName) async {
+    Future<void> _syncCollection(String collectionName) async {
     final userId = _auth.currentUser!.uid;
 
     // Récupération des données locales
     final localItems = await _db.getAll<dynamic>(collectionName);
     final localMap = {for (var item in localItems) _getId(item): item};
 
-    // Récupération des données cloud
+    // Récupération des données cloud depuis les collections racine
     final cloudSnapshot = await _firestore
-        .collection('users')
-        .doc(userId)
         .collection(collectionName)
+        .where('userId', isEqualTo: userId)
         .get();
 
     final cloudItems = cloudSnapshot.docs.map((doc) {
@@ -77,11 +76,13 @@ class SyncService {
       final id = _getId(local);
       if (!cloudMap.containsKey(id)) {
         await _firestore
-            .collection('users')
-            .doc(userId)
             .collection(collectionName)
             .doc(id)
-            .set(_toMap(local));
+            .set({
+              ..._toMap(local),
+              'userId': userId,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
       }
     }
 
@@ -98,18 +99,17 @@ class SyncService {
     final userId = _auth.currentUser!.uid;
     final localCompany = await _db.getCompany();
     final cloudSnapshot = await _firestore
-        .collection('users')
-        .doc(userId)
         .collection('companies')
+        .where('userId', isEqualTo: userId)
         .limit(1)
         .get();
 
     if (cloudSnapshot.docs.isEmpty && localCompany != null) {
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('companies')
-          .add(localCompany.toMap());
+      await _firestore.collection('companies').add({
+        ...localCompany.toMap(),
+        'userId': userId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } else if (cloudSnapshot.docs.isNotEmpty && localCompany == null) {
       final data = cloudSnapshot.docs.first.data();
       data['id'] = cloudSnapshot.docs.first.id;

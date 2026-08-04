@@ -6,6 +6,7 @@ import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../widgets/cloud_storage_info_banner.dart';
 import 'payment_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -73,14 +74,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+                        Text(
               'Passez à la vitesse supérieure avec nos offres',
               style: TextStyle(
                 fontSize: 14,
                 color: subTextColor,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // Bannière de transparence sur le stockage des données
+            CloudStorageInfoBanner(
+              isFreePlan: _isFreePlan(subscriptionProvider),
+            ),
+            const SizedBox(height: 16),
 
             // Plans
             ..._plans.map((plan) => _buildPlanCard(
@@ -317,6 +324,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     );
   }
 
+    /// Détermine si l'utilisateur est sur le plan gratuit (ou aucun plan actif).
+  bool _isFreePlan(SubscriptionProvider subscriptionProvider) {
+    final plan = subscriptionProvider.currentPlan;
+    // Pas d'abonnement actif ou plan gratuit → sauvegarde locale uniquement.
+    return plan == null || plan.isFree;
+  }
+
   // 🔥 UNE SEULE VERSION DE LA MÉTHODE
   void _activateFreePlan(
     BuildContext context,
@@ -331,8 +345,39 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         title: const Text('Activer le plan gratuit'),
-        content: const Text(
-          'Vous allez activer le plan gratuit. Vous pourrez passer à un plan payant à tout moment.',
+        // ⚠️ Avertissement transparent sur la sauvegarde locale.
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Avec le plan gratuit, vos données sont sauvegardées '
+              'uniquement dans la mémoire de votre téléphone.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: const Text(
+                '⚠️ Si vous supprimez l\'application, vous perdrez : '
+                'vos fournisseurs, produits, clients et factures. '
+                'Votre entreprise, elle, est conservée.\n\n'
+                'En souscrivant à un plan payant, vos données sont '
+                'sauvegardées dans le cloud et vous pourrez les retrouver '
+                'même en cas de perte ou de changement de téléphone.',
+                style: TextStyle(fontSize: 12.5, color: Colors.orange, height: 1.4),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(

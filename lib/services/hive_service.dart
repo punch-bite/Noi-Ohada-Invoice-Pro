@@ -1,5 +1,6 @@
 // lib/services/hive_service.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/client.dart';
@@ -106,6 +107,17 @@ class HiveService {
     await Hive.openBox<ActivityLog>('activity_logs');
   }
 
+  /// Initialisation pour les tests (mode VM sans Flutter binding).
+  static Future<void> initForTest() async {
+    if (_initialized) return;
+    final dir = await Directory.systemTemp.createTemp('hive_test_');
+    Hive.init(dir.path);
+    _registerAdapters();
+    await _openAllBoxes();
+    _initialized = true;
+    debugPrint('✅ Hive initialisé pour les tests');
+  }
+
   /// Vérifie que Hive est prêt
   static void ensureInitialized() {
     if (!_initialized) {
@@ -120,25 +132,119 @@ class HiveService {
     return 100;
   }
 
+  /// Boxes qui contiennent des données utilisateur (purgeables au logout)
+  static const List<String> userDataBoxNames = [
+    'clients',
+    'companies',
+    'invoices',
+    'deliveries',
+    'products',
+    'reminders',
+    'subscriptions',
+    'suppliers',
+    'plans',
+    'invoice_templates',
+    'invoice_settings',
+    'dashboard_stats',
+    'customer_stats',
+    'financial_stats',
+    'notifications',
+    'user_cache',
+    'activity_logs',
+    'subscription_notifications_cache',
+  ];
+
+  /// Boxes qui restent sur l'appareil même après déconnexion
+  /// (préférences locales indépendantes de l'utilisateur)
+  static const List<String> protectedBoxNames = [
+    'theme_preferences',
+    'security_preferences',
+    'app_logs',
+  ];
+
   /// Ferme toutes les boxes ouvertes
   static Future<void> closeAllBoxes() async {
-    ensureInitialized();
     try {
-      // await Future.wait(Hive.close());
+      // On ferme chaque box indépendamment pour qu'une erreur sur l'une
+      // n'empêche pas la fermeture des suivantes.
+      for (final name in [...userDataBoxNames, ...protectedBoxNames]) {
+        if (Hive.isBoxOpen(name)) {
+          try {
+            final box = Hive.box(name);
+            if (box.isOpen) {
+              await box.close();
+            }
+          } catch (e) {
+            debugPrint('⚠️ Fermeture box "$name" ignorée: $e');
+          }
+        }
+      }
+      _initialized = false; // Nécessite une réinitialisation
       debugPrint('✅ Toutes les boxes Hive sont fermées');
     } catch (e) {
       debugPrint('❌ Erreur lors de la fermeture des boxes: $e');
     }
   }
 
-  /// Supprime toutes les données de toutes les boxes
-  static Future<void> clearAllData() async {
+  /// © Supprime TOUTES les données de TOUTES les boxes, y compris les
+  /// boxes protégées. À utiliser pour une réinitialisation totale.
+  static Future<void> wipeAllData() async {
     ensureInitialized();
     try {
-      // await Future.wait(Hive.call().map((box) => box.clear()));
-      debugPrint('✅ Toutes les données Hive sont effacées');
+      final tasks = <Future>[];
+      for (final name in [...userDataBoxNames, ...protectedBoxNames]) {
+        if (Hive.isBoxOpen(name)) {
+          tasks.add(Hive.box(name).clear());
+        }
+      }
+      if (tasks.isNotEmpty) {
+        await Future.wait(tasks);
+      }
+      debugPrint('✅ TOUTES les données Hive sont effacées');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du nettoyage complet: $e');
+    }
+  }
+
+  /// ⭐ MÉTHODE PRINCIPALE DE SÉCURITÉ : Purge les données UTILISATEUR
+  static Future<void> clearAllData() async {
+    try {
+      final tasks = <Future>[];
+      for (final name in userDataBoxNames) {
+        if (Hive.isBoxOpen(name)) {
+          tasks.add(Hive.box(name).clear());
+        }
+      }
+      if (tasks.isNotEmpty) {
+        await Future.wait(tasks);
+      }
+      debugPrint('✅ Données utilisateur Hive effacées (${tasks.length} boxes)');
     } catch (e) {
       debugPrint('❌ Erreur lors du nettoyage des données: $e');
+    }
+  }
+
+  /// Alias de clearAllData pour plus de clarté sémantique.
+  static Future<void> clearUserData() async {
+    await clearAllData();
+  }
+
+  /// Supprime uniquement les logs d'activité et les notifications
+  static Future<void> clearSensitiveUserCache() async {
+    ensureInitialized();
+    try {
+      if (Hive.isBoxOpen('user_cache')) {
+        await Hive.box<AppUser>('user_cache').clear();
+      }
+      if (Hive.isBoxOpen('activity_logs')) {
+        await Hive.box<ActivityLog>('activity_logs').clear();
+      }
+      if (Hive.isBoxOpen('notifications')) {
+        await Hive.box<AppNotification>('notifications').clear();
+      }
+      debugPrint('✅ Cache sensible utilisateur effacé');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du nettoyage du cache: $e');
     }
   }
 }

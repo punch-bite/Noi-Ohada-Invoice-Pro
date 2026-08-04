@@ -132,8 +132,85 @@ class NochPayService {
     }
   }
 
+    // ============================================================
+  //  2. TRAITEMENT MOBILE MONEY PAR USSD
   // ============================================================
-  //  2. VÉRIFICATION DU STATUT (POLLING)
+
+  /// Correspondances entre méthodes de l'app et canaux USSD NochPay.
+  ///
+  /// Selon la doc NochPay, le canal USSD suit le format `{pays}.{opérateur}` :
+  ///   - cm.mtn, cm.orange (Cameroun)
+  ///   - ci.mtn, ci.orange (Côte d'Ivoire)
+  ///   - sn.wave, sn.orange (Sénégal)
+  ///   - ke.mpesa (Kenya), gh.mtn (Ghana), ug.airtel (Ouganda)
+  static String channelForMethod(String method) {
+    switch (method) {
+      case methodOrangeMoney:
+        return 'cm.orange';
+      case methodMtnMoney:
+        return 'cm.mtn';
+      case methodWave:
+        return 'sn.wave';
+      default:
+        return 'cm.orange';
+    }
+  }
+
+  /// Déclenche la confirmation MOBILE MONEY via USSD/canal opérateur.
+  ///
+  /// Appelle `POST /payments/{reference}` avec le canal (`channel`) et le
+  /// numéro de téléphone du client. Le client reçoit alors une invite USSD
+  /// sur son téléphone (5 à 30 secondes de traitement).
+  Future<Map<String, dynamic>> processMobileMoneyUSSD({
+    required String reference,
+    required String method,
+    required String phoneNumber,
+  }) async {
+    try {
+      final channel = channelForMethod(method);
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/payments/$reference'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': _publicKey,
+            },
+            body: json.encode({
+              'channel': channel,
+              'data': {
+                'phone': phoneNumber,
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final transaction = data['transaction'] as Map<String, dynamic>? ??
+            data as Map<String, dynamic>? ??
+            const {};
+        return {
+          'success': true,
+          'status': transaction['status'] ?? 'processing',
+          'transaction_id': transaction['id'] ?? reference,
+          'reference': transaction['reference'] ?? reference,
+          'channel': channel,
+        };
+      }
+
+      return {
+        'success': false,
+        'error': data['message'] ?? 'Erreur lors de la demande USSD',
+        'code': response.statusCode,
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // ============================================================
+  //  3. VÉRIFICATION DU STATUT (POLLING)
   // ============================================================
 
   Future<Map<String, dynamic>> checkPaymentStatus(String reference) async {
@@ -168,9 +245,11 @@ class NochPayService {
     }
   }
 
+    // ============================================================
+  //  4. VÉRIFICATION DE LA SIGNATURE D'UN WEBHOOK
   // ============================================================
-  //  3. VÉRIFICATION DE LA SIGNATURE D'UN WEBHOOK
-  // ============================================================
+
+
 
   bool verifyWebhookSignature(String payload, String signature) {
     // 🔥 TODO: Implémenter la vérification HMAC-SHA256
@@ -183,8 +262,6 @@ class NochPayService {
     return true; // À remplacer par la vérification réelle
   }
 
-  // ============================================================
-  //  4. GESTION DES TRANSACTIONS EN ATTENTE
   // ============================================================
 
     Future<void> savePendingTransaction({
@@ -329,6 +406,4 @@ class NochPayService {
   // ============================================================
   //  6. NETTOYAGE
   // ============================================================
-
-  void dispose() => _client.close();
 }

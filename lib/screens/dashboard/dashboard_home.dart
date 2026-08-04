@@ -10,6 +10,7 @@ import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../models/financial_stats.dart';
 import '../../widgets/notification_badge.dart';
+import '../../widgets/cloud_storage_info_banner.dart';
 import 'widgets/payment_bottom_sheet.dart';
 
 class DashboardHome extends StatefulWidget {
@@ -204,7 +205,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header
-                    _buildHeader(
+                                        _buildHeader(
                       authProvider: authProvider,
                       subscriptionProvider: subscriptionProvider,
                       isDark: isDark,
@@ -212,7 +213,12 @@ class _DashboardHomeState extends State<DashboardHome> {
                       textColor: textColor,
                       subTextColor: subTextColor,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+
+                    // ⚠️ Rappel de la sauvegarde locale pour les plans gratuits
+                    if (!_hasCloudSubscription(subscriptionProvider))
+                      CloudStorageInfoBanner(isFreePlan: true, compact: true),
+                    const SizedBox(height: 16),
 
                     // Stats
                     _buildFinancialStats(
@@ -1151,6 +1157,13 @@ class _DashboardHomeState extends State<DashboardHome> {
       default:
         return 'Brouillon';
     }
+  }
+
+    /// Vrai si l'utilisateur a un abonnement payant actif (cloud).
+  bool _hasCloudSubscription(SubscriptionProvider subscriptionProvider) {
+    final subscription = subscriptionProvider.subscription;
+    final plan = subscriptionProvider.currentPlan;
+    return subscription?.isActive == true && (plan?.isFree ?? true) == false;
   }
 
   void _showPaymentDialog() {

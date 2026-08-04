@@ -487,26 +487,48 @@ class _PaymentScreenState extends State<PaymentScreen> {
         paymentMethod: _selectedMethod,
       );
 
-      if (result['success'] == true) {
+            if (result['success'] == true) {
+        final reference = (result['reference'] ?? result['transaction_id']) as String;
+
+        // ✅ Méthode USSD (recommandée par NochPay) : on initie la demande
+        // de paiement sur le canal de l'opérateur (ex : cm.orange, cm.mtn,
+        // sn.wave). Le client reçoit alors une invite USSD sur son téléphone
+        // et n'a qu'à saisir son code PIN pour confirmer.
+        final ussd = await _nochPayService.processMobileMoneyUSSD(
+          reference: reference,
+          method: _selectedMethod,
+          phoneNumber: _phoneNumber,
+        );
+
+        if (ussd['success'] != true) {
+          setState(() {
+            _isProcessing = false;
+            _error = ussd['error'] ?? 'Erreur lors de la demande USSD';
+          });
+          _showSnackBar(_error, Colors.red);
+          return;
+        }
+
         setState(() {
-          _transactionId = result['transaction_id'];
+          _transactionId = reference;
           _confirmationCode = result['confirmation_code'] ?? '';
           _isProcessing = false;
           _isConfirming = true;
         });
 
         await _nochPayService.savePendingTransaction(
-          transactionId: _transactionId,
+          transactionId: reference,
           invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
           invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
           phoneNumber: _phoneNumber,
-          amount: widget.plan.price, 
-          reference: _transactionId, 
+          amount: widget.plan.price,
+          reference: reference,
           authorizationUrl: '',
+          paymentMethod: _selectedMethod,
         );
 
         _startAutoCheck();
-        _showSnackBar('Paiement initié. Veuillez confirmer sur votre téléphone.', Colors.blue);
+        _showSnackBar('Paiement initié. Confirmez l\'invite USSD sur votre téléphone.', Colors.blue);
       } else {
         setState(() {
           _isProcessing = false;

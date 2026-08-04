@@ -7,7 +7,8 @@ import '../models/notification.dart';
 
 class NotificationService extends ChangeNotifier {
   static const String _boxName = 'notifications';
-  late Box<AppNotification> _box;
+  Box<AppNotification>? _box;
+  bool _isInitializing = false;
 
   // Utilisation d'une liste locale pour optimiser l'accès UI
   List<AppNotification> _notifications = [];
@@ -18,34 +19,59 @@ class NotificationService extends ChangeNotifier {
     return _notifications.where((n) => !n.isRead).toList();
   }
 
+  /// Garantit que la box Hive est ouverte avant toute opération.
+  /// Idempotent : si la box est déjà ouverte ne refait rien.
+  Future<Box<AppNotification>> _ensureBox() async {
+    if (_box != null) return _box!;
+    if (_isInitializing) {
+      // Si une initialisation est en cours, on attend qu'elle se termine
+      while (_isInitializing) {
+        await Future.delayed(const Duration(milliseconds: 20));
+      }
+      return _box!;
+    }
+    _isInitializing = true;
+    try {
+      if (!Hive.isBoxOpen(_boxName)) {
+        _box = await Hive.openBox<AppNotification>(_boxName);
+      } else {
+        _box = Hive.box<AppNotification>(_boxName);
+      }
+      _notifications = _box!.values.toList().reversed.toList();
+      return _box!;
+    } finally {
+      _isInitializing = false;
+    }
+  }
+
   Future<void> init() async {
-    _box = await Hive.openBox<AppNotification>(_boxName);
-    _notifications = _box.values.toList().reversed.toList();
+    await _ensureBox();
     notifyListeners();
   }
 
   // --- Opérations CRUD persistées ---
 
   Future<void> addNotification(AppNotification notification) async {
-    await _box.put(notification.id, notification);
+    await (await _ensureBox()).put(notification.id, notification);
     _notifications.insert(0, notification);
     notifyListeners();
   }
 
-  Future<void> markAsRead(String id) async {
+      Future<void> markAsRead(String id) async {
     final index = _notifications.indexWhere((n) => n.id == id);
     if (index != -1 && !_notifications[index].isRead) {
       final updated = _notifications[index].copyWith(isRead: true);
       _notifications[index] = updated;
-      await _box.put(id, updated);
+      await (await _ensureBox()).put(id, updated);
       notifyListeners();
     }
   }
 
   Future<void> markAllAsRead() async {
+    final box = await _ensureBox();
     for (var n in _notifications.where((n) => !n.isRead)) {
       final updated = n.copyWith(isRead: true);
-      await _box.put(updated.id, updated);
+      await box.put(updated.id, updated);
     }
     _notifications =
         _notifications.map((n) => n.copyWith(isRead: true)).toList();
@@ -53,13 +79,25 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> deleteNotification(String id) async {
-    await _box.delete(id);
+    await (await _ensureBox()).delete(id);
     _notifications.removeWhere((n) => n.id == id);
     notifyListeners();
   }
 
-  // 4. Méthode pour tout supprimer
+  // 4. Méthode pour tout supprimer (mémoire + persistance Hive)
   Future<void> deleteAllNotifications() async {
+    await (await _ensureBox()).clear();
+    _notifications.clear();
+    notifyListeners();
+  }
+
+      /// Réinitialise le service de notification (appelé au logout).
+  /// Purge la mémoire et la box Hive.
+  Future<void> clearAllForLogout() async {
+    if (Hive.isBoxOpen(_boxName)) {
+      await Hive.box<AppNotification>(_boxName).clear();
+    }
+    _box = null;
     _notifications.clear();
     notifyListeners();
   }

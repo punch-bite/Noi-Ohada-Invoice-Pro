@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
 
 class AuthService {
@@ -92,7 +93,7 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      
+
       final user = userCredential.user!;
       await user.updateDisplayName(displayName);
 
@@ -112,7 +113,8 @@ class AuthService {
       if (e.code == 'email-already-in-use') {
         throw Exception('Cet e-mail est déjà associé à un compte.');
       } else if (e.code == 'weak-password') {
-        throw Exception('Le mot de passe choisi est trop faible (6 caractères minimum).');
+        throw Exception(
+            'Le mot de passe choisi est trop faible (6 caractères minimum).');
       }
       throw Exception(e.message ?? 'Erreur lors de l\'inscription.');
     } catch (e) {
@@ -128,12 +130,10 @@ class AuthService {
       final remaining = _lockoutUntil!.difference(DateTime.now());
       if (remaining.inMinutes > 0) {
         throw Exception(
-          'Trop de tentatives infructueuses. Réessayez dans ${remaining.inMinutes + 1} minute(s).'
-        );
+            'Trop de tentatives infructueuses. Réessayez dans ${remaining.inMinutes + 1} minute(s).');
       } else {
         throw Exception(
-          'Trop de tentatives infructueuses. Réessayez dans ${remaining.inSeconds} seconde(s).'
-        );
+            'Trop de tentatives infructueuses. Réessayez dans ${remaining.inSeconds} seconde(s).');
       }
     }
 
@@ -142,7 +142,7 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      
+
       final user = userCredential.user!;
       _loginAttempts = 0;
       _lockoutUntil = null;
@@ -162,8 +162,7 @@ class AuthService {
         _lockoutUntil = DateTime.now().add(lockoutDuration);
         _loginAttempts = 0;
         throw Exception(
-          'Trop de tentatives échouées. Compte bloqué temporairement pour 5 minutes.'
-        );
+            'Trop de tentatives échouées. Compte bloqué temporairement pour 5 minutes.');
       }
 
       String messageError = 'Adresse e-mail ou mot de passe incorrect.';
@@ -171,9 +170,48 @@ class AuthService {
         messageError = 'Ce compte utilisateur a été désactivé.';
       }
       final remainingAttempts = maxAttempts - _loginAttempts;
-      throw Exception('$messageError (Tentatives restantes : $remainingAttempts)');
+      throw Exception(
+          '$messageError (Tentatives restantes : $remainingAttempts)');
     } catch (e) {
       throw Exception('Erreur de connexion: $e');
+    }
+  }
+
+  /// Se connecte avec un compte Google.
+  /// Utilise `google_sign_in` pour obtenir le compte Google puis échange
+  /// le jeton avec Firebase Authentication. Ensuite, on s'assure que le
+  /// document utilisateur existe dans Firestore (créé via _ensureUserDocument).
+  Future<AppUser> signInWithGoogle() async {
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        throw Exception('Connexion Google annulée.');
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user!;
+
+      // ✅ Mise à jour du nom affiché si absent
+      if (user.displayName == null || user.displayName!.isEmpty) {
+        await user
+            .updateDisplayName(googleUser.displayName ?? 'Utilisateur Google');
+      }
+
+      // 🔥 Garantit la création du document profil dans Firestore
+      final profile = await _ensureUserDocument(user.uid);
+      _cachedUser = profile;
+      return profile;
+    } catch (e) {
+      if (e is Exception && e.toString().contains('annulée')) {
+        rethrow;
+      }
+      throw Exception('Erreur de connexion Google: $e');
     }
   }
 
@@ -189,7 +227,8 @@ class AuthService {
       if (e.code == 'user-not-found') {
         throw Exception('Aucun utilisateur ne correspond à cet e-mail.');
       }
-      throw Exception(e.message ?? 'Impossible d\'envoyer le mail de réinitialisation.');
+      throw Exception(
+          e.message ?? 'Impossible d\'envoyer le mail de réinitialisation.');
     }
   }
 
@@ -209,9 +248,11 @@ class AuthService {
         _cachedUser = null;
       } on FirebaseAuthException catch (e) {
         if (e.code == 'requires-recent-login') {
-          throw Exception('Veuillez vous reconnecter avant de supprimer votre compte.');
+          throw Exception(
+              'Veuillez vous reconnecter avant de supprimer votre compte.');
         }
-        throw Exception(e.message ?? 'Erreur lors de la suppression du compte.');
+        throw Exception(
+            e.message ?? 'Erreur lors de la suppression du compte.');
       }
     }
   }

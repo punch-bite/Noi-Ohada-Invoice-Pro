@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     // Ferme le clavier virtuel proprement avant de lancer la requête
     FocusScope.of(context).unfocus();
 
@@ -83,16 +83,37 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success) {
       await _saveEmailPreference();
-      
+
       // Vérifier si l'utilisateur a configuré/besoin de valider la double authentification (2FA)
       if (authProvider.needsTwoFactor) {
-        context.push('/auth/verify-2fa'); 
+        context.push('/auth/verify-2fa');
       } else {
-        context.go('/dashboard'); 
+        context.go('/dashboard');
       }
     } else {
       setState(() {
         _errorMessage = authProvider.error ?? 'Échec de connexion';
+      });
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final authProvider = context.read<AppAuthProvider>();
+    final success = await authProvider.loginWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      context.go('/dashboard');
+    } else {
+      setState(() {
+        _errorMessage = authProvider.error ?? 'Connexion Google échouée';
       });
     }
   }
@@ -127,7 +148,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: primary.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.receipt_long_rounded, color: primary, size: 34),
+                    child: Icon(Icons.receipt_long_rounded,
+                        color: primary, size: 34),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -142,7 +164,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Facturation conforme SYSCOHADA',
-                    style: TextStyle(color: sub, fontSize: 13, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        color: sub, fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 32),
 
@@ -160,8 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'Email',
                       hintText: 'exemple@email.com',
                       labelStyle: TextStyle(color: sub, fontSize: 14),
-                      hintStyle: TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
-                      prefixIcon: Icon(Icons.email_outlined, color: primary, size: 20),
+                      hintStyle:
+                          TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
+                      prefixIcon:
+                          Icon(Icons.email_outlined, color: primary, size: 20),
                       filled: true,
                       fillColor: theme.cardColor,
                       border: OutlineInputBorder(
@@ -182,11 +207,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: primary, width: 1.5),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.trim().isEmpty == true) return 'Veuillez saisir votre email';
-                      if (!v!.contains('@') || !v.contains('.')) return 'Adresse email non valide';
+                      if (v?.trim().isEmpty == true)
+                        return 'Veuillez saisir votre email';
+                      if (!v!.contains('@') || !v.contains('.'))
+                        return 'Adresse email non valide';
                       return null;
                     },
                   ),
@@ -205,15 +233,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'Mot de passe',
                       hintText: '••••••••',
                       labelStyle: TextStyle(color: sub, fontSize: 14),
-                      hintStyle: TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
-                      prefixIcon: Icon(Icons.lock_outline_rounded, color: primary, size: 20),
+                      hintStyle:
+                          TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
+                      prefixIcon: Icon(Icons.lock_outline_rounded,
+                          color: primary, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
                           color: sub.withOpacity(0.7),
                           size: 20,
                         ),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -235,11 +268,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: primary, width: 1.5),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.isEmpty == true) return 'Veuillez renseigner votre mot de passe';
-                      if (v!.length < 6) return 'Le mot de passe doit faire 6 caractères minimum';
+                      if (v?.isEmpty == true)
+                        return 'Veuillez renseigner votre mot de passe';
+                      if (v!.length < 6)
+                        return 'Le mot de passe doit faire 6 caractères minimum';
                       return null;
                     },
                   ),
@@ -249,10 +285,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     children: [
                       InkWell(
-                        onTap: _isLoading ? null : () => setState(() => _rememberMe = !_rememberMe),
+                        onTap: _isLoading
+                            ? null
+                            : () => setState(() => _rememberMe = !_rememberMe),
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 4, horizontal: 2),
                           child: Row(
                             children: [
                               SizedBox(
@@ -260,15 +299,21 @@ class _LoginScreenState extends State<LoginScreen> {
                                 height: 24,
                                 child: Checkbox(
                                   value: _rememberMe,
-                                  onChanged: _isLoading ? null : (v) => setState(() => _rememberMe = v!),
+                                  onChanged: _isLoading
+                                      ? null
+                                      : (v) => setState(() => _rememberMe = v!),
                                   activeColor: primary,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4)),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Se souvenir', 
-                                style: TextStyle(fontSize: 13, color: sub, fontWeight: FontWeight.w500),
+                                'Se souvenir',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: sub,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ],
                           ),
@@ -276,7 +321,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const Spacer(),
                       TextButton(
-                        onPressed: _isLoading ? null : () => context.push('/auth/forgot-password'),
+                        onPressed: _isLoading
+                            ? null
+                            : () => context.push('/auth/forgot-password'),
                         style: TextButton.styleFrom(
                           foregroundColor: primary,
                           padding: EdgeInsets.zero,
@@ -284,8 +331,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: const Text(
-                          'Mot de passe oublié ?', 
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          'Mot de passe oublié ?',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -303,14 +351,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline_rounded, color: Colors.red[700], size: 20),
+                          Icon(Icons.error_outline_rounded,
+                              color: Colors.red[700], size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorMessage!,
                               style: TextStyle(
-                                color: Colors.red[850], 
-                                fontSize: 12.5, 
+                                color: Colors.red[850],
+                                fontSize: 12.5,
                                 height: 1.35,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -333,21 +382,83 @@ class _LoginScreenState extends State<LoginScreen> {
                         backgroundColor: primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isLoading
                           ? const SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2.5, 
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2.5,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
                           : const Text(
-                              'Se connecter', 
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              'Se connecter',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
                             ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Séparateur "ou"
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Divider(
+                              color: isDark
+                                  ? Colors.grey[700]
+                                  : Colors.grey[300])),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('ou',
+                            style: TextStyle(color: sub, fontSize: 13)),
+                      ),
+                      Expanded(
+                          child: Divider(
+                              color: isDark
+                                  ? Colors.grey[700]
+                                  : Colors.grey[300])),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Bouton se connecter avec Google
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _loginWithGoogle,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: text,
+                        side: BorderSide(
+                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                          width: 1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: _isLoading
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.grey,
+                              ),
+                            )
+                          : const Icon(Icons.g_mobiledata_rounded,
+                              size: 28, color: Color(0xFF4285F4)),
+                      label: const Text(
+                        'Se connecter avec Google',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ),
 
@@ -357,10 +468,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Pas encore de compte ?', style: TextStyle(color: sub, fontSize: 13)),
+                      Text('Pas encore de compte ?',
+                          style: TextStyle(color: sub, fontSize: 13)),
                       const SizedBox(width: 4),
                       TextButton(
-                        onPressed: _isLoading ? null : () => context.push('/auth/register'),
+                        onPressed: _isLoading
+                            ? null
+                            : () => context.push('/auth/register'),
                         style: TextButton.styleFrom(
                           foregroundColor: primary,
                           padding: EdgeInsets.zero,
@@ -368,8 +482,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: const Text(
-                          'S\'inscrire', 
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          'S\'inscrire',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],

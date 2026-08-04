@@ -11,6 +11,7 @@ import '../router/app_router.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import '../services/mail_service.dart';
+import '../services/hive_service.dart';
 
 class AppAuthProvider extends ChangeNotifier {
   final AuthService _authService;
@@ -37,7 +38,7 @@ class AppAuthProvider extends ChangeNotifier {
   void _init() {
     _authStateSubscription = _authService.authStateChanges.listen((firebaseUser) async {
       if (firebaseUser != null) {
-        if (!_needsTwoFactor) {
+                if (!_needsTwoFactor) {
           await _loadUserProfile(firebaseUser.uid);
         }
       } else {
@@ -45,6 +46,14 @@ class AppAuthProvider extends ChangeNotifier {
         _needsTwoFactor = false;
         _pendingUser = null;
         _pendingCredential = null;
+        // ✅ Purger aussi les données locales Hive en cas de déconnexion
+        // automatique (ex: session expirée) pour évitar la fuite de données
+        // entre utilisateurs sur le même appareil.
+        try {
+          await HiveService.clearAllData();
+        } catch (e) {
+          debugPrint('⚠️ Erreur purge Hive (expiration): $e');
+        }
         SecurityService.clearUserContext();
         notifyListeners();
         notifyRouter();
@@ -134,7 +143,7 @@ class AppAuthProvider extends ChangeNotifier {
     _needsTwoFactor = false;
     _pendingUser = null;
     _pendingCredential = null;
-    notifyListeners();
+        notifyListeners();
 
     try {
       final appUser = await _authService.signInWithEmailPassword(
@@ -142,7 +151,11 @@ class AppAuthProvider extends ChangeNotifier {
         password: password,
       );
 
-      final is2FAEnabled = await SecurityService.isTwoFactorEnabled();
+      // ✅ La 2FA est vérifiée par utilisateur (secret stocké par userId).
+      // Utiliser TwoFactorService.isEnabled(userId) au lieu de la préférence
+      // globale de l'appareil évite de bloquer un utilisateur B par la 2FA
+      // configurée par un utilisateur A précédent sur le même téléphone.
+      final is2FAEnabled = await TwoFactorService.isEnabled(appUser.id);
 
       if (is2FAEnabled) {
         _pendingUser = appUser;
@@ -175,6 +188,41 @@ class AppAuthProvider extends ChangeNotifier {
         'login_failed',
         details: 'Tentative de connexion échouée pour $email: $e',
       );
+      return false;
+    }
+  }
+
+  Future<bool> loginWithGoogle() async {
+    _isLoading = true;
+    _error = null;
+    _needsTwoFactor = false;
+    _pendingUser = null;
+    _pendingCredential = null;
+    notifyListeners();
+
+    try {
+      final appUser = await _authService.signInWithGoogle();
+      _user = appUser;
+
+      if (_user != null) {
+        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      notifyRouter();
+
+      await LoggerService.info(
+        'login_google',
+        details: 'Utilisateur connecté via Google: ${_user?.email}',
+        targetId: _user?.id,
+        targetType: 'user',
+      );
+      return true;
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
       return false;
     }
   }
@@ -236,7 +284,7 @@ class AppAuthProvider extends ChangeNotifier {
     notifyRouter();
   }
 
-  Future<void> logout() async {
+    Future<void> logout() async {
     final userId = _user?.id;
     final userEmail = _user?.email;
 
@@ -249,13 +297,26 @@ class AppAuthProvider extends ChangeNotifier {
       );
     }
 
+    // ✅ Étape 1 : Se déconnecter de Firebase en premier
     await _authService.signOut();
+
+    // ✅ Étape 2 : Purger TOUTES les données locales Hive de l'utilisateur.
+    // Cela empêche l'utilisateur suivant (sur le même téléphone) d'accéder
+    // aux données de l'utilisateur précédent.
+    try {
+      await HiveService.clearAllData();
+    } catch (e) {
+      debugPrint('⚠️ Erreur purge Hive au logout: $e');
+    }
+
+    // ✅ Étape 3 : Réinitialiser l'état de l'auth
     _user = null;
     _needsTwoFactor = false;
     _pendingUser = null;
     _pendingCredential = null;
+    _error = null;
     SecurityService.clearUserContext();
-    
+
     notifyListeners();
     notifyRouter();
   }

@@ -16,9 +16,10 @@ void main() {
   // Initialisation avant les tests
   setUpAll(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    // ⚠️ Utiliser Hive.init() (non Flutter) car les tests tournent en mode VM.
+    await HiveService.initForTest();
     await ConfigService.init();
     await LoggerService.init();
-    await HiveService.init();
   });
 
   // Nettoyage après les tests
@@ -165,12 +166,12 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Vérifier le logo (icône)
-    expect(find.byIcon(Icons.receipt_long), findsOneWidget);
+        // Vérifier le logo (icône)
+    expect(find.byIcon(Icons.receipt_long_rounded), findsOneWidget);
     
     // Vérifier le nom de l'application
     expect(find.text('OHADA Invoice Pro'), findsOneWidget);
-    expect(find.text('Gestion de factures conforme OHADA'), findsOneWidget);
+    expect(find.text('Facturation conforme SYSCOHADA'), findsOneWidget);
   });
 
   testWidgets('Login screen has "Mot de passe oublié" link', (WidgetTester tester) async {
