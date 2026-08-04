@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
+import '../../widgets/glass_widgets.dart';
 
 class ProfileUpdateScreen extends StatefulWidget {
   const ProfileUpdateScreen({super.key});
@@ -95,8 +96,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
     final theme = context.watch<ThemeProvider>();
     final user = context.select((AppAuthProvider p) => p.user);
 
-    return Scaffold(
-      backgroundColor: theme.backgroundColor,
+        return GlassScaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
@@ -176,12 +176,21 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
               icon: Icons.business_outlined,
             ),
             const SizedBox(height: 16),
-            _buildTextField(
+                        _buildTextField(
               controller: _addressController,
               label: 'Adresse',
               icon: Icons.location_on_outlined,
               maxLines: 3,
             ),
+            const SizedBox(height: 28),
+            GradientButton(
+              label: 'Enregistrer les modifications',
+              icon: Icons.check_circle_outline_rounded,
+              height: 52,
+              loading: _isSaving,
+              onPressed: _saveProfile,
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -205,29 +214,37 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       validator: validator,
       style: TextStyle(color: theme.textColor, fontSize: 15),
       cursorColor: theme.primaryColor,
-      decoration: InputDecoration(
+            decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: theme.subTextColor.withOpacity(0.8), fontSize: 14),
         floatingLabelStyle: TextStyle(color: theme.primaryColor),
-        prefixIcon: Icon(icon, color: theme.primaryColor.withOpacity(0.8), size: 22),
+        prefixIcon: Icon(icon, color: theme.primaryColor.withOpacity(0.6), size: 22),
         filled: true,
-        fillColor: theme.inputFillColor ?? (theme.isDarkMode ? Colors.grey[900] : Colors.grey[100]),
+        fillColor: theme.isDarkMode
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         alignLabelWithHint: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: theme.isDarkMode
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
+        ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.primaryColor, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: theme.primaryColor, width: 1.2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
         ),
       ),

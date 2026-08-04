@@ -55,7 +55,14 @@ class NochPayService {
   final NotificationService _notificationService = NotificationService();
   final http.Client _client = http.Client();
 
-  bool get isConfigured => _publicKey.isNotEmpty && _privateKey.isNotEmpty;
+    bool get isConfigured => _publicKey.isNotEmpty && _privateKey.isNotEmpty;
+
+  /// L'initiation d'un paiement (initiatePayment) côté client ne requiert en
+  /// réalité que la clé publique (publishable key). La clé privée (secret
+  /// key) ne sert qu'aux opérations côté serveur (webhooks, statut complet).
+  /// On s'appuie donc sur la seule clé publique pour ne pas bloquer à tort le
+  /// paiement Mobile Money si la clé privée est absente.
+  bool get isPaymentInitiationConfigured => _publicKey.isNotEmpty;
 
   // ============================================================
   //  1. INITIATION DU PAIEMENT (AVEC MÉTADONNÉES)
@@ -73,11 +80,12 @@ class NochPayService {
     Map<String, dynamic>? metadata,
     List<Map<String, dynamic>>? items,
   }) async {
-    if (!isConfigured) {
-      
+        if (!isPaymentInitiationConfigured) {
       return {
         'success': false,
-        'error': 'Configuration API manquante. Vérifiez vos clés NochPay.',
+        'error':
+            'Configuration API manquante. Vérifiez votre clé publique NochPay '
+            '(NOCHPAY_PUBLIC_KEY) dans le fichier .env.',
       };
     }
 

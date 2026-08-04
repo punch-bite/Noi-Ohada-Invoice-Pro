@@ -8,6 +8,7 @@ import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 import 'create_client_screen.dart';
 
 class ClientDetailScreen extends StatefulWidget {
@@ -51,8 +52,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     final bgColor = themeProvider.backgroundColor;
     final dividerColor = themeProvider.dividerColor;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+        return GlassScaffold(
       appBar: AppBar(
         title: Text(
           _client?.name ?? 'Détail client',
@@ -60,7 +60,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
             color: textColor,
           ),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
@@ -145,9 +145,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     Color subTextColor,
     Color cardColor,
   ) {
-    return Container(
+        return Container(
       padding: const EdgeInsets.all(20),
-      color: cardColor,
       child: Row(
         children: [
           Container(
@@ -252,8 +251,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     Color textColor,
     Color primaryColor,
   ) {
-    return Container(
-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        return Container(
+      color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
       child: Row(
         children: [
           _buildTab('Aperçu', 0, textColor, primaryColor),
@@ -364,14 +363,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                  blurRadius: 5,
-                ),
-              ],
+              color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,14 +393,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                  blurRadius: 5,
-                ),
-              ],
+              color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,15 +458,9 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-              blurRadius: 5,
-            ),
-          ],
+                decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,14 +614,8 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                blurRadius: 5,
-              ),
-            ],
+            color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: InkWell(
             onTap: () {

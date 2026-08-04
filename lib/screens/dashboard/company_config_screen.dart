@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../models/company.dart';
-import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/logo_image.dart';
 import 'dart:convert';
 
@@ -154,13 +155,10 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
     final primary = theme.primaryColor;
-    final text = theme.textColor;
+        final text = theme.textColor;
     final sub = theme.subTextColor;
-    final bg = theme.backgroundColor;
-    final card = theme.cardColor;
 
-    return Scaffold(
-      backgroundColor: bg,
+    return GlassScaffold(
       appBar: AppBar(
         title: Text('Entreprise',
             style: TextStyle(
@@ -259,31 +257,15 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
                       keyboard: const TextInputType.numberWithOptions(decimal: true),
                     ),
 
-                    const SizedBox(height: 32),
+                                        const SizedBox(height: 32),
 
                     // Bouton enregistrer
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isSaving ? null : _saveCompany,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
-                        child: _isSaving
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : const Text('Enregistrer',
-                                style: TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w600)),
-                      ),
+                    GradientButton(
+                      label: 'Enregistrer',
+                      icon: Icons.save_outlined,
+                      height: 50,
+                      loading: _isSaving,
+                      onPressed: _saveCompany,
                     ),
                   ],
                 ),
@@ -370,18 +352,30 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
       onChanged: onChanged,
       maxLines: maxLines,
       style: TextStyle(color: text, fontSize: 14),
-      decoration: InputDecoration(
+            decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: sub, fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.6)),
         filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+        ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         isDense: true,
       ),
     );
@@ -393,18 +387,30 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
       isExpanded: true,
       style: TextStyle(color: text, fontSize: 14),
       dropdownColor: isDark ? Colors.grey[850] : Colors.white,
-      decoration: InputDecoration(
+            decoration: InputDecoration(
         labelText: 'Devise',
         labelStyle: TextStyle(color: sub, fontSize: 13),
         prefixIcon: Icon(Icons.monetization_on_outlined,
-            size: 20, color: primary.withOpacity(0.5)),
+            size: 20, color: primary.withOpacity(0.6)),
         filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         isDense: true,
       ),
       items: const [
