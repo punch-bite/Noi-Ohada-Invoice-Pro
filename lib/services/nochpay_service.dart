@@ -74,6 +74,7 @@ class NochPayService {
     List<Map<String, dynamic>>? items,
   }) async {
     if (!isConfigured) {
+      
       return {
         'success': false,
         'error': 'Configuration API manquante. Vérifiez vos clés NochPay.',
