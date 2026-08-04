@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/supplier_service.dart';
 import '../../../models/supplier.dart';
+import '../../../widgets/glass_widgets.dart';
 
 class CreateSupplierScreen extends StatefulWidget {
   final Supplier? supplier;
@@ -131,25 +132,20 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
     }
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final bgColor = themeProvider.backgroundColor;
     final primaryColor = themeProvider.primaryColor;
-    final inputFillColor = themeProvider.inputFillColor;
-    final inputBorderColor = themeProvider.inputBorderColor;
+    final isEditing = widget.supplier != null;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: Text(
-          widget.supplier == null ? 'Nouveau fournisseur' : 'Modifier fournisseur',
+          isEditing ? 'Modifier fournisseur' : 'Nouveau fournisseur',
           style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.close, color: textColor),
@@ -162,17 +158,11 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                 ? const SizedBox(
                     height: 16,
                     width: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.blue,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Text(
-                    widget.supplier == null ? 'Ajouter' : 'Enregistrer',
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    isEditing ? 'Enregistrer' : 'Ajouter',
+                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
                   ),
           ),
         ],
@@ -180,32 +170,25 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
                 child: Column(
                   children: [
-                    _buildTextField(
+                    GlassTextField(
                       label: 'Nom *',
                       controller: _nameController,
-                      icon: Icons.business,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
-                      validator: (v) => v?.trim().isEmpty ?? true ? 'Champ requis' : null,
+                      prefixIcon: Icons.business_outlined,
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) =>
+                          v?.trim().isEmpty ?? true ? 'Champ requis' : null,
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'Email',
                       controller: _emailController,
-                      icon: Icons.email_outlined,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) {
                         if (v?.isNotEmpty == true && !v!.contains('@')) {
@@ -214,73 +197,47 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'Téléphone',
                       controller: _phoneController,
-                      icon: Icons.phone_outlined,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.phone_outlined,
                       keyboardType: TextInputType.phone,
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'Adresse',
                       controller: _addressController,
-                      icon: Icons.location_on_outlined,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.location_on_outlined,
+                      textCapitalization: TextCapitalization.words,
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'NUI / RCCM',
                       controller: _taxIdController,
-                      icon: Icons.assignment_outlined,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.assignment_outlined,
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'Personne de contact',
                       controller: _contactPersonController,
-                      icon: Icons.person_outline,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.person_outline,
+                      textCapitalization: TextCapitalization.words,
                     ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
+                    const SizedBox(height: 14),
+                    GlassTextField(
                       label: 'Notes',
                       controller: _notesController,
-                      icon: Icons.note_outlined,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      primaryColor: primaryColor,
-                      inputFillColor: inputFillColor,
-                      inputBorderColor: inputBorderColor,
+                      prefixIcon: Icons.note_outlined,
                       maxLines: 3,
                     ),
                     const SizedBox(height: 20),
-                    
-                    // Sélecteur d'état (Actif / Inactif) enveloppé pour l'esthétique
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: inputFillColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: inputBorderColor, width: 1),
-                      ),
+
+                    // Sélecteur de statut (carte soft)
+                    GlassCard(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      borderRadius: BorderRadius.circular(14),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -291,15 +248,17 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                                 'Statut du fournisseur',
                                 style: TextStyle(
                                   color: textColor,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                   fontSize: 14,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _isActive ? 'Actif (Peut être associé aux produits)' : 'Inactif',
+                                _isActive
+                                    ? 'Actif (associable aux produits)'
+                                    : 'Inactif',
                                 style: TextStyle(
-                                  color: subTextColor,
+                                  color: themeProvider.subTextColor,
                                   fontSize: 12,
                                 ),
                               ),
@@ -307,60 +266,26 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                           ),
                           Switch.adaptive(
                             value: _isActive,
-                            onChanged: (value) => setState(() => _isActive = value),
+                            onChanged: (value) =>
+                                setState(() => _isActive = value),
                             activeColor: primaryColor,
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
+                    GradientButton(
+                      label: isEditing
+                          ? 'Sauvegarder le fournisseur'
+                          : 'Ajouter le fournisseur',
+                      icon: Icons.check_circle_outline_rounded,
+                      height: 52,
+                      onPressed: _saveSupplier,
+                    ),
                   ],
                 ),
               ),
             ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    required Color textColor,
-    required Color subTextColor,
-    required Color primaryColor,
-    required Color inputFillColor,
-    required Color inputBorderColor,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      style: TextStyle(color: textColor, fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: subTextColor, fontSize: 13),
-        prefixIcon: Icon(icon, color: primaryColor, size: 20),
-        filled: true,
-        fillColor: inputFillColor,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: inputBorderColor, width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryColor, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        isDense: true,
-      ),
-      validator: validator,
     );
   }
 }

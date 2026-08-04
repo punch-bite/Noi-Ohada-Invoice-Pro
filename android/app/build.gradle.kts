@@ -73,7 +73,8 @@ configurations.configureEach {
             "androidx.navigation:navigation-fragment:2.8.4",
             "androidx.navigation:navigation-fragment-ktx:2.8.4",
             "androidx.navigation:navigation-ui:2.8.4",
-            "androidx.navigation:navigation-ui-ktx:2.8.4"
+            "androidx.navigation:navigation-ui-ktx:2.8.4",
+            "androidx.browser:browser:1.8.0"
         )
     }
 }

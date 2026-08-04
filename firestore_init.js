@@ -13,6 +13,11 @@ initializeApp({
 const db = getFirestore();
 
 // ============================================
+// ID ADMIN (⚠️ à remplacer par l'UID réel Firebase Auth)
+// ============================================
+const ADMIN_UID = 'admin_user_id';
+
+// ============================================
 // 1. PLANS
 // ============================================
 const plans = {
@@ -20,7 +25,7 @@ const plans = {
     id: 'free',
     name: 'Gratuit',
     description: 'Pour démarrer avec OHADA Invoice Pro',
-    price: 0,
+    price: 0.0,
     currency: 'XAF',
     interval: 'month',
     maxInvoices: 3,
@@ -37,7 +42,7 @@ const plans = {
     id: 'pro',
     name: 'Pro',
     description: 'Pour les PME en croissance',
-    price: 9900,
+    price: 9900.0,
     currency: 'XAF',
     interval: 'month',
     maxInvoices: -1,
@@ -60,7 +65,7 @@ const plans = {
     id: 'business',
     name: 'Business',
     description: 'Pour les entreprises et équipes',
-    price: 49000,
+    price: 49000.0,
     currency: 'XAF',
     interval: 'year',
     maxInvoices: -1,
@@ -83,7 +88,7 @@ const plans = {
     id: 'unlimited',
     name: 'Illimité',
     description: 'Accès illimité réservé aux administrateurs',
-    price: 0,
+    price: 0.0,
     currency: 'XAF',
     interval: 'year',
     maxInvoices: -1,
@@ -109,7 +114,7 @@ const plans = {
 // ============================================
 const defaultCompany = {
   id: 'default_company',
-  name: 'NoiOHADA Invoice Pro',
+  name: 'Noi OHADA Invoice Pro',
   address: 'Douala, Cameroun',
   taxId: 'RC123456789',
   phone: '+237 6XX XX XX XX',
@@ -133,7 +138,7 @@ const defaultSettings = {
   version: '1.0.0',
   maintenanceMode: false,
   contactEmail: 'support@ohada-invoice-pro.com',
-  contactPhone: '+237 6XX XX XX XX',
+  contactPhone: '+237 620 40 93 83',
   createdAt: new Date(),
   updatedAt: new Date()
 };
@@ -161,10 +166,10 @@ const defaultTemplate = {
 };
 
 // ============================================
-// 5. UTILISATEUR ADMIN (exemple)
+// 5. UTILISATEUR ADMIN (conforme au modèle AppUser)
 // ============================================
 const adminUser = {
-  id: 'admin_user_id', // ⚠️ Remplacez par l'UID réel de votre admin
+  id: ADMIN_UID, // ⚠️ À remplacer par l'UID réel de votre admin
   email: 'admin@ohada-invoice-pro.com',
   displayName: 'Administrateur',
   phone: '+237 6XX XX XX XX',
@@ -179,20 +184,21 @@ const adminUser = {
 };
 
 // ============================================
-// 6. ABONNEMENT ADMIN
+// 6. ABONNEMENT ADMIN (conforme au modèle Subscription)
 // ============================================
 const adminSubscription = {
   id: 'sub_admin_default',
-  userId: 'admin_user_id', // ⚠️ Même UID que ci-dessus
+  userId: ADMIN_UID, // ⚠️ Même UID que ci-dessus
   planId: 'unlimited',
   startDate: new Date('2024-01-01'),
   endDate: new Date('2099-12-31'),
   status: 'active',
   paymentMethod: 'admin',
   paymentId: 'admin_default',
-  amount: 0,
+  amount: 0.0,
   currency: 'XAF',
   autoRenew: true,
+  canceledAt: null,
   isActive: true,
   createdAt: new Date(),
   interval: 'year',
@@ -203,10 +209,11 @@ const adminSubscription = {
 };
 
 // ============================================
-// 7. FOURNISSEUR (exemple)
+// 7. FOURNISSEUR (conforme au modèle Supplier)
 // ============================================
 const supplier = {
   id: 'supplier_1',
+  userId: ADMIN_UID,
   name: 'Fournisseur Exemple SARL',
   email: 'contact@fournisseur.com',
   phone: '+237 6XX XX XX XX',
@@ -216,19 +223,21 @@ const supplier = {
   notes: 'Fournisseur principal pour l\'électronique',
   isActive: true,
   createdAt: new Date(),
-  updatedAt: new Date()
+  updatedAt: new Date(),
+  isSynced: true
 };
 
 // ============================================
-// 8. PRODUIT (exemple)
+// 8. PRODUIT (conforme au modèle Product)
 // ============================================
 const product = {
   id: 'product_1',
+  userId: ADMIN_UID,
   name: 'Ordinateur portable HP',
   description: 'Ordinateur portable HP EliteBook',
   category: 'Électronique',
-  price: 150000,
-  costPrice: 120000,
+  price: 150000.0,
+  costPrice: 120000.0,
   quantity: 10,
   minStock: 3,
   unit: 'pièce',
@@ -237,28 +246,33 @@ const product = {
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
-  supplierId: 'supplier_1'
+  supplierId: 'supplier_1',
+  isSynced: true
 };
 
 // ============================================
-// 9. CLIENT (exemple)
+// 9. CLIENT (conforme au modèle Client)
 // ============================================
 const client = {
   id: 'client_1',
+  userId: ADMIN_UID,
   name: 'Client Exemple SARL',
   address: 'Douala, Cameroun',
   taxId: 'RC1122334455',
   phone: '+237 6XX XX XX XX',
   email: 'client@exemple.com',
   createdAt: new Date(),
-  updatedAt: new Date()
+  updatedAt: new Date(),
+  isActive: true,
+  isSynced: true
 };
 
 // ============================================
-// 10. FACTURE (exemple)
+// 10. FACTURE (conforme au modèle Invoice)
 // ============================================
 const invoice = {
   id: 'invoice_1',
+  userId: ADMIN_UID, // ⚠️ Requis par les règles de sécurité
   companyId: 'default_company',
   clientId: 'client_1',
   invoiceNumber: 'FA-2026-001',
@@ -269,34 +283,33 @@ const invoice = {
       id: 'item_1',
       description: 'Ordinateur portable HP',
       quantity: 2,
-      unitPrice: 150000,
-      taxRate: 18,
-      total: 354000
+      unitPrice: 150000.0,
+      taxRate: 18.0,
+      total: 354000.0
     }
   ],
-  subtotal: 300000,
-  taxRate: 18,
-  taxAmount: 54000,
-  discount: 0,
-  totalAmount: 354000,
+  subtotal: 300000.0,
+  taxRate: 18.0,
+  taxAmount: 54000.0,
+  discount: 0.0,
+  totalAmount: 354000.0,
   status: 'sent',
   terms: 'Paiement à 30 jours',
   isDevis: false,
   notes: 'Facture pour commande de janvier',
-  createdAt: new Date(),
   updatedAt: new Date(),
-  userId: 'admin_user_id'
+  syncedAt: new Date()
 };
 
 // ============================================
-// 11. LOG (exemple)
+// 11. LOG (conforme au modèle ActivityLog)
 // ============================================
 const log = {
   id: 'log_1',
-  userId: 'admin_user_id',
+  userId: ADMIN_UID,
   userEmail: 'admin@ohada-invoice-pro.com',
   action: 'login',
-  targetId: 'admin_user_id',
+  targetId: ADMIN_UID,
   targetType: 'user',
   details: { ip: '192.168.1.1', device: 'Chrome' },
   timestamp: new Date()
@@ -334,9 +347,9 @@ async function initializeFirestore() {
     await db.collection('templates').doc('default_1').set(defaultTemplate);
     console.log('✅ Modèle créé');
 
-    // --- Utilisateur Admin ---
+        // --- Utilisateur Admin ---
     console.log('👤 Création de l\'utilisateur admin...');
-    await db.collection('users').doc('admin_user_id').set(adminUser);
+    await db.collection('users').doc(ADMIN_UID).set(adminUser);
     console.log('✅ Utilisateur admin créé');
 
     // --- Abonnement Admin ---
@@ -369,8 +382,8 @@ async function initializeFirestore() {
     await db.collection('logs').doc('log_1').set(log);
     console.log('✅ Log créé');
 
-    console.log('✅ Initialisation Firestore terminée avec succès !');
-    console.log('ℹ️ N\'oubliez pas de remplacer "admin_user_id" par l\'UID réel de votre admin dans la console Firebase.');
+        console.log('✅ Initialisation Firestore terminée avec succès !');
+    console.log(`ℹ️ N'oubliez pas de remplacer "${ADMIN_UID}" par l'UID réel de votre admin dans la console Firebase.`);
   } catch (error) {
     console.error('❌ Erreur lors de l\'initialisation:', error);
   }

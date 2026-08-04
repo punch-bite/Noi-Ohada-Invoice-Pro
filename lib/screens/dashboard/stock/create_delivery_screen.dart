@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/stock_service.dart';
 import '../../../models/delivery.dart';
+import '../../../widgets/glass_widgets.dart';
 
 class CreateDeliveryScreen extends StatefulWidget {
   final String productId;
@@ -90,14 +91,13 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
 
     final isIncoming = widget.type == DeliveryType.incoming;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+        return GlassScaffold(
       appBar: AppBar(
         title: Text(
           isIncoming ? 'Réception de stock' : 'Livraison',
           style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.close, color: textColor),
@@ -131,16 +131,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
           key: _formKey,
           child: Column(
             children: [
-              Card(
-                color: cardColor,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                    width: 1,
-                  ),
-                ),
+                            GlassCard(
+                borderRadius: BorderRadius.circular(16),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -245,37 +237,18 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Bouton Valider principal
-              SizedBox(
-                width: double.infinity,
+                            // Bouton Valider principal
+              GradientButton(
+                label: isIncoming
+                    ? 'Valider la réception'
+                    : 'Valider la livraison',
+                icon: isIncoming ? Icons.south : Icons.north,
                 height: 54,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveDelivery,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isIncoming ? Colors.green : Colors.orange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0, // Optionnel : design plat moderne aligné sur le reste
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(
-                          isIncoming ? 'Valider la réception' : 'Valider la livraison',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
+                loading: _isLoading,
+                gradientColors: isIncoming
+                    ? const [Color(0xFF16A34A), Color(0xFF22C55E)]
+                    : const [Color(0xFFEA580C), Color(0xFFF97316)],
+                onPressed: _saveDelivery,
               ),
             ],
           ),
@@ -334,25 +307,29 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       validator: validator,
       maxLines: maxLines,
       style: TextStyle(color: textColor, fontSize: 14),
-      decoration: InputDecoration(
+            decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         labelStyle: TextStyle(color: subTextColor, fontSize: 13),
         hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400], fontSize: 13),
         prefixIcon: Icon(icon, color: primaryColor, size: 20),
         filled: true,
-        fillColor: inputFillColor,
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: inputBorderColor, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryColor, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primaryColor.withOpacity(0.8), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         isDense: true,

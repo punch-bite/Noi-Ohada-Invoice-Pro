@@ -9,6 +9,7 @@ import '../../models/line_item.dart';
 import '../../models/client.dart';
 import '../../models/product.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
   const CreateInvoiceScreen({super.key});
@@ -94,8 +95,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final sub = theme.subTextColor;
     final bg = theme.backgroundColor;
 
-    return Scaffold(
-      backgroundColor: bg,
+        return GlassScaffold(
       appBar: AppBar(
         title: Text(
           _isDevis ? 'Nouveau devis' : 'Nouvelle facture',
@@ -140,7 +140,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     selected: !_isDevis,
                     onSelected: (_) => setState(() => _isDevis = false),
                     selectedColor: primary,
-                    backgroundColor: isDark ? Colors.grey[850] : Colors.grey[100],
+                    backgroundColor:
+                        isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                     labelStyle: TextStyle(color: !_isDevis ? Colors.white : sub),
                   ),
                   const SizedBox(width: 8),
@@ -149,7 +150,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     selected: _isDevis,
                     onSelected: (_) => setState(() => _isDevis = true),
                     selectedColor: primary,
-                    backgroundColor: isDark ? Colors.grey[850] : Colors.grey[100],
+                    backgroundColor:
+                        isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                     labelStyle: TextStyle(color: _isDevis ? Colors.white : sub),
                   ),
                 ],
@@ -169,9 +171,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   prefixIcon: Icon(Icons.person_outline, color: sub),
                   suffixIcon: Icon(Icons.arrow_drop_down, color: sub),
                   filled: true,
-                  fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -196,9 +198,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Produit',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -220,9 +222,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Qté',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -244,9 +246,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Prix',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -296,9 +298,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   hintStyle: TextStyle(color: sub.withOpacity(0.5)),
                   prefixIcon: Icon(Icons.local_shipping, color: sub),
                   filled: true,
-                  fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -322,9 +324,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'TVA %',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -347,9 +349,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Remise',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -376,9 +378,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   labelText: 'Notes',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
                   filled: true,
-                  fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -391,11 +393,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               const SizedBox(height: 12),
 
               // Total Summary Container
-              Container(
+                            Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[850] : Colors.grey[50],
-                  borderRadius: BorderRadius.circular(10),
+                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
                   children: [
@@ -411,29 +413,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Footer Submit Button
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: _isSaving ? null : _saveInvoice,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
-                  ),
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Enregistrer',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                ),
+                            // Footer Submit Button
+              GradientButton(
+                label: 'Enregistrer',
+                icon: Icons.save_outlined,
+                height: 48,
+                loading: _isSaving,
+                onPressed: _saveInvoice,
               ),
             ],
           ),
@@ -445,10 +431,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   Widget _productTile(LineItem item, int index, bool isDark, Color text, Color sub) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      margin: const EdgeInsets.only(bottom: 4),
+            margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
+        color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [

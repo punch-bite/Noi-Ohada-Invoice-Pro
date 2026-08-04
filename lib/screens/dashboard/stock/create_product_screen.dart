@@ -9,6 +9,7 @@ import '../../../services/stock_service.dart';
 import '../../../services/supplier_service.dart';
 import '../../../models/product.dart';
 import '../../../models/supplier.dart';
+import '../../../widgets/glass_widgets.dart';
 import '../suppliers/create_supplier_screen.dart';
 
 class CreateProductScreen extends StatefulWidget {
@@ -212,8 +213,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
     final isEditing = widget.product != null;
 
-    return Scaffold(
-      backgroundColor: bg,
+        return GlassScaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
@@ -407,33 +407,15 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
               ),
               const SizedBox(height: 24),
 
-              // --- Bouton ---
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveProduct,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    elevation: 0,
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text(
-                          isEditing
-                              ? 'Modifier le produit'
-                              : 'Ajouter le produit',
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                ),
+                            // --- Bouton ---
+              GradientButton(
+                label: isEditing
+                    ? 'Modifier le produit'
+                    : 'Ajouter le produit',
+                icon: Icons.check_circle_outline_rounded,
+                height: 50,
+                loading: _isLoading,
+                onPressed: _saveProduct,
               ),
             ],
           ),
@@ -456,7 +438,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     String? Function(String?)? validator,
     int maxLines = 1,
   }) {
-    return TextFormField(
+        return TextFormField(
       controller: controller,
       keyboardType: keyboard,
       validator: validator,
@@ -467,15 +449,26 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
         hintText: hint,
         labelStyle: TextStyle(color: sub, fontSize: 13),
         hintStyle: TextStyle(color: sub.withOpacity(0.6), fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.6)),
         filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         isDense: true,
       ),
     );
@@ -503,21 +496,32 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
             isExpanded: true,
             style: TextStyle(color: text, fontSize: 14),
             dropdownColor: isDark ? Colors.grey[850] : Colors.white,
-            decoration: InputDecoration(
+                        decoration: InputDecoration(
               labelText: 'Fournisseur (optionnel)',
               hintText: 'Sélectionner',
               labelStyle: TextStyle(color: sub, fontSize: 13),
               hintStyle: TextStyle(color: sub.withOpacity(0.6), fontSize: 13),
               prefixIcon: Icon(Icons.business_outlined,
-                  size: 20, color: primary.withOpacity(0.5)),
+                  size: 20, color: primary.withOpacity(0.6)),
               filled: true,
-              fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+              fillColor: isDark
+                  ? Colors.white.withOpacity(0.06)
+                  : Colors.white.withOpacity(0.7),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.04)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               isDense: true,
               suffixIcon: IconButton(
                 icon: Icon(Icons.add_circle_outline, color: primary, size: 20),
@@ -567,19 +571,31 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       isExpanded: true,
       style: TextStyle(color: text, fontSize: 14),
       dropdownColor: isDark ? Colors.grey[850] : Colors.white,
-      decoration: InputDecoration(
+            decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         labelStyle: TextStyle(color: sub, fontSize: 13),
         hintStyle: TextStyle(color: sub.withOpacity(0.6), fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.6)),
         filled: true,
-        fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.04)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         isDense: true,
       ),
       items: options
