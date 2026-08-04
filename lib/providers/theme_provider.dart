@@ -54,48 +54,56 @@ class ThemeProvider extends ChangeNotifier {
     setTheme(AppTheme.system);
   }
 
-  // ===== COULEURS DYNAMIQUES (avec fallback explicite pour éviter null sur le Web) =====
-  Color get primaryColor => isDarkMode 
-      ? const Color(0xFF3949AB) 
-      : const Color(0xFF1A237E);
-  
-  Color get secondaryColor => isDarkMode 
-      ? const Color(0xFF5C6BC0) 
-      : const Color(0xFF3949AB);
-  
-  Color get backgroundColor => isDarkMode 
-      ? const Color(0xFF121212) 
-      : const Color(0xFFF5F7FA);
-  
-  Color get cardColor => isDarkMode 
-      ? const Color(0xFF1E1E1E) 
+    // ===== COULEURS DYNAMIQUES (design system Glass/Indigo) =====
+  Color get primaryColor => isDarkMode
+      ? const Color(0xFF7C6CF0)
+      : const Color(0xFF4338CA);
+
+  Color get secondaryColor => isDarkMode
+      ? const Color(0xFF9A7BFF)
+      : const Color(0xFF7C3AED);
+
+  /// Extrémité du dégradé indigo → violet.
+  Color get gradientEndColor => isDarkMode
+      ? const Color(0xFF9A7BFF)
+      : const Color(0xFF7C3AED);
+
+  /// Accent doré (marketing, badges premium).
+  Color get accentGold => const Color(0xFFE9B949);
+
+  Color get backgroundColor => isDarkMode
+      ? const Color(0xFF0E1117)
+      : const Color(0xFFF6F7FB);
+
+  Color get cardColor => isDarkMode
+      ? const Color(0xFF1E2433)
       : Colors.white;
-  
-  Color get textColor => isDarkMode 
-      ? Colors.white 
-      : const Color(0xFF1A1A1A);
-  
-  Color get subTextColor => isDarkMode 
-      ? (Colors.grey[400] ?? Colors.grey) 
+
+  Color get textColor => isDarkMode
+      ? Colors.white
+      : const Color(0xFF14161C);
+
+  Color get subTextColor => isDarkMode
+      ? (Colors.grey[400] ?? Colors.grey)
       : (Colors.grey[600] ?? Colors.grey);
-  
-  Color get dividerColor => isDarkMode 
-      ? (Colors.grey[800] ?? Colors.grey) 
+
+  Color get dividerColor => isDarkMode
+      ? const Color(0xFF2A2F3D)
       : (Colors.grey[200] ?? Colors.grey);
-  
-  Color get inputFillColor => isDarkMode 
-      ? const Color(0xFF2C2C2C) 
-      : Colors.white;
-  
-  Color get inputBorderColor => isDarkMode 
-      ? (Colors.grey[700] ?? Colors.grey) 
+
+  Color get inputFillColor => isDarkMode
+      ? const Color(0xFF1E2433)
+      : Colors.white.withValues(alpha: 0.85);
+
+  Color get inputBorderColor => isDarkMode
+      ? Colors.white.withValues(alpha: 0.08)
       : (Colors.grey[200] ?? Colors.grey);
-  
-  Color get inputFocusedBorderColor => isDarkMode 
-      ? const Color(0xFF3949AB) 
-      : const Color(0xFF1A237E);
-  
-  Color get shadowColor => isDarkMode 
-      ? Colors.black.withOpacity(0.3) 
-      : Colors.black.withOpacity(0.05);
+
+  Color get inputFocusedBorderColor => isDarkMode
+      ? const Color(0xFF7C6CF0)
+      : const Color(0xFF4338CA);
+
+  Color get shadowColor => isDarkMode
+      ? Colors.black.withValues(alpha: 0.3)
+      : const Color(0xFF4338CA).withValues(alpha: 0.08);
 }

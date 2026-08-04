@@ -2,6 +2,7 @@
 // lib/router/app_router.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/invitations_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/invite_member_screen.dart';
@@ -16,7 +17,6 @@ import '../models/plan.dart';
 import '../providers/auth_provider.dart';
 
 // Écrans - Auth / Landing
-import '../screens/landing/landing_screen_carousel.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
@@ -48,8 +48,10 @@ import '../screens/dashboard/reminders_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
+
+
 import '../screens/customization/invoice_customization_screen.dart';
-import '../screens/customization/templates_screen.dart';
+import '../screens/customization/template_store_screen.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
 import '../screens/notifications/notification_screen.dart';
@@ -202,14 +204,15 @@ class AppRouter {
         builder: (context, state) => const SessionsScreen(),
       ),
 
-      // Customisation visuelle des factures
+            // Customisation visuelle des factures
       GoRoute(
         path: '/customization',
         builder: (context, state) => const InvoiceCustomizationScreen(),
       ),
+      // Boutique de modèles (créés par l'admin + par défaut)
       GoRoute(
         path: '/templates',
-        builder: (context, state) => const TemplatesScreen(),
+        builder: (context, state) => const TemplateStoreScreen(),
       ),
 
       // Notifications

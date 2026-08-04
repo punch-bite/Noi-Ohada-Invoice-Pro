@@ -36,112 +36,228 @@ class ThemeService {
     }
   }
 
+    // ============================================================
+  //  DESIGN SYSTEM — Marquee moderne "Glass + Indigo/Violet"
+  //  Couleur primaire : Deep Indigo #2A2A72 → Violet #5B3B8C (dégradé)
+  //  Accent premium   : Or cuivré #D4AF37
+  // ============================================================
+
+  /// Couleur primaire (dégradé indigo/violette) — ton clair
+  static const Color primaryLight = Color(0xFF4338CA);
+  static const Color primaryGradientEndLight = Color(0xFF7C3AED);
+  /// Accent doré (marketing, badges premium, highlights)
+  static const Color accentGold = Color(0xFFE9B949);
+  /// Fond clair : très léger dégradé indigo
+  static const Color bgLight = Color(0xFFF6F7FB);
+  /// Fond sombre
+  static const Color bgDark = Color(0xFF0E1117);
+  static const Color surfaceDark = Color(0xFF161B26);
+  static const Color surfaceDarkAlt = Color(0xFF1E2433);
+
+  /// Typographie : hiérarchie raffinée sur la police Roboto (embarquée,
+  /// fiable hors-ligne) avec graisses et espacements soignés.
+  static TextStyle _displayLarge(Color color, {double size = 34}) => TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: size,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
+        height: 1.1,
+        color: color,
+      );
+
   // ===== THÈME CLAIR =====
   static ThemeData getLightTheme() {
+    final primary = primaryLight;
+    final gradientEnd = primaryGradientEndLight;
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      primaryColor: const Color(0xFF1A237E),
-      scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+      primaryColor: primary,
+      scaffoldBackgroundColor: bgLight,
       fontFamily: 'Roboto',
-      colorScheme: const ColorScheme.light(
-        primary: Color(0xFF1A237E),
-        secondary: Color(0xFF3949AB),
+            colorScheme: ColorScheme.light(
+        primary: primaryLight,
+        secondary: gradientEnd,
         surface: Colors.white,
-        error: Colors.red,
+        error: Colors.redAccent,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onSurface: Color(0xFF1A1A1A),
+        onSurface: const Color(0xFF14161C),
         onError: Colors.white,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
-        foregroundColor: Color(0xFF1A1A1A),
-        elevation: 0,
-        centerTitle: false,
+      // ===== Texte raffiné =====
+      textTheme: TextTheme(
+        displayLarge: _displayLarge(const Color(0xFF14161C)),
+        headlineLarge: _displayLarge(const Color(0xFF14161C), size: 28),
+        headlineMedium: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF14161C),
+          letterSpacing: -0.3,
+        ),
+        titleLarge: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: const Color(0xFF14161C),
+        ),
+        titleMedium: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF1A1D24),
+          letterSpacing: 0.1,
+        ),
+        bodyLarge: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF33373F),
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          color: const Color(0xFF5A5F6B),
+          height: 1.45,
+        ),
+        labelLarge: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: primary,
+          letterSpacing: 0.2,
+        ),
       ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.white.withValues(alpha: 0.72),
+        foregroundColor: const Color(0xFF14161C),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: const TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF14161C),
+        ),
+      ),
+      // ===== Cartes en "glassmorphisme" =====
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
-        color: Colors.white,
+        color: Colors.white.withValues(alpha: 0.7),
+        shadowColor: const Color(0xFF4338CA).withValues(alpha: 0.08),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1A237E),
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF1A237E),
+          foregroundColor: primary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
-          side: const BorderSide(color: Color(0xFF1A237E)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          side: const BorderSide(color: primaryLight, width: 1.5),
+          textStyle: TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: primary,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF1A237E),
+          foregroundColor: primary,
+          textStyle: TextStyle(
+            fontFamily: 'Roboto',
+            fontWeight: FontWeight.w600,
+            color: primary,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: Colors.white.withValues(alpha: 0.85),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF1A237E), width: 2),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: primaryLight, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
         ),
-        labelStyle: const TextStyle(
-          color: Color(0xFF1A1A1A),
+        labelStyle: TextStyle(
+          color: const Color(0xFF14161C),
           fontWeight: FontWeight.w500,
+          fontFamily: 'Roboto',
         ),
-        hintStyle: TextStyle(
-          color: Colors.grey[400],
-        ),
-        prefixIconColor: const Color(0xFF1A237E),
-        suffixIconColor: const Color(0xFF1A237E),
+        hintStyle: TextStyle(color: Colors.grey[400], fontFamily: 'Roboto'),
+        prefixIconColor: primary,
+        suffixIconColor: primary,
       ),
       dividerTheme: DividerThemeData(
         color: Colors.grey[200],
         thickness: 1,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.white,
-        selectedItemColor: Color(0xFF1A237E),
-        unselectedItemColor: Colors.grey,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: Colors.white.withValues(alpha: 0.85),
+        selectedItemColor: primary,
+        unselectedItemColor: Colors.grey[500],
         elevation: 0,
+        type: BottomNavigationBarType.fixed,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: const Color(0xFF14161C),
+        contentTextStyle: const TextStyle(fontFamily: 'Roboto', fontSize: 14),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF1A237E);
+              return primary;
             }
             return Colors.grey[400]!;
           },
@@ -154,7 +270,7 @@ class ThemeService {
         fillColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF1A237E);
+              return primary;
             }
             return Colors.grey[400]!;
           },
@@ -164,129 +280,223 @@ class ThemeService {
         thumbColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF1A237E);
+              return primary;
             }
-            return Colors.grey[400]!;
+            return Colors.grey[300]!;
           },
         ),
-        trackColor: WidgetStateProperty.resolveWith<Color>(
+                trackColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF1A237E).withOpacity(0.5);
+              return primary.withValues(alpha: 0.5);
             }
             return Colors.grey[300]!;
           },
         ),
       ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primary,
+        linearTrackColor: primary.withValues(alpha: 0.15),
+      ),
+      listTileTheme: const ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+      ),
     );
   }
 
-  // ===== THÈME SOMBRE =====
+    // ===== THÈME SOMBRE =====
   static ThemeData getDarkTheme() {
+    final primary = const Color(0xFF7C6CF0);
+    final gradientEnd = const Color(0xFF9A7BFF);
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      primaryColor: const Color(0xFF3949AB),
-      scaffoldBackgroundColor: const Color(0xFF121212),
+      primaryColor: primary,
+      scaffoldBackgroundColor: bgDark,
       fontFamily: 'Roboto',
-      colorScheme: const ColorScheme.dark(
-        primary: Color(0xFF3949AB),
-        secondary: Color(0xFF5C6BC0),
-        surface: Color(0xFF1E1E1E),
-        error: Colors.red,
+            colorScheme: ColorScheme.dark(
+        primary: primary,
+        secondary: gradientEnd,
+        surface: surfaceDark,
+        error: const Color(0xFFFF6B6B),
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: Colors.white,
-        onError: Colors.white,
+        onError: Colors.black,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF1E1E1E),
+      // ===== Texte raffiné =====
+      textTheme: TextTheme(
+        displayLarge: _displayLarge(Colors.white),
+        headlineLarge: _displayLarge(Colors.white, size: 28),
+        headlineMedium: const TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          letterSpacing: -0.3,
+        ),
+        titleLarge: const TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+        titleMedium: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.92),
+          letterSpacing: 0.1,
+        ),
+        bodyLarge: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          color: Colors.white.withValues(alpha: 0.82),
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          color: Colors.white.withValues(alpha: 0.6),
+          height: 1.45,
+        ),
+        labelLarge: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: primary,
+          letterSpacing: 0.2,
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: bgDark.withValues(alpha: 0.8),
         foregroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: false,
+        titleTextStyle: const TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
       ),
+      // ===== Cartes en "glassmorphisme" sombre =====
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
-        color: const Color(0xFF1E1E1E),
+        color: surfaceDarkAlt.withValues(alpha: 0.6),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF3949AB),
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF3949AB),
+          foregroundColor: primary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
-          side: const BorderSide(color: Color(0xFF3949AB)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          side: const BorderSide(color: Color(0xFF7C6CF0), width: 1.5),
+          textStyle: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF7C6CF0),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF3949AB),
+          foregroundColor: primary,
+          textStyle: const TextStyle(
+            fontFamily: 'Roboto',
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF7C6CF0),
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF2C2C2C),
+        fillColor: surfaceDarkAlt.withValues(alpha: 0.65),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[700]!, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF3949AB), width: 2),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF7C6CF0), width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 2),
         ),
         labelStyle: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w500,
+          fontFamily: 'Roboto',
         ),
-        hintStyle: TextStyle(
-          color: Colors.grey[500],
-        ),
-        prefixIconColor: const Color(0xFF3949AB),
-        suffixIconColor: const Color(0xFF3949AB),
+        hintStyle: TextStyle(color: Colors.grey[500], fontFamily: 'Roboto'),
+        prefixIconColor: primary,
+        suffixIconColor: primary,
       ),
       dividerTheme: DividerThemeData(
-        color: Colors.grey[800],
+        color: Colors.white.withValues(alpha: 0.08),
         thickness: 1,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Color(0xFF1E1E1E),
-        selectedItemColor: Color(0xFF3949AB),
-        unselectedItemColor: Colors.grey,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: bgDark.withValues(alpha: 0.85),
+        selectedItemColor: primary,
+        unselectedItemColor: Colors.grey[500],
         elevation: 0,
+        type: BottomNavigationBarType.fixed,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: const Color(0xFF1E2433),
+        contentTextStyle: const TextStyle(fontFamily: 'Roboto', fontSize: 14),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
+        elevation: 8,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF3949AB);
+              return primary;
             }
             return Colors.grey[600]!;
           },
@@ -299,7 +509,7 @@ class ThemeService {
         fillColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF3949AB);
+              return primary;
             }
             return Colors.grey[600]!;
           },
@@ -309,19 +519,26 @@ class ThemeService {
         thumbColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF3949AB);
+              return primary;
             }
             return Colors.grey[600]!;
           },
         ),
-        trackColor: WidgetStateProperty.resolveWith<Color>(
+                trackColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
-              return const Color(0xFF3949AB).withOpacity(0.5);
+              return primary.withValues(alpha: 0.5);
             }
             return Colors.grey[700]!;
           },
         ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primary,
+        linearTrackColor: primary.withValues(alpha: 0.15),
+      ),
+      listTileTheme: const ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
       ),
     );
   }

@@ -40,7 +40,7 @@ class _NochPayPaymentDialogState extends State<NochPayPaymentDialog> {
   String _error = '';
   String _paymentUrl = '';
   bool _isLoading = false;
-  String _userConfirmationCode = '';
+  final String _userConfirmationCode = '';
 
   @override
   void initState() {

@@ -211,10 +211,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.trim().isEmpty == true)
+                      if (v?.trim().isEmpty == true) {
                         return 'Veuillez saisir votre email';
-                      if (!v!.contains('@') || !v.contains('.'))
+                      }
+                      if (!v!.contains('@') || !v.contains('.')) {
                         return 'Adresse email non valide';
+                      }
                       return null;
                     },
                   ),
@@ -272,10 +274,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           horizontal: 16, vertical: 16),
                     ),
                     validator: (v) {
-                      if (v?.isEmpty == true)
+                      if (v?.isEmpty == true) {
                         return 'Veuillez renseigner votre mot de passe';
-                      if (v!.length < 6)
+                      }
+                      if (v!.length < 6) {
                         return 'Le mot de passe doit faire 6 caractères minimum';
+                      }
                       return null;
                     },
                   ),

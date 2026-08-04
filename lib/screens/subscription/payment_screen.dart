@@ -2,6 +2,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
@@ -11,6 +12,9 @@ import '../../providers/subscription_provider.dart';
 import '../../services/nochpay_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/notification.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Plan plan;
@@ -30,11 +34,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final NochPayService _nochPayService = NochPayService();
   final NotificationService _notificationService = NotificationService();
 
-  String _selectedMethod = 'orange_money';
+    String _selectedMethod = 'orange_money';
   String _phoneNumber = '';
   String _confirmationCode = '';
   String _userConfirmationCode = '';
   String _transactionId = '';
+  String _paymentUrl = ''; // Lien NotchPay Collect (carte / portefeuilles numériques)
+  String _qrCodeUrl = ''; // URL du QR code (paiement QR)
   bool _isProcessing = false;
   bool _isConfirming = false;
   String _error = '';
@@ -47,26 +53,59 @@ class _PaymentScreenState extends State<PaymentScreen> {
       name: 'Orange Money',
       icon: Icons.phone_android,
       color: Colors.orange,
+      category: PaymentMethodCategory.ussd,
     ),
     PaymentMethod(
       id: 'mtn_money',
       name: 'MTN Mobile Money',
       icon: Icons.phone_android,
       color: const Color(0xFFFFD700),
+      category: PaymentMethodCategory.ussd,
     ),
     PaymentMethod(
       id: 'wave',
       name: 'Wave',
       icon: Icons.waves,
       color: Colors.blue,
+      category: PaymentMethodCategory.ussd,
     ),
     PaymentMethod(
       id: 'card',
       name: 'Carte bancaire',
       icon: Icons.credit_card,
       color: Colors.purple,
+      category: PaymentMethodCategory.collect,
+    ),
+    // ✅ Méthodes alternatives (docs Notch Pay "Other Payment Methods")
+    PaymentMethod(
+      id: 'asso',
+      name: 'Assoh (Portefeuille)',
+      icon: Icons.account_balance_wallet,
+      color: Colors.teal,
+      category: PaymentMethodCategory.collect,
+    ),
+    PaymentMethod(
+      id: 'kudi',
+      name: 'Kudi (Portefeuille)',
+      icon: Icons.account_balance_wallet,
+      color: Colors.indigo,
+      category: PaymentMethodCategory.collect,
+    ),
+        PaymentMethod(
+      id: 'qr_code',
+      name: 'Paiement par QR Code',
+      icon: Icons.qr_code_2,
+      color: Colors.green,
+      category: PaymentMethodCategory.qrCode,
     ),
   ];
+
+  PaymentMethod? get _selectedPaymentMethod {
+    for (final m in _paymentMethods) {
+      if (m.id == _selectedMethod) return m;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -182,46 +221,53 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+                Text(
           'Méthode de paiement',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Choisissez le moyen le plus adapté (Mobile Money, portefeuille numérique, carte ou QR code).',
+          style: TextStyle(fontSize: 12, color: subTextColor),
         ),
         const SizedBox(height: 12),
         ..._paymentMethods.map((method) => _buildPaymentMethodTile(method, isDark, textColor, primaryColor)),
         const SizedBox(height: 16),
 
-        // Numéro de téléphone
-        TextFormField(
-          keyboardType: TextInputType.phone,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Numéro de téléphone',
-            labelStyle: TextStyle(color: subTextColor),
-            hintText: '6X XX XX XX XX',
-            hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            prefixIcon: Icon(Icons.phone, color: primaryColor),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
-                width: 1,
+        // Numéro de téléphone (requis pour Mobile Money / USSD uniquement)
+        if (_selectedPaymentMethod?.category == PaymentMethodCategory.ussd)
+          TextFormField(
+            keyboardType: TextInputType.phone,
+            style: TextStyle(color: textColor),
+            decoration: InputDecoration(
+              labelText: 'Numéro de téléphone',
+              labelStyle: TextStyle(color: subTextColor),
+              hintText: '6X XX XX XX XX',
+              hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[400]),
+              prefixIcon: Icon(Icons.phone, color: primaryColor),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
+              filled: true,
+              fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
+                  width: 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: primaryColor, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: primaryColor, width: 2),
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            onChanged: (value) => setState(() => _phoneNumber = value),
           ),
-          onChanged: (value) => setState(() => _phoneNumber = value),
-        ),
-        const SizedBox(height: 16),
+        if (_selectedPaymentMethod?.category == PaymentMethodCategory.ussd)
+          const SizedBox(height: 16),
 
         if (_error.isNotEmpty)
           Container(
@@ -285,29 +331,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildConfirmationView(
+    Widget _buildConfirmationView(
     bool isDark,
     Color textColor,
     Color subTextColor,
     Color primaryColor,
     Color cardColor,
   ) {
+    final category = _selectedPaymentMethod?.category;
+    final methodName = _selectedPaymentMethod?.name ?? 'Paiement';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.hourglass_empty, size: 48, color: Colors.orange),
-        const SizedBox(height: 16),
-        Text(
-          'En attente de confirmation...',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Veuillez confirmer le paiement sur votre téléphone',
-          style: TextStyle(fontSize: 14, color: subTextColor),
-        ),
-        const SizedBox(height: 16),
-
+        // ===== Résumé du montant =====
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -326,12 +363,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                 ],
               ),
+              if (_phoneNumber.isNotEmpty &&
+                  category == PaymentMethodCategory.ussd) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Téléphone:', style: TextStyle(color: subTextColor)),
+                    Text(_phoneNumber,
+                        style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
+                  ],
+                ),
+              ],
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Téléphone:', style: TextStyle(color: subTextColor)),
-                  Text(_phoneNumber, style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
+                  Text('Méthode:', style: TextStyle(color: subTextColor)),
+                  Text(methodName,
+                      style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -339,14 +389,27 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Transaction:', style: TextStyle(color: subTextColor)),
-                  Text('#${_transactionId.substring(0, 8)}', style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
+                  Text('#${_transactionId.substring(0, 8)}',
+                      style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),
             ],
           ),
         ),
+        const SizedBox(height: 16),
 
-        if (_confirmationCode.isNotEmpty) ...[
+        // ===== Contenu spécifique à la méthode =====
+        if (category == PaymentMethodCategory.ussd)
+          _buildUssdConfirmation(isDark, subTextColor)
+        else if (category == PaymentMethodCategory.collect)
+          _buildCollectConfirmation(isDark, subTextColor, primaryColor)
+        else if (category == PaymentMethodCategory.qrCode)
+          _buildQrCodeConfirmation(
+              isDark, subTextColor, primaryColor, cardColor),
+
+        // ===== Code SMS (Mobile Money uniquement) =====
+        if (category == PaymentMethodCategory.ussd &&
+            _confirmationCode.isNotEmpty) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
@@ -402,11 +465,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () => _showSnackBar('Un nouveau code a été envoyé', Colors.blue),
-            child: Text('Renvoyer le code', style: TextStyle(color: primaryColor)),
-          ),
         ],
 
         const SizedBox(height: 16),
@@ -417,12 +475,191 @@ class _PaymentScreenState extends State<PaymentScreen> {
               _transactionId = '';
               _confirmationCode = '';
               _userConfirmationCode = '';
+              _paymentUrl = '';
+              _qrCodeUrl = '';
             });
           },
           child: const Text('Annuler le paiement', style: TextStyle(color: Colors.red)),
         ),
       ],
     );
+  }
+
+  // ---- Vue Mobile Money (USSD) ----
+  Widget _buildUssdConfirmation(bool isDark, Color subTextColor) {
+    return Column(
+      children: [
+        const Icon(Icons.smartphone, size: 48, color: Colors.orange),
+        const SizedBox(height: 12),
+        Text(
+          'En attente de confirmation...',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Votre client va recevoir une invite USSD sur son téléphone.\n'
+          'Demandez-lui de saisir son code PIN pour confirmer le paiement.',
+          style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        const CircularProgressIndicator(strokeWidth: 2),
+      ],
+    );
+  }
+
+  // ---- Vue Carte / Portefeuilles numériques (NotchPay Collect) ----
+  Widget _buildCollectConfirmation(bool isDark, Color subTextColor, Color primaryColor) {
+    final isWallet = _selectedPaymentMethod?.category == PaymentMethodCategory.collect &&
+        _selectedMethod != 'card';
+    return Column(
+      children: [
+        Icon(isWallet ? Icons.account_balance_wallet : Icons.credit_card,
+            size: 48, color: Colors.purple.shade300),
+        const SizedBox(height: 12),
+        Text(
+          isWallet ? 'Paiement par portefeuille numérique' : 'Paiement par carte bancaire',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Réglez via la page sécurisée NotchPay. '
+          '${isWallet ? 'Les portefeuilles tels que Assoh, Kudi apparaissent dans les options.' : ''}',
+          style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4),
+          textAlign: TextAlign.center,
+        ),
+                const SizedBox(height: 16),
+        SelectableText(
+          _paymentUrl,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline),
+        ),
+        const SizedBox(height: 16),
+        // Bouton principal : ouvrir la page de paiement sécurisée NotchPay.
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: _openPaymentUrl,
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('Ouvrir la page de paiement'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _sharePaymentLink(),
+              icon: const Icon(Icons.share, size: 18),
+              label: const Text('Envoyer le lien'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: _paymentUrl));
+                _showSnackBar('Lien de paiement copié ✅', Colors.green);
+              },
+              child: const Text('Copier'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const CircularProgressIndicator(strokeWidth: 2),
+      ],
+    );
+  }
+
+  // ---- Vue Paiement par QR code ----
+  Widget _buildQrCodeConfirmation(
+      bool isDark, Color subTextColor, Color primaryColor, Color cardColor) {
+    return Column(
+      children: [
+        Text(
+          'Scannez pour payer',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Affichez ce QR code sur votre écran ou transmettez-le au payeur. '
+          'Le paiement est détecté automatiquement une fois scanné et validé.',
+          style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        // Affichage du QR code (généré localement via qr_flutter si l'URL
+        // renvoyée par l'API n'est pas directement affichable).
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black12, width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrImageView(
+                data: _qrCodeUrl.isNotEmpty ? _qrCodeUrl : _transactionId,
+                version: QrVersions.auto,
+                size: 200,
+                backgroundColor: Colors.white,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _paymentUrl,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => _sharePaymentLink(),
+              icon: const Icon(Icons.share, size: 18),
+              label: const Text('Partager'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const CircularProgressIndicator(strokeWidth: 2),
+      ],
+    );
+  }
+
+    /// Ouvre la page de paiement sécurisée NotchPay Collect dans le navigateur.
+  /// C'est ici que le client choisit son moyen (Mobile Money, portefeuille
+  /// numérique Assoh, carte bancaire…) et règle.
+  Future<void> _openPaymentUrl() async {
+    final url = _paymentUrl.isNotEmpty ? _paymentUrl : _qrCodeUrl;
+    if (url.isEmpty) {
+      _showSnackBar('Lien de paiement indisponible', Colors.orange);
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showSnackBar('Impossible d\'ouvrir le lien de paiement', Colors.red);
+      return;
+    }
+  }
+
+  /// Partage le lien de paiement sécurisé (SMS / WhatsApp / copie) pour les
+  /// méthodes de type Collect (carte, portefeuilles numériques) et QR code.
+  Future<void> _sharePaymentLink() async {
+    final message = 'Règlement de votre abonnement ${widget.plan.name} '
+        'd\'un montant de ${widget.plan.getFormattedPrice()} '
+        'via ce lien sécurisé : ${_paymentUrl.isEmpty ? _qrCodeUrl : _paymentUrl}';
+    await SharePlus.instance.share(ShareParams(text: message));
   }
 
   Widget _buildPaymentMethodTile(
@@ -466,8 +703,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Future<void> _processPayment() async {
-    if (_phoneNumber.isEmpty || _phoneNumber.length < 9) {
+    Future<void> _processPayment() async {
+    final category = _selectedPaymentMethod?.category;
+    if (category == null) return;
+
+    // Le numéro de téléphone n'est requis que pour Mobile Money (USSD).
+    if (category == PaymentMethodCategory.ussd &&
+        (_phoneNumber.isEmpty || _phoneNumber.length < 9)) {
       _showSnackBar('Numéro de téléphone invalide', Colors.red);
       return;
     }
@@ -478,63 +720,107 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
-            final result = await _nochPayService.initiatePayment(
+      final reference = 'SUB-${DateTime.now().millisecondsSinceEpoch}';
+
+      final result = await _nochPayService.initiatePayment(
         amount: widget.plan.price,
         currency: widget.plan.currency,
         phoneNumber: _phoneNumber,
-        invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
+        invoiceNumber: reference,
         description: 'Abonnement ${widget.plan.name}',
         paymentMethod: _selectedMethod,
+        customerName: null,
+        customerEmail: null,
       );
 
-            if (result['success'] == true) {
-        final reference = (result['reference'] ?? result['transaction_id']) as String;
-
-        // ✅ Méthode USSD (recommandée par NochPay) : on initie la demande
-        // de paiement sur le canal de l'opérateur (ex : cm.orange, cm.mtn,
-        // sn.wave). Le client reçoit alors une invite USSD sur son téléphone
-        // et n'a qu'à saisir son code PIN pour confirmer.
-        final ussd = await _nochPayService.processMobileMoneyUSSD(
-          reference: reference,
-          method: _selectedMethod,
-          phoneNumber: _phoneNumber,
-        );
-
-        if (ussd['success'] != true) {
-          setState(() {
-            _isProcessing = false;
-            _error = ussd['error'] ?? 'Erreur lors de la demande USSD';
-          });
-          _showSnackBar(_error, Colors.red);
-          return;
-        }
-
-        setState(() {
-          _transactionId = reference;
-          _confirmationCode = result['confirmation_code'] ?? '';
-          _isProcessing = false;
-          _isConfirming = true;
-        });
-
-        await _nochPayService.savePendingTransaction(
-          transactionId: reference,
-          invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
-          invoiceNumber: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
-          phoneNumber: _phoneNumber,
-          amount: widget.plan.price,
-          reference: reference,
-          authorizationUrl: '',
-          paymentMethod: _selectedMethod,
-        );
-
-        _startAutoCheck();
-        _showSnackBar('Paiement initié. Confirmez l\'invite USSD sur votre téléphone.', Colors.blue);
-      } else {
+      if (result['success'] != true) {
         setState(() {
           _isProcessing = false;
           _error = result['error'] ?? 'Erreur d\'initialisation';
         });
         _showSnackBar(_error, Colors.red);
+        return;
+      }
+
+      final txRef =
+          (result['reference'] ?? result['transaction_id']) as String;
+      final authorizationUrl = result['authorization_url'] as String? ?? '';
+
+      setState(() {
+        _transactionId = txRef;
+        _paymentUrl = authorizationUrl.isNotEmpty
+            ? authorizationUrl
+            : 'https://pay.notchpay.co/payments/$txRef';
+        _confirmationCode = result['confirmation_code'] ?? '';
+        _isProcessing = false;
+        _isConfirming = true;
+      });
+
+      // Sauvegarde de la transaction en attente.
+      await _nochPayService.savePendingTransaction(
+        transactionId: txRef,
+        invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
+        invoiceNumber: reference,
+        phoneNumber: _phoneNumber,
+        amount: widget.plan.price,
+        reference: txRef,
+        authorizationUrl: _paymentUrl,
+        paymentMethod: _selectedMethod,
+      );
+
+      switch (category) {
+        // ---- Mobile Money → invite USSD sur le téléphone du client ----
+        case PaymentMethodCategory.ussd:
+          final ussd = await _nochPayService.processMobileMoneyUSSD(
+            reference: txRef,
+            method: _selectedMethod,
+            phoneNumber: _phoneNumber,
+          );
+          if (ussd['success'] != true) {
+            setState(() {
+              _isProcessing = false;
+              _error = ussd['error'] ?? 'Erreur lors de la demande USSD';
+            });
+            _showSnackBar(_error, Colors.red);
+            return;
+          }
+          _startAutoCheck();
+          _showSnackBar(
+            'Paiement initié. Confirmez l\'invite USSD sur votre téléphone.',
+            Colors.blue,
+          );
+          break;
+
+        // ---- Carte & portefeuilles numériques → page NotchPay Collect ----
+        case PaymentMethodCategory.collect:
+          // La page Collect affiche les options disponibles (carte, Assoh, …).
+          // Le statut est vérifié automatiquement une fois le règlement fait.
+          _startAutoCheck();
+          _showSnackBar(
+            'Ouvrez le lien sécurisé pour finaliser le paiement.',
+            Colors.blue,
+          );
+          break;
+
+        // ---- Paiement par QR code → affichage du QR code à scanner ----
+        case PaymentMethodCategory.qrCode:
+          final qr = await _nochPayService.fetchQRCodeUrl(
+            reference: txRef,
+            fallbackUrl: _paymentUrl,
+          );
+          if (qr['success'] == true) {
+            _qrCodeUrl = (qr['qr_code_url'] ?? _paymentUrl) as String;
+          } else {
+            // Repli : on génère un QR pointant vers la page Collect.
+            _qrCodeUrl = _paymentUrl;
+          }
+          if (mounted) setState(() {});
+          _startAutoCheck();
+          _showSnackBar(
+            'Scannez le QR code pour régler votre abonnement.',
+            Colors.blue,
+          );
+          break;
       }
     } catch (e) {
       setState(() {
@@ -554,20 +840,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
   }
 
-  Future<void> _autoCheckStatus(int checks, int maxChecks) async {
+    Future<void> _autoCheckStatus(int checks, int maxChecks) async {
     if (checks >= maxChecks || !_isConfirming) return;
 
     final result = await _nochPayService.checkPaymentStatus(_transactionId);
+    final status = result['status']?.toString() ?? '';
 
-    if (result['success'] == true && result['status'] == 'paid') {
+    // Paiement réussi (status `complete` chez Notch Pay, ou `paid`).
+    if (result['success'] == true && result['is_success'] == true) {
       await _completeSubscription();
       return;
     }
 
-    if (result['success'] == true && result['status'] == 'failed') {
+    final failedStatuses = ['failed', 'canceled', 'cancelled', 'rejected', 'expired', 'abandoned'];
+    if (result['success'] == true && failedStatuses.contains(status)) {
       setState(() {
         _isConfirming = false;
-        _error = 'Le paiement a échoué';
+        _error = 'Le paiement a échoué (${status == 'abandoned' ? 'abandonné' : status})';
       });
       await _notificationService.addNotification(
         AppNotification(
@@ -669,16 +958,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
+/// Catégorie de flux de paiement selon la méthode.
+///
+/// - [ussd]   : Mobile Money → invite USSD sur le téléphone du client.
+/// - [collect]: Carte bancaire & portefeuilles numériques → page NotchPay
+///              Collect via `authorization_url`.
+/// - [qrCode] : Paiement par QR code → affichage d'un QR code à scanner.
+enum PaymentMethodCategory { ussd, collect, qrCode }
+
 class PaymentMethod {
   final String id;
   final String name;
   final IconData icon;
   final Color color;
+  final PaymentMethodCategory category;
 
   PaymentMethod({
     required this.id,
     required this.name,
     required this.icon,
     required this.color,
+    this.category = PaymentMethodCategory.ussd,
   });
 }

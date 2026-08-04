@@ -6,11 +6,16 @@ import '../services/notification_service.dart';
 import '../services/config_service.dart';
 
 class NochPayService {
-  // ===== Constantes des méthodes de paiement supportées =====
+    // ===== Constantes des méthodes de paiement supportées =====
   static const String methodOrangeMoney = 'orange_money';
   static const String methodMtnMoney = 'mtn_money';
   static const String methodWave = 'wave';
   static const String methodCard = 'card';
+
+  // ✅ Méthodes alternatives (docs Notch Pay "Other Payment Methods")
+  static const String methodAssoh = 'asso'; // Portefeuille numérique (Cameroun)
+  static const String methodKudi = 'kudi'; // Portefeuille numérique
+  static const String methodQrCode = 'qr_code'; // Paiement par QR Code
 
   /// Liste de toutes les méthodes de paiement supportées.
   static const List<String> supportedMethods = [
@@ -18,6 +23,22 @@ class NochPayService {
     methodMtnMoney,
     methodWave,
     methodCard,
+    methodAssoh,
+    methodKudi,
+    methodQrCode,
+  ];
+
+  /// Méthodes "Mobile Money" traitées via l'invite USSD / canal opérateur.
+  static const List<String> ussdMethods = [
+    methodOrangeMoney,
+    methodMtnMoney,
+    methodWave,
+  ];
+
+  /// Méthodes "Portefeuilles numériques" traitées via la page NotchPay Collect.
+  static const List<String> walletMethods = [
+    methodAssoh,
+    methodKudi,
   ];
 
   // 🔥 URL de base (sandbox ou production)
@@ -143,7 +164,7 @@ class NochPayService {
   ///   - ci.mtn, ci.orange (Côte d'Ivoire)
   ///   - sn.wave, sn.orange (Sénégal)
   ///   - ke.mpesa (Kenya), gh.mtn (Ghana), ug.airtel (Ouganda)
-  static String channelForMethod(String method) {
+    static String channelForMethod(String method) {
     switch (method) {
       case methodOrangeMoney:
         return 'cm.orange';
@@ -151,8 +172,66 @@ class NochPayService {
         return 'cm.mtn';
       case methodWave:
         return 'sn.wave';
+      // ✅ Portefeuilles numériques (docs "Digital Wallets")
+      case methodAssoh:
+        return 'cm.assoh';
+      case methodKudi:
+        return 'ci.kudi';
       default:
         return 'cm.orange';
+    }
+  }
+
+  // ============================================================
+  //  2b. PAIEMENT PAR QR CODE
+  // ============================================================
+
+  /// Récupère l'URL du QR code d'un paiement via l'API Notch Pay.
+  ///
+  /// Appelle `GET /payments/{reference}/qrcode` (voir doc "QR Code
+  /// Payments"). Le client paie ensuite en scannant le QR code avec son
+  /// application mobile bancaire / portefeuille. Un lien de repli (fallback)
+  /// est fourni si l'endpoint QR n'est pas disponible, afin de générer
+  /// localement un QR code pointant vers la page Collect.
+  Future<Map<String, dynamic>> fetchQRCodeUrl({
+    required String reference,
+    String? fallbackUrl,
+  }) async {
+    try {
+      final response = await _client
+          .get(
+            Uri.parse('$_baseUrl/payments/$reference/qrcode'),
+            headers: {'Authorization': _publicKey},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final qrCodeUrl = data['qr_code_url'] ??
+            data['qr_code'] ??
+            data['qr'] ??
+            data['url'];
+        return {
+          'success': true,
+          'qr_code_url': qrCodeUrl,
+          'reference': reference,
+        };
+      }
+
+      return {
+        'success': false,
+        'error': data['message'] ?? 'Erreur lors de la génération du QR code',
+        'code': response.statusCode,
+        // En cas d'échec, on retombe sur la page Collect si fournie.
+        'fallback_url': fallbackUrl,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+        'fallback_url': fallbackUrl,
+      };
     }
   }
 
@@ -213,6 +292,18 @@ class NochPayService {
   //  3. VÉRIFICATION DU STATUT (POLLING)
   // ============================================================
 
+    /// Indique si un statut de transaction = paiement réussi.
+  ///
+  /// Notch Pay utilise `complete` pour un paiement terminé (statut final).
+  /// On accepte aussi `paid` par rétro-compatibilité avec l'ancien flux.
+  static bool isPaymentSuccessful(String? status) {
+    final normalized = status?.toLowerCase();
+    return normalized == 'complete' ||
+        normalized == 'paid' ||
+        normalized == 'success' ||
+        normalized == 'successful';
+  }
+
   Future<Map<String, dynamic>> checkPaymentStatus(String reference) async {
     try {
       final response = await _client.get(
@@ -222,12 +313,16 @@ class NochPayService {
 
       final data = json.decode(response.body);
 
-      if (response.statusCode == 200) {
-        final transaction = data['transaction'] as Map<String, dynamic>;
+      if (response.statusCode == 200 || response.statusCode == 202) {
+        final transaction = data['transaction'] as Map<String, dynamic>? ??
+            data as Map<String, dynamic>? ??
+            const {};
+        final status = transaction['status'] ?? 'pending';
         return {
           'success': true,
-          'status': transaction['status'],
-          'reference': transaction['reference'],
+          'status': status,
+          'is_success': isPaymentSuccessful(status),
+          'reference': transaction['reference'] ?? reference,
           'amount': transaction['amount'],
           'currency': transaction['currency'],
           'payment_method': transaction['payment_method'],
