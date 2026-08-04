@@ -1,10 +1,12 @@
 // lib/screens/auth/verify_2fa_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 
 class VerifyTwoFactorScreen extends StatefulWidget {
   const VerifyTwoFactorScreen({super.key});
@@ -155,16 +157,35 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Icône de sécurité 2FA
+                                        // Icône de sécurité 2FA (dégradé + halo)
                     Container(
-                      width: 58,
-                      height: 58,
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            primary.withValues(alpha: 0.9),
+                            theme.secondaryColor.withValues(alpha: 0.7),
+                          ],
+                        ),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: primary.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.security_rounded, color: primary, size: 28),
-                    ),
+                      child: const Icon(Icons.security_rounded,
+                          color: Colors.white, size: 28),
+                    ).animate().scale(
+                          begin: const Offset(0.6, 0.6),
+                          end: const Offset(1, 1),
+                          curve: Curves.easeOutBack,
+                        ),
                     const SizedBox(height: 14),
                     
                     Text(
@@ -288,30 +309,14 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // Bouton de validation manuelle
-                    SizedBox(
-                      width: double.infinity,
+                                        // Bouton de validation manuelle (dégradé indigo → violet)
+                    GradientButton(
+                      label: 'Valider et se connecter',
+                      icon: Icons.verified_user_rounded,
                       height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _verifyCode,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                              )
-                            : const Text(
-                                'Valider et se connecter',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                              ),
-                      ),
-                    ),
+                      loading: _isLoading,
+                      onPressed: _verifyCode,
+                    ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
                     const SizedBox(height: 20),
 
                     // Bouton Annuler

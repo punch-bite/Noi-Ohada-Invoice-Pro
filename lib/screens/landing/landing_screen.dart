@@ -68,18 +68,39 @@ class _LandingScreenState extends State<LandingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
-                  GlassCard(
+                  // Logo réel de l'application (extrémité gauche)
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    padding: const EdgeInsets.all(9),
-                    child: Icon(
-                      Icons.receipt_long_rounded,
-                      color: theme.primaryColor,
-                      size: 22,
+                    child: Image.asset(
+                      'assets/images/splash_logo.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stack) => Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              theme.primaryColor,
+                              theme.secondaryColor,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.receipt_long_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'NOI OHADA',
+                    'Noi Ohada',
                     style: TextStyle(
                       fontFamily: 'Roboto',
                       fontWeight: FontWeight.w800,

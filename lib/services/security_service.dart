@@ -14,9 +14,18 @@ class SecurityService {
   static const String _lockTimeoutKey = 'lock_timeout';
   static const String _lastActivityKey = 'last_activity';
 
-  static Box? _box;
+    static Box? _box;
   static final LocalAuthentication _localAuth = LocalAuthentication();
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+
+  // 🔓 Verrou d'application déverrouillé pour la session courante (mémoire).
+  // Mis à true après une authentification biométrique/PIN réussie.
+  static bool _unlockedThisSession = false;
+
+  /// Réinitialise le verrou de session (à appeler lors du logout/app start).
+  static void resetSessionUnlock() => _unlockedThisSession = false;
+  static bool get isUnlockedThisSession => _unlockedThisSession;
+  static void markSessionUnlocked() => _unlockedThisSession = true;
 
   // Contexte utilisateur pour les logs Firestore
   static String? _currentUserId;
@@ -136,13 +145,20 @@ class SecurityService {
     return _box!.get(_biometricKey, defaultValue: false) as bool;
   }
 
-  static Future<void> setBiometricEnabled(bool enabled) async {
+    static Future<void> setBiometricEnabled(bool enabled) async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
     await _box!.put(_biometricKey, enabled);
     await _logActivity(
       action: enabled ? 'biometric_enabled' : 'biometric_disabled',
       details: 'Biométrie ${enabled ? 'activée' : 'désactivée'}',
     );
+  }
+
+  /// Indique si une protection d'accès (PIN ou biométrie) est configurée.
+  static Future<bool> isAppProtectionEnabled() async {
+    final pinSet = await isPinSet();
+    final bioEnabled = await isBiometricEnabled();
+    return pinSet || bioEnabled;
   }
 
   static Future<bool> authenticateWithBiometrics() async {

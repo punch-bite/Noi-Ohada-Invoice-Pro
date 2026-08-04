@@ -2,8 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -112,16 +114,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Badge Icône d'inscription
+                                            // Badge Icône d'inscription (dégradé + halo)
                       Container(
-                        width: 58,
-                        height: 58,
+                        width: 66,
+                        height: 66,
                         decoration: BoxDecoration(
-                          color: primary.withOpacity(0.1),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              primary.withValues(alpha: 0.9),
+                              theme.secondaryColor.withValues(alpha: 0.7),
+                            ],
+                          ),
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: primary.withValues(alpha: 0.35),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                        child: Icon(Icons.person_add_alt_1_rounded, color: primary, size: 28),
-                      ),
+                        child: const Icon(Icons.person_add_alt_1_rounded,
+                            color: Colors.white, size: 28),
+                      ).animate().scale(
+                            begin: const Offset(0.6, 0.6),
+                            end: const Offset(1, 1),
+                            curve: Curves.easeOutBack,
+                          ),
                       const SizedBox(height: 14),
                       Text(
                         'Créer un compte',
@@ -134,7 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Rejoignez OHADA Invoice Pro',
+                        'Rejoignez NOI OHADA Invoice Pro',
                         style: TextStyle(fontSize: 13, color: sub, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 28),
@@ -265,33 +286,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Bouton d'inscription
-                      SizedBox(
-                        width: double.infinity,
+                                            // Bouton d'inscription (dégradé indigo → violet)
+                      GradientButton(
+                        label: 'Créer mon compte',
+                        icon: Icons.person_add_alt_1_rounded,
                         height: 50,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _register,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5, 
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'Créer mon compte', 
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                                ),
-                        ),
-                      ),
+                        loading: _isLoading,
+                        onPressed: _register,
+                      ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
 
                       const SizedBox(height: 20),
 

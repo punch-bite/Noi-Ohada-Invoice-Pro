@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -103,14 +105,19 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    final authProvider = context.read<AppAuthProvider>();
+        final authProvider = context.read<AppAuthProvider>();
     final success = await authProvider.loginWithGoogle();
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (success) {
-      context.go('/dashboard');
+      // 🔐 Redirige vers la vérification 2FA si elle est requise.
+      if (authProvider.needsTwoFactor) {
+        context.push('/auth/verify-2fa');
+      } else {
+        context.go('/dashboard');
+      }
     } else {
       setState(() {
         _errorMessage = authProvider.error ?? 'Connexion Google échouée';
@@ -140,18 +147,36 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo de la marque
+                                    // Logo de la marque (verre dépoli + halo)
                   Container(
-                    width: 68,
-                    height: 68,
+                    width: 76,
+                    height: 76,
                     decoration: BoxDecoration(
-                      color: primary.withOpacity(0.1),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          primary.withValues(alpha: 0.9),
+                          theme.secondaryColor.withValues(alpha: 0.7),
+                        ],
+                      ),
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withValues(alpha: 0.35),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                    child: Icon(Icons.receipt_long_rounded,
-                        color: primary, size: 34),
-                  ),
-                  const SizedBox(height: 16),
+                    child: const Icon(Icons.receipt_long_rounded,
+                        color: Colors.white, size: 34),
+                  ).animate().scale(
+                        begin: const Offset(0.6, 0.6),
+                        end: const Offset(1, 1),
+                        curve: Curves.easeOutBack,
+                      ),
+                  const SizedBox(height: 20),
                   Text(
                     'OHADA Invoice Pro',
                     style: TextStyle(
@@ -376,36 +401,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Bouton Soumission
-                  SizedBox(
-                    width: double.infinity,
+                                    // Bouton Soumission (dégradé indigo → violet)
+                  GradientButton(
+                    label: 'Se connecter',
+                    icon: Icons.lock_open_rounded,
                     height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              'Se connecter',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                    ),
-                  ),
+                    loading: _isLoading,
+                    onPressed: _login,
+                  ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
 
                   const SizedBox(height: 16),
 

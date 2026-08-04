@@ -6,6 +6,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../services/database_service.dart';
 import '../../models/client.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
 
 class CreateClientScreen extends StatefulWidget {
   final Client? client;
@@ -270,25 +271,21 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     );
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
-    final subTextColor = themeProvider.subTextColor;
-    final bgColor = themeProvider.backgroundColor;
     final primaryColor = themeProvider.primaryColor;
     final isEditing = widget.client != null;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: Text(
           isEditing ? 'Modifier le client' : 'Nouveau client',
           style: TextStyle(
               color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.close, color: textColor),
@@ -297,12 +294,9 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         actions: [
           if (!isEditing)
             IconButton(
-              icon: Icon(
-                Icons.contact_phone_outlined,
-                color: primaryColor,
-              ),
+              icon: Icon(Icons.contact_phone_outlined, color: primaryColor),
               onPressed: _isLoadingContacts ? null : _importFromContacts,
-              tooltip: 'Importer depuis les contacts',
+              tooltip: 'Importer depuis le répertoire',
             ),
           if (_isLoadingContacts)
             const Padding(
@@ -338,47 +332,38 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                // Icône d'import (raccourci visuel)
+                // Raccourci d'import depuis le répertoire (carte soft)
                 if (!isEditing)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: primaryColor.withOpacity(0.2),
-                      ),
-                    ),
+                  GlassCard(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 14),
+                    borderRadius: BorderRadius.circular(16),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.contact_phone,
-                          color: primaryColor,
-                          size: 20,
-                        ),
+                        Icon(Icons.contact_phone,
+                            color: primaryColor, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Appuyez sur l\'icône 📇 en haut à droite pour importer depuis vos contacts',
+                            'Appuyez sur l\'icône en haut à droite pour importer depuis votre répertoire',
                             style: TextStyle(
                               fontSize: 12,
-                              color: subTextColor,
+                              color: themeProvider.subTextColor,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                _buildField(
+                const SizedBox(height: 16),
+                GlassTextField(
                   controller: _nameController,
                   label: 'Nom complet *',
-                  icon: Icons.person_outline,
-                  isDark: isDark,
-                  textColor: textColor,
+                  prefixIcon: Icons.person_outline,
+                  textCapitalization: TextCapitalization.words,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Veuillez saisir le nom';
@@ -386,13 +371,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-                _buildField(
+                const SizedBox(height: 14),
+                GlassTextField(
                   controller: _addressController,
                   label: 'Adresse *',
-                  icon: Icons.location_on_outlined,
-                  isDark: isDark,
-                  textColor: textColor,
+                  prefixIcon: Icons.location_on_outlined,
+                  textCapitalization: TextCapitalization.words,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Veuillez saisir l\'adresse';
@@ -400,13 +384,11 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-                _buildField(
+                const SizedBox(height: 14),
+                GlassTextField(
                   controller: _phoneController,
                   label: 'Téléphone *',
-                  icon: Icons.phone_outlined,
-                  isDark: isDark,
-                  textColor: textColor,
+                  prefixIcon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -415,70 +397,31 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
-                _buildField(
+                const SizedBox(height: 14),
+                GlassTextField(
                   controller: _emailController,
                   label: 'Email',
-                  icon: Icons.email_outlined,
-                  isDark: isDark,
-                  textColor: textColor,
+                  prefixIcon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
                 ),
-                const SizedBox(height: 16),
-                _buildField(
+                const SizedBox(height: 14),
+                GlassTextField(
                   controller: _taxIdController,
                   label: 'NUI / RCCM',
-                  icon: Icons.numbers_outlined,
-                  isDark: isDark,
-                  textColor: textColor,
+                  prefixIcon: Icons.numbers_outlined,
+                ),
+                const SizedBox(height: 24),
+                GradientButton(
+                  label: isEditing ? 'Sauvegarder' : 'Ajouter le client',
+                  icon: Icons.check_circle_outline_rounded,
+                  height: 52,
+                  loading: _isSaving,
+                  onPressed: _saveClient,
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required bool isDark,
-    required Color textColor,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
-      style: TextStyle(color: textColor, fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-            color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13),
-        prefixIcon: Icon(icon,
-            color: isDark ? Colors.grey[400] : Colors.grey[600], size: 20),
-        filled: true,
-        fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
-            width: 1,
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF1A237E), width: 2),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

@@ -3,11 +3,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
 
 class ConfigService {
-  // Liste des clés obligatoires pour le bon fonctionnement de l'app
+  // Liste des clés obligatoires pour le bon fonctionnement de l'app.
+  // (Les clés NochPay sont optionnelles : l'app fonctionne hors-ligne, et
+  // les paiements ne sont disponibles que si les clés sont présentes dans .env)
   static const List<String> _requiredKeys = [
     'FIREBASE_API_KEY',
     'FIREBASE_PROJECT_ID',
-    'NOCHPAY_API_KEY'
   ];
 
   /// Initialise les variables d'environnement et vérifie la présence des clés critiques
@@ -15,7 +16,7 @@ class ConfigService {
     try {
       await dotenv.load(fileName: ".env");
 
-      // Validation stricte
+      // Validation stricte UNIQUEMENT pour les clés réellement indispensables
       for (final key in _requiredKeys) {
         if (!dotenv.env.containsKey(key)) {
           throw Exception('Variable d\'environnement manquante : $key');
@@ -50,6 +51,7 @@ class ConfigService {
   static String get firebaseProjectId => _get('FIREBASE_PROJECT_ID');
   static String get firebaseAuthDomain => _get('FIREBASE_AUTH_DOMAIN');
   static String get firebaseStorageBucket => _get('FIREBASE_STORAGE_BUCKET');
+  static String get firebaseWebClientId => _get('FIREBASE_WEB_CLIENT_ID');
 
   // Nochpay
   static String get nochpayPublicKey => dotenv.env['NOCHPAY_PUBLIC_KEY'] ?? '';

@@ -3,13 +3,16 @@
 <plist version="1.0">
 	<dict>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
+		<true/>
 		<key>NSContactsUsageDescription</key>
 		<string>Cette application nécessite l'accès à vos contacts pour importer les informations de vos clients.</string>
-		<true/>
+
+		<key>NSFaceIDUsageDescription</key>
+		<string>Cette application utilise Face ID ou le Touch ID pour déverrouiller l'accès à vos données de facturation de manière sécurisée.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Noi Facture Whatsapp</string>
+		<string>Noi Ohada Invoice Pro</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>

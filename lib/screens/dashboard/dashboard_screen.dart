@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../services/security_service.dart';
 import '../../widgets/custom_drawer.dart';
+import '../security/app_lock_screen.dart';
 import 'dashboard_home.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -40,8 +42,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
+    // 🔐 Verrou d'application : si une protection (PIN/biométrie) est
+    // configurée et que la session n'est pas encore déverrouillée, on
+    // affiche l'écran de déverrouillage avant le tableau de bord.
+        return FutureBuilder<bool>(
+      future: _lockCheck,
+      builder: (context, snapshot) {
+        final enabled = snapshot.data ?? false;
+        if (enabled && !SecurityService.isUnlockedThisSession) {
+          return AppLockScreen(
+            onUnlocked: () => setState(() {}),
+          );
+        }
+        return _buildDashboard(context);
+      },
+    );
+  }
+
+  Future<bool>? _lockCheck;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _lockCheck = SecurityService.isAppProtectionEnabled();
+  }
+
+  Widget _buildDashboard(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final primaryColor = themeProvider.primaryColor;

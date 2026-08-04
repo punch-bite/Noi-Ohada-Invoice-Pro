@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
+import 'config_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -177,13 +178,21 @@ class AuthService {
     }
   }
 
-  /// Se connecte avec un compte Google.
+    /// Se connecte avec un compte Google.
   /// Utilise `google_sign_in` pour obtenir le compte Google puis échange
   /// le jeton avec Firebase Authentication. Ensuite, on s'assure que le
   /// document utilisateur existe dans Firestore (créé via _ensureUserDocument).
   Future<AppUser> signInWithGoogle() async {
     try {
-      final googleUser = await GoogleSignIn().signIn();
+      // 🔥 Fournit le client ID Firebase (utilisé sur le web). Sur
+      // Android/iOS, le comportement par défaut (google-services.json /
+      // Info.plist) est conservé automatiquement.
+      final clientId = ConfigService.firebaseWebClientId;
+      final googleSignIn = GoogleSignIn(
+        clientId: clientId.isEmpty ? null : clientId,
+      );
+
+      final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('Connexion Google annulée.');
       }

@@ -200,8 +200,21 @@ class AppAuthProvider extends ChangeNotifier {
     _pendingCredential = null;
     notifyListeners();
 
-    try {
+        try {
       final appUser = await _authService.signInWithGoogle();
+
+      // 🔐 La 2FA s'applique aussi à Google Sign-In pour empêcher toute
+      // connexion au tableau de bord sans vérification du code TOTP.
+      final is2FAEnabled = await TwoFactorService.isEnabled(appUser.id);
+      if (is2FAEnabled) {
+        _pendingUser = appUser;
+        _needsTwoFactor = true;
+        _isLoading = false;
+        notifyListeners();
+        notifyRouter();
+        return true;
+      }
+
       _user = appUser;
 
       if (_user != null) {
@@ -309,13 +322,14 @@ class AppAuthProvider extends ChangeNotifier {
       debugPrint('⚠️ Erreur purge Hive au logout: $e');
     }
 
-    // ✅ Étape 3 : Réinitialiser l'état de l'auth
+        // ✅ Étape 3 : Réinitialiser l'état de l'auth
     _user = null;
     _needsTwoFactor = false;
     _pendingUser = null;
     _pendingCredential = null;
     _error = null;
     SecurityService.clearUserContext();
+    SecurityService.resetSessionUnlock();
 
     notifyListeners();
     notifyRouter();

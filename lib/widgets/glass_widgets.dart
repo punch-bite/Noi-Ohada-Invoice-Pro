@@ -5,6 +5,7 @@
 // ============================================================
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Arrière-plan dégradé indigo → violet utilisé par les écrans premium.
 class GlassScaffold extends StatelessWidget {
@@ -353,6 +354,132 @@ class GlassBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Champ de formulaire "glass" minimaliste : fond translucide, bordure
+/// ultra-soft (presque invisible), focus encadré par la couleur primaire.
+/// Standardise tous les formulaires de l'app vers une approche épurée.
+class GlassTextField extends StatelessWidget {
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
+  final String label;
+  final String? hint;
+  final IconData? prefixIcon;
+  final IconData? suffixIcon;
+  final bool obscureText;
+  final int maxLines;
+  final int? maxLength;
+  final bool enabled;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+  final String? Function(String?)? validator;
+  final ValueChanged<String>? onChanged;
+  final TextInputAction? textInputAction;
+  final List<TextInputFormatter>? inputFormatters;
+  final void Function()? onSuffixTap;
+
+  const GlassTextField({
+    super.key,
+    this.controller,
+    this.focusNode,
+    required this.label,
+    this.hint,
+    this.prefixIcon,
+    this.suffixIcon,
+    this.obscureText = false,
+    this.maxLines = 1,
+    this.maxLength,
+    this.enabled = true,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
+    this.validator,
+    this.onChanged,
+    this.textInputAction,
+    this.inputFormatters,
+    this.onSuffixTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.04);
+
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      enabled: enabled,
+      obscureText: obscureText,
+      maxLines: maxLines,
+      maxLength: maxLength,
+      keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      textInputAction: textInputAction,
+      inputFormatters: inputFormatters,
+      validator: validator,
+      onChanged: onChanged,
+      autocorrect: false,
+      style: TextStyle(
+        fontSize: 14,
+        color: isDark ? Colors.white : const Color(0xFF14161C),
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          fontSize: 13,
+          color: isDark ? Colors.grey[400] : Colors.grey[600],
+        ),
+        hintText: hint,
+        hintStyle: TextStyle(
+          color: isDark ? Colors.grey[600] : Colors.grey[400],
+          fontSize: 13,
+        ),
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon,
+                size: 20, color: scheme.primary.withValues(alpha: 0.7))
+            : null,
+        suffixIcon: suffixIcon != null
+            ? IconButton(
+                onPressed: onSuffixTap,
+                icon: Icon(suffixIcon,
+                    size: 20, color: scheme.primary.withValues(alpha: 0.7)),
+              )
+            : null,
+        counterText: maxLength != null ? null : '',
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        // 🙈 Bordure ultra-soft : quasiment invisible au repos.
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: borderColor, width: 0.8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+              color: scheme.primary.withValues(alpha: 0.8), width: 1.2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+              color: Colors.red.withValues(alpha: 0.6), width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red, width: 1.2),
+        ),
       ),
     );
   }
