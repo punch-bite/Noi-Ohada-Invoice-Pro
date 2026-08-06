@@ -44,8 +44,8 @@ class NochPayService {
 
   // 🔥 URL de base (sandbox ou production)
   static String get _baseUrl => ConfigService.isProduction
-      ? 'https://api.nochpay.co'
-      : 'https://api-sandbox.nochpay.co';
+      ? 'https://api.notchpay.co'
+      : 'https://api-sandbox.notchpay.co';
 
   // 🔥 Clés depuis ConfigService (ou dotenv directement)
   static String get _publicKey => ConfigService.nochpayPublicKey; // pk_...
