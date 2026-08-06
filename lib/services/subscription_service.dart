@@ -77,6 +77,28 @@ class SubscriptionService {
   }) async {
     final plan = await getPlan(planId) ?? Plan.getFreePlan();
 
+    // ✅ Idempotence : si l'abonnement a déjà été activé (ex. via le serveur
+    // de callback NotchPay), on le renvoie sans en créer un doublon.
+    if (paymentId.isNotEmpty) {
+      try {
+        final existing = await _db
+            .collection('subscriptions')
+            .where('paymentId', isEqualTo: paymentId)
+            .limit(1)
+            .get();
+        if (existing.docs.isNotEmpty) {
+          final sub = Subscription.fromMap(
+              {...existing.docs.first.data(), 'id': existing.docs.first.id});
+          if (sub.status == 'active') {
+            debugPrint('♻️ Abonnement déjà actif (idempotent) : ${sub.id}');
+            return sub;
+          }
+        }
+      } on FirebaseException catch (e) {
+        debugPrint("⚠️ createSubscription idempotence: $e");
+      }
+    }
+
     try {
       return await _db.runTransaction((transaction) async {
         final subRef = _db.collection('subscriptions').doc();

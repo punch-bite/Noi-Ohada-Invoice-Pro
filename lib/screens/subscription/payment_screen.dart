@@ -798,6 +798,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
+      final authProvider = context.read<AppAuthProvider>();
       final reference = 'SUB-${DateTime.now().millisecondsSinceEpoch}';
 
       final result = await _nochPayService.initiatePayment(
@@ -809,6 +810,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
         paymentMethod: _selectedMethod,
         customerName: null,
         customerEmail: null,
+        // 🔥 Métadonnées pour que le serveur de callback puisse activer
+        // l'abonnement correspondant (user_id / plan_id / reference).
+        metadata: {
+          'purpose': 'subscription',
+          'plan_id': widget.plan.id,
+          'user_id': authProvider.user?.id ?? '',
+          'reference': reference,
+        },
       );
 
       if (result['success'] != true) {

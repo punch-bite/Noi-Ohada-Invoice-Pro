@@ -99,39 +99,44 @@ class NochPayService {
     }
 
     try {
-      // 🔥 Construction du payload enrichi
+      // 🔥 Construction du payload conforme à la doc NotchPay « Create a
+      // Payment Session » : champs racines `amount`, `currency`, `phone`,
+      // `callback` (+ métadonnées optionnelles acceptées par l'API).
       final apiBase = ConfigService.apiBaseUrl.trim();
       final payload = {
         'amount': amount,
         'currency': currency,
+        // `phone` requis par la méthode officielle : on ne l'envoie que s'il
+        // est renseigné (la page Collect gère aussi la saisie côté client).
+        if (phoneNumber.isNotEmpty) 'phone': phoneNumber,
+        // Callback obligatoire dans la méthode officielle : si aucune API
+        // n'est configurée, on s'appuie sur le polling / webhook NoChPay.
+        if (apiBase.isNotEmpty)
+          'callback': '$apiBase/payment/callback',
+        // --- Champs optionnels (enrichissement) ---
         'payment_method': paymentMethod,
+        'reference': invoiceNumber,
+        'description': description,
         'customer': {
           'name': customerName ?? 'Client',
           'email': customerEmail ?? 'client@email.com',
           'phone': phoneNumber,
         },
-        'description': description,
-        'reference': invoiceNumber,
-        // Callback optionnel : si aucune API configurée, on s'appuie sur le
-        // polling / webhook NoChPay pour détecter le paiement.
-        if (apiBase.isNotEmpty)
-          'callback': '$apiBase/payment/callback',
-        // 🔥 Métadonnées pour suivi
         'customer_meta': {
           'invoice_number': invoiceNumber,
           'source': 'noi_ohada_invoice_app',
           'payment_method': paymentMethod,
           if (metadata != null) ...metadata,
         },
-        // 🔥 Détails des articles (si fournis)
         if (items != null) 'items': items,
-        // 🔥 Mode (sandbox/production)
         'mode': ConfigService.isProduction ? 'production' : 'sandbox',
       };
 
+      // ✅ Endpoint OFFICIEL : POST {base}/payment (singulier), conforme à
+      // la méthode de réception de paiement NotchPay.
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/payments'),
+            Uri.parse('$_baseUrl/payment'),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': _publicKey,
@@ -143,13 +148,18 @@ class NochPayService {
       final data = json.decode(response.body);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        final transaction = data['transaction'] as Map<String, dynamic>;
+        // La réponse officielle place `authorization_url` à la racine et la
+        // transaction sous `transaction`. On gère les deux formes.
+        final transaction = (data['transaction'] is Map<String, dynamic>)
+            ? data['transaction'] as Map<String, dynamic>
+            : (data as Map<String, dynamic>);
         return {
           'success': true,
-          'transaction_id': (transaction['id'] ?? transaction['reference']),
-          'reference': transaction['reference'],
+          'transaction_id':
+              (transaction['id'] ?? transaction['reference'] ?? data['reference']),
+          'reference': transaction['reference'] ?? data['reference'] ?? invoiceNumber,
           'authorization_url': data['authorization_url'],
-          'status': transaction['status'],
+          'status': transaction['status'] ?? 'pending',
           'message': data['message'] ?? 'Paiement initialisé',
           'payment_method': paymentMethod,
         };

@@ -1,0 +1,23 @@
+{
+  "name": "noi-ohada-payment-callback",
+  "version": "1.0.0",
+  "description": "Serveur de callback / webhook NotchPay : confirme les paiements d'abonnement et active l'abonnement dans Firestore. Compatible Vercel (serverless).",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "vercel:dev": "vercel dev"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^14.2.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.0"
+  }
+}
