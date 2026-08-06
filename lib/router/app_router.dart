@@ -46,6 +46,7 @@ import '../screens/dashboard/settings_screen.dart';
 import '../screens/dashboard/company_config_screen.dart';
 import '../screens/dashboard/reminders_screen.dart';
 import '../screens/dashboard/relance_screen.dart';
+import '../screens/dashboard/drive_sync_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
@@ -53,6 +54,9 @@ import '../screens/status/no_internet_screen.dart';
 
 import '../screens/customization/invoice_customization_screen.dart';
 import '../screens/customization/template_store_screen.dart';
+import '../screens/customization/template_workspace_screen.dart';
+import '../screens/customization/template_preview_screen.dart';
+import '../models/invoice_template.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
 import '../screens/notifications/notification_screen.dart';
@@ -70,6 +74,7 @@ import '../screens/admin/user_subscription_screen.dart';
 import '../screens/admin/activity_logs_screen.dart';
 import '../screens/admin/admin_add_subscription_screen.dart';
 import '../screens/admin/admin_template_form_screen.dart';
+import '../screens/admin/admin_templates_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
 import '../screens/teams/teams_screen.dart';
@@ -210,10 +215,27 @@ class AppRouter {
         path: '/customization',
         builder: (context, state) => const InvoiceCustomizationScreen(),
       ),
+      // Sauvegarde Google Drive (Business)
+      GoRoute(
+        path: '/settings/drive-sync',
+        builder: (context, state) => const DriveSyncScreen(),
+      ),
       // Boutique de modèles (créés par l'admin + par défaut)
       GoRoute(
         path: '/templates',
         builder: (context, state) => const TemplateStoreScreen(),
+      ),
+      // Espace de travail drag & drop (personnalisation visuelle)
+      GoRoute(
+        path: '/templates/workspace',
+        builder: (context, state) =>
+            TemplateWorkspaceScreen(template: state.extra as InvoiceTemplate),
+      ),
+      // Aperçu d'un modèle (rendu avec données d'exemple)
+      GoRoute(
+        path: '/templates/preview',
+        builder: (context, state) =>
+            TemplatePreviewScreen(template: state.extra as InvoiceTemplate),
       ),
 
       // Notifications
@@ -412,6 +434,11 @@ class AppRouter {
               final id = state.pathParameters['id']!;
               return AdminTemplateFormScreen(templateId: id);
             },
+          ),
+          GoRoute(
+            path: 'templates',
+            name: 'admin-templates',
+            builder: (context, state) => const AdminTemplatesScreen(),
           ),
 
           // ✅ Gestion des plans personnalisés

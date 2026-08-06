@@ -1,11 +1,16 @@
 // lib/screens/dashboard/create_client_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../../services/database_service.dart';
+import '../../services/quota_enforcement_service.dart';
 import '../../models/client.dart';
+import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../widgets/glass_widgets.dart';
 
 class CreateClientScreen extends StatefulWidget {
@@ -54,6 +59,25 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   Future<void> _saveClient() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Blocage quota : uniquement pour un NOUVEAU client (pas en édition).
+    if (widget.client == null) {
+      final sub = context.read<SubscriptionProvider>();
+      final plan = sub.currentPlan ?? Plan.getFreePlan();
+      final result =
+          await QuotaEnforcementService().canAddClient(plan);
+      if (!result.isAllowed) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                result.message ?? 'Limite de clients atteinte. Passez au plan supérieur.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -99,13 +123,26 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   // ===== IMPORTER DEPUIS LE RÉPERTOIRE (flutter_contacts) =====
 
   Future<void> _importFromContacts() async {
+    // Le plugin flutter_contacts ne supporte PAS le web (MethodChannel natif).
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Import des contacts disponible uniquement sur mobile/desktop'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     // Vérifier les permissions
     final status =
         await FlutterContacts.permissions.request(PermissionType.readWrite);
     if (status != PermissionStatus.granted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Permission d\'accès aux contacts refusée'),
+          content: Text(
+              'Permission d\'accès aux contacts refusée. Autorisez-la dans les paramètres du téléphone.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -132,15 +169,25 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         return;
       }
 
+      setState(() => _isLoadingContacts = false);
       _showContactsDialog(contacts);
+    } on MissingPluginException {
+      setState(() => _isLoadingContacts = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Import des contacts non disponible sur cette plateforme. Saisissez le client manuellement.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     } catch (e) {
+      setState(() => _isLoadingContacts = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur lors du chargement des contacts: $e'),
           backgroundColor: Colors.red,
         ),
       );
-      setState(() => _isLoadingContacts = false);
     }
   }
 
@@ -206,13 +253,13 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                         children: [
                           if (phones.isNotEmpty)
                             Text(
-                              phones.first.number ?? '',
+                              phones.first.number,
                               style:
                                   TextStyle(color: subTextColor, fontSize: 12),
                             ),
                           if (emails.isNotEmpty)
                             Text(
-                              emails.first.address ?? '',
+                              emails.first.address,
                               style:
                                   TextStyle(color: subTextColor, fontSize: 12),
                             ),

@@ -13,6 +13,8 @@ import '../../services/database_service.dart';
 import '../../services/mail_service.dart';
 import '../../services/printing_service.dart';
 import '../../services/template_service.dart';
+import '../../services/template_selection_service.dart';
+import '../../services/template_custom_service.dart';
 import '../../models/invoice.dart';
 import '../../models/client.dart';
 import '../../models/company.dart';
@@ -79,10 +81,29 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       ...defaults.where((d) => !adminIds.contains(d.id)),
       ...adminTemplates,
     ];
-    _selectedTemplate = _templates.firstWhere(
-      (t) => t.isDefault,
-      orElse: () => _templates.first,
-    );
+
+    // ✅ Modèle actif choisi dans la boutique (sélection persistante).
+    final activeId = await TemplateSelectionService.getActiveTemplateId();
+    if (activeId != null && _templates.any((t) => t.id == activeId)) {
+      _selectedTemplate = _templates.firstWhere((t) => t.id == activeId);
+    } else {
+      _selectedTemplate = _templates.firstWhere(
+        (t) => t.isDefault,
+        orElse: () => _templates.first,
+      );
+    }
+
+    // Applique les personnalisations locales (positions/mapping) si présentes.
+    if (_selectedTemplate != null) {
+      final custom = await TemplateCustomService.loadCustom(_selectedTemplate!.id);
+      if (custom.positions.isNotEmpty || custom.mapping.isNotEmpty) {
+        _selectedTemplate = _selectedTemplate!.copyWith(
+          positions: custom.positions,
+          mapping: {..._selectedTemplate!.mapping, ...custom.mapping},
+        );
+      }
+    }
+
     if (mounted) {
       setState(() {});
     }

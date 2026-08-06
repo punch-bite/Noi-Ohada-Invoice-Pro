@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
@@ -338,7 +339,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   /// Affiche la page de paiement sécurisée NochPay dans une WebView intégrée.
   /// Retour automatique vers l'app dès que le paiement est détecté (polling).
+  /// Sur web : la WebView n'est pas supportée → ouverture dans un nouvel onglet
+  /// (le polling `_autoCheckStatus` continue de vérifier le statut).
   Widget _buildCollectWebView() {
+    if (kIsWeb) {
+      return Column(
+        children: [
+          const Icon(Icons.language_rounded, size: 48, color: Colors.purple),
+          const SizedBox(height: 12),
+          const Text(
+            'Finalisez le paiement dans un nouvel onglet',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Le statut du paiement sera vérifié automatiquement.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(_paymentUrl);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Ouvrir la page de paiement'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return MobileMoneyWebView(
       paymentUrl: _paymentUrl,
       provider: _selectedPaymentMethod?.name ?? 'Collect',

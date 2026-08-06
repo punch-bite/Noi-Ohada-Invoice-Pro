@@ -226,6 +226,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
+                        onPressed: () => context.push('/admin/templates'),
+                        icon: const Icon(Icons.description_rounded),
+                        label: const Text('Gérer les modèles de factures'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7C3AED),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
                         onPressed: () => context.push('/admin/plans/create'),
                         icon: const Icon(Icons.add),
                         label: const Text('Créer un plan personnalisé'),

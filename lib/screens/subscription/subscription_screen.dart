@@ -1,7 +1,9 @@
 // lib/screens/subscription/subscription_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -402,7 +404,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       return;
     }
 
-    // Ouvre la page de paiement sécurisée NoChPay dans une WebView intégrée.
+    // Ouvre la page de paiement sécurisée NoChPay.
+    // Sur web : nouvel onglet (la WebView intégrée n'est pas supportée).
+    // Sinon : WebView intégrée pour un retour fluide vers l'app.
     final uri = Uri.tryParse(url);
     if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -411,6 +415,19 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    if (kIsWeb) {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impossible d\'ouvrir le lien de paiement.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 

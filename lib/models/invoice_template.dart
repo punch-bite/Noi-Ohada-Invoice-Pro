@@ -74,6 +74,14 @@ class InvoiceTemplate {
   // Ex : {'invoice_number': '{invoice_number}', 'client_name': '{client_name}'}
   final Map<String, String> mapping;
 
+  // 🏷️ Catégorie du modèle (pour la boutique) : classique, moderne, premium…
+  final String category;
+
+  // 📐 Positions des éléments (drag & drop) : élément → {x, y, scale, visible}.
+  // Ex : {'header': {'x': 0.5, 'y': 0.12, 'scale': 1.0, 'visible': true}, ...}
+  // Les coordonnées sont RELATIVES (0..1) pour rester proportionnelles à la page.
+  final Map<String, dynamic> positions;
+
   // Liste des variables disponibles pour les factures (à exposer dans l'UI).
   static const List<String> availableVariables = [
     'invoice_number',
@@ -121,6 +129,8 @@ class InvoiceTemplate {
     this.fileType = '',
     this.fileData = '',
     this.mapping = const {},
+    this.category = 'classique',
+    this.positions = const {},
   })  : primaryColorValue = primaryColor?.value ?? 0xFF1976D2,
         textColorValue = textColor?.value ?? 0xFF000000,
         backgroundColorValue = backgroundColor?.value ?? 0xFFFFFFFF;
@@ -153,6 +163,8 @@ class InvoiceTemplate {
       fileType: data['fileType'] ?? '',
       fileData: data['fileData'] ?? '',
       mapping: Map<String, String>.from(data['mapping'] ?? const {}),
+      category: data['category'] ?? 'classique',
+      positions: Map<String, dynamic>.from(data['positions'] ?? const {}),
     );
   }
 
@@ -183,6 +195,8 @@ class InvoiceTemplate {
       fileType: map['fileType'] ?? '',
       fileData: map['fileData'] ?? '',
       mapping: Map<String, String>.from(map['mapping'] ?? const {}),
+      category: map['category'] ?? 'classique',
+      positions: Map<String, dynamic>.from(map['positions'] ?? const {}),
     );
   }
 
@@ -212,6 +226,8 @@ class InvoiceTemplate {
       'fileType': fileType,
       'fileData': fileData,
       'mapping': mapping,
+      'category': category,
+      'positions': positions,
     };
   }
 
@@ -225,6 +241,7 @@ class InvoiceTemplate {
         textColor: const Color(0xFF000000),
         backgroundColor: Colors.white,
         isDefault: true,
+        category: 'classique',
       ),
       InvoiceTemplate(
         id: 'default_2',
@@ -233,6 +250,7 @@ class InvoiceTemplate {
         primaryColor: const Color(0xFFE91E63),
         textColor: const Color(0xFF000000),
         backgroundColor: const Color(0xFFF5F5F5),
+        category: 'moderne',
       ),
       InvoiceTemplate(
         id: 'default_3',
@@ -241,6 +259,7 @@ class InvoiceTemplate {
         primaryColor: const Color(0xFF004D40),
         textColor: const Color(0xFF000000),
         backgroundColor: const Color(0xFFF9FBE7),
+        category: 'elegant',
       ),
       InvoiceTemplate(
         id: 'default_4',
@@ -250,6 +269,7 @@ class InvoiceTemplate {
         textColor: Colors.white,
         backgroundColor: const Color(0xFF1A1A2E),
         isPremium: true,
+        category: 'premium',
       ),
     ];
   }
@@ -276,6 +296,8 @@ class InvoiceTemplate {
     String? fileType,
     String? fileData,
     Map<String, String>? mapping,
+    String? category,
+    Map<String, dynamic>? positions,
   }) {
     return InvoiceTemplate(
       id: id,
@@ -302,6 +324,8 @@ class InvoiceTemplate {
       fileType: fileType ?? this.fileType,
       fileData: fileData ?? this.fileData,
       mapping: mapping ?? this.mapping,
+      category: category ?? this.category,
+      positions: positions ?? this.positions,
     );
   }
 

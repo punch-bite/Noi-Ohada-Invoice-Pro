@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/database_service.dart';
 import '../../services/stock_service.dart';
+import '../../services/quota_enforcement_service.dart';
 import '../../models/invoice.dart';
 import '../../models/line_item.dart';
 import '../../models/client.dart';
 import '../../models/product.dart';
+import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../widgets/glass_widgets.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
@@ -619,6 +622,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       quantity: quantity,
                       unitPrice: selectedProduct!.price,
                       taxRate: _taxRate,
+                      imageData: selectedProduct!.imagePath ?? '',
                     );
                     setState(() => _items.add(item));
                   },
@@ -690,6 +694,23 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ajoutez au moins un produit'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    // Blocage quota : nouveau document (facture OU devis).
+    final sub = context.read<SubscriptionProvider>();
+    final plan = sub.currentPlan ?? Plan.getFreePlan();
+    final quota =
+        await QuotaEnforcementService().canAddInvoice(plan);
+    if (!quota.isAllowed) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(quota.message ??
+              'Limite de factures atteinte. Passez au plan supérieur.'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }

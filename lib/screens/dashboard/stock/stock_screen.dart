@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/stock_service.dart';
 import '../../../models/product.dart';
+import '../../../widgets/logo_image.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -517,7 +518,7 @@ class _StockScreenState extends State<StockScreen> {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              // Avatar stylisé à coins très arrondis
+              // Avatar / photo du produit
               Container(
                 width: 58,
                 height: 58,
@@ -532,15 +533,26 @@ class _StockScreenState extends State<StockScreen> {
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Center(
-                  child: Text(
-                    product.name[0].toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: product.statusColor,
-                    ),
-                  ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: product.imagePath != null &&
+                          product.imagePath!.isNotEmpty
+                      ? LogoImage(
+                          path: product.imagePath,
+                          width: 58,
+                          height: 58,
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Text(
+                            product.name[0].toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: product.statusColor,
+                            ),
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -605,8 +617,11 @@ class _StockScreenState extends State<StockScreen> {
                   ],
                 ),
               ),
-              // Section de droite : Prix et Ajustement
-              Column(
+              // Section de droite : Prix et Ajustement (largeur bornée pour
+              // éviter le chevauchement avec le champ quantité sur petit écran)
+              SizedBox(
+                width: 86,
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
@@ -664,23 +679,27 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   ),
                 ],
+                ),
               ),
-              // Menu contextuel discret au lieu d'icônes d'édition/suppression directes encombrantes
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert_rounded, color: subTextColor, size: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CreateProductScreen(product: product),
-                      ),
-                    ).then((_) => _loadProducts());
-                  } else if (value == 'delete') {
-                    _deleteProduct(product);
-                  }
-                },
+              // Menu contextuel discret (largeur fixe pour éviter le
+              // chevauchement avec le champ quantité sur petit écran)
+              SizedBox(
+                width: 32,
+                child: PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: subTextColor, size: 20),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CreateProductScreen(product: product),
+                        ),
+                      ).then((_) => _loadProducts());
+                    } else if (value == 'delete') {
+                      _deleteProduct(product);
+                    }
+                  },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
                     value: 'edit',
@@ -703,6 +722,7 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   ),
                 ],
+              ),
               ),
             ],
           ),

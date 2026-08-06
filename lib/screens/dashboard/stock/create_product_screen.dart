@@ -1,15 +1,22 @@
 // lib/screens/dashboard/stock/create_product_screen.dart
 // ignore_for_file: deprecated_member_use
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../providers/theme_provider.dart';
+import '../../../providers/subscription_provider.dart';
 import '../../../services/stock_service.dart';
 import '../../../services/supplier_service.dart';
+import '../../../services/quota_enforcement_service.dart';
 import '../../../models/product.dart';
+import '../../../models/plan.dart';
 import '../../../models/supplier.dart';
 import '../../../widgets/glass_widgets.dart';
+import '../../../widgets/logo_image.dart';
 import '../suppliers/create_supplier_screen.dart';
 
 class CreateProductScreen extends StatefulWidget {
@@ -40,6 +47,9 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   bool _isLoadingSuppliers = true;
   List<Supplier> _suppliers = []; // ✅ Toujours une liste, jamais null
   Supplier? _selectedSupplier;
+
+  // 📷 Photo optionnelle du produit (data URI base64 pour web + mobile)
+  String? _imageData;
 
   final List<String> _unitOptions = [
     'pièce',
@@ -83,14 +93,14 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       _categoryController.text = widget.product!.category;
       _unitController.text = widget.product!.unit;
       _barcodeController.text = widget.product!.barcode ?? '';
+      _imageData = widget.product!.imagePath;
 
       if (widget.product!.supplierId != null) {
-        setState(() {
-          _selectedSupplier = _suppliers.firstWhere(
-            (s) => s.id == widget.product!.supplierId,
-            orElse: () => null as Supplier,
-          );
-        });
+        final matches =
+            _suppliers.where((s) => s.id == widget.product!.supplierId);
+        if (matches.isNotEmpty) {
+          setState(() => _selectedSupplier = matches.first);
+        }
       }
     } else {
       _unitController.text = 'pièce';
@@ -129,6 +139,26 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Blocage quota : uniquement pour un NOUVEAU produit (pas en édition).
+    if (widget.product == null) {
+      final sub = context.read<SubscriptionProvider>();
+      final plan = sub.currentPlan ?? Plan.getFreePlan();
+      final result =
+          await QuotaEnforcementService().canAddProduct(plan);
+      if (!result.isAllowed) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                result.message ?? 'Limite de produits atteinte. Passez au plan supérieur.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     final product = Product(
@@ -147,7 +177,9 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       barcode: _barcodeController.text.trim().isEmpty
           ? null
           : _barcodeController.text.trim(),
-      supplierId: _selectedSupplier?.id, userId: '',
+      supplierId: _selectedSupplier?.id,
+      imagePath: _imageData,
+      userId: '',
     );
 
     try {
@@ -162,6 +194,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
           category: product.category,
           unit: product.unit,
           barcode: product.barcode,
+          imagePath: _imageData,
           supplierId: product.supplierId, updatedAt: DateTime.now(),
         );
         await _stockService.updateProduct(updated);
@@ -200,6 +233,59 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       _suppliers = _safeCastToList(activeSuppliers);
       _isLoadingSuppliers = false;
     });
+  }
+
+  // ===== 📷 PHOTO OPTIONNELLE DU PRODUIT =====
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 82,
+      );
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+      final ext = file.name.split('.').last.toLowerCase();
+      final mime = ext == 'png'
+          ? 'image/png'
+          : ext == 'webp'
+              ? 'image/webp'
+              : 'image/jpeg';
+      final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
+      if (mounted) setState(() => _imageData = dataUri);
+    } catch (e) {
+      // Repli : sélection via FilePicker
+      try {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return;
+        final f = result.files.first;
+        final bytes = f.bytes;
+        if (bytes == null) return;
+        final ext = (f.extension ?? 'jpg').toLowerCase();
+        final mime = ext == 'png'
+            ? 'image/png'
+            : ext == 'webp'
+                ? 'image/webp'
+                : 'image/jpeg';
+        final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
+        if (mounted) setState(() => _imageData = dataUri);
+      } catch (e2) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Impossible de charger l\'image : $e2'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -243,6 +329,83 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- 📷 Photo optionnelle du produit ---
+              Center(
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: _imageData != null
+                            ? LogoImage(
+                                path: _imageData,
+                                width: 96,
+                                height: 96,
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                width: 96,
+                                height: 96,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.grey[850]
+                                      : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: primary.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.add_a_photo_outlined,
+                                  color: sub,
+                                  size: 28,
+                                ),
+                              ),
+                      ),
+                      if (_imageData != null)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _imageData = null),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _pickImage,
+                  icon: Icon(
+                    _imageData != null
+                        ? Icons.photo_library_outlined
+                        : Icons.add_a_photo_outlined,
+                    size: 18,
+                    color: primary,
+                  ),
+                  label: Text(
+                    _imageData != null ? 'Changer la photo' : 'Ajouter une photo (optionnel)',
+                    style: TextStyle(color: primary, fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               // --- Nom ---
               _field(
                 controller: _nameController,

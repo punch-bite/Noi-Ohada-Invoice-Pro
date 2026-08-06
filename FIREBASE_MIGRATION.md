@@ -19,12 +19,41 @@ Plusieurs helpers : `hasProductLimit`, `isUnlimitedClients/Products/Invoices()`.
 ### 2. Normes de quotas (logique SaaS)
 | Plan      | Clients   | Produits  | Factures        | Équipe | Google Drive |
 |-----------|-----------|-----------|-----------------|--------|--------------|
-| Gratuit   | 5         | 5         | 10              | non    | non          |
+| Gratuit   | 5         | 3         | 5               | non    | non          |
 | Pro       | 200       | 25        | illimitées      | non    | non          |
 | Business  | illimité  | illimité  | illimitées      | oui    | oui          |
 
 - `Plan.getFreePlan()`, `getProPlan()`, `getBusinessPlan()` mis à jour.
+- `QuotaEnforcementService` branché sur les écrans de création
+  (client, produit, facture/devis) : au-delà de la limite, ajout bloqué
+  avec message de passage au plan supérieur.
 - `firestore_init.js` : plans `free`, `pro`, `business`, `unlimited` alignés.
+
+---
+
+## 🚀 Lancement Web & clés NoChPay
+
+Le `.env` **n'est plus embarqué** dans le bundle (sécurité). En mode **debug**,
+sur mobile/desktop, `ConfigService` lit le `.env` depuis le système de fichiers
+(`env_loader_io.dart`). Sur **web**, il faut injecter les clés via
+`--dart-define` :
+
+```bash
+# Web (Edge/Chrome) — clés NoChPay (test ou production)
+flutter run -d edge --dart-define=NOCHPAY_PUBLIC_KEY=pk_test.udZRV3kzUtgQHymnJArUFnnSvZxww3WxH6WfSZWxNHJSPUf9bIoguBPpkR6aNtMX7RDA51j1mxYP23UB1i3D9BfrkGwwxAAgQAHmlSrUG1OjiNs4E7G2cpK5m14Vm
+
+# Build production (APK / Web) — injecter aussi les secrets
+flutter build apk --release \
+  --dart-define=NOCHPAY_PUBLIC_KEY=pk_test.xxx \
+  --dart-define=NOCHPAY_PRIVATE_KEY=sk_test.xxx \
+  --dart-define=NOCHPAY_WEBHOOK_SECRET=hsk_test.xxx
+```
+
+> 💡 La clé publique NoChPay (`pk_`) est **publishable** (côté client) : elle
+> peut être injectée sans risque. Les clés privée (`sk_`) et webhook (`hsk_`)
+> ne doivent **jamais** être dans le bundle — uniquement côté serveur (webhook).
+
+---
 
 ### 3. `DatabaseService` → Firestore UNIQUEMENT (lib/services/database_service.dart)
 - **Réécrit intégralement** : plus aucune boîte Hive.

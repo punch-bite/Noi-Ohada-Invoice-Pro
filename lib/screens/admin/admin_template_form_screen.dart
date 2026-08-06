@@ -39,8 +39,22 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   bool _isPremium = false;
   bool _showBorder = true;
   String _fontFamily = 'Roboto';
+  String _category = 'classique';
   bool _isLoading = false;
   bool _isLoadingData = true;
+
+  // 🏷️ Catégories proposées pour la boutique
+  static const List<String> _categoryOptions = [
+    'classique',
+    'moderne',
+    'elegant',
+    'premium',
+    'minimaliste',
+    'entreprise',
+  ];
+
+  static String _categoryLabel(String c) =>
+      c.isEmpty ? 'Classique' : c[0].toUpperCase() + c.substring(1);
 
   // 🗂️ Fichier téléversé (PDF/JPEG/PNG)
   String _fileType = '';
@@ -130,6 +144,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _isPremium = template.isPremium;
     _showBorder = template.showBorder;
     _fontFamily = template.fontFamily;
+    _category = template.category.isEmpty ? 'classique' : template.category;
     _priceController.text = template.price.toStringAsFixed(0);
     _fileType = template.fileType;
     _fileData = template.fileData;
@@ -280,6 +295,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       fileType: _fileType,
       fileData: _fileData,
       mapping: Map<String, String>.from(_mapping),
+      category: _category,
     );
 
     try {
@@ -380,7 +396,44 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
                       _buildField('Nom du modèle *', _nameController, Icons.label_important_outline_rounded, cardColor, textColor, subTextColor, primaryColor, isDark),
                       const SizedBox(height: 12),
                       _buildField('Description *', _descriptionController, Icons.description_outlined, cardColor, textColor, subTextColor, primaryColor, isDark, maxLines: 3),
-                      
+                      const SizedBox(height: 12),
+                      // 🏷️ Catégorie (boutique)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _category,
+                            icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+                            dropdownColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+                            style: TextStyle(color: textColor, fontSize: 14),
+                            items: _categoryOptions.map((c) {
+                              return DropdownMenuItem<String>(
+                                value: c,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.category_outlined, size: 18, color: primaryColor),
+                                    const SizedBox(width: 10),
+                                    Text(_categoryLabel(c)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              if (v != null) setState(() => _category = v);
+                            },
+                          ),
+                        ),
+                      ),
+
                       const SizedBox(height: 24),
                       _buildSectionLabel('Couleurs du modèle (Hexadécimal)', textColor),
                       const SizedBox(height: 10),
@@ -579,10 +632,10 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
                                       (_mappingControllers[v] =
                                           TextEditingController(
                                               text: _mapping[v] ??
-                                                  '{${v}}')),
+                                                  '{$v}')),
                                   decoration: InputDecoration(
                                     isDense: true,
-                                    hintText: '{${v}}',
+                                    hintText: '{$v}',
                                     hintStyle: TextStyle(
                                         color: subTextColor, fontSize: 12),
                                     filled: true,

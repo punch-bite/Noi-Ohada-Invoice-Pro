@@ -15,6 +15,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/template_service.dart';
+import '../../services/template_selection_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class TemplateStoreScreen extends StatefulWidget {
@@ -28,6 +29,27 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
   final TemplateService _templateService = TemplateService();
   List<InvoiceTemplate> _adminTemplates = [];
   bool _loading = true;
+  String _selectedCategory = 'Tous';
+
+  /// Libellé lisible d'une catégorie (ex. 'elegant' → 'Élégant').
+  static String _categoryLabel(String c) {
+    switch (c) {
+      case 'classique':
+        return 'Classique';
+      case 'moderne':
+        return 'Moderne';
+      case 'elegant':
+        return 'Élégant';
+      case 'premium':
+        return 'Premium';
+      case 'minimaliste':
+        return 'Minimaliste';
+      case 'entreprise':
+        return 'Entreprise';
+      default:
+        return c.isEmpty ? 'Autre' : c[0].toUpperCase() + c.substring(1);
+    }
+  }
 
   @override
   void initState() {
@@ -60,6 +82,17 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
       ...defaults.where((d) => !adminIds.contains(d.id)),
       ..._adminTemplates,
     ];
+
+    // 🏷️ Catégories distinctes (pour les filtres de la boutique)
+    final categories = <String>{'Tous'};
+    for (final t in merged) {
+      categories.add(t.category.isEmpty ? 'classique' : t.category);
+    }
+    final filtered = _selectedCategory == 'Tous'
+        ? merged
+        : merged.where((t) =>
+            (t.category.isEmpty ? 'classique' : t.category) ==
+            _selectedCategory).toList();
 
     return GlassScaffold(
       appBar: AppBar(
@@ -116,6 +149,45 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            // 🏷️ Filtres par catégorie
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (final c in categories)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(_categoryLabel(c)),
+                        selected: _selectedCategory == c,
+                        onSelected: (_) =>
+                            setState(() => _selectedCategory = c),
+                        selectedColor: const Color(0xFF4338CA),
+                        backgroundColor: theme.cardColor,
+                        labelStyle: TextStyle(
+                          color: _selectedCategory == c
+                              ? Colors.white
+                              : theme.textColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        side: BorderSide(
+                          color: _selectedCategory == c
+                              ? const Color(0xFF4338CA)
+                              : theme.dividerColor,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        showCheckmark: false,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
             // Grille de modèles
             Expanded(
               child: _loading
@@ -130,9 +202,9 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         mainAxisSpacing: 16,
                         childAspectRatio: 0.72,
                       ),
-                      itemCount: merged.length,
+                      itemCount: filtered.length,
                       itemBuilder: (context, index) {
-                        final template = merged[index];
+                        final template = filtered[index];
                         // 🔓 Déverrouillé si : abonnement actif (accès à tout),
                         // OU template non premium, OU template déjà acheté
                         // par l'utilisateur (achat possible sans abonnement).
@@ -247,7 +319,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Column(
               children: [
                 Text(
@@ -276,6 +348,102 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+                const SizedBox(height: 8),
+                // 👁️ Aperçu + 🎨 Personnaliser (espace de travail drag & drop)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: isLocked
+                                ? theme.subTextColor.withValues(alpha: 0.4)
+                                : theme.primaryColor.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(9),
+                            onTap: () => _openPreview(template),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.visibility_outlined,
+                                    color: isLocked
+                                        ? theme.subTextColor
+                                        : theme.primaryColor,
+                                    size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Aperçu',
+                                  style: TextStyle(
+                                    color: isLocked
+                                        ? theme.subTextColor
+                                        : theme.primaryColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isLocked
+                                ? [theme.subTextColor.withValues(alpha: 0.5)]
+                                : [
+                                    const Color(0xFF4338CA),
+                                    const Color(0xFF7C3AED)
+                                  ],
+                          ),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(9),
+                            onTap: () {
+                              if (isLocked) {
+                                _showUpgradeDialog();
+                              } else {
+                                _openWorkspace(template);
+                              }
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.tune_rounded,
+                                    color: Colors.white, size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Personnaliser',
+                                  style: TextStyle(
+                                    color: isLocked
+                                        ? Colors.white70
+                                        : Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -293,13 +461,33 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     if (isLocked) {
       _showUpgradeDialog();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${template.name} sélectionné comme modèle actif'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _selectAndOpen(template);
     }
+  }
+
+  /// Sélectionne le modèle comme actif (persistance locale) puis ouvre
+  /// l'espace de travail de personnalisation (drag & drop).
+  Future<void> _selectAndOpen(InvoiceTemplate template) async {
+    await TemplateSelectionService.setActiveTemplateId(template.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${template.name} défini comme modèle actif'),
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 1200),
+      ),
+    );
+    _openWorkspace(template);
+  }
+
+  /// Ouvre l'espace de travail drag & drop pour ce modèle.
+  void _openWorkspace(InvoiceTemplate template) {
+    context.push('/templates/workspace', extra: template);
+  }
+
+  /// Ouvre l'aperçu du modèle (rendu avec données d'exemple).
+  void _openPreview(InvoiceTemplate template) {
+    context.push('/templates/preview', extra: template);
   }
 
   /// Dialog d'achat d'un template payant (vendu sur la plateforme).

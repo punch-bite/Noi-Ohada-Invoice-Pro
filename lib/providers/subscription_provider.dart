@@ -69,17 +69,17 @@ class SubscriptionProvider extends ChangeNotifier {
 
   int get maxInvoices {
     if (_authProvider.user?.isAdmin == true) return -1;
-    return _currentPlan?.maxInvoices ?? 3;
+    return _currentPlan?.maxInvoices ?? 5;
   }
 
-    int get maxClients {
+  int get maxClients {
     if (_authProvider.user?.isAdmin == true) return -1;
     return _currentPlan?.maxClients ?? 5;
   }
 
   int get maxProducts {
     if (_authProvider.user?.isAdmin == true) return -1;
-    return _currentPlan?.maxProducts ?? 5;
+    return _currentPlan?.maxProducts ?? 3;
   }
 
   bool get hasTeamAccess {

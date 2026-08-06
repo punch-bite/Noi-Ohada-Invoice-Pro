@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../models/client.dart';
 import '../../../models/invoice.dart';
 import '../../../models/invoice_template.dart';
+import '../../../models/line_item.dart';
 
 class PrintingService {
   
@@ -388,13 +389,7 @@ class PrintingService {
               children: [
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(8),
-                  child: pw.Text(
-                    item.description,
-                    style: pw.TextStyle(
-                      fontSize: template.fontSize,
-                      color: textColor,
-                    ),
-                  ),
+                  child: _buildItemCell(item, template),
                 ),
                 pw.Padding(
                   padding: const pw.EdgeInsets.all(8),
@@ -443,6 +438,52 @@ class PrintingService {
                 ),
               ],
             )),
+      ],
+    );
+  }
+
+  /// Cellule « Désignation » d'une ligne : photo produit (optionnelle) + texte.
+  static pw.Widget _buildItemCell(LineItem item, InvoiceTemplate template) {
+    final textColor = _getPdfColor(template.textColor);
+
+    // Photo du produit (data URI base64) si présente.
+    pw.Widget? imageWidget;
+    if (item.imageData.isNotEmpty) {
+      try {
+        final bytes = _logoBytesFromPath(item.imageData);
+        if (bytes != null) {
+          imageWidget = pw.ClipRRect(
+            horizontalRadius: 4,
+            verticalRadius: 4,
+            child: pw.Image(
+              pw.MemoryImage(bytes),
+              width: 26,
+              height: 26,
+              fit: pw.BoxFit.cover,
+            ),
+          );
+        }
+      } catch (_) {
+        imageWidget = null;
+      }
+    }
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      children: [
+        if (imageWidget != null) ...[
+          imageWidget,
+          pw.SizedBox(width: 6),
+        ],
+        pw.Expanded(
+          child: pw.Text(
+            item.description,
+            style: pw.TextStyle(
+              fontSize: template.fontSize,
+              color: textColor,
+            ),
+          ),
+        ),
       ],
     );
   }

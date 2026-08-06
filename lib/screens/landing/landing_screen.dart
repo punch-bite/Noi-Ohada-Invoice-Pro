@@ -5,6 +5,8 @@
 //  - Animations d'entrée fluides (flutter_animate)
 //  - Mise en avant des bénéfices & CTA vectorisés
 // ============================================================
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -21,9 +23,22 @@ class LandingScreen extends StatefulWidget {
   State<LandingScreen> createState() => _LandingScreenState();
 }
 
-class _LandingScreenState extends State<LandingScreen> {
+class _LandingScreenState extends State<LandingScreen>
+    with TickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+
+  // Contrôleur d'orbite (facture + avatars équipe).
+  late final AnimationController _orbitController;
+
+  @override
+  void initState() {
+    super.initState();
+    _orbitController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+  }
 
   final List<_Feature> _features = const [
     _Feature(
@@ -47,10 +62,25 @@ class _LandingScreenState extends State<LandingScreen> {
           'Orange Money, MTN, Wave, Assoh, Kudi, carte bancaire & QR code.',
       accent: Color(0xFFE9B949),
     ),
+    _Feature(
+      icon: Icons.group_rounded,
+      title: 'Travail en Équipe',
+      description:
+          'Collaborez avec vos associés, comptables et collaborateurs en temps réel.',
+      accent: Color(0xFF06B6D4),
+    ),
+    _Feature(
+      icon: Icons.campaign_rounded,
+      title: 'Marketing & Relance',
+      description:
+          'Relancez vos clients et partagez vos données pour booster vos ventes.',
+      accent: Color(0xFFF59E0B),
+    ),
   ];
 
   @override
   void dispose() {
+    _orbitController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -133,12 +163,22 @@ class _LandingScreenState extends State<LandingScreen> {
               child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (i) => setState(() => _currentPage = i),
-                itemCount: _features.length,
+                itemCount: _features.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _buildHero(isDark, theme);
                   }
-                  return _buildFeaturePage(_features[index], isDark, theme);
+                  final featureIndex = index - 1;
+                  if (featureIndex == 3) {
+                    // Slide 4 : équipe cloud avec avatars en orbite
+                    return _buildTeamSlide(isDark, theme);
+                  }
+                  if (featureIndex == 4) {
+                    // Slide 5 : marketing / partage de données
+                    return _buildMarketingSlide(isDark, theme);
+                  }
+                  return _buildFeaturePage(
+                      _features[featureIndex], isDark, theme);
                 },
               ),
             ),
@@ -147,7 +187,7 @@ class _LandingScreenState extends State<LandingScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
-                _features.length,
+                _features.length + 1,
                 (i) => _buildDot(i, theme),
               ),
             ),
@@ -192,57 +232,13 @@ class _LandingScreenState extends State<LandingScreen> {
   // ---- Section héros (slide 0) ----
   Widget _buildHero(bool isDark, ThemeProvider theme) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          GlassCard(
-            padding: const EdgeInsets.all(24),
-            borderRadius: BorderRadius.circular(28),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _miniStat('Factures', '2 400+', const Color(0xFF4338CA)),
-                    const SizedBox(width: 10),
-                    _miniStat('Clients', '850+', const Color(0xFF7C3AED)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.receipt_long,
-                    size: 60,
-                    color: Color(0xFF4338CA),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Votre facturation à la pointe de la conformité',
-                  style: TextStyle(
-                    fontFamily: 'Roboto',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : const Color(0xFF33373F),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
-              .animate().fadeIn(duration: 600.ms),
-
-          const SizedBox(height: 32),
+          // 🎨 Art central : facture + modules en orbite (motion design)
+          _buildHeroArt(),
+          const SizedBox(height: 20),
           Text(
             'La facturation OHADA,\nsimple & puissante.',
             style: TextStyle(
@@ -268,7 +264,7 @@ class _LandingScreenState extends State<LandingScreen> {
             textAlign: TextAlign.center,
           ).animate().fadeIn(delay: 260.ms),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           GlassBadge(
             label: '✨ Essai gratuit • Sans carte bancaire',
             color: const Color(0xFFE9B949),
@@ -276,6 +272,385 @@ class _LandingScreenState extends State<LandingScreen> {
               .animate().fadeIn(delay: 400.ms),
         ],
       ),
+    );
+  }
+
+  /// Facture au centre + icônes de modules en orbite circulaire.
+  Widget _buildHeroArt() {
+    const modules = [
+      (Icons.inventory_2_rounded, Color(0xFF4338CA)),
+      (Icons.people_alt_rounded, Color(0xFF7C3AED)),
+      (Icons.payments_rounded, Color(0xFF16A34A)),
+      (Icons.cloud_done_rounded, Color(0xFF06B6D4)),
+      (Icons.bar_chart_rounded, Color(0xFFE9B949)),
+      (Icons.qr_code_2_rounded, Color(0xFFF97316)),
+    ];
+    return SizedBox(
+      width: 230,
+      height: 230,
+      child: _OrbitRing(
+        controller: _orbitController,
+        radius: 108,
+        reverse: false,
+        center: Container(
+          width: 118,
+          height: 150,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF4338CA), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF4338CA).withValues(alpha: 0.25),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4338CA).withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: 64,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4338CA),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 34,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  Container(
+                    width: 22,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 30,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF9CA3AF).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  Container(
+                    width: 26,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF9CA3AF).withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'TOTAL 206 500',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        children: [
+          for (final (icon, color) in modules)
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withValues(alpha: 0.4)),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+        ],
+      ),
+    ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
+        .animate().fadeIn(duration: 600.ms);
+  }
+
+  // ---- Slide 4 : ÉQUIPE — nuage + avatars en orbite rotative ----
+  Widget _buildTeamSlide(bool isDark, ThemeProvider theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 250,
+            height: 250,
+            child: _OrbitRing(
+              controller: _orbitController,
+              radius: 116,
+              reverse: true,
+              center: Container(
+                width: 110,
+                height: 110,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF06B6D4).withValues(alpha: 0.35),
+                      blurRadius: 28,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.cloud_rounded,
+                    color: Colors.white, size: 56),
+              ),
+              children: [
+                for (final (name, color) in const [
+                  ('A', Color(0xFF4338CA)),
+                  ('B', Color(0xFF7C3AED)),
+                  ('C', Color(0xFF16A34A)),
+                  ('D', Color(0xFFF97316)),
+                  ('E', Color(0xFFE9B949)),
+                ])
+                  Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [color, color.withValues(alpha: 0.7)],
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ).animate().scale(begin: Offset(0.85, 0.85), end: Offset(1, 1))
+              .animate().fadeIn(duration: 500.ms),
+          const SizedBox(height: 28),
+          Text(
+            'Travaillez en Équipe',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: theme.textColor,
+            ),
+          ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.25, end: 0),
+          const SizedBox(height: 14),
+          Text(
+            'Invitez vos associés, comptables et collaborateurs. '
+            'Gérez vos rôles, partagez les données et collaborez en temps réel.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15,
+              height: 1.55,
+              color: theme.subTextColor,
+            ),
+          ).animate().fadeIn(delay: 240.ms),
+        ],
+      ),
+    );
+  }
+
+  // ---- Slide 5 : MARKETING / PARTAGE DE DONNÉES ----
+  Widget _buildMarketingSlide(bool isDark, ThemeProvider theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _marketingIcon(Icons.campaign_rounded, const Color(0xFFF59E0B),
+                  delay: 0),
+              const SizedBox(width: 16),
+              _marketingIcon(Icons.share_rounded, const Color(0xFF4338CA),
+                  delay: 150),
+              const SizedBox(width: 16),
+              _marketingIcon(Icons.trending_up_rounded, const Color(0xFF16A34A),
+                  delay: 300),
+            ],
+          ),
+          const SizedBox(height: 34),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFFF59E0B).withValues(alpha: 0.9),
+                  const Color(0xFFF97316).withValues(alpha: 0.9),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                  blurRadius: 26,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _statPill('+38%', 'Ventes'),
+                    _statPill('2 400', 'Relances'),
+                    _statPill('95%', 'Paiements'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Icon(Icons.auto_graph_rounded, color: Colors.white, size: 44),
+              ],
+            ),
+          ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
+              .animate().fadeIn(delay: 200.ms),
+          const SizedBox(height: 30),
+          Text(
+            'Marketing & Partage de données',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: theme.textColor,
+            ),
+          ).animate().fadeIn(delay: 120.ms).slideY(begin: 0.25, end: 0),
+          const SizedBox(height: 14),
+          Text(
+            'Relancez vos clients, partagez vos rapports et prenez '
+            'des décisions éclairées grâce à vos données.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15,
+              height: 1.55,
+              color: theme.subTextColor,
+            ),
+          ).animate().fadeIn(delay: 240.ms),
+        ],
+      ),
+    );
+  }
+
+  Widget _marketingIcon(IconData icon, Color color, {required int delay}) {
+    return Container(
+      width: 66,
+      height: 66,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Icon(icon, size: 30, color: color),
+    ).animate().scale(
+        begin: const Offset(0, 0),
+        end: const Offset(1, 1),
+        curve: Curves.elasticOut,
+        delay: delay.ms);
+  }
+
+  Widget _statPill(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.85),
+            fontSize: 11,
+          ),
+        ),
+      ],
     );
   }
 
@@ -337,39 +712,6 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _miniStat(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: 'Roboto',
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                color: color,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Roboto',
-                fontSize: 12,
-                color: Colors.black54,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDot(int index, ThemeProvider theme) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -399,4 +741,80 @@ class _Feature {
     required this.description,
     required this.accent,
   });
+}
+
+/// Anneau d'éléments qui orbitent autour d'un centre (motion design).
+class _OrbitRing extends StatelessWidget {
+  final AnimationController controller;
+  final Widget center;
+  final List<Widget> children;
+  final double radius;
+  final bool reverse;
+
+  const _OrbitRing({
+    required this.controller,
+    required this.center,
+    required this.children,
+    required this.radius,
+    this.reverse = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = controller.value;
+        final full = 2 * math.pi;
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Cercle de guidage (léger)
+            Container(
+              width: radius * 2,
+              height: radius * 2,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFF4338CA).withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+            ),
+            center,
+            for (int i = 0; i < children.length; i++)
+              _OrbitingChild(
+                angleBase: i * (full / children.length),
+                t: reverse ? 1 - t : t,
+                radius: radius,
+                child: children[i],
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OrbitingChild extends StatelessWidget {
+  final Widget child;
+  final double angleBase;
+  final double t;
+  final double radius;
+
+  const _OrbitingChild({
+    required this.child,
+    required this.angleBase,
+    required this.t,
+    required this.radius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final angle = angleBase + t * 2 * math.pi;
+    return Transform.translate(
+      offset: Offset(radius * math.cos(angle), radius * math.sin(angle)),
+      child: child,
+    );
+  }
 }

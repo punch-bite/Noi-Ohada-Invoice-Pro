@@ -178,6 +178,7 @@ const defaultTemplate = {
   fontFamily: 'Roboto',
   fontSize: 12,
   showBorder: true,
+  category: 'classique',
   createdAt: new Date()
 };
 

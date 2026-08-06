@@ -26,12 +26,16 @@ class LineItem {
   @HiveField(5)
   final double total; // Montant global Toutes Taxes Comprises (TTC) pour cette ligne
 
+  // 📷 Photo optionnelle du produit (data URI base64) — Firestore only.
+  final String imageData;
+
   LineItem({
     String? id,
     required this.description,
     required this.quantity,
     required this.unitPrice,
     this.taxRate = 18.0,
+    this.imageData = '',
   })  : id = id ?? const Uuid().v4(),
         total = (quantity * unitPrice) * (1 + taxRate / 100);
 
@@ -51,6 +55,7 @@ class LineItem {
       'unitPrice': unitPrice,
       'taxRate': taxRate,
       'total': total,
+      'imageData': imageData,
     };
   }
 
@@ -65,6 +70,7 @@ class LineItem {
       quantity: qty,
       unitPrice: uPrice,
       taxRate: tRate,
+      imageData: map['imageData'] ?? '',
     );
   }
 
@@ -84,6 +90,7 @@ class LineItem {
     int? quantity,
     double? unitPrice,
     double? taxRate,
+    String? imageData,
   }) {
     return LineItem(
       id: id ?? this.id,
@@ -91,6 +98,7 @@ class LineItem {
       quantity: quantity ?? this.quantity,
       unitPrice: unitPrice ?? this.unitPrice,
       taxRate: taxRate ?? this.taxRate,
+      imageData: imageData ?? this.imageData,
     );
   }
 }

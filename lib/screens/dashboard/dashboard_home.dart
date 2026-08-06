@@ -150,37 +150,21 @@ class _DashboardHomeState extends State<DashboardHome> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Avatar
-                Consumer<AppAuthProvider>(
-                  builder: (context, authProvider, _) {
-                    final user = authProvider.user;
-                    return GestureDetector(
-                      onTap: () => context.push('/dashboard/settings'),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              primaryColor,
-                              primaryColor.withOpacity(0.7)
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Text(
-                            (user?.displayName.isNotEmpty == true) ? user!.displayName[0].toUpperCase() : 'U',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                // 🔥 Boutique de modèles de factures (au lieu du gravatar)
+                GestureDetector(
+                  onTap: () => context.push('/templates'),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[800] : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.storefront_outlined,
+                      color: textColor,
+                      size: 22,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 // 🔥 Menu hamburger (ouvre le drawer)
