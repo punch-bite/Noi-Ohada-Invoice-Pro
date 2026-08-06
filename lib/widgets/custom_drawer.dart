@@ -134,6 +134,7 @@ class CustomDrawer extends StatelessWidget {
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
+                  premium: !subscriptionProvider.canAccessPremiumTemplates,
                 ),
                 _buildTile(
                   icon: Icons.business_outlined,
@@ -157,6 +158,7 @@ class CustomDrawer extends StatelessWidget {
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
+                  premium: !subscriptionProvider.hasTeamAccess,
                 ),
                 _buildTile(
                   icon: Icons.mail_outline,
@@ -179,6 +181,18 @@ class CustomDrawer extends StatelessWidget {
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
+                ),
+                _buildTile(
+                  icon: Icons.campaign_outlined,
+                  label: 'Relance clients',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/dashboard/relance');
+                  },
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  premium: !subscriptionProvider.canUseRelance,
                 ),
                 // Condition pour afficher le menu admin
                 if (authProvider.user?.isAdmin == true)
@@ -268,6 +282,7 @@ class CustomDrawer extends StatelessWidget {
     required Color textColor,
     required Color subTextColor,
     bool isLogout = false,
+    bool premium = false,
   }) {
     return ListTile(
       leading: Icon(
@@ -277,12 +292,50 @@ class CustomDrawer extends StatelessWidget {
             : (isDark ? Colors.grey[400] : Colors.grey[700]),
         size: 22,
       ),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: isLogout ? Colors.red : textColor,
-          fontWeight: FontWeight.w500,
-        ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isLogout ? Colors.red : textColor,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // ⭐ Badge premium sur les fonctionnalités réservées aux plans payants
+          if (premium) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9B949).withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: const Color(0xFFE9B949).withValues(alpha: 0.5),
+                  width: 0.6,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star_rounded, size: 12, color: Color(0xFFB8860B)),
+                  SizedBox(width: 2),
+                  Text(
+                    'PREMIUM',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFB8860B),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
       onTap: onTap,
     );

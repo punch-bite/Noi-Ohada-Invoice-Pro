@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/theme_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/animated_background.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -59,9 +60,12 @@ class _LandingScreenState extends State<LandingScreen> {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
 
-    return GlassScaffold(
-      body: SafeArea(
-        child: Column(
+    // 🎬 Fond animé (halos + icônes flottantes) sur tout l'écran.
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0B0D17) : const Color(0xFFF6F7FB),
+      body: AnimatedBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             // ---- Barre de navigation / logo ----
             Padding(
@@ -179,6 +183,7 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

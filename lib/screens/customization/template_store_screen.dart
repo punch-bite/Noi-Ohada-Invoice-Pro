@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/template_service.dart';
 import '../../widgets/glass_widgets.dart';
 
@@ -48,6 +49,8 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final subProvider = context.watch<SubscriptionProvider>();
+    final authProvider = context.watch<AppAuthProvider>();
+    final currentUserId = authProvider.user?.id ?? '';
     final canAccessPremium = subProvider.canAccessPremiumTemplates;
     final defaults = InvoiceTemplate.getDefaultTemplates();
 
@@ -130,8 +133,14 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                       itemCount: merged.length,
                       itemBuilder: (context, index) {
                         final template = merged[index];
-                        final isLocked =
-                            template.isPremium && !canAccessPremium;
+                        // 🔓 Déverrouillé si : abonnement actif (accès à tout),
+                        // OU template non premium, OU template déjà acheté
+                        // par l'utilisateur (achat possible sans abonnement).
+                        final isOwned = currentUserId.isNotEmpty &&
+                            template.purchasedBy.contains(currentUserId);
+                        final isLocked = template.isPremium &&
+                            !canAccessPremium &&
+                            !isOwned;
                         return _buildTemplateCard(
                           template, isLocked, theme);
                       },
@@ -186,6 +195,18 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                       label: 'Premium',
                       icon: Icons.stars_rounded,
                       color: const Color(0xFFE9B949),
+                    ),
+                  ),
+                // 💰 Badge prix de vente (template payant)
+                if (template.price > 0)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GlassBadge(
+                      label:
+                          '${template.price.toStringAsFixed(0)} XAF',
+                      icon: Icons.sell_rounded,
+                      color: const Color(0xFF16A34A),
                     ),
                   ),
                 if (isLocked)
@@ -264,6 +285,11 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
   }
 
   void _handleTap(InvoiceTemplate template, bool isLocked) {
+    // 💳 Template payant non acheté → propose l'achat.
+    if (template.price > 0 && !template.paid) {
+      _showPurchaseDialog(template);
+      return;
+    }
     if (isLocked) {
       _showUpgradeDialog();
     } else {
@@ -271,6 +297,82 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
         SnackBar(
           content: Text('${template.name} sélectionné comme modèle actif'),
           backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  /// Dialog d'achat d'un template payant (vendu sur la plateforme).
+  void _showPurchaseDialog(InvoiceTemplate template) {
+    final theme = context.watch<ThemeProvider>();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          '💰 ${template.name}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Ce modèle est vendu à ${template.price.toStringAsFixed(0)} XAF.\n\n'
+          'Après achat, il sera disponible dans vos factures.',
+          style: TextStyle(color: theme.subTextColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _purchaseTemplate(template);
+            },
+            icon: const Icon(Icons.lock_open, size: 18),
+            label: Text('Acheter ${template.price.toStringAsFixed(0)} XAF'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 💳 Achète un template payant : ajoute l'UID à `purchasedBy` et marque
+  /// `paid`. Un utilisateur en plan gratuit peut acheter (aucun abonnement
+  /// requis) ; l'abonnement actif donne accès à tous sans achat.
+  Future<void> _purchaseTemplate(InvoiceTemplate template) async {
+    final authProvider = context.read<AppAuthProvider>();
+    final userId = authProvider.user?.id ?? '';
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connectez-vous pour acheter ce modèle'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final updated = template.copyWith(
+        purchasedBy: [...template.purchasedBy, userId],
+        paid: true,
+      );
+      await _templateService.updateTemplate(updated);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Modèle acheté avec succès !'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadTemplates();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur d\'achat : $e'),
+          backgroundColor: Colors.redAccent,
         ),
       );
     }

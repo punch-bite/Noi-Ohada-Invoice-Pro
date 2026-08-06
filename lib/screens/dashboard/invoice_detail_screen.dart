@@ -12,6 +12,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/mail_service.dart';
 import '../../services/printing_service.dart';
+import '../../services/template_service.dart';
 import '../../models/invoice.dart';
 import '../../models/client.dart';
 import '../../models/company.dart';
@@ -19,6 +20,7 @@ import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/team_service.dart';
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/logo_image.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -66,7 +68,17 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _loadTemplates() async {
-    _templates = InvoiceTemplate.getDefaultTemplates();
+    // Fusion : templates par défaut + ceux créés par l'admin (boutique).
+    final defaults = InvoiceTemplate.getDefaultTemplates();
+    List<InvoiceTemplate> adminTemplates = [];
+    try {
+      adminTemplates = await TemplateService().getAllTemplates();
+    } catch (_) {}
+    final adminIds = adminTemplates.map((e) => e.id).toSet();
+    _templates = [
+      ...defaults.where((d) => !adminIds.contains(d.id)),
+      ...adminTemplates,
+    ];
     _selectedTemplate = _templates.firstWhere(
       (t) => t.isDefault,
       orElse: () => _templates.first,
@@ -469,14 +481,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: bgColor,
+        return GlassScaffold(
       appBar: AppBar(
         title: Text(
           _invoice!.invoiceNumber,
           style: TextStyle(color: textColor),
         ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           // Sélection du modèle
@@ -578,17 +589,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Container(
+                        Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                    blurRadius: 5,
-                  ),
-                ],
+                color: isDark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.white.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

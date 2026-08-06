@@ -1,5 +1,6 @@
 // lib/services/nochpay_service.dart
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/notification_service.dart';
@@ -99,6 +100,7 @@ class NochPayService {
 
     try {
       // 🔥 Construction du payload enrichi
+      final apiBase = ConfigService.apiBaseUrl.trim();
       final payload = {
         'amount': amount,
         'currency': currency,
@@ -110,7 +112,10 @@ class NochPayService {
         },
         'description': description,
         'reference': invoiceNumber,
-        'callback': '${ConfigService.apiBaseUrl}/payment/callback',
+        // Callback optionnel : si aucune API configurée, on s'appuie sur le
+        // polling / webhook NoChPay pour détecter le paiement.
+        if (apiBase.isNotEmpty)
+          'callback': '$apiBase/payment/callback',
         // 🔥 Métadonnées pour suivi
         'customer_meta': {
           'invoice_number': invoiceNumber,
@@ -161,9 +166,49 @@ class NochPayService {
     }
   }
 
-    // ============================================================
-  //  2. TRAITEMENT MOBILE MONEY PAR USSD
   // ============================================================
+  //  1b. LIEN DE PAIEMENT PUBLIC (page Collect / "receive payment")
+  // ============================================================
+
+  /// Crée un paiement destiné à être réglé via la page sécurisée NoChPay
+  /// (mode Collect). Retourne le lien `authorization_url` à ouvrir ou
+  /// partager. La méthode de paiement par défaut est la carte, mais la
+  /// page Collect propose aussi Mobile Money et portefeuilles au client.
+  Future<Map<String, dynamic>> createSubscriptionPaymentLink({
+    required double amount,
+    required String currency,
+    required String planName,
+    String? planId,
+    String? userId,
+    String? email,
+  }) async {
+    if (!isPaymentInitiationConfigured) {
+      return {
+        'success': false,
+        'error':
+            'Configuration API manquante. Vérifiez votre clé publique NochPay '
+            '(NOCHPAY_PUBLIC_KEY).',
+      };
+    }
+    final reference =
+        'SUB-${DateTime.now().millisecondsSinceEpoch}';
+    return initiatePayment(
+      amount: amount,
+      currency: currency,
+      phoneNumber: '',
+      invoiceNumber: reference,
+      description: 'Abonnement $planName — NOI OHADA Invoice Pro',
+      paymentMethod: methodCard,
+      customerName: planId,
+      customerEmail: email,
+      metadata: {
+        'purpose': 'subscription',
+        'plan_id': planId ?? '',
+        'user_id': userId ?? '',
+        'reference': reference,
+      },
+    );
+  }
 
   /// Correspondances entre méthodes de l'app et canaux USSD NochPay.
   ///
@@ -355,14 +400,37 @@ class NochPayService {
 
 
   bool verifyWebhookSignature(String payload, String signature) {
-    // 🔥 TODO: Implémenter la vérification HMAC-SHA256
-    // La signature est dans le header 'x-notch-signature'
-    // Utiliser _webhookSecret pour vérifier
-    // Implémentation :
-    // final hmac = Hmac(sha256, utf8.encode(_webhookSecret));
-    // final digest = hmac.convert(utf8.encode(payload));
-    // return digest.toString() == signature;
-    return true; // À remplacer par la vérification réelle
+    // � Vérification HMAC-SHA256 du webhook NochPay.
+    // La signature est fournie dans le header 'x-notch-signature' et
+    // se présente sous la forme "sha256=<hex digest>".
+    try {
+      final secret = _webhookSecret;
+      if (secret.isEmpty) {
+        return false; // Aucun secret configuré → refuser (sécurité stricte)
+      }
+      final hmac = Hmac(sha256, utf8.encode(secret));
+      final digest = hmac.convert(utf8.encode(payload)).toString();
+
+      // Accepte "sha256=<digest>" ou le digest brut.
+      final cleanSignature = signature.trim().startsWith('sha256=')
+          ? signature.trim().substring('sha256='.length)
+          : signature.trim();
+
+      // Comparaison en temps constant pour éviter les attaques temporelles.
+      return _constantTimeEquals(digest, cleanSignature);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Comparaison de deux chaînes en temps constant.
+  bool _constantTimeEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var result = 0;
+    for (var i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
   }
 
   // ============================================================
@@ -459,14 +527,16 @@ class NochPayService {
     required String confirmationCode,
   }) async {
     try {
-      final response = await _client.post(
-        Uri.parse('$_baseUrl/payments/$transactionId/confirm'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': _publicKey,
-        },
-        body: json.encode({'confirmation_code': confirmationCode}),
-      );
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/payments/$transactionId/confirm'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': _publicKey,
+            },
+            body: json.encode({'confirmation_code': confirmationCode}),
+          )
+          .timeout(const Duration(seconds: 15));
 
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['status'] == 'paid') {

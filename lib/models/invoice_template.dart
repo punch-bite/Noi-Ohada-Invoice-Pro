@@ -61,6 +61,36 @@ class InvoiceTemplate {
   @HiveField(17)
   final DateTime? createdAt;
 
+  // 💰 Prix de vente du template (0 = gratuit) et statut payé.
+  final double price;
+  final bool paid;
+  final List<String> purchasedBy;
+
+  // 🗂️ Fichier téléversé (PDF/JPEG/PNG) : type MIME + contenu base64.
+  final String fileType; // 'pdf' | 'jpeg' | 'png'
+  final String fileData; // base64 du fichier
+
+  // 🧩 Mapping : variable de facture → placeholder dans le template.
+  // Ex : {'invoice_number': '{invoice_number}', 'client_name': '{client_name}'}
+  final Map<String, String> mapping;
+
+  // Liste des variables disponibles pour les factures (à exposer dans l'UI).
+  static const List<String> availableVariables = [
+    'invoice_number',
+    'issue_date',
+    'due_date',
+    'client_name',
+    'client_email',
+    'client_phone',
+    'company_name',
+    'company_address',
+    'company_tax_id',
+    'subtotal',
+    'tax_amount',
+    'total_amount',
+    'status',
+  ];
+
   // Getters pour les couleurs
   Color get primaryColor => Color(primaryColorValue);
   Color get textColor => Color(textColorValue);
@@ -85,6 +115,12 @@ class InvoiceTemplate {
     this.createdBy,
     this.isActive = true,
     this.createdAt,
+    this.price = 0,
+    this.paid = false,
+    this.purchasedBy = const [],
+    this.fileType = '',
+    this.fileData = '',
+    this.mapping = const {},
   })  : primaryColorValue = primaryColor?.value ?? 0xFF1976D2,
         textColorValue = textColor?.value ?? 0xFF000000,
         backgroundColorValue = backgroundColor?.value ?? 0xFFFFFFFF;
@@ -111,6 +147,12 @@ class InvoiceTemplate {
       createdBy: data['createdBy'],
       isActive: data['isActive'] ?? true,
       createdAt: data['createdAt'] != null ? _parseDateTime(data['createdAt']) : null,
+      price: (data['price'] as num?)?.toDouble() ?? 0,
+      paid: data['paid'] ?? false,
+      purchasedBy: List<String>.from(data['purchasedBy'] ?? const []),
+      fileType: data['fileType'] ?? '',
+      fileData: data['fileData'] ?? '',
+      mapping: Map<String, String>.from(data['mapping'] ?? const {}),
     );
   }
 
@@ -135,6 +177,12 @@ class InvoiceTemplate {
       createdBy: map['createdBy'],
       isActive: map['isActive'] ?? true,
       createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : null,
+      price: (map['price'] as num?)?.toDouble() ?? 0,
+      paid: map['paid'] ?? false,
+      purchasedBy: List<String>.from(map['purchasedBy'] ?? const []),
+      fileType: map['fileType'] ?? '',
+      fileData: map['fileData'] ?? '',
+      mapping: Map<String, String>.from(map['mapping'] ?? const {}),
     );
   }
 
@@ -158,6 +206,12 @@ class InvoiceTemplate {
       'createdBy': createdBy,
       'isActive': isActive,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'price': price,
+      'paid': paid,
+      'purchasedBy': purchasedBy,
+      'fileType': fileType,
+      'fileData': fileData,
+      'mapping': mapping,
     };
   }
 
@@ -216,6 +270,12 @@ class InvoiceTemplate {
     double? fontSize,
     bool? showBorder,
     bool? isActive,
+    double? price,
+    bool? paid,
+    List<String>? purchasedBy,
+    String? fileType,
+    String? fileData,
+    Map<String, String>? mapping,
   }) {
     return InvoiceTemplate(
       id: id,
@@ -236,6 +296,12 @@ class InvoiceTemplate {
       createdBy: createdBy,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
+      price: price ?? this.price,
+      paid: paid ?? this.paid,
+      purchasedBy: purchasedBy ?? this.purchasedBy,
+      fileType: fileType ?? this.fileType,
+      fileData: fileData ?? this.fileData,
+      mapping: mapping ?? this.mapping,
     );
   }
 

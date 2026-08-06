@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:noi_ohada_invoice_pro/firebase_options.dart';
 import 'package:noi_ohada_invoice_pro/services/sync_service.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 // Services
@@ -21,7 +19,9 @@ import 'services/stock_service.dart';
 import 'services/nochpay_service.dart';
 import 'services/subscription_checker_service.dart';
 import 'services/hive_service.dart';
+import 'services/database_service.dart';
 import 'services/firestore_initializer.dart';
+import 'services/boot_logger.dart' as boot;
 
 // Providers
 import 'providers/auth_provider.dart';
@@ -32,22 +32,16 @@ import 'providers/theme_provider.dart';
 import 'router/app_router.dart';
 import 'widgets/connectivity_wrapper.dart';
 import 'widgets/app_bootstrap.dart';
-
-// 📝 Fonction de log vers un fichier
-Future<void> _writeLog(String message) async {
-  try {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/app_log.txt');
-    await file.writeAsString('${DateTime.now()}: $message\n',
-        mode: FileMode.append);
-  } catch (_) {}
-}
+import 'widgets/glass_app_background.dart';
 
 /// Services créés lors de l'initialisation (globales pour être partagées)
 NotificationService? gNotificationService;
 ConnectivityService? gConnectivityService;
 StockService? gStockService;
 NochPayService? gNochPayService;
+
+/// Log de démarrage compatible web + mobile (délègue à boot_logger).
+Future<void> _writeLog(String message) => boot.writeBootLog(message);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // ⚠️ À placer en tout premier
@@ -111,12 +105,25 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
     await _writeLog('⚠️ Configuration: $e');
   }
 
-  // ===== HIVE =====
-  bootstrapContext.onStatusChange('Base de données locale...');
-  await _writeLog('📦 Hive...');
+    // ===== BASE DE DONNÉES (FIRESTORE = source de vérité) =====
+  // NB : toute la donnée métier (clients, produits, factures, entreprise…)
+  // vit désormais dans Firestore via DatabaseService. Hive n'est conservé
+  // que pour le cache interne de certains services auxiliaires.
+  bootstrapContext.onStatusChange('Base de données cloud...');
+  await _writeLog('🔥 DatabaseService (Firestore)...');
+  try {
+    await DatabaseService.init();
+    await _writeLog('✅ DatabaseService (Firestore) OK');
+  } catch (e) {
+    await _writeLog('⚠️ DatabaseService: $e');
+  }
+
+  // ===== HIVE (cache auxiliaire uniquement) =====
+  bootstrapContext.onStatusChange('Cache local...');
+  await _writeLog('📦 Hive (cache)...');
   try {
     await HiveService.init();
-    await _writeLog('✅ Hive OK');
+    await _writeLog('✅ Hive (cache) OK');
   } catch (e) {
     await _writeLog('⚠️ Hive: $e');
   }
@@ -126,14 +133,7 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
   await _writeLog('🔥 Firebase...');
   try {
     await Firebase.initializeApp(
-      options: FirebaseOptions(
-        apiKey: ConfigService.firebaseApiKey,
-        appId: ConfigService.firebaseAppId,
-        messagingSenderId: ConfigService.firebaseMessagingSenderId,
-        projectId: ConfigService.firebaseProjectId,
-        authDomain: ConfigService.firebaseAuthDomain,
-        storageBucket: ConfigService.firebaseStorageBucket,
-      ),
+      options: DefaultFirebaseOptions.currentPlatform,
     );
     await _writeLog('✅ Firebase OK');
   } catch (e) {
@@ -259,9 +259,12 @@ class MyApp extends StatelessWidget {
             themeMode: _getThemeMode(themeProvider.currentTheme),
             routerConfig: AppRouter.router,
             builder: (context, child) {
-              return ConnectivityWrapper(
-                onRetry: () {},
-                child: child ?? const SizedBox.shrink(),
+              // 🖼️ Fond glass global derrière toute la navigation.
+              return GlassAppBackground(
+                child: ConnectivityWrapper(
+                  onRetry: () {},
+                  child: child ?? const SizedBox.shrink(),
+                ),
               );
             },
           );

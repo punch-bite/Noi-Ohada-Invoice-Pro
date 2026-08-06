@@ -7,6 +7,8 @@ import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../widgets/cloud_storage_info_banner.dart';
+import '../../services/nochpay_service.dart';
+import '../payment/mobile_money_webview.dart';
 import 'payment_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -149,6 +151,28 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
+            // 🔥 Payer via lien sécurisé NoChPay (page Collect publique)
+            if (_selectedPlan != null && !_selectedPlan!.isFree)
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () => _payViaSecureLink(context),
+                  icon: const Icon(Icons.link, size: 18),
+                  label: const Text('Payer via lien sécurisé'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    side: BorderSide(
+                      color: primaryColor.withValues(alpha: 0.5),
+                    ),
+                    foregroundColor: primaryColor,
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
 
             // Sécurité
@@ -329,6 +353,87 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final plan = subscriptionProvider.currentPlan;
     // Pas d'abonnement actif ou plan gratuit → sauvegarde locale uniquement.
     return plan == null || plan.isFree;
+  }
+
+  // 🔥 Génère un lien de paiement sécurisé NoChPay (page Collect publique)
+  // et l'ouvre pour que l'utilisateur règle facilement son abonnement.
+  Future<void> _payViaSecureLink(BuildContext context) async {
+    final plan = _selectedPlan;
+    if (plan == null) return;
+    final authProvider = context.read<AppAuthProvider>();
+    final user = authProvider.user;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Génération du lien de paiement sécurisé...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    final result = await NochPayService().createSubscriptionPaymentLink(
+      amount: plan.price,
+      currency: plan.currency,
+      planName: plan.name,
+      planId: plan.id,
+      userId: user?.id,
+      email: user?.email,
+    );
+
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['error'] ?? 'Impossible de créer le lien'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final url = (result['authorization_url'] as String? ?? '').trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lien de paiement indisponible. Réessayez.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Ouvre la page de paiement sécurisée NoChPay dans une WebView intégrée.
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lien de paiement invalide. Réessayez.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // ignore: use_build_context_synchronously
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MobileMoneyWebView(
+          paymentUrl: url,
+          provider: 'NoChPay Collect',
+          transactionReference: plan.id,
+          onSuccess: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Paiement confirmé. Merci !'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+          onCancel: () {},
+        ),
+      ),
+    );
   }
 
   // 🔥 UNE SEULE VERSION DE LA MÉTHODE

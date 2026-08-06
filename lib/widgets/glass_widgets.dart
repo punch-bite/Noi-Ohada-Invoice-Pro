@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Arrière-plan dégradé indigo → violet utilisé par les écrans premium.
+/// Le dégradé occupe TOUT l'écran (media), y compris derrière la barre
+/// d'état et la barre de navigation système.
 class GlassScaffold extends StatelessWidget {
   final Widget body;
   final PreferredSizeWidget? appBar;
@@ -34,57 +36,78 @@ class GlassScaffold extends StatelessWidget {
     final e = endColor ??
         (isDark ? const Color(0xFF1E2433) : const Color(0xFFFDF2F8));
 
-    Widget scaffold = Scaffold(
+    // Fond plein écran (dégradé + halos) placé DERRIÈRE le Scaffold.
+    final background = Stack(
+      fit: StackFit.expand,
+      children: [
+        // Dégradé de fond
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [s, e],
+            ),
+          ),
+        ),
+        // Halos lumineux décoratifs pour l'effet "glass"
+        Positioned(
+          top: -80,
+          right: -60,
+          child: _GlowOrb(
+            color: (isDark
+                    ? const Color(0xFF7C6CF0)
+                    : const Color(0xFF818CF8))
+                .withValues(alpha: 0.35),
+            size: 220,
+          ),
+        ),
+        Positioned(
+          bottom: -100,
+          left: -70,
+          child: _GlowOrb(
+            color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
+                .withValues(alpha: 0.3),
+            size: 240,
+          ),
+        ),
+      ],
+    );
+
+    // Scaffold transparent posé PAR-DESSUS le fond plein écran.
+    final scaffold = Scaffold(
+      backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: extendBodyBehindAppBar,
       appBar: appBar,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          // Dégradé de fond
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [s, e],
-                ),
-              ),
-            ),
-          ),
-          // Halos lumineux décoratifs pour l'effet "glass"
-          Positioned(
-            top: -80,
-            right: -60,
-            child: _GlowOrb(
-              color: (isDark
-                      ? const Color(0xFF7C6CF0)
-                      : const Color(0xFF818CF8))
-                  .withValues(alpha: 0.35),
-              size: 220,
-            ),
-          ),
-          Positioned(
-            bottom: -100,
-            left: -70,
-            child: _GlowOrb(
-              color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
-                  .withValues(alpha: 0.3),
-              size: 240,
-            ),
-          ),
           if (enableBlur)
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
-                child: const SizedBox.shrink(),
-              ),
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
+              child: const SizedBox.shrink(),
             ),
-          // Contenu
           body,
         ],
       ),
     );
-    return scaffold;
+
+    // Status bar + barre de navigation transparentes pour laisser
+    // transparaître le dégradé sur tout l'écran.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [background, scaffold],
+      ),
+    );
   }
 }
 
@@ -163,14 +186,15 @@ class GlassCard extends StatelessWidget {
         borderRadius: radius,
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.white.withValues(alpha: 0.7),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.5),
+          width: 0.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -250,12 +274,12 @@ class GradientButton extends StatelessWidget {
           end: Alignment.centerRight,
           colors: colors,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: colors.last.withValues(alpha: 0.4),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: colors.last.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -263,7 +287,7 @@ class GradientButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: loading ? null : onPressed,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           child: Center(
             child: loading
                 ? const SizedBox(
@@ -410,77 +434,81 @@ class GlassTextField extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.04);
 
-    return TextFormField(
-      controller: controller,
-      focusNode: focusNode,
-      enabled: enabled,
-      obscureText: obscureText,
-      maxLines: maxLines,
-      maxLength: maxLength,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
-      textInputAction: textInputAction,
-      inputFormatters: inputFormatters,
-      validator: validator,
-      onChanged: onChanged,
-      autocorrect: false,
-      style: TextStyle(
-        fontSize: 14,
-        color: isDark ? Colors.white : const Color(0xFF14161C),
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          fontSize: 13,
-          color: isDark ? Colors.grey[400] : Colors.grey[600],
+      return TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled,
+        obscureText: obscureText,
+        maxLines: maxLines,
+        maxLength: maxLength,
+        keyboardType: keyboardType,
+        textCapitalization: textCapitalization,
+        textInputAction: textInputAction,
+        inputFormatters: inputFormatters,
+        validator: validator,
+        onChanged: onChanged,
+        autocorrect: false,
+        // 📏 Hauteur compacte 36-40px + padding aéré
+        style: TextStyle(
+          fontSize: 14,
+          color: isDark ? Colors.white : const Color(0xFF14161C),
         ),
-        hintText: hint,
-        hintStyle: TextStyle(
-          color: isDark ? Colors.grey[600] : Colors.grey[400],
-          fontSize: 13,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+          hintText: hint,
+          hintStyle: TextStyle(
+            color: isDark ? Colors.grey[600] : Colors.grey[400],
+            fontSize: 13,
+          ),
+          prefixIcon: prefixIcon != null
+              ? Icon(prefixIcon,
+                  size: 18, color: scheme.primary.withValues(alpha: 0.7))
+              : null,
+          suffixIcon: suffixIcon != null
+              ? IconButton(
+                  onPressed: onSuffixTap,
+                  icon: Icon(suffixIcon,
+                      size: 18, color: scheme.primary.withValues(alpha: 0.7)),
+                )
+              : null,
+          counterText: maxLength != null ? null : '',
+          filled: true,
+          fillColor: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.white.withValues(alpha: 0.7),
+          // 📏 Hauteur 50-54px : padding vertical adapté
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: maxLines > 1 ? 14 : 12,
+          ),
+          // 🙈 Bordure ultra-fine, presque invisible au repos.
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: borderColor, width: 0.6),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+                color: scheme.primary.withValues(alpha: 0.7), width: 1),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+                color: Colors.red.withValues(alpha: 0.6), width: 0.8),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.red, width: 1),
+          ),
         ),
-        prefixIcon: prefixIcon != null
-            ? Icon(prefixIcon,
-                size: 20, color: scheme.primary.withValues(alpha: 0.7))
-            : null,
-        suffixIcon: suffixIcon != null
-            ? IconButton(
-                onPressed: onSuffixTap,
-                icon: Icon(suffixIcon,
-                    size: 20, color: scheme.primary.withValues(alpha: 0.7)),
-              )
-            : null,
-        counterText: maxLength != null ? null : '',
-        filled: true,
-        fillColor: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.white.withValues(alpha: 0.7),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        // 🙈 Bordure ultra-soft : quasiment invisible au repos.
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: borderColor, width: 0.8),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-              color: scheme.primary.withValues(alpha: 0.8), width: 1.2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-              color: Colors.red.withValues(alpha: 0.6), width: 1),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.red, width: 1.2),
-        ),
-      ),
-    );
+      );
   }
 }

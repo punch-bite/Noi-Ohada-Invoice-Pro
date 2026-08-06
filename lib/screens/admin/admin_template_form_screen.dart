@@ -1,6 +1,9 @@
 // lib/screens/admin/admin_template_form_screen.dart
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/invoice_template.dart';
@@ -24,6 +27,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
   late TextEditingController _fontSizeController;
+  late TextEditingController _priceController;
   late TextEditingController _primaryColorController;
   late TextEditingController _textColorController;
   late TextEditingController _backgroundColorController;
@@ -37,6 +41,49 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   String _fontFamily = 'Roboto';
   bool _isLoading = false;
   bool _isLoadingData = true;
+
+  // 🗂️ Fichier téléversé (PDF/JPEG/PNG)
+  String _fileType = '';
+  String _fileData = '';
+  String _fileName = '';
+  // 🧩 Mapping variable de facture → placeholder
+  final Map<String, String> _mapping = {};
+  // Contrôleurs pour le mapping (un par variable)
+  final Map<String, TextEditingController> _mappingControllers = {};
+
+  /// Libellé lisible d'une variable (ex. invoice_number → 'N° de facture').
+  static String _varLabel(String v) {
+    switch (v) {
+      case 'invoice_number':
+        return 'N° de facture';
+      case 'issue_date':
+        return 'Date d\'émission';
+      case 'due_date':
+        return 'Date d\'échéance';
+      case 'client_name':
+        return 'Nom du client';
+      case 'client_email':
+        return 'Email client';
+      case 'client_phone':
+        return 'Téléphone client';
+      case 'company_name':
+        return 'Nom de l\'entreprise';
+      case 'company_address':
+        return 'Adresse entreprise';
+      case 'company_tax_id':
+        return 'N° fiscal';
+      case 'subtotal':
+        return 'Sous-total';
+      case 'tax_amount':
+        return 'Montant TVA';
+      case 'total_amount':
+        return 'Total TTC';
+      case 'status':
+        return 'Statut';
+      default:
+        return v;
+    }
+  }
 
   final List<String> _fontOptions = [
     'Roboto',
@@ -60,6 +107,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _nameController = TextEditingController();
     _descriptionController = TextEditingController();
     _fontSizeController = TextEditingController(text: '12');
+    _priceController = TextEditingController(text: '0');
     _primaryColorController = TextEditingController(text: '#1976D2');
     _textColorController = TextEditingController(text: '#000000');
     _backgroundColorController = TextEditingController(text: '#FFFFFF');
@@ -82,6 +130,14 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _isPremium = template.isPremium;
     _showBorder = template.showBorder;
     _fontFamily = template.fontFamily;
+    _priceController.text = template.price.toStringAsFixed(0);
+    _fileType = template.fileType;
+    _fileData = template.fileData;
+    _fileName = template.fileData.isNotEmpty
+        ? 'Fichier téléversé (${template.fileType.toUpperCase()})'
+        : '';
+    _mapping.clear();
+    _mapping.addAll(template.mapping);
   }
 
   Future<void> _loadTemplate(String id) async {
@@ -125,6 +181,10 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _primaryColorController.dispose();
     _textColorController.dispose();
     _backgroundColorController.dispose();
+    for (final c in _mappingControllers.values) {
+      c.dispose();
+    }
+    _mappingControllers.clear();
     super.dispose();
   }
 
@@ -135,6 +195,47 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       return Color(int.parse(clean, radix: 16));
     } catch (_) {
       return Colors.grey;
+    }
+  }
+
+  /// 🗂️ Téléverse un fichier template (PDF / JPEG / PNG) et le stocke en base64.
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpeg', 'jpg', 'png'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      final ext = file.extension?.toLowerCase() ?? 'png';
+      final type = ext == 'pdf'
+          ? 'pdf'
+          : (ext == 'png' ? 'png' : 'jpeg');
+      setState(() {
+        _fileType = type;
+        _fileData = base64Encode(bytes);
+        _fileName = file.name;
+      });
+    } catch (e) {
+      // Repli : image_picker pour les images si file_picker échoue.
+      try {
+        final picked = await ImagePicker()
+            .pickImage(source: ImageSource.gallery, maxWidth: 2048);
+        if (picked != null) {
+          final bytes = await picked.readAsBytes();
+          final type = picked.name.toLowerCase().endsWith('png')
+              ? 'png'
+              : 'jpeg';
+          setState(() {
+            _fileType = type;
+            _fileData = base64Encode(bytes);
+            _fileName = picked.name;
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -172,6 +273,13 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       createdBy: userId,
       isActive: true,
       createdAt: DateTime.now(),
+      // 💰 Prix de vente (0 = gratuit) — template vendu sur la plateforme.
+      price: double.tryParse(_priceController.text) ?? 0,
+      paid: _isPremium && (double.tryParse(_priceController.text) ?? 0) > 0,
+      // 🗂️ Fichier téléversé + mapping
+      fileType: _fileType,
+      fileData: _fileData,
+      mapping: Map<String, String>.from(_mapping),
     );
 
     try {
@@ -308,10 +416,198 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
                             _buildSwitch('Ajouter une bordure de page', _showBorder, primaryColor, textColor, (v) => setState(() => _showBorder = v)),
                             const Divider(height: 12, thickness: 0.5),
                             _buildSwitch('Définir comme modèle Premium', _isPremium, primaryColor, textColor, (v) => setState(() => _isPremium = v)),
+                            const Divider(height: 12, thickness: 0.5),
+                            // 💰 Prix de vente du template sur la plateforme.
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: TextFormField(
+                                controller: _priceController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: 'Prix de vente (XAF)',
+                                  labelStyle: TextStyle(color: subTextColor, fontSize: 13),
+                                  hintText: '0 = gratuit',
+                                  prefixIcon: Icon(Icons.sell_outlined, size: 20, color: primaryColor),
+                                  filled: true,
+                                  fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                ),
+                                style: TextStyle(color: textColor, fontSize: 14),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                       
+                      const SizedBox(height: 24),
+                      _buildSectionLabel('Fichier du modèle & Mapping', textColor),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Téléversez votre template (PDF/JPEG/PNG) puis mappez '
+                        'les variables de facture à leurs emplacements.',
+                        style: TextStyle(
+                            color: subTextColor, fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // ===== Bouton d'upload =====
+                      InkWell(
+                        onTap: _pickFile,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.grey[800]
+                                : Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.grey[700]!
+                                  : Colors.grey[300]!,
+                              width: 0.6,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _fileData.isEmpty
+                                    ? Icons.upload_file_rounded
+                                    : (_fileType == 'pdf'
+                                        ? Icons.picture_as_pdf_rounded
+                                        : Icons.image_rounded),
+                                color: primaryColor,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _fileData.isEmpty
+                                          ? 'Téléverser un template'
+                                          : _fileName.isNotEmpty
+                                              ? _fileName
+                                              : 'Fichier chargé',
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _fileData.isEmpty
+                                          ? 'PDF, JPEG ou PNG'
+                                          : '${_fileType.toUpperCase()} • cliquer pour remplacer',
+                                      style: TextStyle(
+                                        color: subTextColor,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.edit_outlined,
+                                  color: Colors.grey, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // ===== Aperçu de l'image si JPEG/PNG =====
+                      if (_fileData.isNotEmpty && _fileType != 'pdf') ...[
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            base64Decode(_fileData),
+                            height: 120,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+
+                      // ===== Mapping des variables =====
+                      Text(
+                        'Mapping des variables',
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Associez chaque variable de facture à son placeholder '
+                        'dans le template (ex. {invoice_number}).',
+                        style: TextStyle(
+                            color: subTextColor, fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 8),
+                      ...InvoiceTemplate.availableVariables.map(
+                        (v) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  _varLabel(v),
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 13,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: _mappingControllers[v] ??
+                                      (_mappingControllers[v] =
+                                          TextEditingController(
+                                              text: _mapping[v] ??
+                                                  '{${v}}')),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: '{${v}}',
+                                    hintStyle: TextStyle(
+                                        color: subTextColor, fontSize: 12),
+                                    filled: true,
+                                    fillColor: isDark
+                                        ? Colors.grey[800]
+                                        : Colors.grey[50],
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 8),
+                                  ),
+                                  style: TextStyle(
+                                      color: textColor, fontSize: 13),
+                                  onChanged: (val) =>
+                                      _mapping[v] = val.trim(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
                       const SizedBox(height: 24),
                       _buildSectionLabel('Typographie & Structure', textColor),
                       const SizedBox(height: 10),

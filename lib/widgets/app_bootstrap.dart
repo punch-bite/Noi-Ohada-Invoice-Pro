@@ -35,6 +35,9 @@ class _AppBootstrapState extends State<AppBootstrap>
   late final Animation<double> _logoFade;
   late final Animation<double> _textSlide;
   late final Animation<double> _ringRotation;
+  // Pulsation lumineuse autour du logo
+  late final Animation<double> _pulseScale;
+  late final Animation<double> _pulseOpacity;
 
   @override
   void initState() {
@@ -55,6 +58,13 @@ class _AppBootstrapState extends State<AppBootstrap>
     );
     _ringRotation = Tween<double>(begin: 0, end: 2 * 3.14159).animate(
       CurvedAnimation(parent: _controller, curve: Curves.linear),
+    );
+    // Halo pulsant : grandit et s'estompe en boucle.
+    _pulseScale = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _pulseOpacity = Tween<double>(begin: 0.55, end: 0.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
     _initialize();
@@ -158,8 +168,45 @@ class _AppBootstrapState extends State<AppBootstrap>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _buildGlassLogoCard(),
-                            const SizedBox(height: 28),
+                            // Logo avec halo lumineux pulsant
+                            SizedBox(
+                              width: 180,
+                              height: 180,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Halo pulsant (grandit + s'estompe)
+                                  AnimatedBuilder(
+                                    animation: _pulseScale,
+                                    builder: (context, _) {
+                                      return Transform.scale(
+                                        scale: _pulseScale.value,
+                                        child: Opacity(
+                                          opacity: _pulseOpacity.value,
+                                          child: Container(
+                                            width: 150,
+                                            height: 150,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: RadialGradient(
+                                                colors: [
+                                                  const Color(0xFF9A7BFF)
+                                                      .withValues(alpha: 0.6),
+                                                  const Color(0xFF9A7BFF)
+                                                      .withValues(alpha: 0),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  _buildGlassLogoCard(),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                             const Text(
                               'NOI OHADA Invoice Pro',
                               style: TextStyle(
@@ -222,7 +269,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     return Container(
       width: 116,
       height: 116,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -246,10 +293,18 @@ class _AppBootstrapState extends State<AppBootstrap>
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: const Icon(
-            Icons.receipt_long,
-            size: 60,
-            color: Colors.white,
+          // 🎨 Logo réel de l'application (animé par le parent : zoom + fondu),
+          // avec repli sur l'icône si l'asset est absent.
+          child: Image.asset(
+            'assets/images/splash_logo.png',
+            width: 60,
+            height: 60,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stack) => const Icon(
+              Icons.receipt_long,
+              size: 60,
+              color: Colors.white,
+            ),
           ),
         ),
       ),

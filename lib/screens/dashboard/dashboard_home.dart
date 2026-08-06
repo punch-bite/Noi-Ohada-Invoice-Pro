@@ -11,6 +11,7 @@ import '../../models/invoice.dart';
 import '../../models/financial_stats.dart';
 import '../../widgets/notification_badge.dart';
 import '../../widgets/cloud_storage_info_banner.dart';
+import '../../widgets/marketing_carousel.dart';
 import 'widgets/payment_bottom_sheet.dart';
 
 class DashboardHome extends StatefulWidget {
@@ -212,6 +213,12 @@ class _DashboardHomeState extends State<DashboardHome> {
                       primaryColor: primaryColor,
                       textColor: textColor,
                       subTextColor: subTextColor,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 🎯 Slides marketing abonnement (carrousel + badges)
+                    MarketingCarousel(
+                      slides: buildSubscriptionSlides(subscriptionProvider),
                     ),
                     const SizedBox(height: 16),
 

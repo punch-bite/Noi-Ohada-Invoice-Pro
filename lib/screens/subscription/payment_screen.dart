@@ -15,6 +15,7 @@ import '../../models/notification.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../payment/mobile_money_webview.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Plan plan;
@@ -44,8 +45,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isProcessing = false;
   bool _isConfirming = false;
   String _error = '';
-  final int _retryCount = 0;
-  final int _maxRetries = 3;
 
   final List<PaymentMethod> _paymentMethods = [
     PaymentMethod(
@@ -190,13 +189,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
             const SizedBox(height: 24),
 
             if (_isConfirming)
-              _buildConfirmationView(
-                isDark,
-                textColor,
-                subTextColor,
-                primaryColor,
-                cardColor,
-              )
+              // 🔥 Paiement Collect (carte / portefeuilles) : WebView intégré
+              // pour un retour fluide vers l'app + détection automatique.
+              (_selectedPaymentMethod?.category ==
+                          PaymentMethodCategory.collect &&
+                      _paymentUrl.isNotEmpty)
+                  ? _buildCollectWebView()
+                  : _buildConfirmationView(
+                      isDark,
+                      textColor,
+                      subTextColor,
+                      primaryColor,
+                      cardColor,
+                    )
             else
               _buildPaymentForm(
                 isDark,
@@ -331,6 +336,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// Affiche la page de paiement sécurisée NochPay dans une WebView intégrée.
+  /// Retour automatique vers l'app dès que le paiement est détecté (polling).
+  Widget _buildCollectWebView() {
+    return MobileMoneyWebView(
+      paymentUrl: _paymentUrl,
+      provider: _selectedPaymentMethod?.name ?? 'Collect',
+      transactionReference: _transactionId,
+      onSuccess: () {
+        _completeSubscription();
+      },
+      onCancel: () {
+        if (mounted) {
+          setState(() {
+            _isConfirming = false;
+            _error = 'Paiement annulé. Vous pouvez réessayer.';
+          });
+        }
+      },
+    );
+  }
+
+  /// Identifiant de transaction tronqué sans crash (ID < 8 caractères).
+  String _shortTxId() {
+    if (_transactionId.isEmpty) return '...';
+    return _transactionId.length <= 8
+        ? _transactionId
+        : _transactionId.substring(0, 8);
+  }
+
     Widget _buildConfirmationView(
     bool isDark,
     Color textColor,
@@ -389,7 +423,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Transaction:', style: TextStyle(color: subTextColor)),
-                  Text('#${_transactionId.substring(0, 8)}',
+                  Text('#${_shortTxId()}',
                       style: TextStyle(fontWeight: FontWeight.w500, color: textColor)),
                 ],
               ),

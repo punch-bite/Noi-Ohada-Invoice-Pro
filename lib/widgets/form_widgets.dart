@@ -85,40 +85,40 @@ class FormTextField extends StatelessWidget {
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
-            width: 1,
+            color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+            width: 0.6,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
             color: primaryColor,
-            width: 2,
+            width: 1,
           ),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(
+            color: Colors.red,
+            width: 0.8,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(
             color: Colors.red,
             width: 1,
           ),
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Colors.red,
-            width: 2,
-          ),
-        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: 14,
+          vertical: 12,
         ),
       ),
     );
@@ -172,33 +172,33 @@ class FormDropdown extends StatelessWidget {
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: isDark ? Colors.grey[700]! : Colors.grey[200]!,
-            width: 1,
+            color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+            width: 0.6,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
             color: primaryColor,
-            width: 2,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Colors.red,
             width: 1,
           ),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(
+            color: Colors.red,
+            width: 0.8,
+          ),
+        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 4,
+          horizontal: 14,
+          vertical: 12,
         ),
       ),
       dropdownColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,

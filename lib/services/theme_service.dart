@@ -74,7 +74,8 @@ class ThemeService {
       useMaterial3: true,
       brightness: Brightness.light,
       primaryColor: primary,
-      scaffoldBackgroundColor: bgLight,
+      // Transparent : le fond glass global (GlassAppBackground) transparaît.
+      scaffoldBackgroundColor: Colors.transparent,
       fontFamily: 'Roboto',
             colorScheme: ColorScheme.light(
         primary: primaryLight,
@@ -133,11 +134,12 @@ class ThemeService {
         ),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white.withValues(alpha: 0.72),
+        backgroundColor: Colors.transparent,
         foregroundColor: const Color(0xFF14161C),
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
           fontFamily: 'Roboto',
           fontSize: 18,
@@ -200,18 +202,19 @@ class ThemeService {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.85),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        // 📏 Hauteur 50-54px, coins arrondis 8
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey[300]!, width: 0.6),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: primaryLight, width: 2),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: primaryLight.withValues(alpha: 0.8), width: 1),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -313,7 +316,8 @@ class ThemeService {
       useMaterial3: true,
       brightness: Brightness.dark,
       primaryColor: primary,
-      scaffoldBackgroundColor: bgDark,
+      // Transparent : le fond glass global (GlassAppBackground) transparaît.
+      scaffoldBackgroundColor: Colors.transparent,
       fontFamily: 'Roboto',
             colorScheme: ColorScheme.dark(
         primary: primary,
@@ -372,11 +376,12 @@ class ThemeService {
         ),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: bgDark.withValues(alpha: 0.8),
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
           fontFamily: 'Roboto',
           fontSize: 18,
@@ -439,26 +444,27 @@ class ThemeService {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceDarkAlt.withValues(alpha: 0.65),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        // 📏 Hauteur 50-54px, coins arrondis 8
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 1),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF7C6CF0), width: 2),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF7C6CF0), width: 1),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 1),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 0.8),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 2),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 1),
         ),
         labelStyle: const TextStyle(
           color: Colors.white,

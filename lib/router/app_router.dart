@@ -45,6 +45,7 @@ import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
 import '../screens/dashboard/company_config_screen.dart';
 import '../screens/dashboard/reminders_screen.dart';
+import '../screens/dashboard/relance_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
@@ -225,6 +226,16 @@ class AppRouter {
       GoRoute(
         path: '/dashboard/reminders',
         builder: (context, state) => const RemindersScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard/relance',
+        builder: (context, state) => const RelanceScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard/relance/:clientId',
+        builder: (context, state) => RelanceScreen(
+          initialClientId: state.pathParameters['clientId'],
+        ),
       ),
 
       // Erreur réseau

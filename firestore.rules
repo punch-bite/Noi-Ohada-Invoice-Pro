@@ -1,88 +1,191 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     // =========== FONCTIONS UTILITAIRES ===========
-    function isAdmin() { return request.auth != null && request.auth.token.admin == true; }
-    function isAuthenticated() { return request.auth != null; }
-    // Vrai si le document appartient à l'utilisateur connecté ou si c'est un admin.
-    function isUserResource() {
-      return isAdmin() || resource.data.userId == request.auth.uid;
+    // ⚠️ Langage des règles Firestore = langage d'EXPRESSIONS.
+    // Pas de `if`, `for`, `let`, `while` — uniquement des expressions.
+
+    function isSignedIn() {
+      return request.auth != null;
     }
-    // Vrai si le document en cours d'écriture est assigné à l'utilisateur connecté.
-    function canWriteUserResource() {
-      return isAdmin() || request.resource.data.userId == request.auth.uid;
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
     }
 
-    // =========== RESSOURCES "PAR UTILISATEUR" ===========
-    // Chaque utilisateur ne peut LIRE/ÉCRIRE que SES documents (userId == uid).
-    // L'administrateur a accès à TOUTES les données de tous les utilisateurs.
+    // Le document appartient à l'utilisateur connecté.
+    function isOwner() {
+      return resource.data.userId == request.auth.uid;
+    }
+    function isNewOwner() {
+      return request.resource.data.userId == request.auth.uid;
+    }
 
-    // Clients (par utilisateur)
+    // Vrai si le document (nouveau ou existant) accorde des privilèges admin.
+    function hasAdminPrivileges(data) {
+      return data.isAdmin == true
+        || ('roles' in data && data.roles.hasAny(['admin', 'super-admin']));
+    }
+
+    // Lecture autorisée : admin OU propriétaire.
+    function canReadResource() {
+      return isAdmin() || isOwner();
+    }
+
+    // Création autorisée : admin OU utilisateur authentifié propriétaire.
+    // NB : le champ `userId` doit être présent pour les collections métier.
+    function canWriteOwnResource() {
+      return isAdmin() || (isSignedIn() && isNewOwner());
+    }
+
+    // Mise à jour/suppression : admin OU propriétaire existant.
+    function canUpdateOwnResource() {
+      return isAdmin() || (isSignedIn() && isOwner());
+    }
+
+    // ===========================================
+    // RESSOURCES "PAR UTILISATEUR"
+    // ===========================================
     match /clients/{clientId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
-
-    // Produits (par utilisateur)
     match /products/{productId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
-
-    // Factures (par utilisateur)
     match /invoices/{invoiceId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
-
-    // Fournisseurs (par utilisateur)
-    match /suppliers/{supplierId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+    match /suppliers/{id} {
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
-
-    // Livraisons (par utilisateur)
-    match /deliveries/{deliveryId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+    match /deliveries/{id} {
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
-
-    // Entreprises — CHAQUE utilisateur n'a accès qu'à SA company.
-    // L'utilisateur connecté ne peut voir que sa propre entreprise,
-    // l'admin voit/édite toutes.
+    match /reminders/{id} {
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
+    }
     match /companies/{companyId} {
-      allow read: if isAuthenticated() && isUserResource();
-      allow write: if isAuthenticated() && canWriteUserResource();
+      // L'entreprise "par défaut" (sans userId) est gérée par l'initialiseur.
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isSignedIn();
+      allow update, delete: if isAdmin() || isOwner() || companyId == 'default_company';
+    }
+    match /dashboard_stats/{id} {
+      allow read, write: if isSignedIn() && canUpdateOwnResource();
+    }
+    match /financial_stats/{id} {
+      allow read, write: if isSignedIn() && canUpdateOwnResource();
+    }
+    match /analytics_data/{id} {
+      allow read, write: if isSignedIn() && canUpdateOwnResource();
+    }
+    match /line_items/{id} {
+      allow read: if isSignedIn() && canReadResource();
+      allow create: if canWriteOwnResource();
+      allow update, delete: if canUpdateOwnResource();
     }
 
-    // Abonnements (par utilisateur) — chaque user ne voit que le sien.
+    // ===========================================
+    // ABONNEMENTS / SOUSCRIPTIONS / PLANS
+    // ===========================================
     match /subscriptions/{subscriptionId} {
-      allow read, write: if isAuthenticated() && isUserResource();
+      allow read: if isSignedIn() && (isAdmin() || isOwner());
+      allow create: if isAdmin() || (isSignedIn() && isNewOwner());
+      allow update, delete: if isAdmin();
     }
-
-    // Utilisateurs — chaque user accède à son propre document profile.
-    match /users/{userId} {
-      allow read, write: if isAuthenticated() && (isAdmin() || request.auth.uid == userId);
-    }
-
-    // =========== RESSOURCES PARTAGÉES / SYSTÈME ===========
-    // Plans : lecture publique (nécessaire pour afficher les prix), écriture admin.
     match /plans/{planId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Modèles de factures : lecture pour tout utilisateur authentifié
-    // (modèles génériques partagés), écriture admin.
+    // Un utilisateur peut créer/lire/mettre à jour SON propre profil.
+    // Il ne peut JAMAIS s'auto-attribuer un rôle admin (hasAdminPrivileges).
+    // `subscriptionId` est modifiable (activation d'abonnement), mais pas
+    // `isActive` (réservé à l'admin/backend).
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && !hasAdminPrivileges(request.resource.data);
+      allow update: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId
+            && !hasAdminPrivileges(request.resource.data)
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['isActive']));
+    }
+
+    // ===========================================
+    // MODULE ÉQUIPE (Business) + PARTAGES
+    // ===========================================
+    match /teams/{teamId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || resource.data.ownerId == request.auth.uid
+        || request.auth.uid in resource.data.memberIds);
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAdmin()
+        || resource.data.ownerId == request.auth.uid;
+    }
+    match /team_invitations/{invitationId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || resource.data.invitedEmail == request.auth.token.email
+        || resource.data.invitedBy == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.invitedBy == request.auth.uid;
+      allow update, delete: if isAdmin()
+        || resource.data.invitedBy == request.auth.uid;
+    }
+    match /team_permissions/{permId} {
+      allow read, write: if isAdmin();
+    }
+    match /shared_invoices/{sharedId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || request.auth.uid in resource.data.sharedWith
+        || resource.data.sharedBy == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.sharedBy == request.auth.uid;
+      allow update, delete: if isAdmin()
+        || resource.data.sharedBy == request.auth.uid;
+    }
+
+    // ===========================================
+    // SYSTÈME
+    // ===========================================
     match /templates/{templateId} {
-      allow read: if isAuthenticated();
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
-    // Paramètres généraux (système) : lecture authentifiée, écriture admin.
     match /settings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
-    // Logs système : accès admin uniquement.
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (isAdmin() || isOwner());
+      allow write: if canWriteOwnResource();
+    }
     match /logs/{logId} {
       allow read, write: if isAdmin();
+    }
+    match /drive_sync/{syncId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || resource.data.userId == request.auth.uid);
+      allow write: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+    }
+    // Compteurs de numérotation : chaque utilisateur n'écrit que le sien.
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn() && request.auth.uid == counterId;
     }
   }
 }

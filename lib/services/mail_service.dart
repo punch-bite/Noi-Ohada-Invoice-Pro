@@ -1,43 +1,20 @@
 // lib/services/mail_service.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'config_service.dart';
 
 class MailService {
-  static bool _envLoaded = false;
-
-  // Getters sécurisés avec valeurs de repli
-  static String get _host => _getEnv('SMTP_HOST', 'smtp.gmail.com');
-  static int get _port => int.tryParse(_getEnv('SMTP_PORT', '587')) ?? 587;
-  static String get _username => _getEnv('SMTP_USERNAME', '');
-  static String get _password => _getEnv('SMTP_PASSWORD', '');
-  static String get _fromEmail => _getEnv('SMTP_FROM_EMAIL', '');
-  static String get _fromName => _getEnv('SMTP_FROM_NAME', 'OHADA Invoice Pro');
-  static bool get _secure => _getEnv('SMTP_SECURE', 'false').toLowerCase() == 'true';
-
-  static String _getEnv(String key, String defaultValue) {
-    try {
-      if (!_envLoaded) {
-        _loadEnv();
-      }
-      return dotenv.env[key] ?? defaultValue;
-    } catch (_) {
-      return defaultValue;
-    }
-  }
-
-  static Future<void> _loadEnv() async {
-    if (_envLoaded) return;
-    try {
-      await dotenv.load();
-      _envLoaded = true;
-      print('✅ .env chargé avec succès');
-    } catch (e) {
-      print('⚠️ Impossible de charger .env: $e');
-      _envLoaded = true; // Éviter de recharger sans cesse
-    }
-  }
+  // Getters sécurisés via ConfigService (secrets = --dart-define, jamais
+  // embarqués dans le bundle ; valeurs non sensibles via .env en dev).
+  static String get _host => ConfigService.smtpHost;
+  static int get _port => ConfigService.smtpPort;
+  static String get _username => ConfigService.smtpUsername;
+  static String get _password => ConfigService.smtpPassword;
+  static String get _fromEmail => ConfigService.smtpFromEmail;
+  static String get _fromName => ConfigService.smtpFromName;
+  static bool get _secure => ConfigService.smtpSecure;
 
   static bool get isConfigured =>
       _username.isNotEmpty && _password.isNotEmpty && _fromEmail.isNotEmpty;
@@ -65,7 +42,7 @@ class MailService {
     bool isHtml = false,
   }) async {
     if (!isConfigured) {
-      print('⚠️ MailService non configuré. Vérifiez vos variables SMTP.');
+      debugPrint('⚠️ MailService non configuré. Vérifiez vos variables SMTP.');
       return false;
     }
 
@@ -86,13 +63,13 @@ class MailService {
 
       final server = _getSmtpServer();
       final sendReport = await send(message, server);
-      print('✅ Email envoyé à ${sendReport.mail}');
+      debugPrint('✅ Email envoyé à ${sendReport.mail}');
       return true;
     } on MailerException catch (e) {
-      print('❌ Erreur Mailer: $e');
+      debugPrint('❌ Erreur Mailer: $e');
       return false;
     } catch (e) {
-      print('❌ Erreur envoi email: $e');
+      debugPrint('❌ Erreur envoi email: $e');
       return false;
     }
   }

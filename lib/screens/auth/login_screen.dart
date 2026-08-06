@@ -229,11 +229,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: primary, width: 1.5),
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                            color: primary.withValues(alpha: 0.8), width: 1),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 16),
+                          horizontal: 14, vertical: 12),
                     ),
                     validator: (v) {
                       if (v?.trim().isEmpty == true) {
@@ -285,18 +286,19 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                          width: 1,
+                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                          width: 0.6,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: primary, width: 1.5),
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                            color: primary.withValues(alpha: 0.8), width: 1),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 16),
+                          horizontal: 14, vertical: 12),
                     ),
                     validator: (v) {
                       if (v?.isEmpty == true) {

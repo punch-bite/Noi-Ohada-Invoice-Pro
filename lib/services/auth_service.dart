@@ -190,6 +190,7 @@ class AuthService {
       final clientId = ConfigService.firebaseWebClientId;
       final googleSignIn = GoogleSignIn(
         clientId: clientId.isEmpty ? null : clientId,
+        scopes: ['email', 'profile'],
       );
 
       final googleUser = await googleSignIn.signIn();
@@ -198,6 +199,9 @@ class AuthService {
       }
 
       final googleAuth = await googleUser.authentication;
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        throw Exception('Authentification Google incomplète. Réessayez.');
+      }
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -216,6 +220,13 @@ class AuthService {
       final profile = await _ensureUserDocument(user.uid);
       _cachedUser = profile;
       return profile;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'popup-closed-by-user' ||
+          e.code == 'cancelled-popup-request' ||
+          e.code == 'user-cancelled') {
+        throw Exception('Connexion Google annulée.');
+      }
+      throw Exception('Erreur de connexion Google: ${e.message ?? e.code}');
     } catch (e) {
       if (e is Exception && e.toString().contains('annulée')) {
         rethrow;

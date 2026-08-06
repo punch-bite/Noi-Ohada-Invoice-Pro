@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -84,6 +85,26 @@ class PrintingService {
   }
 
   // ===== EN-TÊTE AVEC LOGO =====
+  /// Convertit `company.logoPath` (data URI `data:image/...;base64,xxx`
+  /// OU chemin de fichier local) en bytes utilisables dans le PDF.
+  static Uint8List? _logoBytesFromPath(String logoPath) {
+    try {
+      if (logoPath.startsWith('data:image')) {
+        final comma = logoPath.indexOf(',');
+        if (comma == -1) return null;
+        final base64 = logoPath.substring(comma + 1);
+        return base64Decode(base64);
+      }
+      final file = File(logoPath);
+      if (file.existsSync()) {
+        return file.readAsBytesSync();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static pw.Widget _buildHeader(
     Invoice invoice,
     Company company,
@@ -95,9 +116,8 @@ class PrintingService {
     pw.Widget? logoWidget;
     if (template.showLogo && company.logoPath.isNotEmpty) {
       try {
-        final file = File(company.logoPath);
-        if (file.existsSync()) {
-          final bytes = file.readAsBytesSync();
+        final bytes = _logoBytesFromPath(company.logoPath);
+        if (bytes != null) {
           logoWidget = pw.Image(
             pw.MemoryImage(bytes),
             width: 80,

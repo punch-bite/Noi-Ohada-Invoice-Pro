@@ -28,12 +28,15 @@ const plans = {
     price: 0.0,
     currency: 'XAF',
     interval: 'month',
-    maxInvoices: 3,
+    maxInvoices: 10,
     maxClients: 5,
+    maxProducts: 5,
     hasPdfExport: true,
     hasCloudSync: false,
     hasTeamAccess: false,
-    features: ['3 factures par mois', '5 clients', 'Export PDF', 'Stockage local'],
+    maxTeamMembers: 0,
+    hasGoogleDriveSync: false,
+    features: ['10 factures', '5 clients', '5 produits', 'Export PDF', 'Stockage Firestore'],
     isPopular: false,
     isActive: true,
     createdAt: new Date()
@@ -46,13 +49,17 @@ const plans = {
     currency: 'XAF',
     interval: 'month',
     maxInvoices: -1,
-    maxClients: -1,
+    maxClients: 200,
+    maxProducts: 25,
     hasPdfExport: true,
     hasCloudSync: true,
     hasTeamAccess: false,
+    maxTeamMembers: 0,
+    hasGoogleDriveSync: false,
     features: [
       'Factures illimitées',
-      'Clients illimités',
+      '200 clients',
+      '25 produits',
       'Export PDF illimité',
       'Synchronisation cloud',
       'Support prioritaire'
@@ -70,15 +77,19 @@ const plans = {
     interval: 'year',
     maxInvoices: -1,
     maxClients: -1,
+    maxProducts: -1,
     hasPdfExport: true,
     hasCloudSync: true,
     hasTeamAccess: true,
+    maxTeamMembers: 20,
+    hasGoogleDriveSync: true,
     features: [
       'Tout le plan Pro',
-      'Accès équipe (5 utilisateurs)',
-      'API intégration',
-      'Support dédié 24/7',
-      'Formation incluse'
+      'Clients / produits / factures illimités',
+      'Module équipe (20 utilisateurs)',
+      'Invitation par lien e-mail',
+      'Synchronisation Google Drive',
+      'Support dédié 24/7'
     ],
     isPopular: false,
     isActive: true,
@@ -91,16 +102,21 @@ const plans = {
     price: 0.0,
     currency: 'XAF',
     interval: 'year',
-    maxInvoices: -1,
+        maxInvoices: -1,
     maxClients: -1,
+    maxProducts: -1,
     hasPdfExport: true,
     hasCloudSync: true,
     hasTeamAccess: true,
+    maxTeamMembers: 1000,
+    hasGoogleDriveSync: true,
     features: [
       'Factures illimitées',
       'Clients illimités',
+      'Produits illimités',
       'Synchronisation cloud',
       'Accès équipe',
+      'Google Drive',
       'Support prioritaire'
     ],
     isPopular: false,
@@ -379,8 +395,33 @@ async function initializeFirestore() {
 
     // --- Log ---
     console.log('📝 Création du log...');
-    await db.collection('logs').doc('log_1').set(log);
+        await db.collection('logs').doc('log_1').set(log);
     console.log('✅ Log créé');
+
+    // --- Notification (exemple) ---
+    const notification1 = { id: 'notif_1', userId: ADMIN_UID, type: 'welcome', title: 'Bienvenue !', body: 'Configurez votre entreprise.', isRead: false, createdAt: new Date() };
+        await db.collection('notifications').doc('notif_1').set(notification1);
+    console.log('✅ Notification créée');
+
+    // --- Équipe (module Business) ---
+    const team = { id: 'team_1', name: 'Équipe de direction', ownerId: ADMIN_UID, memberIds: [ADMIN_UID], adminIds: [ADMIN_UID], invitationLink: '', isActive: true, createdAt: new Date(), updatedAt: new Date() };
+    await db.collection('teams').doc('team_1').set(team);
+    console.log('✅ Équipe créée');
+
+    // --- Invitation d'équipe ---
+    const teamInvitation = { id: 'invite_1', teamId: 'team_1', invitedEmail: 'membre@exemple.com', invitedBy: ADMIN_UID, role: 'member', invitationToken: 'token_exemple', status: 'pending', expiresAt: new Date(Date.now() + 7*24*3600*1000), createdAt: new Date() };
+    await db.collection('team_invitations').doc('invite_1').set(teamInvitation);
+    console.log('✅ Invitation créée');
+
+    // --- Permission d'équipe ---
+    const teamPermission = { id: 'perm_1', teamId: 'team_1', userId: ADMIN_UID, resourceType: 'invoice', canRead: true, canWrite: true, canDelete: false, grantedBy: ADMIN_UID, createdAt: new Date() };
+        await db.collection('team_permissions').doc('perm_1').set(teamPermission);
+    console.log('✅ Permission créée');
+
+    // --- Synchronisation Google Drive (état) ---
+    const driveSync = { id: 'drive_sync_1', userId: ADMIN_UID, enabled: false, folderId: '', lastSyncAt: null, intervalDays: 7, createdAt: new Date(), updatedAt: new Date() };
+    await db.collection('drive_sync').doc('drive_sync_1').set(driveSync);
+    console.log('✅ Google Drive sync état créé');
 
         console.log('✅ Initialisation Firestore terminée avec succès !');
     console.log(`ℹ️ N'oubliez pas de remplacer "${ADMIN_UID}" par l'UID réel de votre admin dans la console Firebase.`);

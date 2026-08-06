@@ -29,6 +29,7 @@ class Invoice {
   @HiveField(19) final bool isSynced; // 🔥 Flag local/cloud
   @HiveField(16) final DateTime? syncedAt;
   @HiveField(17) final DateTime updatedAt; // Champ critique pour la synchro
+  @HiveField(18) final DateTime createdAt; // Date de création (quotas mensuels)
 
   Invoice({
     String? id,
@@ -48,9 +49,12 @@ class Invoice {
     this.isDevis = false,
     this.notes = '',
     this.syncedAt,
-    DateTime? updatedAt, required this.isSynced,
+    this.isSynced = false,
+    DateTime? updatedAt,
+    DateTime? createdAt,
   }) : id = id ?? const Uuid().v4(),
-       updatedAt = updatedAt ?? DateTime.now();
+       updatedAt = updatedAt ?? DateTime.now(),
+       createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
     return {
@@ -70,8 +74,10 @@ class Invoice {
       'terms': terms,
       'isDevis': isDevis,
       'notes': notes,
+      'isSynced': isSynced,
       'syncedAt': syncedAt != null ? Timestamp.fromDate(syncedAt!) : null,
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
@@ -94,7 +100,9 @@ class Invoice {
       isDevis: map['isDevis'] ?? false,
       notes: map['notes'] ?? '',
       syncedAt: map['syncedAt'] != null ? _parseDateTime(map['syncedAt']) : null,
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(), isSynced: false,
+      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(),
+      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
+      isSynced: map['isSynced'] ?? false,
     );
   }
 
@@ -108,7 +116,11 @@ class Invoice {
 
   Invoice copyWith({
     String? status,
-    DateTime? updatedAt, required bool isSynced,
+    DateTime? updatedAt,
+    bool? isSynced,
+    DateTime? syncedAt,
+    DateTime? dueDate,
+    String? notes,
     // ... autres champs
   }) {
     return Invoice(
@@ -117,7 +129,7 @@ class Invoice {
       clientId: clientId,
       invoiceNumber: invoiceNumber,
       issueDate: issueDate,
-      dueDate: dueDate,
+      dueDate: dueDate ?? this.dueDate,
       status: status ?? this.status,
       items: items,
       subtotal: subtotal,
@@ -125,12 +137,13 @@ class Invoice {
       taxAmount: taxAmount,
       discount: discount,
       totalAmount: totalAmount,
-            terms: terms,
+      terms: terms,
       isDevis: isDevis,
-      notes: notes,
-      syncedAt: syncedAt,
-      updatedAt: updatedAt ?? DateTime.now(),
-      isSynced: isSynced,
+      notes: notes ?? this.notes,
+      syncedAt: syncedAt ?? this.syncedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: createdAt,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 }

@@ -34,7 +34,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       if (mounted) {
         setState(() {
-          _stats = stats.map((key, value) => MapEntry(key, value as int));
+          // ⚠️ `conversionRate` est un double (ex. 33.33) : on convertit
+          // proprement en entier (arrondi) pour l'affichage des stats.
+          _stats = stats.map((key, value) {
+            if (value is num) {
+              return MapEntry(key, value.toInt());
+            }
+            return MapEntry(key, 0);
+          });
           _isLoading = false;
         });
       }

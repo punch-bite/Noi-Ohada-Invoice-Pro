@@ -72,14 +72,40 @@ class SubscriptionProvider extends ChangeNotifier {
     return _currentPlan?.maxInvoices ?? 3;
   }
 
-  int get maxClients {
+    int get maxClients {
     if (_authProvider.user?.isAdmin == true) return -1;
     return _currentPlan?.maxClients ?? 5;
+  }
+
+  int get maxProducts {
+    if (_authProvider.user?.isAdmin == true) return -1;
+    return _currentPlan?.maxProducts ?? 5;
+  }
+
+  bool get hasTeamAccess {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return _currentPlan?.hasTeamAccess ?? false;
+  }
+
+  int get maxTeamMembers {
+    if (_authProvider.user?.isAdmin == true) return 1000;
+    return _currentPlan?.maxTeamMembers ?? 0;
+  }
+
+  bool get hasGoogleDriveSync {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return _currentPlan?.hasGoogleDriveSync ?? false;
   }
 
   bool get canSyncToCloud {
     if (_authProvider.user?.isAdmin == true) return true;
     return _currentPlan?.hasCloudSync ?? false;
+  }
+
+  /// 🔥 Module marketing payant : relance clients (email/WhatsApp/SMS).
+  bool get canUseRelance {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return _currentPlan?.hasClientRelance ?? false;
   }
 
   // ===== LOAD PLANS =====

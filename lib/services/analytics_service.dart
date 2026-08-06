@@ -1,5 +1,7 @@
 // lib/services/analytics_service.dart
-import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/invoice.dart';
 import '../services/database_service.dart';
 import '../services/stock_service.dart';
@@ -47,7 +49,7 @@ class AnalyticsService {
         'collectionRate': totalRevenue > 0 ? (totalPaid / totalRevenue) * 100 : 0,
       };
     } catch (e) {
-      print('❌ Erreur getGeneralStats: $e');
+      debugPrint('❌ Erreur getGeneralStats: $e');
       return {};
     }
   }
@@ -127,7 +129,7 @@ class AnalyticsService {
 
       return allMonths.values.toList();
     } catch (e) {
-      print('❌ Erreur getMonthlyStats: $e');
+      debugPrint('❌ Erreur getMonthlyStats: $e');
       return [];
     }
   }
@@ -153,7 +155,7 @@ class AnalyticsService {
         'value': entry.value,
       }).toList();
     } catch (e) {
-      print('❌ Erreur getCategoryStats: $e');
+      debugPrint('❌ Erreur getCategoryStats: $e');
       return [];
     }
   }
@@ -200,7 +202,7 @@ class AnalyticsService {
       }).toList()
         ..sort((a, b) => (b['totalAmount'] as double).compareTo(a['totalAmount'] as double));
     } catch (e) {
-      print('❌ Erreur getClientStats: $e');
+      debugPrint('❌ Erreur getClientStats: $e');
       return [];
     }
   }
@@ -247,7 +249,7 @@ class AnalyticsService {
         'averageProcessingTime': _calculateAverageProcessingTime(invoices),
       };
     } catch (e) {
-      print('❌ Erreur getPaymentStats: $e');
+      debugPrint('❌ Erreur getPaymentStats: $e');
       return {};
     }
   }
@@ -275,7 +277,7 @@ class AnalyticsService {
             : 0,
       };
     } catch (e) {
-      print('❌ Erreur getPerformanceStats: $e');
+      debugPrint('❌ Erreur getPerformanceStats: $e');
       return {};
     }
   }
@@ -301,7 +303,7 @@ class AnalyticsService {
         'churnRate': total > 0 ? ((canceled + expired) / total) * 100 : 0,
       };
     } catch (e) {
-      print('❌ Erreur getSubscriptionStats: $e');
+      debugPrint('❌ Erreur getSubscriptionStats: $e');
       return {};
     }
   }
@@ -327,7 +329,7 @@ class AnalyticsService {
             : 0,
       };
     } catch (e) {
-      print('❌ Erreur getStockStats: $e');
+      debugPrint('❌ Erreur getStockStats: $e');
       return {};
     }
   }
@@ -361,7 +363,7 @@ class AnalyticsService {
         'total': total,
       };
     } catch (e) {
-      print('❌ Erreur getInvoiceStatusDistribution: $e');
+      debugPrint('❌ Erreur getInvoiceStatusDistribution: $e');
       return {};
     }
   }
@@ -410,23 +412,27 @@ class AnalyticsService {
     return count > 0 ? totalDays / count : 0;
   }
 
-  // ===== CACHE (optionnel avec Hive) =====
+  // ===== CACHE (SharedPreferences au lieu de Hive) =====
 
-  Future<void> saveCacheStats(Map<String, dynamic> stats, {String key = 'analytics_cache'}) async {
+  Future<void> saveCacheStats(Map<String, dynamic> stats,
+      {String key = 'analytics_cache'}) async {
     try {
-      final box = await Hive.openBox('analytics_cache');
-      await box.put(key, stats);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, jsonEncode(stats));
     } catch (e) {
-      print('❌ Erreur sauvegarde cache: $e');
+      debugPrint('❌ Erreur sauvegarde cache: $e');
     }
   }
 
-  Future<Map<String, dynamic>?> getCacheStats({String key = 'analytics_cache'}) async {
+  Future<Map<String, dynamic>?> getCacheStats(
+      {String key = 'analytics_cache'}) async {
     try {
-      final box = await Hive.openBox('analytics_cache');
-      return box.get(key) as Map<String, dynamic>?;
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(key);
+      if (raw == null) return null;
+      return jsonDecode(raw) as Map<String, dynamic>?;
     } catch (e) {
-      print('❌ Erreur lecture cache: $e');
+      debugPrint('❌ Erreur lecture cache: $e');
       return null;
     }
   }

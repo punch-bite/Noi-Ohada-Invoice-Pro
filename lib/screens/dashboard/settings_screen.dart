@@ -7,6 +7,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../models/user.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/glass_widgets.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -26,8 +27,7 @@ class SettingsScreen extends StatelessWidget {
     final bgColor = themeProvider.backgroundColor ?? Colors.white;
     final cardColor = themeProvider.cardColor ?? Colors.white;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+        return GlassScaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
@@ -127,6 +127,7 @@ class SettingsScreen extends StatelessWidget {
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
+                  premium: !subscriptionProvider.canAccessPremiumTemplates,
                 ),
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(
@@ -251,12 +252,14 @@ class SettingsScreen extends StatelessWidget {
         ? displayName.trim()[0].toUpperCase()
         : 'U';
 
-    return Container(
+        return Container(
       decoration: BoxDecoration(
-        color: cardColor,
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
           width: 0.5,
         ),
       ),
@@ -350,12 +353,14 @@ class SettingsScreen extends StatelessWidget {
     required bool isDark,
     required List<Widget> children,
   }) {
-    return Container(
+        return Container(
       decoration: BoxDecoration(
-        color: cardColor,
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
           width: 0.5,
         ),
       ),
@@ -581,6 +586,7 @@ class _SettingsTile extends StatelessWidget {
   final Color textColor;
   final Color subTextColor;
   final bool isDanger;
+  final bool premium;
 
   const _SettingsTile({
     required this.icon,
@@ -591,6 +597,7 @@ class _SettingsTile extends StatelessWidget {
     required this.textColor,
     required this.subTextColor,
     this.isDanger = false,
+    this.premium = false,
   });
 
   @override
@@ -601,13 +608,51 @@ class _SettingsTile extends StatelessWidget {
         color: isDanger ? Colors.redAccent : textColor.withOpacity(0.8),
         size: 22,
       ),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isDanger ? Colors.redAccent : textColor,
-          fontWeight: FontWeight.w500,
-          fontSize: 15,
-        ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: isDanger ? Colors.redAccent : textColor,
+                fontWeight: FontWeight.w500,
+                fontSize: 15,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // ⭐ Badge premium sur les fonctionnalités payantes
+          if (premium) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9B949).withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: const Color(0xFFE9B949).withValues(alpha: 0.5),
+                  width: 0.6,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star_rounded, size: 12, color: Color(0xFFB8860B)),
+                  SizedBox(width: 2),
+                  Text(
+                    'PREMIUM',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFB8860B),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
       subtitle: Text(
         subtitle,

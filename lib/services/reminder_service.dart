@@ -1,5 +1,9 @@
 // lib/services/reminder_service.dart
-import 'package:hive_flutter/hive_flutter.dart';
+//
+// ✅ Rappels de paiement — FIRESTORE (plus de Hive).
+// Les rappels sont stockés dans la collection `reminders`, scopée par l'UID.
+//
+import 'package:flutter/foundation.dart';
 import 'package:noi_ohada_invoice_pro/models/notification.dart';
 import '../models/reminder.dart';
 import '../models/invoice.dart';
@@ -8,94 +12,65 @@ import '../services/database_service.dart';
 import '../services/notification_service.dart';
 
 class ReminderService {
-  static const String _reminderBox = 'reminders';
-  late Box<Reminder> _reminderBoxInstance;
-  bool _isInitialized = false;
-
   final DatabaseService _db = DatabaseService();
   final NotificationService _notificationService = NotificationService();
 
   Future<void> init() async {
-    if (_isInitialized) return;
-    _reminderBoxInstance = await Hive.openBox<Reminder>(_reminderBox);
-    _isInitialized = true;
-    print('✅ ReminderService initialisé avec ${_reminderBoxInstance.length} rappels');
-  }
-
-  Future<void> _ensureInitialized() async {
-    if (!_isInitialized) {
-      await init();
-    }
+    // Firestore ne nécessite aucune initialisation locale.
+    debugPrint('✅ ReminderService (Firestore)');
   }
 
   // ===== CRUD =====
 
   Future<List<Reminder>> getReminders() async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values.toList()
-      ..sort((a, b) => b.reminderDate.compareTo(a.reminderDate));
+    final reminders = await _db.getReminders();
+    reminders.sort((a, b) => b.reminderDate.compareTo(a.reminderDate));
+    return reminders;
   }
 
   Future<List<Reminder>> getPendingReminders() async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values
+    final all = await getReminders();
+    return all
         .where((r) => r.reminderStatus == ReminderStatus.pending)
         .toList();
   }
 
   Future<List<Reminder>> getRemindersByInvoice(String invoiceId) async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values
-        .where((r) => r.invoiceId == invoiceId)
-        .toList();
+    final all = await getReminders();
+    return all.where((r) => r.invoiceId == invoiceId).toList();
   }
 
   Future<Reminder?> getReminder(String id) async {
-    await _ensureInitialized();
-    try {
-      return _reminderBoxInstance.values.firstWhere((r) => r.id == id);
-    } catch (e) {
-      return null;
+    final all = await getReminders();
+    for (final r in all) {
+      if (r.id == id) return r;
     }
+    return null;
   }
 
   Future<void> addReminder(Reminder reminder) async {
-    await _ensureInitialized();
-    await _reminderBoxInstance.add(reminder);
-    print('✅ Rappel ajouté pour la facture ${reminder.invoiceNumber}');
+    await _db.saveReminder(reminder);
+    debugPrint('✅ Rappel ajouté pour la facture ${reminder.invoiceNumber}');
   }
 
   Future<void> updateReminder(Reminder reminder) async {
-    await _ensureInitialized();
-    final index = _reminderBoxInstance.values
-        .toList()
-        .indexWhere((r) => r.id == reminder.id);
-    if (index != -1) {
-      await _reminderBoxInstance.putAt(index, reminder);
-    }
+    await _db.saveReminder(reminder);
   }
 
   Future<void> deleteReminder(String id) async {
-    await _ensureInitialized();
-    final index = _reminderBoxInstance.values
-        .toList()
-        .indexWhere((r) => r.id == id);
-    if (index != -1) {
-      await _reminderBoxInstance.deleteAt(index);
-    }
+    await _db.deleteReminder(id);
   }
 
   // ===== CHECK ET ENVOI DES RAPPELS =====
 
   Future<void> checkAndSendReminders() async {
-    await _ensureInitialized();
-    
     final now = DateTime.now();
     final pendingReminders = await getPendingReminders();
-    
+
     for (final reminder in pendingReminders) {
       // Vérifier si la date du rappel est atteinte
-      if (reminder.reminderDate.isBefore(now) || reminder.reminderDate.isAtSameMomentAs(now)) {
+      if (reminder.reminderDate.isBefore(now) ||
+          reminder.reminderDate.isAtSameMomentAs(now)) {
         await _sendReminder(reminder);
       }
     }
@@ -111,7 +86,7 @@ class ReminderService {
 
       // Vérifier si la facture est déjà payée
       if (invoice.status == 'paid') {
-        // Marquer le rappel comme envoyé et supprimer
+        // Marquer le rappel comme envoyé
         final updated = reminder.copyWith(
           status: ReminderStatus.sent.toString(),
           sentAt: DateTime.now(),
@@ -127,7 +102,7 @@ class ReminderService {
       // Créer le message de rappel
       final message = _buildReminderMessage(reminder, clientName);
 
-      // Envoyer la notification
+      // Envoyer la notification (Firestore)
       await _notificationService.addNotification(
         AppNotification(
           title: 'Rappel de paiement - ${reminder.invoiceNumber}',
@@ -145,9 +120,9 @@ class ReminderService {
       );
       await updateReminder(updated);
 
-      print('✅ Rappel envoyé pour la facture ${reminder.invoiceNumber}');
+      debugPrint('✅ Rappel envoyé pour la facture ${reminder.invoiceNumber}');
     } catch (e) {
-      print('❌ Erreur envoi rappel: $e');
+      debugPrint('❌ Erreur envoi rappel: $e');
       final updated = reminder.copyWith(
         status: ReminderStatus.failed.toString(),
         errorMessage: e.toString(),
@@ -245,17 +220,16 @@ OHADA Invoice Pro
       await addReminder(reminder);
     }
 
-    print('✅ ${reminders.length} rappels créés pour la facture ${invoice.invoiceNumber}');
+    debugPrint(
+        '✅ ${reminders.length} rappels créés pour la facture ${invoice.invoiceNumber}');
   }
 
   // ===== NETTOYAGE =====
 
   Future<void> cleanSentReminders() async {
-    await _ensureInitialized();
-    final sentReminders = _reminderBoxInstance.values
-        .where((r) => r.reminderStatus == ReminderStatus.sent)
-        .toList();
-    
+    final sentReminders =
+        (await getReminders()).where((r) => r.reminderStatus == ReminderStatus.sent);
+
     for (final reminder in sentReminders) {
       // Supprimer les rappels envoyés après 30 jours
       if (reminder.sentAt != null &&
@@ -268,22 +242,19 @@ OHADA Invoice Pro
   // ===== STATISTIQUES =====
 
   Future<int> getPendingCount() async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values
+    return (await getReminders())
         .where((r) => r.reminderStatus == ReminderStatus.pending)
         .length;
   }
 
   Future<int> getSentCount() async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values
+    return (await getReminders())
         .where((r) => r.reminderStatus == ReminderStatus.sent)
         .length;
   }
 
   Future<int> getFailedCount() async {
-    await _ensureInitialized();
-    return _reminderBoxInstance.values
+    return (await getReminders())
         .where((r) => r.reminderStatus == ReminderStatus.failed)
         .length;
   }

@@ -1,22 +1,23 @@
 // lib/widgets/cloud_storage_info_banner.dart
 //
-// Bannière d'information transparente sur le stockage des données selon
-// le plan (gratuit = mémoire locale du téléphone, payant = cloud sécurisé).
+// Bannière d'information sur le stockage des données.
+// Depuis la migration Hive → Firestore, TOUTES les données (même plan
+// gratuit) sont sauvegardées dans le cloud : plus aucune divergence
+// local/cloud. Le plan n'affecte que les QUOTAS, pas le stockage.
+//
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 /// Affiche un récapitulatif clair du mode de stockage des données.
 ///
-/// Fonctionnement :
-///   - Plan gratuit : les données sont sauvegardées UNIQUEMENT dans la
-///     mémoire du téléphone. Supprimer l'app → perte des fournisseurs,
-///     produits, clients et factures (l'entreprise n'est pas perdue).
-///   - Avec abonnement : sauvegarde dans le cloud, données récupérables
-///     même en cas de perte ou de changement de téléphone.
+///  - Tous les plans : sauvegarde cloud sécurisée (Firestore).
+///  - Plan gratuit  : rappel des quotas (clients/produits/factures).
+///  - Payant        : confirmation du cloud + avantages.
 class CloudStorageInfoBanner extends StatelessWidget {
   /// `true` si l'utilisateur est sur le plan gratuit.
   final bool isFreePlan;
 
-  /// Affichage compact (pour un dashboards / liste) ou complet.
+  /// Affichage compact (pour un dashboard / liste) ou complet.
   final bool compact;
 
   const CloudStorageInfoBanner({
@@ -30,105 +31,95 @@ class CloudStorageInfoBanner extends StatelessWidget {
     final theme = Theme.of(context);
 
     if (isFreePlan) {
-      return Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: EdgeInsets.all(compact ? 12 : 16),
-        decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.phone_android, color: Colors.orange, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Plan gratuit • Sauvegarde locale',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    compact
-                        ? 'Vos données sont stockées dans la mémoire de ce téléphone.'
-                        : 'Vos fournisseurs, produits, clients et factures ne sont '
-                            'sauvegardés QUE dans la mémoire de ce téléphone. Si vous '
-                            'supprimez l\'application, ces données seront perdues '
-                            '(l\'entreprise, elle, est conservée).',
-                    style: TextStyle(
-                      fontSize: compact ? 12 : 13,
-                      color: Colors.orange.shade900,
-                      height: 1.35,
-                    ),
-                  ),
-                  if (!compact) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Souscrivez à un abonnement pour sauvegarder vos données '
-                      'dans le cloud et les retrouver même en cas de perte ou de '
-                      'changement de téléphone.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange.shade800,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+      return _buildBanner(
+        context,
+        icon: Icons.cloud_done_outlined,
+        iconColor: theme.colorScheme.primary,
+        title: 'Sauvegarde cloud active',
+        message: compact
+            ? 'Vos données sont sauvegardées dans le cloud.'
+            : 'Vos fournisseurs, produits, clients et factures sont sauvegardés '
+                'dans le cloud Firestore. Vous les retrouvez même si vous '
+                'changez de téléphone.\n\n'
+                'Le plan gratuit inclut 5 clients, 5 produits et 10 factures. '
+                'Passez à Pro ou Business pour des limites supérieures.',
+        actionLabel: 'Voir les plans',
+        onAction: () => context.push('/subscription'),
       );
     }
 
     // Utilisateur avec abonnement (cloud)
+    return _buildBanner(
+      context,
+      icon: Icons.cloud_done,
+      iconColor: Colors.green,
+      title: 'Abonnement actif • Sauvegarde cloud',
+      message: compact
+          ? 'Vos données sont sauvegardées dans le cloud.'
+          : 'Vos données sont sauvegardées dans le cloud Firestore. Vous pouvez '
+              'les retrouver sur n\'importe quel appareil, même si vous perdez '
+              'ou changez de téléphone.',
+    );
+  }
+
+  Widget _buildBanner(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: EdgeInsets.all(compact ? 12 : 16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.08),
+        color: iconColor.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.3), width: 1),
+        border: Border.all(color: iconColor.withValues(alpha: 0.25), width: 1),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.cloud_done, color: Colors.green, size: 22),
+          Icon(icon, color: iconColor, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Abonnement actif • Sauvegarde cloud',
+                Text(
+                  title,
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
-                    color: Colors.green,
+                    color: iconColor,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Vos données sont sauvegardées dans le cloud. Vous pouvez les '
-                  'retrouver sur n\'importe quel appareil, même si vous perdez '
-                  'ou changez de téléphone.',
+                  message,
                   style: TextStyle(
                     fontSize: compact ? 12 : 13,
-                    color: Colors.green.shade900,
+                    color: theme.colorScheme.onSurfaceVariant,
                     height: 1.35,
                   ),
                 ),
+                if (actionLabel != null && onAction != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: onAction,
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: Text(actionLabel),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

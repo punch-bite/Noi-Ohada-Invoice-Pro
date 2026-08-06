@@ -1,11 +1,15 @@
-import 'package:hive_flutter/hive_flutter.dart';
+// lib/services/supplier_service.dart
+//
+// ✅ Fournisseurs — FIRESTORE (plus de Hive).
+// Les fournisseurs sont stockés dans la collection `suppliers`, scopée par UID.
+//
+import 'package:flutter/foundation.dart';
 import '../models/supplier.dart';
-import '../services/stock_service.dart'; // Importez votre service de stock
+import '../services/database_service.dart';
+import '../services/stock_service.dart'; // Relation produits fournisseur
 
 class SupplierService {
-  static const String _supplierBox = 'suppliers';
-  late Box<Supplier> _supplierBoxInstance;
-  bool _isInitialized = false;
+  final DatabaseService _db = DatabaseService();
 
   // Injection du StockService
   final StockService _stockService;
@@ -14,67 +18,47 @@ class SupplierService {
       : _stockService = stockService ?? StockService();
 
   Future<void> init() async {
-    if (_isInitialized) return;
-    if (!Hive.isBoxOpen(_supplierBox)) {
-      _supplierBoxInstance = await Hive.openBox<Supplier>(_supplierBox);
-    } else {
-      _supplierBoxInstance = Hive.box<Supplier>(_supplierBox);
-    }
-    _isInitialized = true;
+    // Firestore ne nécessite aucune initialisation locale.
+    debugPrint('✅ SupplierService (Firestore)');
   }
 
-  Future<void> _ensureInitialized() async {
-    if (!_isInitialized) await init();
-  }
-
-  // ===== CRUD Optimisé =====
+  // ===== CRUD (Firestore) =====
 
   Future<List<Supplier>> getSuppliers() async {
-    await _ensureInitialized();
-    return _supplierBoxInstance.values.toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final suppliers = await _db.getSuppliers();
+    suppliers.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return suppliers;
   }
 
   Future<Supplier?> getSupplier(String id) async {
-    await _ensureInitialized();
-    // Utilisation de .get si l'ID est la clé Hive, sinon firstWhere
-    return _supplierBoxInstance.values
-        .cast<Supplier?>()
-        .firstWhere((s) => s?.id == id, orElse: () => null);
+    return _db.getSupplier(id);
   }
 
   Future<void> addSupplier(Supplier supplier) async {
-    await _ensureInitialized();
-    // Si l'ID est la clé Hive, utilisez .put(supplier.id, supplier)
-    await _supplierBoxInstance.put(supplier.id, supplier);
+    await _db.saveSupplier(supplier);
   }
 
   Future<void> updateSupplier(Supplier supplier) async {
-    await _ensureInitialized();
-    // Utiliser la clé ID pour la mise à jour directe (plus performant que putAt)
-    await _supplierBoxInstance.put(supplier.id, supplier);
+    await _db.saveSupplier(supplier);
   }
 
   Future<void> deleteSupplier(String id) async {
-    await _ensureInitialized();
-    await _supplierBoxInstance.delete(id);
+    await _db.deleteSupplier(id);
   }
 
   // ===== Logique métier croisée =====
 
   Future<bool> hasProducts(String supplierId) async {
-    await _ensureInitialized();
-    // Utilisation du StockService injecté pour vérifier les relations
     final products = await _stockService.getProductsBySupplier(supplierId);
     return products.isNotEmpty;
   }
 
   Future<Supplier?> getActiveSupplier() async {
-    final box = Hive.box<Supplier>(_supplierBox);
-    // Recherche le premier fournisseur dont le champ isActive est vrai
-    return box.values.cast<Supplier?>().firstWhere(
-          (s) => s?.isActive == true,
-          orElse: () => null,
-        );
+    final suppliers = await getSuppliers();
+    for (final s in suppliers) {
+      if (s.isActive) return s;
+    }
+    return null;
   }
 }

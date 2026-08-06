@@ -40,6 +40,7 @@ dependencies:
 
   # --- Utilitaires & Sécurité ---
   dart_dash_otp: ^2.0.0
+  crypto: ^3.0.6
   qr_flutter: ^4.1.0
   mailer: ^6.4.0
   http: ^1.2.2
@@ -48,6 +49,7 @@ dependencies:
   connectivity_plus: ^6.1.0
   path_provider: ^2.0.12
   image_picker: ^1.1.2
+  file_picker: ^8.1.2
   flutter_dotenv: ^6.0.1
   local_auth: 3.0.2
   flutter_contacts: ^2.0.0
@@ -76,7 +78,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - .env
+    # ⚠️ NE PAS embarquer .env ici : il contient des secrets (SMTP, NochPay…).
+    # Les secrets sont injectés au build via --dart-define (voir README).
   fonts:
     - family: NoiPolice
       fonts:
