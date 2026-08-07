@@ -70,10 +70,10 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
-    final textColor = theme.textColor ?? Colors.black;
-    final subTextColor = theme.subTextColor ?? Colors.grey;
-    final primaryColor = theme.primaryColor ?? Colors.blue;
-    final bgColor = theme.backgroundColor ?? Colors.white;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
+    final bgColor = theme.backgroundColor;
 
     return Scaffold(
       backgroundColor: bgColor,

@@ -1,5 +1,6 @@
 // lib/services/notification_checker_service.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../services/stock_service.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
@@ -40,7 +41,7 @@ class NotificationCheckerService {
       Duration(seconds: checkIntervalSeconds),
       (_) => _checkAll(),
     );
-    print('✅ NotificationCheckerService démarré (intervalle: ${checkIntervalSeconds}s)');
+    debugPrint('✅ NotificationCheckerService démarré (intervalle: ${checkIntervalSeconds}s)');
   }
 
   /// Arrêter la surveillance
@@ -48,7 +49,7 @@ class NotificationCheckerService {
     _timer?.cancel();
     _timer = null;
     _isRunning = false;
-    print('⏹️ NotificationCheckerService arrêté');
+    debugPrint('⏹️ NotificationCheckerService arrêté');
   }
 
   /// Vérification complète
@@ -57,7 +58,7 @@ class NotificationCheckerService {
       await _checkStock();
       await _checkOverdueInvoices();
     } catch (e) {
-      print('❌ Erreur dans _checkAll: $e');
+      debugPrint('❌ Erreur dans _checkAll: $e');
     }
   }
 
@@ -139,6 +140,6 @@ class NotificationCheckerService {
   void resetAlerts() {
     _alertedProducts.clear();
     _alertedInvoices.clear();
-    print('🔄 Alertes réinitialisées');
+    debugPrint('🔄 Alertes réinitialisées');
   }
 }

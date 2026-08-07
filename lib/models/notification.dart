@@ -4,7 +4,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'notification.g.dart'; // Généré par Hive
@@ -26,7 +25,6 @@ enum NotificationType {
   stock_out,                 // Rupture de stock
 }
 
-@JsonSerializable()
 @HiveType(typeId: 9) // Ajuste le typeId selon ton registre Hive
 class AppNotification {
   @HiveField(0)

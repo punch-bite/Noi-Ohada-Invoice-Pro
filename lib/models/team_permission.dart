@@ -1,13 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'team_permission.g.dart';
 
 enum PermissionLevel { none, read, write, admin }
 
-@JsonSerializable()
 @HiveType(typeId: 21)
 class TeamPermission {
   @HiveField(0)

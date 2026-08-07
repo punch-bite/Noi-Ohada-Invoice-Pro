@@ -34,7 +34,7 @@ class RelanceService {
     required String message,
     Invoice? invoice,
   }) async {
-    final phone = _normalizePhone(client.phone ?? '');
+    final phone = _normalizePhone(client.phone);
     switch (channel) {
       case RelanceChannel.email:
         return _sendEmail(client, subject, message);
@@ -101,7 +101,7 @@ class RelanceService {
   // ===== HELPERS =====
 
   bool _sendEmail(Client client, String subject, String message) {
-    final email = client.email ?? '';
+    final email = client.email;
     if (email.isEmpty) return false;
     // MailService.sendHtmlEmail est statique.
     MailService.sendHtmlEmail(

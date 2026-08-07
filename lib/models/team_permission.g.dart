@@ -57,33 +57,3 @@ class TeamPermissionAdapter extends TypeAdapter<TeamPermission> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-TeamPermission _$TeamPermissionFromJson(Map<String, dynamic> json) =>
-    TeamPermission(
-      id: json['id'] as String?,
-      teamId: json['teamId'] as String,
-      userId: json['userId'] as String,
-      resourceType: json['resourceType'] as String,
-      permissionLevel: json['permissionLevel'] as String,
-      createdAt: json['createdAt'] == null
-          ? null
-          : DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'] as String),
-    );
-
-Map<String, dynamic> _$TeamPermissionToJson(TeamPermission instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'teamId': instance.teamId,
-      'userId': instance.userId,
-      'resourceType': instance.resourceType,
-      'permissionLevel': instance.permissionLevel,
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt?.toIso8601String(),
-    };

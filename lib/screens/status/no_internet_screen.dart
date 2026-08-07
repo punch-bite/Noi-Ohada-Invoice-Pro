@@ -15,8 +15,8 @@ class NoInternetScreen extends StatelessWidget {
   Widget build(BuildContext context) {
         final connectivity = context.watch<ConnectivityService>();
     final theme = context.watch<ThemeProvider>();
-    final textColor = theme.textColor ?? Colors.black;
-    final subTextColor = theme.subTextColor ?? Colors.grey;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
 
         return GlassScaffold(
       body: Center(

@@ -3,11 +3,9 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart'; // Généré par Hive
 
-@JsonSerializable()
 @HiveType(typeId: 13) // Ajout de l'annotation Hive avec un typeId dédié
 class Subscription {
   @HiveField(0)

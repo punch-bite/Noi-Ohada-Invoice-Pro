@@ -2,12 +2,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'activity_log.g.dart'; // Généré par Hive
 
-@JsonSerializable()
 @HiveType(typeId: 17) // Utiliser un ID unique (17)
 class ActivityLog {
   @HiveField(0)

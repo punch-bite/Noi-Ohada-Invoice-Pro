@@ -63,37 +63,3 @@ class SharedInvoiceAdapter extends TypeAdapter<SharedInvoice> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-SharedInvoice _$SharedInvoiceFromJson(Map<String, dynamic> json) =>
-    SharedInvoice(
-      id: json['id'] as String?,
-      invoiceId: json['invoiceId'] as String,
-      teamId: json['teamId'] as String,
-      sharedBy: json['sharedBy'] as String,
-      sharedWith: (json['sharedWith'] as List<dynamic>)
-          .map((e) => e as String)
-          .toList(),
-      permissionLevel: json['permissionLevel'] as String,
-      sharedAt: DateTime.parse(json['sharedAt'] as String),
-      expiresAt: json['expiresAt'] == null
-          ? null
-          : DateTime.parse(json['expiresAt'] as String),
-      isActive: json['isActive'] as bool? ?? true,
-    );
-
-Map<String, dynamic> _$SharedInvoiceToJson(SharedInvoice instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'invoiceId': instance.invoiceId,
-      'teamId': instance.teamId,
-      'sharedBy': instance.sharedBy,
-      'sharedWith': instance.sharedWith,
-      'sharedAt': instance.sharedAt.toIso8601String(),
-      'permissionLevel': instance.permissionLevel,
-      'expiresAt': instance.expiresAt?.toIso8601String(),
-      'isActive': instance.isActive,
-    };

@@ -76,9 +76,9 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
-    final textColor = theme.textColor ?? Colors.black;
-    final subTextColor = theme.subTextColor ?? Colors.grey;
-    final bgColor = theme.backgroundColor ?? Colors.white;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final bgColor = theme.backgroundColor;
 
     return Scaffold(
       backgroundColor: bgColor,

@@ -5,14 +5,10 @@ import '../models/user.dart';
 import '../models/subscription.dart';
 import '../models/activity_log.dart';
 import '../models/plan.dart';
-import 'subscription_service.dart';
-import 'cloud_access_service.dart';
 import 'logger_service.dart';
 
 class AdminService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final SubscriptionService _subscriptionService = SubscriptionService();
-  final CloudAccessService _cloudAccess = CloudAccessService();
 
   // ============================================================
   //  UTILISATEURS

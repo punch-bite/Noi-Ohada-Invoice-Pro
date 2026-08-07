@@ -1,11 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'team.g.dart';
 
-@JsonSerializable()
 @HiveType(typeId: 20)
 class Team {
   @HiveField(0)

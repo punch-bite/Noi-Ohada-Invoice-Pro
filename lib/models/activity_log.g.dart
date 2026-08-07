@@ -60,30 +60,3 @@ class ActivityLogAdapter extends TypeAdapter<ActivityLog> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-ActivityLog _$ActivityLogFromJson(Map<String, dynamic> json) => ActivityLog(
-      id: json['id'] as String,
-      userId: json['userId'] as String,
-      userEmail: json['userEmail'] as String,
-      action: json['action'] as String,
-      targetId: json['targetId'] as String?,
-      targetType: json['targetType'] as String?,
-      details: json['details'] as Map<String, dynamic>?,
-      timestamp: DateTime.parse(json['timestamp'] as String),
-    );
-
-Map<String, dynamic> _$ActivityLogToJson(ActivityLog instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'userId': instance.userId,
-      'userEmail': instance.userEmail,
-      'action': instance.action,
-      'targetId': instance.targetId,
-      'targetType': instance.targetType,
-      'details': instance.details,
-      'timestamp': instance.timestamp.toIso8601String(),
-    };

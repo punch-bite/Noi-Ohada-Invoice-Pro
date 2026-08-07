@@ -30,6 +30,10 @@ class AppAuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _user != null;
   bool get needsTwoFactor => _needsTwoFactor;
 
+  /// L'utilisateur courant est-il administrateur ?
+  /// (source unique : [AppUser.isAdmin] basé sur les rôles admin/super-admin)
+  bool get isAdmin => _user?.isAdmin ?? false;
+
   AppAuthProvider({AuthService? authService})
       : _authService = authService ?? AuthService() {
     _init();

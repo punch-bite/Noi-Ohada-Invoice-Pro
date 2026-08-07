@@ -69,38 +69,3 @@ class FinancialStatsAdapter extends TypeAdapter<FinancialStats> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-FinancialStats _$FinancialStatsFromJson(Map<String, dynamic> json) =>
-    FinancialStats(
-      totalRevenue: (json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
-      totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0.0,
-      totalPending: (json['totalPending'] as num?)?.toDouble() ?? 0.0,
-      totalOverdue: (json['totalOverdue'] as num?)?.toDouble() ?? 0.0,
-      totalCancelled: (json['totalCancelled'] as num?)?.toDouble() ?? 0.0,
-      totalInvoices: (json['totalInvoices'] as num?)?.toInt() ?? 0,
-      paidCount: (json['paidCount'] as num?)?.toInt() ?? 0,
-      pendingCount: (json['pendingCount'] as num?)?.toInt() ?? 0,
-      overdueCount: (json['overdueCount'] as num?)?.toInt() ?? 0,
-      cancelledCount: (json['cancelledCount'] as num?)?.toInt() ?? 0,
-      averageInvoiceValue:
-          (json['averageInvoiceValue'] as num?)?.toDouble() ?? 0.0,
-    );
-
-Map<String, dynamic> _$FinancialStatsToJson(FinancialStats instance) =>
-    <String, dynamic>{
-      'totalRevenue': instance.totalRevenue,
-      'totalPaid': instance.totalPaid,
-      'totalPending': instance.totalPending,
-      'totalOverdue': instance.totalOverdue,
-      'totalCancelled': instance.totalCancelled,
-      'totalInvoices': instance.totalInvoices,
-      'paidCount': instance.paidCount,
-      'pendingCount': instance.pendingCount,
-      'overdueCount': instance.overdueCount,
-      'cancelledCount': instance.cancelledCount,
-      'averageInvoiceValue': instance.averageInvoiceValue,
-    };

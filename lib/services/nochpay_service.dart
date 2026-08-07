@@ -376,40 +376,6 @@ class NochPayService {
     }
   }
 
-  /// Vérifie le statut d'un paiement via NOTRE serveur de callback
-  /// (GET /verify/:reference sur apiBaseUrl). Le serveur est la source de
-  /// vérité de l'activation : il reçoit le webhook NotchPay puis crée
-  /// l'abonnement Firestore. Réponse : {status, activated, subscriptionId}.
-  Future<Map<String, dynamic>> verifyPaymentViaServer(String reference) async {
-    final apiBase = ConfigService.apiBaseUrl.trim();
-    if (apiBase.isEmpty) {
-      return {'success': false, 'error': 'API_BASE_URL non configurée'};
-    }
-    try {
-      final response = await _client
-          .get(Uri.parse('$apiBase/verify/$reference'))
-          .timeout(const Duration(seconds: 10));
-      final data = json.decode(response.body);
-      if (response.statusCode == 200) {
-        final activated = data['activated'] == true;
-        final status = data['status']?.toString() ?? 'pending';
-        return {
-          'success': true,
-          'status': status,
-          'activated': activated,
-          'is_success': activated || isPaymentSuccessful(status),
-          'subscription_id': data['subscriptionId'],
-        };
-      }
-      return {
-        'success': false,
-        'error': data['error'] ?? 'Erreur de vérification serveur',
-      };
-    } catch (e) {
-      return {'success': false, 'error': e.toString()};
-    }
-  }
-
     // ============================================================
   //  4. VÉRIFICATION DE LA SIGNATURE D'UN WEBHOOK
   // ============================================================

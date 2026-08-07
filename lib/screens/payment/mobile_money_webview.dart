@@ -283,19 +283,6 @@ class _MobileMoneyWebViewState extends State<MobileMoneyWebView> {
     );
   }
 
-  // ===== RETRY MANUEL =====
-  Future<void> _retryPayment() async {
-    setState(() {
-      _isPaymentConfirmed = false;
-      _pollingAttempts = 0;
-      _isLoading = true;
-    });
-
-    // Recharger la page WebView
-    await _controller.loadRequest(Uri.parse(widget.paymentUrl));
-    _startPolling();
-  }
-
   @override
   void dispose() {
     _pollingTimer?.cancel();

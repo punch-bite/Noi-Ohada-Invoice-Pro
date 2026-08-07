@@ -25,19 +25,23 @@ class PlanAdapter extends TypeAdapter<Plan> {
       interval: fields[5] as String,
       maxInvoices: fields[6] as int,
       maxClients: fields[7] as int,
+      maxProducts: fields[11] as int,
       hasPdfExport: fields[8] as bool,
       hasCloudSync: fields[9] as bool,
       hasTeamAccess: fields[10] as bool,
-      features: (fields[11] as List).cast<String>(),
-      isPopular: fields[12] as bool,
-      isActive: fields[13] as bool,
+      maxTeamMembers: fields[15] as int,
+      hasGoogleDriveSync: fields[16] as bool,
+      hasClientRelance: fields[17] as bool,
+      features: (fields[12] as List).cast<String>(),
+      isPopular: fields[13] as bool,
+      isActive: fields[14] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Plan obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -61,11 +65,19 @@ class PlanAdapter extends TypeAdapter<Plan> {
       ..writeByte(10)
       ..write(obj.hasTeamAccess)
       ..writeByte(11)
-      ..write(obj.features)
+      ..write(obj.maxProducts)
       ..writeByte(12)
-      ..write(obj.isPopular)
+      ..write(obj.features)
       ..writeByte(13)
-      ..write(obj.isActive);
+      ..write(obj.isPopular)
+      ..writeByte(14)
+      ..write(obj.isActive)
+      ..writeByte(15)
+      ..write(obj.maxTeamMembers)
+      ..writeByte(16)
+      ..write(obj.hasGoogleDriveSync)
+      ..writeByte(17)
+      ..write(obj.hasClientRelance);
   }
 
   @override
@@ -78,44 +90,3 @@ class PlanAdapter extends TypeAdapter<Plan> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-Plan _$PlanFromJson(Map<String, dynamic> json) => Plan(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String,
-      price: (json['price'] as num).toDouble(),
-      currency: json['currency'] as String,
-      interval: json['interval'] as String,
-      maxInvoices: (json['maxInvoices'] as num?)?.toInt() ?? -1,
-      maxClients: (json['maxClients'] as num?)?.toInt() ?? -1,
-      hasPdfExport: json['hasPdfExport'] as bool? ?? true,
-      hasCloudSync: json['hasCloudSync'] as bool? ?? true,
-      hasTeamAccess: json['hasTeamAccess'] as bool? ?? false,
-      features: (json['features'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          const [],
-      isPopular: json['isPopular'] as bool? ?? false,
-      isActive: json['isActive'] as bool? ?? true,
-    );
-
-Map<String, dynamic> _$PlanToJson(Plan instance) => <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'description': instance.description,
-      'price': instance.price,
-      'currency': instance.currency,
-      'interval': instance.interval,
-      'maxInvoices': instance.maxInvoices,
-      'maxClients': instance.maxClients,
-      'hasPdfExport': instance.hasPdfExport,
-      'hasCloudSync': instance.hasCloudSync,
-      'hasTeamAccess': instance.hasTeamAccess,
-      'features': instance.features,
-      'isPopular': instance.isPopular,
-      'isActive': instance.isActive,
-    };

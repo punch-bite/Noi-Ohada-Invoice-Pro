@@ -37,10 +37,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final theme = context.watch<ThemeProvider>();
     final auth = context.watch<AppAuthProvider>();
     final isDark = theme.isDarkMode;
-    final textColor = theme.textColor ?? Colors.black;
-    final subTextColor = theme.subTextColor ?? Colors.grey;
-    final primaryColor = theme.primaryColor ?? Colors.blue;
-    final bgColor = theme.backgroundColor ?? Colors.white;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
+    final bgColor = theme.backgroundColor;
     final userId = auth.user?.id;
 
     if (_isLoading) {

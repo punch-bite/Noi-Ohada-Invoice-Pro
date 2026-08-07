@@ -2,7 +2,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'reminder.g.dart';
@@ -19,7 +18,6 @@ enum ReminderType {
   final_warning,
 }
 
-@JsonSerializable()
 @HiveType(typeId: 12) // Modifié à 6 pour éviter la collision avec Product (typeId: 5)
 class Reminder {
   @HiveField(0)

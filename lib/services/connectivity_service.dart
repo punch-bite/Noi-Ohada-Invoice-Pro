@@ -7,7 +7,6 @@ class ConnectivityService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
-  List<ConnectivityResult> _connectivityResults = [ConnectivityResult.none];
   bool _hasInternet = false;
   bool _isInitialized = false;
 
@@ -50,7 +49,6 @@ class ConnectivityService extends ChangeNotifier {
   }
 
   void _updateState(List<ConnectivityResult> results) {
-    _connectivityResults = results;
     final previous = _hasInternet;
     _hasInternet = !results.contains(ConnectivityResult.none);
     if (previous != _hasInternet) {

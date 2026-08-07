@@ -1,13 +1,11 @@
 // lib/models/invoice.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'line_item.dart';
 
 part 'invoice.g.dart';
 
-@JsonSerializable()
 @HiveType(typeId: 7)
 class Invoice {
   @HiveField(0) final String id;

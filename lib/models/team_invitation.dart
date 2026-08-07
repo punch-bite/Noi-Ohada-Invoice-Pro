@@ -1,12 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'team_invitation.g.dart';
 
 enum InvitationStatus { pending, accepted, declined, expired }
-@JsonSerializable()
 @HiveType(typeId: 22)
 class TeamInvitation {
   @HiveField(0)

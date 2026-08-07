@@ -1,14 +1,12 @@
 // lib/models/dashboard_stats.dart
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart'; // Pour Hive (optionnel)
-import 'package:json_annotation/json_annotation.dart';
 import 'activity_log.dart';
 
 part 'dashboard_stats.g.dart';
 // ============================================================
 //  DASHBOARD STATS (Stats globales du tableau de bord)
 // ============================================================
-@JsonSerializable()
 @HiveType(typeId: 2) // À ajouter si tu veux stocker les stats en cache Hive
 class DashboardStats {
   @HiveField(0)

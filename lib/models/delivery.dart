@@ -1,7 +1,6 @@
 // lib/models/delivery.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'delivery.g.dart';
@@ -20,7 +19,6 @@ enum DeliveryStatus {
   cancelled,
 }
 
-@JsonSerializable()
 @HiveType(typeId: 3)
 class Delivery {
   @HiveField(0)

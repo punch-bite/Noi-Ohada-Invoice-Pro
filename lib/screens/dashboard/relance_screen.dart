@@ -220,7 +220,7 @@ class _RelanceScreenState extends State<RelanceScreen> {
         }),
         title: Text(c.name, style: TextStyle(color: text)),
         subtitle: Text(
-          '${c.email ?? ''}${c.phone.isNotEmpty ? ' • ${c.phone}' : ''}',
+          '${c.email}${c.phone.isNotEmpty ? ' • ${c.phone}' : ''}',
           style: TextStyle(color: sub, fontSize: 12),
         ),
         controlAffinity: ListTileControlAffinity.leading,

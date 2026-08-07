@@ -1,5 +1,6 @@
 // lib/services/template_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/invoice_template.dart';
 
 class TemplateService {
@@ -19,7 +20,7 @@ class TemplateService {
         return InvoiceTemplate.fromMap(data);
       }).toList();
     } catch (e) {
-      print('❌ Erreur getAllTemplates: $e');
+      debugPrint('❌ Erreur getAllTemplates: $e');
       return [];
     }
   }
@@ -38,7 +39,7 @@ class TemplateService {
         return InvoiceTemplate.fromMap(data);
       }).toList();
     } catch (e) {
-      print('❌ Erreur getTemplatesByAdmin: $e');
+      debugPrint('❌ Erreur getTemplatesByAdmin: $e');
       return [];
     }
   }
@@ -54,7 +55,7 @@ class TemplateService {
       }
       return null;
     } catch (e) {
-      print('❌ Erreur getTemplateById: $e');
+      debugPrint('❌ Erreur getTemplateById: $e');
       return null;
     }
   }

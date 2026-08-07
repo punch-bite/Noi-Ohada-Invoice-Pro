@@ -106,35 +106,3 @@ class CustomerAdapter extends TypeAdapter<Customer> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-DashboardStats _$DashboardStatsFromJson(Map<String, dynamic> json) =>
-    DashboardStats(
-      netRevenue: (json['netRevenue'] as num?)?.toDouble() ?? 3131021,
-      revenueChange: (json['revenueChange'] as num?)?.toDouble() ?? 0.4,
-      arr: (json['arr'] as num?)?.toDouble() ?? 1511121,
-      arrChange: (json['arrChange'] as num?)?.toDouble() ?? 32,
-      goalProgress: (json['goalProgress'] as num?)?.toDouble() ?? 71,
-      goalTarget: (json['goalTarget'] as num?)?.toDouble() ?? 1100000,
-      newOrders: (json['newOrders'] as num?)?.toInt() ?? 18221,
-      ordersChange: (json['ordersChange'] as num?)?.toDouble() ?? 11,
-      totalProfit: (json['totalProfit'] as num?)?.toDouble() ?? 136755.77,
-      totalSales: (json['totalSales'] as num?)?.toDouble() ?? 71020,
-    );
-
-Map<String, dynamic> _$DashboardStatsToJson(DashboardStats instance) =>
-    <String, dynamic>{
-      'netRevenue': instance.netRevenue,
-      'revenueChange': instance.revenueChange,
-      'arr': instance.arr,
-      'arrChange': instance.arrChange,
-      'goalProgress': instance.goalProgress,
-      'goalTarget': instance.goalTarget,
-      'newOrders': instance.newOrders,
-      'ordersChange': instance.ordersChange,
-      'totalProfit': instance.totalProfit,
-      'totalSales': instance.totalSales,
-    };

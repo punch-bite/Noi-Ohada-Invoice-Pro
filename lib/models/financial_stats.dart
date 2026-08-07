@@ -1,10 +1,8 @@
 // lib/models/financial_stats.dart
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 
 part 'financial_stats.g.dart';
 
-@JsonSerializable()
 @HiveType(typeId: 4) // À ajouter si tu veux stocker en Hive
 class FinancialStats {
   @HiveField(0)

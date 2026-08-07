@@ -1,10 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
 part 'shared_invoice.g.dart';
-@JsonSerializable()
 @HiveType(typeId: 23)
 class SharedInvoice {
   @HiveField(0)

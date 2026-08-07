@@ -51,61 +51,64 @@ class SubscriptionProvider extends ChangeNotifier {
   List<Plan> get plans => _plans;
   bool get isLoading => _isLoading;
 
-  // ===== ACCÈS PREMIUM =====
-  bool get canAccessPremiumTemplates {
-    if (_authProvider.user?.isAdmin == true) {
-      debugPrint("🔥 Admin détecté, accès premium accordé");
-      return true;
-    }
-    final isActive = _subscription?.isActive ?? false;
-    debugPrint("🔔 Abonnement actif ? $isActive");
-    return isActive;
-  }
+  // ===== ACCÈS PREMIUM (logique unifiée admin / utilisateur / abonnement) =====
+  //  • ADMIN (rôle admin/super-admin) → accès complet sans abonnement.
+  //  • UTILISATEUR → les fonctionnalités du plan ne sont débloquées que si
+  //    l'abonnement est ACTIF ; sinon on retombe sur le plan GRATUIT.
+  bool get hasPremiumAccess =>
+      _authProvider.user?.isAdmin == true || (_subscription?.isActive ?? false);
+
+  /// Plan effectivement applicable (gratuit si aucun abonnement actif).
+  Plan get effectivePlan => hasPremiumAccess
+      ? (_currentPlan ?? Plan.getFreePlan())
+      : Plan.getFreePlan();
+
+  bool get canAccessPremiumTemplates => hasPremiumAccess;
 
   bool get hasUnlimitedAccess {
     if (_authProvider.user?.isAdmin == true) return true;
-    return _subscription?.planId == 'unlimited';
+    return hasPremiumAccess && _subscription?.planId == 'unlimited';
   }
 
   int get maxInvoices {
     if (_authProvider.user?.isAdmin == true) return -1;
-    return _currentPlan?.maxInvoices ?? 5;
+    return effectivePlan.maxInvoices;
   }
 
   int get maxClients {
     if (_authProvider.user?.isAdmin == true) return -1;
-    return _currentPlan?.maxClients ?? 5;
+    return effectivePlan.maxClients;
   }
 
   int get maxProducts {
     if (_authProvider.user?.isAdmin == true) return -1;
-    return _currentPlan?.maxProducts ?? 3;
+    return effectivePlan.maxProducts;
   }
 
   bool get hasTeamAccess {
     if (_authProvider.user?.isAdmin == true) return true;
-    return _currentPlan?.hasTeamAccess ?? false;
+    return hasPremiumAccess && effectivePlan.hasTeamAccess;
   }
 
   int get maxTeamMembers {
     if (_authProvider.user?.isAdmin == true) return 1000;
-    return _currentPlan?.maxTeamMembers ?? 0;
+    return hasPremiumAccess ? effectivePlan.maxTeamMembers : 0;
   }
 
   bool get hasGoogleDriveSync {
     if (_authProvider.user?.isAdmin == true) return true;
-    return _currentPlan?.hasGoogleDriveSync ?? false;
+    return hasPremiumAccess && effectivePlan.hasGoogleDriveSync;
   }
 
   bool get canSyncToCloud {
     if (_authProvider.user?.isAdmin == true) return true;
-    return _currentPlan?.hasCloudSync ?? false;
+    return hasPremiumAccess && effectivePlan.hasCloudSync;
   }
 
   /// 🔥 Module marketing payant : relance clients (email/WhatsApp/SMS).
   bool get canUseRelance {
     if (_authProvider.user?.isAdmin == true) return true;
-    return _currentPlan?.hasClientRelance ?? false;
+    return hasPremiumAccess && effectivePlan.hasClientRelance;
   }
 
   // ===== LOAD PLANS =====

@@ -21,11 +21,11 @@ class SettingsScreen extends StatelessWidget {
 
     // 🔒 Sécurisation des couleurs
     final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor ?? Colors.black;
-    final subTextColor = themeProvider.subTextColor ?? Colors.grey;
-    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
-    final bgColor = themeProvider.backgroundColor ?? Colors.white;
-    final cardColor = themeProvider.cardColor ?? Colors.white;
+    final textColor = themeProvider.textColor;
+    final subTextColor = themeProvider.subTextColor;
+    final primaryColor = themeProvider.primaryColor;
+    final bgColor = themeProvider.backgroundColor;
+    final cardColor = themeProvider.cardColor;
 
         return GlassScaffold(
       appBar: AppBar(
@@ -267,8 +267,8 @@ class SettingsScreen extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final String displayName = user.displayName ?? 'Utilisateur';
-    final String email = user.email ?? 'Compte non configuré';
+    final String displayName = user.displayName;
+    final String email = user.email;
     final String initial = displayName.trim().isNotEmpty
         ? displayName.trim()[0].toUpperCase()
         : 'U';
@@ -727,8 +727,8 @@ class _ThemeOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
-    final textColor = themeProvider.textColor ?? Colors.black;
-    final primaryColor = themeProvider.primaryColor ?? Colors.blue;
+    final textColor = themeProvider.textColor;
+    final primaryColor = themeProvider.primaryColor;
 
     return ListTile(
       leading: Icon(

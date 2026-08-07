@@ -72,39 +72,3 @@ class ReminderAdapter extends TypeAdapter<Reminder> {
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
-
-// **************************************************************************
-// JsonSerializableGenerator
-// **************************************************************************
-
-Reminder _$ReminderFromJson(Map<String, dynamic> json) => Reminder(
-      id: json['id'] as String?,
-      invoiceId: json['invoiceId'] as String,
-      invoiceNumber: json['invoiceNumber'] as String,
-      clientId: json['clientId'] as String,
-      clientName: json['clientName'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      type: json['type'] as String,
-      dueDate: DateTime.parse(json['dueDate'] as String),
-      reminderDate: DateTime.parse(json['reminderDate'] as String),
-      status: json['status'] as String,
-      sentAt: json['sentAt'] == null
-          ? null
-          : DateTime.parse(json['sentAt'] as String),
-      errorMessage: json['errorMessage'] as String?,
-    );
-
-Map<String, dynamic> _$ReminderToJson(Reminder instance) => <String, dynamic>{
-      'id': instance.id,
-      'invoiceId': instance.invoiceId,
-      'invoiceNumber': instance.invoiceNumber,
-      'clientId': instance.clientId,
-      'clientName': instance.clientName,
-      'amount': instance.amount,
-      'type': instance.type,
-      'dueDate': instance.dueDate.toIso8601String(),
-      'reminderDate': instance.reminderDate.toIso8601String(),
-      'status': instance.status,
-      'sentAt': instance.sentAt?.toIso8601String(),
-      'errorMessage': instance.errorMessage,
-    };

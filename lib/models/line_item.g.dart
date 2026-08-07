@@ -64,6 +64,7 @@ LineItem _$LineItemFromJson(Map<String, dynamic> json) => LineItem(
       quantity: (json['quantity'] as num).toInt(),
       unitPrice: (json['unitPrice'] as num).toDouble(),
       taxRate: (json['taxRate'] as num?)?.toDouble() ?? 18.0,
+      imageData: json['imageData'] as String? ?? '',
     );
 
 Map<String, dynamic> _$LineItemToJson(LineItem instance) => <String, dynamic>{
@@ -72,4 +73,5 @@ Map<String, dynamic> _$LineItemToJson(LineItem instance) => <String, dynamic>{
       'quantity': instance.quantity,
       'unitPrice': instance.unitPrice,
       'taxRate': instance.taxRate,
+      'imageData': instance.imageData,
     };

@@ -1,10 +1,8 @@
 ﻿// lib/models/plan.dart
 import 'package:hive/hive.dart';
-import 'package:json_annotation/json_annotation.dart';
 
 part 'plan.g.dart';
 
-@JsonSerializable()
 @HiveType(typeId: 10)
 class Plan {
   @HiveField(0)
