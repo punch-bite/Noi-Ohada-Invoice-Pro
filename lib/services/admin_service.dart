@@ -323,20 +323,44 @@ class AdminService {
           .collection('subscriptions')
           .where('status', isEqualTo: 'active')
           .get();
+
       final total = usersSnapshot.size;
-      final active = subsSnapshot.size;
+      // Utilisateurs distincts avec un abonnement actif.
+      final activeUserIds = subsSnapshot.docs
+          .map((d) => d.data()['userId']?.toString() ?? '')
+          .where((u) => u.isNotEmpty)
+          .toSet();
+      final active = activeUserIds.length;
+
+      // Comptage des administrateurs (rôle admin/super-admin) vs utilisateurs.
+      int admins = 0;
+      int users = 0;
+      for (final doc in usersSnapshot.docs) {
+        final roles = List<String>.from(doc.data()['roles'] ?? ['user']);
+        if (roles.contains('admin') || roles.contains('super-admin')) {
+          admins++;
+        } else {
+          users++;
+        }
+      }
+
       return {
-        'totalUsers': total,
-        'activeSubscriptions': active,
-        'inactiveUsers': total - active,
+        // ⚠️ Clés attendues par AdminDashboard (_stats['total'] etc.).
+        'total': total,
+        'active': active,
+        'inactive': total - active,
+        'admins': admins,
+        'users': users,
         'conversionRate': total > 0 ? (active / total) * 100 : 0,
       };
     } catch (e) {
       debugPrint("❌ Erreur getUsersStats: $e");
       return {
-        'totalUsers': 0,
-        'activeSubscriptions': 0,
-        'inactiveUsers': 0,
+        'total': 0,
+        'active': 0,
+        'inactive': 0,
+        'admins': 0,
+        'users': 0,
         'conversionRate': 0
       };
     }
