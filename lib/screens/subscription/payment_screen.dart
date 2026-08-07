@@ -10,6 +10,7 @@ import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../services/deep_link_service.dart';
 import '../../services/nochpay_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/notification.dart';
@@ -339,6 +340,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 20),
+        // ===== [TEST] Retour de paiement via deep link =====
+        _buildDeepLinkTestBox(isDark, subTextColor),
       ],
     );
   }
@@ -942,6 +946,90 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
       _showSnackBar(_error, Colors.red);
     }
+  }
+
+  /// [TEST] Encadré de test du retour de paiement (deep link).
+  /// Simule la réception de `yourapp://payment?reference=...` pour valider
+  /// le flux complet sans dépendre d'un vrai paiement NotchPay.
+  Widget _buildDeepLinkTestBox(bool isDark, Color subTextColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.blueGrey.withOpacity(0.15)
+            : Colors.blue.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.science_outlined, size: 16, color: Colors.blue),
+              SizedBox(width: 6),
+              Text(
+                'Mode test — retour deep link',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Simule la réception de yourapp://payment?reference=... pour '
+            'vérifier le flux complet (vérification + activation + retour '
+            'au tableau de bord).',
+            style: TextStyle(fontSize: 11, color: subTextColor, height: 1.35),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed:
+                    _isProcessing ? null : () => _testDeepLinkReturn(false),
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('Retour réel'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed:
+                    _isProcessing ? null : () => _testDeepLinkReturn(true),
+                icon: const Icon(Icons.bolt, size: 16),
+                label: const Text('Simuler succès'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [TEST] Déclenche le retour de paiement depuis l'écran.
+  Future<void> _testDeepLinkReturn(bool forceSuccess) async {
+    final reference =
+        _transactionId.isNotEmpty ? _transactionId : 'SUB-TEST';
+    _showSnackBar(
+      '🧪 Simulation retour: yourapp://payment?reference=$reference',
+      Colors.blue,
+    );
+    await DeepLinkService.instance.handleTestLink(
+      reference,
+      forceSuccess: forceSuccess,
+    );
   }
 
     Future<void> _processPayment() async {

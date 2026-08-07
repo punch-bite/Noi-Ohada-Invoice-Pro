@@ -65,6 +65,28 @@ class DeepLinkService {
     }
   }
 
+  /// [TEST] Simule la réception d'un deep link de retour de paiement
+  /// (`yourapp://payment?reference=<reference>`) pour vérifier le flux complet
+  /// depuis l'écran de paiement.
+  ///
+  /// - [forceSuccess] = false : vérifie réellement le paiement (serveur puis
+  ///   API NotchPay en repli) — utile quand des clés valides sont configurées.
+  /// - [forceSuccess] = true  : court-circuite la vérification et déclenche
+  ///   directement l'activation (rafraîchit l'abonnement, navigue, notifie)
+  ///   pour valider visuellement le retour sans paiement réel.
+  Future<void> handleTestLink(
+    String reference, {
+    bool forceSuccess = false,
+  }) async {
+    final link = '$scheme://$host?reference=$reference';
+    debugPrint('🧪 DeepLink (test): $link');
+    if (forceSuccess) {
+      await _completeSuccess(reference);
+    } else {
+      await _handle(link);
+    }
+  }
+
   Future<void> _handle(String link) async {
     debugPrint('🔗 Deep link reçu: $link');
     final uri = Uri.tryParse(link);
@@ -80,21 +102,7 @@ class DeepLinkService {
   Future<void> _verifyAndComplete(String reference) async {
     final nochPay = NochPayService();
 
-    // 1) Trouver la transaction en attente correspondante.
-    Map<String, dynamic>? tx;
-    try {
-      final pending = await nochPay.getAllPendingTransactions();
-      for (final p in pending) {
-        if (p['transaction_id'] == reference || p['reference'] == reference) {
-          tx = p;
-          break;
-        }
-      }
-    } catch (e) {
-      debugPrint('⚠️ DeepLink (pending): $e');
-    }
-
-    // 2) Vérifier le statut réel du paiement.
+    // 1) Vérifier le statut réel du paiement (serveur → repli API NotchPay).
     bool success = false;
     try {
       final verified = await nochPay.verifyPaymentViaServer(reference);
@@ -118,18 +126,30 @@ class DeepLinkService {
       return;
     }
 
-    // 3) Nettoyer la transaction en attente.
-    if (tx != null) {
-      try {
-        await nochPay.removePendingTransaction(
-          tx['transaction_id']?.toString() ?? reference,
-        );
-      } catch (e) {
-        debugPrint('⚠️ DeepLink (cleanup): $e');
+    await _completeSuccess(reference);
+  }
+
+  /// Termine le flux de retour : nettoie la transaction en attente,
+  /// rafraîchit l'abonnement, navigue vers le tableau de bord et notifie.
+  Future<void> _completeSuccess(String reference) async {
+    final nochPay = NochPayService();
+
+    // Nettoyer la transaction en attente correspondante.
+    try {
+      final pending = await nochPay.getAllPendingTransactions();
+      for (final p in pending) {
+        if (p['transaction_id'] == reference || p['reference'] == reference) {
+          await nochPay.removePendingTransaction(
+            p['transaction_id']?.toString() ?? reference,
+          );
+          break;
+        }
       }
+    } catch (e) {
+      debugPrint('⚠️ DeepLink (cleanup): $e');
     }
 
-    // 4) Rafraîchir l'abonnement et afficher le message de succès.
+    // Rafraîchir l'abonnement et afficher le message de succès.
     final ctx = AppRouter.navigatorKey.currentContext;
     if (ctx != null) {
       try {
