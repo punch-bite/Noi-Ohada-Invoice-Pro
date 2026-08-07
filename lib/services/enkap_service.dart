@@ -46,14 +46,20 @@ class EnkapService {
   String get _baseUrl => ConfigService.enkapBaseUrl;
 
   /// Sur le web, l'API E-nkap refuse les appels navigateur (CORS → 403
-  /// « Invalid CORS request »). On relaie donc les appels via notre serveur
-  /// (Vercel) qui détient les secrets ENKAP. En natif, appel direct.
+  /// « Invalid CORS request ») : on relaie TOUJOURS via notre serveur
+  /// (Vercel), qui détient les secrets ENKAP.
+  ///
+  /// En natif (Android/iOS), on relaie aussi via le serveur lorsque les
+  /// secrets ENKAP ne sont pas embarqués dans l'app (cas standard : l'APK
+  /// ne contient JAMAIS les secrets). Si des secrets sont injectés au build
+  /// via --dart-define, on appelle ENKAP en direct.
   String get _serverBase => ConfigService.apiBaseUrl.trim();
-  bool get _useServerProxy => kIsWeb && _serverBase.isNotEmpty;
+  bool get _useServerProxy =>
+      kIsWeb || (!isConfigured && _serverBase.isNotEmpty);
   bool get isConfigured => ConfigService.enkapConfigured;
 
-  /// Vrai si la configuration suffit (web → API_BASE_URL suffit, les
-  /// secrets ENKAP sont côté serveur).
+  /// Vrai si la configuration suffit : le serveur (proxy) est joignable,
+  /// ou les secrets ENKAP sont présents pour un appel direct.
   bool get _configOk => _useServerProxy ? _serverBase.isNotEmpty : isConfigured;
 
   String? _cachedToken;
@@ -161,11 +167,10 @@ class EnkapService {
     if (!_configOk) {
       return {
         'success': false,
-        'error': kIsWeb
-            ? 'Serveur de paiement non configuré. Lancez l\'app avec '
-                '--dart-define=API_BASE_URL=https://server-xi-two-23.vercel.app'
-            : 'Configuration ENKAP manquante. Renseignez les clés ENKAP dans '
-                '.env (ENKAP_ACCESS_TOKEN ou ENKAP_CONSUMER_KEY/SECRET).',
+        'error':
+            'Paiement non configuré. Assurez-vous que l\'URL du serveur de '
+            'paiement (API_BASE_URL) est valide, ou injectez les clés ENKAP '
+            'au build (--dart-define).',
       };
     }
 
