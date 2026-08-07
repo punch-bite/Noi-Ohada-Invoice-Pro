@@ -12,6 +12,9 @@ class MobileMoneyWebView extends StatefulWidget {
   final String transactionReference; // 🔥 Ajout : référence de la transaction
   final VoidCallback onSuccess;
   final VoidCallback onCancel;
+  /// Vérificateur de statut personnalisé (ex. ENKAP). Si fourni, il remplace
+  /// la vérification NoChPay : retourne le statut brut (ex. 'CONFIRMED').
+  final Future<String> Function(String reference)? statusChecker;
 
   const MobileMoneyWebView({
     super.key,
@@ -20,6 +23,7 @@ class MobileMoneyWebView extends StatefulWidget {
     required this.transactionReference,
     required this.onSuccess,
     required this.onCancel,
+    this.statusChecker,
   });
 
   @override
@@ -134,6 +138,25 @@ class _MobileMoneyWebViewState extends State<MobileMoneyWebView> {
   }
 
   Future<void> _checkPaymentStatusFromApi() async {
+    // Vérificateur personnalisé (ex. ENKAP) : statut brut type 'CONFIRMED'.
+    if (widget.statusChecker != null) {
+      try {
+        final status = await widget.statusChecker!(widget.transactionReference);
+        final s = status.trim().toUpperCase();
+        if (s == 'CONFIRMED' || s == 'COMPLETED' || s == 'PAID') {
+          await _handlePaymentSuccess();
+        } else if (s == 'FAILED' || s == 'CANCELED' || s == 'CANCELLED' ||
+            s == 'DECLINED') {
+          await _handlePaymentFailure('Le paiement a échoué. Status: $s');
+        }
+        // Sinon (CREATED/INITIALISED/IN_PROGRESS) → on continue d'attendre.
+      } catch (e) {
+        if (_pollingAttempts > 5) debugPrint('⚠️ Polling error: $e');
+      }
+      return;
+    }
+
+    // Vérification NoChPay par défaut.
     try {
       final result = await _nochPayService.checkPaymentStatus(
         widget.transactionReference,

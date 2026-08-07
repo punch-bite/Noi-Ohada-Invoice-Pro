@@ -10,37 +10,22 @@ class NochPayService {
     // ===== Constantes des méthodes de paiement supportées =====
   static const String methodOrangeMoney = 'orange_money';
   static const String methodMtnMoney = 'mtn_money';
-  static const String methodWave = 'wave';
-  static const String methodCard = 'card';
-
-  // ✅ Méthodes alternatives (docs Notch Pay "Other Payment Methods")
-  static const String methodAssoh = 'asso'; // Portefeuille numérique (Cameroun)
-  static const String methodKudi = 'kudi'; // Portefeuille numérique
-  static const String methodQrCode = 'qr_code'; // Paiement par QR Code
 
   /// Liste de toutes les méthodes de paiement supportées.
+  /// 🔒 Décision produit : seuls Orange Money et MTN Money sont proposés.
   static const List<String> supportedMethods = [
     methodOrangeMoney,
     methodMtnMoney,
-    methodWave,
-    methodCard,
-    methodAssoh,
-    methodKudi,
-    methodQrCode,
   ];
 
   /// Méthodes "Mobile Money" traitées via l'invite USSD / canal opérateur.
   static const List<String> ussdMethods = [
     methodOrangeMoney,
     methodMtnMoney,
-    methodWave,
   ];
 
   /// Méthodes "Portefeuilles numériques" traitées via la page NotchPay Collect.
-  static const List<String> walletMethods = [
-    methodAssoh,
-    methodKudi,
-  ];
+  static const List<String> walletMethods = [];
 
   // 🔥 URL de base — l'API NoChPay est UNIQUE : https://api.notchpay.co.
   // Le mode test/sandbox est géré par les CLÉS (sandbox vs live), PAS par un
@@ -203,7 +188,7 @@ class NochPayService {
       phoneNumber: '',
       invoiceNumber: reference,
       description: 'Abonnement $planName — NOI OHADA Invoice Pro',
-      paymentMethod: methodCard,
+      paymentMethod: methodOrangeMoney,
       customerName: planId,
       customerEmail: email,
       metadata: {
@@ -228,13 +213,6 @@ class NochPayService {
         return 'cm.orange';
       case methodMtnMoney:
         return 'cm.mtn';
-      case methodWave:
-        return 'sn.wave';
-      // ✅ Portefeuilles numériques (docs "Digital Wallets")
-      case methodAssoh:
-        return 'cm.assoh';
-      case methodKudi:
-        return 'ci.kudi';
       default:
         return 'cm.orange';
     }

@@ -6,5 +6,6 @@
     "java.import.gradle.version": "9.6.1",
     "java.import.gradle.offline.enabled": true,
     "java.compile.nullAnalysis.mode": "automatic",
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

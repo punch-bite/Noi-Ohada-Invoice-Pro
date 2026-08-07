@@ -13,7 +13,8 @@ import 'notification_service.dart';
 import 'nochpay_service.dart';
 
 /// Gère les deep links de retour paiement NotchPay :
-///   `yourapp://payment?reference=<reference>`
+///   `noiohadainvoice://payment?reference=<reference>`
+
 ///
 /// Quand le client a terminé le paiement sur la page sécurisée NotchPay (ou
 /// le checkout du SDK), NotchPay peut rediriger vers ce schéma custom pour
@@ -29,7 +30,7 @@ class DeepLinkService {
   static final DeepLinkService instance = DeepLinkService._();
 
   /// Schéma custom enregistré dans Info.plist (iOS) et AndroidManifest (Android).
-  static const String scheme = 'yourapp';
+  static const String scheme = 'noiohadainvoice';
   static const String host = 'payment';
 
   StreamSubscription<String?>? _sub;
@@ -66,7 +67,8 @@ class DeepLinkService {
   }
 
   /// [TEST] Simule la réception d'un deep link de retour de paiement
-  /// (`yourapp://payment?reference=<reference>`) pour vérifier le flux complet
+  /// (`noiohadainvoice://payment?reference=<reference>`) pour vérifier le
+  /// flux complet
   /// depuis l'écran de paiement.
   ///
   /// - [forceSuccess] = false : vérifie réellement le paiement (serveur puis

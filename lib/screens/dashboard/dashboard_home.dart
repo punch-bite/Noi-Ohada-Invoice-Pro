@@ -125,15 +125,11 @@ class _DashboardHomeState extends State<DashboardHome> {
             color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             child: Row(
               children: [
-                Flexible(
-                  child: Text(
-                    'Accueil',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                const Text(
+                  'Accueil',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
@@ -154,28 +150,11 @@ class _DashboardHomeState extends State<DashboardHome> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 🔥 Boutique de modèles de factures (au lieu du gravatar)
-                GestureDetector(
-                  onTap: () => context.push('/templates'),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[800] : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.storefront_outlined,
-                      color: textColor,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 🔥 Menu hamburger (ouvre le drawer)
+                // Menu hamburger (ouvre le drawer)
                 IconButton(
                   icon: Icon(Icons.menu, color: textColor),
                   onPressed: () {
-                    // ✅ Ouverture simple du drawer grâce au Scaffold parent
+                    // Ouverture simple du drawer grâce au Scaffold parent
                     Scaffold.of(context).openDrawer();
                   },
                 ),

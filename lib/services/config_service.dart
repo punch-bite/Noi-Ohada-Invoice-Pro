@@ -106,6 +106,23 @@ class ConfigService {
   static String get nochpayWebhookSecret => _secret('NOCHPAY_WEBHOOK_SECRET');
   static bool get isProduction => _get('NOCHPAY_MODE') == 'production';
 
+  // ENKAP (Maviance e-nkap) — paiement Mobile Money (Orange/MTN) + Carte.
+  // Base de l'API de paiement (production par défaut).
+  static const String _defaultEnkapBaseUrl =
+      'https://api-v2.enkap.cm/purchase/v1.2';
+  static String get enkapBaseUrl =>
+      _get('ENKAP_BASE_URL', def: _defaultEnkapBaseUrl);
+  static String get enkapTokenUrl => _get('ENKAP_TOKEN_URL');
+  static String get enkapConsumerKey => _secret('ENKAP_CONSUMER_KEY');
+  static String get enkapConsumerSecret => _secret('ENKAP_CONSUMER_SECRET');
+  static String get enkapAccessToken => _secret('ENKAP_ACCESS_TOKEN');
+  /// Vrai si une configuration ENKAP (jeton ou clés) est présente.
+  static bool get enkapConfigured =>
+      enkapAccessToken.isNotEmpty ||
+      (enkapConsumerKey.isNotEmpty &&
+          enkapConsumerSecret.isNotEmpty &&
+          enkapTokenUrl.isNotEmpty);
+
   // SMTP — SECRET (--dart-define uniquement)
   static String get smtpHost => _get('SMTP_HOST', def: 'smtp.gmail.com');
   static int get smtpPort => _getInt('SMTP_PORT', 587);

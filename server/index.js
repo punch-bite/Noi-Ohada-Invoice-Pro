@@ -278,14 +278,101 @@ app.get('/verify/:reference', async (req, res) => {
   }
 });
 
+// ============================================================
+//  ENKAP (Maviance e-nkap) — callback de confirmation
+// ============================================================
+
+/// Enregistre l'intention d'un abonnement (appelé par l'app avant le
+/// paiement ENKAP). Permet au callback ENKAP d'activer l'abonnement même si
+/// l'app est fermée.
+app.post('/enkap/register', async (req, res) => {
+  const { reference, user_id, plan_id, amount, currency, payment_method } =
+    req.body || {};
+  if (!reference || !user_id || !plan_id) {
+    return res.status(400).json({ error: 'reference/user_id/plan_id requis' });
+  }
+  try {
+    await db
+      .collection('pending_enkap_orders')
+      .doc(reference)
+      .set({
+        reference,
+        user_id,
+        plan_id,
+        amount: amount || 0,
+        currency: currency || 'XAF',
+        payment_method: payment_method || 'enkap',
+        createdAt: serverTimestamp(),
+      });
+    res.status(201).json({ ok: true, reference });
+  } catch (e) {
+    console.error('❌ /enkap/register error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/// Callback instantané ENKAP (ITN) : ENKAP appelle
+/// `PUT <notificationUrl>/<merchantReference>` avec `{"status":"CONFIRMED"}`.
+/// On active l'abonnement correspondant si une intention a été enregistrée.
+app.put('/enkap/callback/:reference', async (req, res) => {
+  const reference = req.params.reference || '';
+  const status = (req.body && req.body.status) || '';
+  const confirmed =
+    (status || '').toUpperCase() === 'CONFIRMED' ||
+    (status || '').toUpperCase() === 'COMPLETED';
+
+  if (!reference) {
+    return res.status(400).json({ error: 'missing reference' });
+  }
+
+  try {
+    const ref = db.collection('pending_enkap_orders').doc(reference);
+    const snap = await ref.get();
+    const data = snap.exists ? snap.data() : {};
+
+    await ref.set(
+      { status: (status || '').toUpperCase(), confirmed, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+
+    let activated = false;
+    if (confirmed && data && data.user_id && data.plan_id) {
+      activated = await activateSubscription({
+        userId: data.user_id,
+        planId: data.plan_id,
+        reference,
+        amount: data.amount || 0,
+        currency: data.currency || 'XAF',
+        paymentMethod: data.payment_method || 'enkap',
+      });
+      // L'activation a eu lieu : on peut retirer l'intention.
+      if (activated) await ref.delete();
+    }
+
+    console.log(
+      `✅ ENKAP callback — ref=${reference} status=${status || 'N/A'} confirmed=${confirmed} activated=${activated}`
+    );
+    res.status(200).json({ received: true, confirmed, activated });
+  } catch (e) {
+    console.error('❌ /enkap/callback error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/health', (req, res) =>
   res.json({ ok: true, service: 'noi-ohada-payment-callback', time: new Date().toISOString() })
 );
 
 app.get('/', (req, res) =>
   res.json({
-    service: 'NOI OHADA — NotchPay callback',
-    endpoints: ['POST /payment/callback', 'GET /verify/:reference', 'GET /health'],
+    service: 'NOI OHADA — callbacks paiement (NotchPay + ENKAP)',
+    endpoints: [
+      'POST /payment/callback',
+      'GET /verify/:reference',
+      'POST /enkap/register',
+      'PUT /enkap/callback/:reference',
+      'GET /health',
+    ],
   })
 );
 

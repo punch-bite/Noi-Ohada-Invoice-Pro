@@ -1,4 +1,6 @@
 // lib/screens/customization/template_preview_screen.dart
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/invoice_template.dart';
@@ -21,6 +23,8 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   Company? _company;
   final InvoiceSettings _settings = InvoiceSettings();
   bool _isLoading = true;
+  // 🖼️ Image téléversée du modèle : arrière-plan de l'aperçu.
+  Uint8List? _backgroundBytes;
 
   @override
   void initState() {
@@ -36,9 +40,23 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     if (mounted) {
       setState(() {
         _company = company;
+        _backgroundBytes = _decodeBackground();
         // _settings = settings ?? InvoiceSettings();
         _isLoading = false;
       });
+    }
+  }
+
+  /// Décode l'image téléversée du modèle (base64) pour l'utiliser en arrière-plan.
+  Uint8List? _decodeBackground() {
+    if (widget.template.fileData.isEmpty ||
+        widget.template.fileType == 'pdf') {
+      return null;
+    }
+    try {
+      return base64Decode(widget.template.fileData);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -93,7 +111,6 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                     // Container principal de la facture
                     Container(
                       width: 420,
-                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: widget.template.backgroundColor,
                         borderRadius: BorderRadius.circular(12),
@@ -113,22 +130,45 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                           ),
                         ],
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildHeader(),
-                          const Divider(height: 24, thickness: 1),
-                          if (_settings.showClientInfo) ...[
-                            _buildClientSection(),
-                            const SizedBox(height: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          children: [
+                            // 🖼️ Image téléversée du modèle en arrière-plan.
+                            if (_backgroundBytes != null)
+                              Positioned.fill(
+                                child: Opacity(
+                                  opacity: 0.35,
+                                  child: Image.memory(
+                                    _backgroundBytes!,
+                                    fit: BoxFit.fill,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink(),
+                                  ),
+                                ),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildHeader(),
+                                  const Divider(height: 24, thickness: 1),
+                                  if (_settings.showClientInfo) ...[
+                                    _buildClientSection(),
+                                    const SizedBox(height: 16),
+                                  ],
+                                  _buildItemsTable(),
+                                  const SizedBox(height: 16),
+                                  _buildTotalsAndQR(),
+                                  const SizedBox(height: 16),
+                                  _buildFooter(),
+                                ],
+                              ),
+                            ),
                           ],
-                          _buildItemsTable(),
-                          const SizedBox(height: 16),
-                          _buildTotalsAndQR(),
-                          const SizedBox(height: 16),
-                          _buildFooter(),
-                        ],
+                        ),
                       ),
                     ),
                     

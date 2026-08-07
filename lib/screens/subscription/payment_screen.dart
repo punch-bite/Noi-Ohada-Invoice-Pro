@@ -1,5 +1,5 @@
 // lib/screens/subscription/payment_screen.dart
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use, unused_element
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,15 +12,14 @@ import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/deep_link_service.dart';
 import '../../services/nochpay_service.dart';
+import '../../services/enkap_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/notification.dart';
+import '../../widgets/enkap_checkout_dialog.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../payment/mobile_money_webview.dart';
-// 🔥 SDK officiel flutter_notchpay (checkout intégré : MTN/Orange/Wave/Carte)
-import 'package:flutter_notchpay/flutter_notchpay.dart';
-import '../../services/config_service.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Plan plan;
@@ -38,6 +37,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   final NochPayService _nochPayService = NochPayService();
+  final EnkapService _enkapService = EnkapService();
   final NotificationService _notificationService = NotificationService();
 
     String _selectedMethod = 'orange_money';
@@ -51,56 +51,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isConfirming = false;
   String _error = '';
 
+  // 🔒 Paiement ENKAP : Orange Money, MTN Mobile Money et Carte.
   final List<PaymentMethod> _paymentMethods = [
     PaymentMethod(
-      id: 'orange_money',
+      id: EnkapService.methodOrangeMoney,
       name: 'Orange Money',
       icon: Icons.phone_android,
       color: Colors.orange,
       category: PaymentMethodCategory.ussd,
     ),
     PaymentMethod(
-      id: 'mtn_money',
+      id: EnkapService.methodMtnMoney,
       name: 'MTN Mobile Money',
       icon: Icons.phone_android,
       color: const Color(0xFFFFD700),
       category: PaymentMethodCategory.ussd,
     ),
     PaymentMethod(
-      id: 'wave',
-      name: 'Wave',
-      icon: Icons.waves,
-      color: Colors.blue,
-      category: PaymentMethodCategory.ussd,
-    ),
-    PaymentMethod(
-      id: 'card',
-      name: 'Carte bancaire',
+      id: EnkapService.methodCard,
+      name: 'Carte bancaire (Visa / MasterCard)',
       icon: Icons.credit_card,
       color: Colors.purple,
       category: PaymentMethodCategory.collect,
-    ),
-    // ✅ Méthodes alternatives (docs Notch Pay "Other Payment Methods")
-    PaymentMethod(
-      id: 'asso',
-      name: 'Assoh (Portefeuille)',
-      icon: Icons.account_balance_wallet,
-      color: Colors.teal,
-      category: PaymentMethodCategory.collect,
-    ),
-    PaymentMethod(
-      id: 'kudi',
-      name: 'Kudi (Portefeuille)',
-      icon: Icons.account_balance_wallet,
-      color: Colors.indigo,
-      category: PaymentMethodCategory.collect,
-    ),
-        PaymentMethod(
-      id: 'qr_code',
-      name: 'Paiement par QR Code',
-      icon: Icons.qr_code_2,
-      color: Colors.green,
-      category: PaymentMethodCategory.qrCode,
     ),
   ];
 
@@ -231,16 +203,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ===== Paiement express via le SDK officiel flutter_notchpay =====
-        _buildNotchPayExpressPay(primaryColor),
-        const SizedBox(height: 16),
         Text(
           'Méthode de paiement',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
         ),
         const SizedBox(height: 4),
         Text(
-          'Choisissez le moyen le plus adapté (Mobile Money, portefeuille numérique, carte ou QR code).',
+          'Choisissez votre moyen de paiement : Mobile Money (Orange / MTN) '
+          'ou carte bancaire (Visa / MasterCard).',
           style: TextStyle(fontSize: 12, color: subTextColor),
         ),
         const SizedBox(height: 12),
@@ -791,166 +761,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  /// Carte "Paiement express" : lance le checkout officiel flutter_notchpay.
-  /// Le SDK gère lui-même le choix du canal (MTN/Orange/Wave/Carte), la
-  /// saisie du téléphone, la page sécurisée et la vérification du statut.
-  Widget _buildNotchPayExpressPay(Color primaryColor) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withOpacity(0.85)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withOpacity(0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.bolt_rounded, color: Colors.white, size: 22),
-              SizedBox(width: 8),
-              Text(
-                'Paiement express',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Réglez en quelques secondes : MTN MoMo, Orange Money, Wave ou carte bancaire.',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _isProcessing ? null : _payWithNotchPaySdk,
-              icon: const Icon(Icons.lock_outline, size: 18),
-              label: Text(
-                'Payer ${widget.plan.getFormattedPrice()}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: primaryColor,
-                disabledBackgroundColor: Colors.white70,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                elevation: 2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 🔥 Paiement via le SDK officiel flutter_notchpay (checkout intégré).
-  /// Le SDK gère lui-même : choix du canal (MTN/Orange/Wave/Carte), saisie
-  /// du téléphone, page sécurisée et vérification automatique du statut.
-  /// En cas de succès, on active l'abonnement avec la référence renvoyée.
-  Future<void> _payWithNotchPaySdk() async {
-    setState(() {
-      _isProcessing = true;
-      _error = '';
-    });
-
-    try {
-      final authProvider = context.read<AppAuthProvider>();
-      final user = authProvider.user;
-
-      // (Ré)initialise le SDK au cas où la clé a changé.
-      final key = ConfigService.nochpayPublicKey.trim();
-      if (key.isEmpty) {
-        throw Exception('Clé publique NoChPay manquante');
-      }
-      NotchPay.init(publicKey: key);
-
-      final phone =
-          _phoneNumber.isNotEmpty ? _phoneNumber : (user?.phone ?? '');
-
-      final result = await NotchPay.instance.checkout(
-        context,
-        request: NotchPayCheckoutRequest(
-          amount: widget.plan.price,
-          currency: widget.plan.currency,
-          description: 'Abonnement ${widget.plan.name}',
-          customer: NotchPayCheckoutCustomer(
-            name: user?.displayName,
-            email: user?.email,
-            phone: phone.isEmpty ? null : phone,
-          ),
-          reference: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
-          metadata: {
-            'purpose': 'subscription',
-            'plan_id': widget.plan.id,
-            'user_id': user?.id ?? '',
-          },
-        ),
-        countryCode: 'cm',
-      );
-
-      if (!mounted) return;
-      setState(() => _isProcessing = false);
-
-      switch (result.status) {
-        case NotchPayCheckoutStatus.success:
-          final ref = result.payment?.reference ?? '';
-          setState(() {
-            _transactionId = ref;
-            _selectedMethod = 'notchpay_sdk';
-          });
-          await _completeSubscription();
-          break;
-        case NotchPayCheckoutStatus.cancelled:
-          setState(() => _error = 'Paiement annulé.');
-          _showSnackBar(
-            'Paiement annulé. Vous pouvez réessayer.',
-            Colors.orange,
-          );
-          break;
-        case NotchPayCheckoutStatus.failed:
-          setState(() => _error = result.message ?? 'Le paiement a échoué.');
-          _showSnackBar(_error, Colors.red);
-          break;
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isProcessing = false;
-        _error = 'Erreur: $e';
-      });
-      _showSnackBar(_error, Colors.red);
-    }
-  }
-
   /// [TEST] Encadré de test du retour de paiement (deep link).
-  /// Simule la réception de `yourapp://payment?reference=...` pour valider
-  /// le flux complet sans dépendre d'un vrai paiement NotchPay.
+  /// Simule la réception de `noiohadainvoice://payment?reference=...` pour
+  /// valider le flux complet sans dépendre d'un vrai paiement NotchPay.
   Widget _buildDeepLinkTestBox(bool isDark, Color subTextColor) {
     return Container(
       width: double.infinity,
@@ -981,9 +794,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Simule la réception de yourapp://payment?reference=... pour '
-            'vérifier le flux complet (vérification + activation + retour '
-            'au tableau de bord).',
+            'Simule la réception de noiohadainvoice://payment?reference=... '
+            'pour vérifier le flux complet (vérification + activation + '
+            'retour au tableau de bord).',
             style: TextStyle(fontSize: 11, color: subTextColor, height: 1.35),
           ),
           const SizedBox(height: 10),
@@ -1023,7 +836,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final reference =
         _transactionId.isNotEmpty ? _transactionId : 'SUB-TEST';
     _showSnackBar(
-      '🧪 Simulation retour: yourapp://payment?reference=$reference',
+      '🧪 Simulation retour: noiohadainvoice://payment?reference=$reference',
       Colors.blue,
     );
     await DeepLinkService.instance.handleTestLink(
@@ -1033,12 +846,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
     Future<void> _processPayment() async {
-    final category = _selectedPaymentMethod?.category;
-    if (category == null) return;
+    final method = _selectedPaymentMethod;
+    if (method == null) return;
 
-    // Le numéro de téléphone n'est requis que pour Mobile Money (USSD).
-    if (category == PaymentMethodCategory.ussd &&
-        (_phoneNumber.isEmpty || _phoneNumber.length < 9)) {
+    // Le numéro de téléphone n'est requis que pour Mobile Money.
+    final isCard = _selectedMethod == EnkapService.methodCard;
+    if (!isCard && (_phoneNumber.isEmpty || _phoneNumber.length < 9)) {
       _showSnackBar('Numéro de téléphone invalide', Colors.red);
       return;
     }
@@ -1048,125 +861,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _error = '';
     });
 
-    try {
-      final authProvider = context.read<AppAuthProvider>();
-      final reference = 'SUB-${DateTime.now().millisecondsSinceEpoch}';
+    final authProvider = context.read<AppAuthProvider>();
+    final reference = 'SUB-${DateTime.now().millisecondsSinceEpoch}';
+    _transactionId = reference;
 
-      final result = await _nochPayService.initiatePayment(
+    // Enregistre l'intention d'abonnement sur le serveur pour que le
+    // callback ENKAP puisse activer l'abonnement (best-effort).
+    final uid = authProvider.user?.id ?? '';
+    if (uid.isNotEmpty) {
+      await _enkapService.registerSubscriptionIntent(
+        reference: reference,
+        userId: uid,
+        planId: widget.plan.id,
         amount: widget.plan.price,
         currency: widget.plan.currency,
-        phoneNumber: _phoneNumber,
-        invoiceNumber: reference,
-        description: 'Abonnement ${widget.plan.name}',
         paymentMethod: _selectedMethod,
+      );
+    }
+
+    // 💳 Paiement via ENKAP (page sécurisée : invite USSD pour le Mobile
+    // Money, formulaire pour la carte). La confirmation est vérifiée
+    // automatiquement puis l'abonnement est activé.
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => EnkapCheckoutDialog(
+        amount: widget.plan.price,
+        currency: widget.plan.currency,
+        description: 'Abonnement ${widget.plan.name}',
+        merchantReference: reference,
+        providerName: method.name,
+        phoneNumber: _phoneNumber,
         customerName: authProvider.user?.displayName,
         customerEmail: authProvider.user?.email,
-        // 🔥 Métadonnées pour que le serveur de callback puisse activer
-        // l'abonnement correspondant (user_id / plan_id / reference).
-        metadata: {
-          'purpose': 'subscription',
-          'plan_id': widget.plan.id,
-          'user_id': authProvider.user?.id ?? '',
-          'reference': reference,
+        onSuccess: () {
+          _completeSubscription();
         },
-      );
-
-      if (result['success'] != true) {
-        setState(() {
-          _isProcessing = false;
-          _error = result['error'] ?? 'Erreur d\'initialisation';
-        });
-        _showSnackBar(_error, Colors.red);
-        return;
-      }
-
-      final txRef =
-          (result['reference'] ?? result['transaction_id']) as String;
-      final authorizationUrl = result['authorization_url'] as String? ?? '';
-
-      setState(() {
-        _transactionId = txRef;
-        _paymentUrl = authorizationUrl.isNotEmpty
-            ? authorizationUrl
-            : 'https://pay.notchpay.co/payments/$txRef';
-        _confirmationCode = result['confirmation_code'] ?? '';
-        _isProcessing = false;
-        _isConfirming = true;
-      });
-
-      // Sauvegarde de la transaction en attente.
-      await _nochPayService.savePendingTransaction(
-        transactionId: txRef,
-        invoiceId: 'sub_${DateTime.now().millisecondsSinceEpoch}',
-        invoiceNumber: reference,
-        phoneNumber: _phoneNumber,
-        amount: widget.plan.price,
-        reference: txRef,
-        authorizationUrl: _paymentUrl,
-        paymentMethod: _selectedMethod,
-      );
-
-      switch (category) {
-        // ---- Mobile Money → invite USSD sur le téléphone du client ----
-        case PaymentMethodCategory.ussd:
-          final ussd = await _nochPayService.processMobileMoneyUSSD(
-            reference: txRef,
-            method: _selectedMethod,
-            phoneNumber: _phoneNumber,
-          );
-          if (ussd['success'] != true) {
-            setState(() {
-              _isProcessing = false;
-              _error = ussd['error'] ?? 'Erreur lors de la demande USSD';
-            });
-            _showSnackBar(_error, Colors.red);
-            return;
+        onCancel: () {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+            _showSnackBar('Paiement annulé', Colors.orange);
           }
-          _startAutoCheck();
-          _showSnackBar(
-            'Paiement initié. Confirmez l\'invite USSD sur votre téléphone.',
-            Colors.blue,
-          );
-          break;
-
-        // ---- Carte & portefeuilles numériques → page NotchPay Collect ----
-        case PaymentMethodCategory.collect:
-          // La page Collect affiche les options disponibles (carte, Assoh, …).
-          // Le statut est vérifié automatiquement une fois le règlement fait.
-          _startAutoCheck();
-          _showSnackBar(
-            'Ouvrez le lien sécurisé pour finaliser le paiement.',
-            Colors.blue,
-          );
-          break;
-
-        // ---- Paiement par QR code → affichage du QR code à scanner ----
-        case PaymentMethodCategory.qrCode:
-          final qr = await _nochPayService.fetchQRCodeUrl(
-            reference: txRef,
-            fallbackUrl: _paymentUrl,
-          );
-          if (qr['success'] == true) {
-            _qrCodeUrl = (qr['qr_code_url'] ?? _paymentUrl) as String;
-          } else {
-            // Repli : on génère un QR pointant vers la page Collect.
-            _qrCodeUrl = _paymentUrl;
-          }
-          if (mounted) setState(() {});
-          _startAutoCheck();
-          _showSnackBar(
-            'Scannez le QR code pour régler votre abonnement.',
-            Colors.blue,
-          );
-          break;
-      }
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _error = 'Erreur: $e';
-      });
-      _showSnackBar(_error, Colors.red);
-    }
+        },
+      ),
+    );
   }
 
   void _startAutoCheck() {
@@ -1254,8 +992,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       currency: widget.plan.currency,
       interval: widget.plan.interval,
     );
-
-    await _nochPayService.removePendingTransaction(_transactionId);
 
     setState(() {
       _isConfirming = false;

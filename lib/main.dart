@@ -193,8 +193,8 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
   }
 
   // ===== DEEP LINKS (retour paiement NotchPay) =====
-  // Écoute `yourapp://payment?reference=...` pour confirmer le paiement
-  // et réactiver l'abonnement au retour dans l'app.
+  // Écoute `noiohadainvoice://payment?reference=...` pour confirmer le
+  // paiement et réactiver l'abonnement au retour dans l'app.
   bootstrapContext.onStatusChange('Préparation des deep links...');
   await _writeLog('🔗 DeepLinkService...');
   try {

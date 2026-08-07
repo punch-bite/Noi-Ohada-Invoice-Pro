@@ -9,6 +9,8 @@
 //   - Mapping des variables de facture vers chaque élément
 //   - Sauvegarde locale des positions + mapping (TemplateCustomService)
 // ============================================================
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -37,6 +39,13 @@ const List<TemplateElement> kTemplateElements = [
   TemplateElement('signature', 'Signature', Icons.draw_rounded),
 ];
 
+/// Sections de la facture : chaque élément est déplaçable et éditable.
+const Map<String, List<String>> kTemplateSections = {
+  'En-tête': ['header', 'client'],
+  'Corps': ['items', 'totals'],
+  'Pied de page': ['footer', 'qr', 'signature'],
+};
+
 /// Position par défaut de chaque élément (x,y relatifs 0..1, scale).
 const Map<String, dynamic> kDefaultPositions = {
   'header': {'x': 0.04, 'y': 0.04, 'scale': 1.0, 'visible': true},
@@ -44,8 +53,8 @@ const Map<String, dynamic> kDefaultPositions = {
   'items': {'x': 0.04, 'y': 0.30, 'scale': 1.0, 'visible': true},
   'totals': {'x': 0.45, 'y': 0.62, 'scale': 1.0, 'visible': true},
   'footer': {'x': 0.04, 'y': 0.85, 'scale': 1.0, 'visible': true},
-  'qr': {'x': 0.04, 'y': 0.64, 'scale': 1.0, 'visible': false},
-  'signature': {'x': 0.55, 'y': 0.86, 'scale': 1.0, 'visible': false},
+  'qr': {'x': 0.04, 'y': 0.64, 'scale': 1.0, 'visible': true},
+  'signature': {'x': 0.55, 'y': 0.86, 'scale': 1.0, 'visible': true},
 };
 
 class TemplateWorkspaceScreen extends StatefulWidget {
@@ -239,160 +248,171 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           ),
         ],
       ),
-      body: _isWide(context)
-          ? _buildWideLayout(theme)
-          : _buildNarrowLayout(theme),
+      body: _buildPage(theme),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openToolbar,
+        backgroundColor: widget.template.primaryColor,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.tune_rounded),
+        label: const Text('Éléments'),
+      ),
     );
   }
 
-  bool _isWide(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= 900;
-
-  // ===== LAYOUT LARGE (palette à gauche, page au centre, props à droite) =====
-  Widget _buildWideLayout(ThemeProvider theme) {
-    return Row(
-      children: [
-        SizedBox(width: 200, child: _buildPalette(theme)),
-        const VerticalDivider(width: 1),
-        Expanded(child: _buildPage(theme)),
-        const VerticalDivider(width: 1),
-        SizedBox(width: 250, child: _buildProperties(theme)),
-      ],
+  /// Ouvre la barre d'outils de personnalisation en tiroir (drawer) par le bas.
+  void _openToolbar() {
+    final theme = context.read<ThemeProvider>();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) =>
+            _buildToolbarSheet(theme, setSheetState),
+      ),
     );
   }
 
-  // ===== LAYOUT ÉTROIT (page au centre, palette/props en panneaux) =====
-  Widget _buildNarrowLayout(ThemeProvider theme) {
-    return Column(
-      children: [
-        Expanded(child: _buildPage(theme)),
-        _buildBottomBar(theme),
-      ],
-    );
-  }
-
-  Widget _buildBottomBar(ThemeProvider theme) {
+  // ===== BARRE D'OUTILS (tiroir depuis le bas) =====
+  Widget _buildToolbarSheet(ThemeProvider theme, StateSetter setSheetState) {
     return Container(
-      height: 88,
+      height: MediaQuery.of(context).size.height * 0.62,
       decoration: BoxDecoration(
         color: theme.cardColor,
-        border: Border(top: BorderSide(color: theme.dividerColor)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              children: [
-                for (final e in kTemplateElements)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _buildPaletteChip(e, theme),
-                  ),
-              ],
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.isDarkMode ? Colors.grey[700] : Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(Icons.dashboard_customize_rounded,
+                  color: widget.template.primaryColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Éléments',
+                style: TextStyle(
+                  color: theme.textColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Fermer',
+                icon: Icon(Icons.close, color: theme.subTextColor, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Sections En-tête / Corps / Pied de page — chaque élément est
+          // déplaçable et éditable individuellement.
+          for (final entry in kTemplateSections.entries) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                entry.key,
+                style: TextStyle(
+                  color: theme.subTextColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final id in entry.value)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _buildToolbarChip(
+                        _elementById(id),
+                        theme,
+                        setSheetState,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          Divider(height: 1, color: theme.dividerColor),
+          const SizedBox(height: 8),
+          // Propriétés de l'élément sélectionné.
           Expanded(
             child: _selectedElement == null
                 ? Center(
                     child: Text(
                       'Touchez un élément pour le modifier',
-                      style: TextStyle(color: theme.subTextColor, fontSize: 11),
+                      style: TextStyle(color: theme.subTextColor, fontSize: 12),
                     ),
                   )
-                : _buildProperties(theme, compact: true),
+                : _buildProperties(theme),
           ),
         ],
       ),
     );
   }
 
-  // ===== PALETTE (liste des éléments) =====
-  Widget _buildPalette(ThemeProvider theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-          child: Text(
-            'Éléments',
-            style: TextStyle(
-              color: theme.textColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'Glissez un élément sur la page',
-            style: TextStyle(color: theme.subTextColor, fontSize: 11),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            children: [
-              for (final e in kTemplateElements)
-                Draggable<String>(
-                  data: e.id,
-                  feedback: Material(
-                    color: Colors.transparent,
-                    child: _paletteChipWidget(e, theme, elevated: true),
-                  ),
-                  childWhenDragging: Opacity(
-                    opacity: 0.4,
-                    child: _paletteChipWidget(e, theme),
-                  ),
-                  child: _paletteChipWidget(e, theme),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  TemplateElement _elementById(String id) => kTemplateElements.firstWhere(
+        (e) => e.id == id,
+        orElse: () => kTemplateElements.first,
+      );
 
-  Widget _buildPaletteChip(TemplateElement e, ThemeProvider theme) {
-    return _paletteChipWidget(e, theme);
-  }
-
-  Widget _paletteChipWidget(TemplateElement e, ThemeProvider theme,
-      {bool elevated = false}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: theme.dividerColor),
-        boxShadow: elevated
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        children: [
-          Icon(e.icon, size: 18, color: widget.template.primaryColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
+  Widget _buildToolbarChip(
+      TemplateElement e, ThemeProvider theme, StateSetter setSheetState) {
+    final isSelected = _selectedElement == e.id;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedElement = e.id);
+        setSheetState(() {});
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? widget.template.primaryColor.withValues(alpha: 0.12)
+              : theme.backgroundColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? widget.template.primaryColor
+                : theme.dividerColor,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(e.icon, size: 16, color: widget.template.primaryColor),
+            const SizedBox(width: 6),
+            Text(
               e.label,
-              style: TextStyle(color: theme.textColor, fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.textColor,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -400,6 +420,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   // ===== PAGE (aperçu A4 avec éléments positionnés) =====
   Widget _buildPage(ThemeProvider theme) {
     final pageBg = widget.template.backgroundColor;
+    final bgBytes = _templateBgBytes();
     return Container(
       color: theme.isDarkMode ? const Color(0xFF111114) : const Color(0xFFEEEEF2),
       child: Center(
@@ -445,6 +466,22 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                             ),
                           ),
                         ),
+                        // 🖼️ Image téléversée du modèle en arrière-plan.
+                        if (bgBytes != null)
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Opacity(
+                                opacity: 0.3,
+                                child: Image.memory(
+                                  bgBytes,
+                                  fit: BoxFit.fill,
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox.shrink(),
+                                ),
+                              ),
+                            ),
+                          ),
                         for (final e in kTemplateElements)
                           if (_visible(e.id))
                             _buildPositionedElement(e, w, h, theme),
@@ -460,6 +497,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         ),
       ),
     );
+  }
+
+  /// Décode l'image téléversée du modèle (base64) pour l'arrière-plan.
+  Uint8List? _templateBgBytes() {
+    if (widget.template.fileData.isEmpty ||
+        widget.template.fileType == 'pdf') {
+      return null;
+    }
+    try {
+      return base64Decode(widget.template.fileData);
+    } catch (_) {
+      return null;
+    }
   }
 
   List<Widget> _buildGuideGrid(double w, double h, ThemeProvider theme) {
@@ -501,7 +551,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       top: y * h,
       width: elemWidth,
       child: GestureDetector(
-        onTap: () => setState(() => _selectedElement = e.id),
+        onTap: () {
+          setState(() => _selectedElement = e.id);
+          _openToolbar();
+        },
         onPanUpdate: (details) {
           if (!isSelected) setState(() => _selectedElement = e.id);
           final newX = (_x(e.id) + details.delta.dx / w).clamp(0.0, 0.98);
@@ -857,7 +910,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ===== PANNEAU DE PROPRIÉTÉS =====
-  Widget _buildProperties(ThemeProvider theme, {bool compact = false}) {
+  Widget _buildProperties(ThemeProvider theme) {
     final id = _selectedElement;
     if (id == null) {
       return Center(
@@ -905,7 +958,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
-            title: const Text('Visible', style: TextStyle(fontSize: 12)),
+            title: Text(
+              'Visible',
+              style: TextStyle(fontSize: 12),
+            ),
             value: visible,
             onChanged: (v) => _updatePos(id, {'visible': v}),
           ),

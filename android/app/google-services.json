@@ -2,7 +2,7 @@
   "project_info": {
     "project_number": "942740787802",
     "project_id": "facture-ohada",
-    "storage_bucket": "facture-ohada.firebasestorage.app"
+    "storage_bucket": "facture-ohada.appspot.com"
   },
   "client": [
     {

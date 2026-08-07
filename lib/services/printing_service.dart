@@ -63,26 +63,61 @@ class PrintingService {
     final pdf = pw.Document();
     final baseFont = font ?? await _getFont();
 
+    // 🖼️ Image téléversée du modèle : utilisée comme ARRIÈRE-PLAN imprimé.
+    final bgBytes = _templateBackgroundBytes(template);
+    final pw.Widget? background = bgBytes == null
+        ? null
+        : pw.Positioned.fill(
+            child: pw.Opacity(
+              opacity: 0.35,
+              child: pw.Image(
+                pw.MemoryImage(bgBytes),
+                fit: pw.BoxFit.fill,
+              ),
+            ),
+          );
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: pw.ThemeData.withFont(base: baseFont),
         margin: const pw.EdgeInsets.all(32),
         build: (pw.Context context) => [
-          _buildHeader(invoice, company, template),
-          pw.SizedBox(height: 16),
-          _buildClientInfo(client, template),
-          pw.SizedBox(height: 16),
-          _buildItemsTable(invoice, template),
-          pw.SizedBox(height: 16),
-          _buildTotals(invoice, template),
-          pw.SizedBox(height: 16),
-          _buildFooter(company, template),
+          pw.Stack(
+            children: [
+              if (background != null) background,
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(invoice, company, template),
+                  pw.SizedBox(height: 16),
+                  _buildClientInfo(client, template),
+                  pw.SizedBox(height: 16),
+                  _buildItemsTable(invoice, template),
+                  pw.SizedBox(height: 16),
+                  _buildTotals(invoice, template),
+                  pw.SizedBox(height: 16),
+                  _buildFooter(company, template),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
 
     return pdf.save();
+  }
+
+  /// Extrait les octets de l'image téléversée du modèle (arrière-plan).
+  /// Retourne `null` si le modèle n'a pas d'image (ou un PDF).
+  static Uint8List? _templateBackgroundBytes(InvoiceTemplate template) {
+    if (template.fileData.isEmpty || template.fileType == 'pdf') return null;
+    try {
+      return base64Decode(template.fileData);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ===== EN-TÊTE AVEC LOGO =====

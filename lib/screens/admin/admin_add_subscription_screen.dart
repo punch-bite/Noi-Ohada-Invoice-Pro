@@ -217,9 +217,6 @@ class _AdminAddSubscriptionScreenState
                       items: const [
                         DropdownMenuItem(value: 'orange_money', child: Text('Orange Money')),
                         DropdownMenuItem(value: 'mtn_money', child: Text('MTN Mobile Money')),
-                        DropdownMenuItem(value: 'wave', child: Text('Wave')),
-                        DropdownMenuItem(value: 'stripe', child: Text('Carte bancaire (Stripe)')),
-                        DropdownMenuItem(value: 'cash', child: Text('Espèces / Manuel')),
                       ],
                       onChanged: _isSubmitting ? null : (v) => setState(() => _paymentMethod = v!),
                     ),

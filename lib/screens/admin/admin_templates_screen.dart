@@ -4,6 +4,7 @@
 //  Liste les modèles (par défaut + boutique), permet de créer,
 //  modifier, supprimer (soft-delete) et personnaliser (drag & drop).
 // ============================================================
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -138,8 +139,20 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
               color: t.primaryColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(Icons.description_outlined,
-                color: t.primaryColor, size: 24),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: (t.fileData.isNotEmpty && t.fileType != 'pdf')
+                  ? Image.memory(
+                      base64Decode(t.fileData),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Icon(
+                          Icons.description_outlined,
+                          color: t.primaryColor,
+                          size: 24),
+                    )
+                  : Icon(Icons.description_outlined,
+                      color: t.primaryColor, size: 24),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(

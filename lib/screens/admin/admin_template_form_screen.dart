@@ -60,6 +60,9 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
   String _fileType = '';
   String _fileData = '';
   String _fileName = '';
+  // 📏 Firestore plafonne chaque document à 1 Mo : on garde une marge
+  // (base64 +33%) pour ne pas faire échouer l'enregistrement en silence.
+  static const int _maxFileBytes = 700 * 1024; // 700 Ko
   // 🧩 Mapping variable de facture → placeholder
   final Map<String, String> _mapping = {};
   // Contrôleurs pour le mapping (un par variable)
@@ -225,6 +228,19 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       final file = result.files.single;
       final bytes = file.bytes;
       if (bytes == null) return;
+      // ⚠️ Garde anti-dépassement Firestore (1 Mo / document).
+      if (bytes.length > _maxFileBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Fichier trop lourd (max 700 Ko). Choisissez une image plus légère.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
       final ext = file.extension?.toLowerCase() ?? 'png';
       final type = ext == 'pdf'
           ? 'pdf'
@@ -238,9 +254,22 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       // Repli : image_picker pour les images si file_picker échoue.
       try {
         final picked = await ImagePicker()
-            .pickImage(source: ImageSource.gallery, maxWidth: 2048);
+            .pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 80);
         if (picked != null) {
           final bytes = await picked.readAsBytes();
+          // ⚠️ Garde anti-dépassement Firestore (1 Mo / document).
+          if (bytes.length > _maxFileBytes) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                      'Image trop lourde (max 700 Ko). Choisissez une image plus légère.'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            return;
+          }
           final type = picked.name.toLowerCase().endsWith('png')
               ? 'png'
               : 'jpeg';

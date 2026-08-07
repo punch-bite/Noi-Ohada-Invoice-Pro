@@ -67,7 +67,7 @@ dependencies:
 
   # --- Paiement Mobile Money (NoChPay) ---
   flutter_notchpay: ^0.2.0
-  # Retour automatique dans l'app après paiement (yourapp://payment?reference=...)
+  # Retour automatique dans l'app après paiement (noiohadainvoice://payment?reference=...)
   uni_links: ^0.5.1
 
 dev_dependencies:

@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/database_service.dart';
 import '../../../services/notification_service.dart';
-import '../../../services/nochpay_service.dart';
-import '../../../widgets/nochpay_payment_dialog.dart';
+import '../../../services/enkap_service.dart';
+import '../../../widgets/enkap_checkout_dialog.dart';
 import '../../../models/invoice.dart';
 import '../../../models/invoice_status.dart';
 
@@ -41,20 +41,20 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       color: Colors.green,
     ),
     PaymentMethod(
-      id: NochPayService.methodOrangeMoney,
-      name: 'Mobile Money (Orange)',
+      id: EnkapService.methodOrangeMoney,
+      name: 'Orange Money',
       icon: Icons.phone_android,
       color: Colors.orange,
     ),
     PaymentMethod(
-      id: NochPayService.methodMtnMoney,
-      name: 'Mobile Money (MTN)',
+      id: EnkapService.methodMtnMoney,
+      name: 'MTN Mobile Money',
       icon: Icons.phone_android,
-      color: Colors.yellow,
+      color: const Color(0xFFFFD700),
     ),
-    const PaymentMethod(
-      id: NochPayService.methodCard,
-      name: 'Carte bancaire',
+    PaymentMethod(
+      id: EnkapService.methodCard,
+      name: 'Carte bancaire (Visa / MasterCard)',
       icon: Icons.credit_card,
       color: Colors.purple,
     ),
@@ -108,7 +108,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     }
   }
 
-      /// Point d'entrée unique : route vers le bon flux selon le moyen choisi.
+  /// Point d'entrée unique : route vers le bon flux selon le moyen choisi.
   Future<void> _processPayment() async {
     if (_selectedInvoice == null) {
       _showSnackBar('Veuillez sélectionner une facture', Colors.orange);
@@ -132,14 +132,14 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     );
   }
 
-  /// Ouvre le dialogue de paiement NochPay (Mobile Money USSD ou Carte)
-  /// pour la facture sélectionnée. Le client arrive à régler via son
-  /// téléphone (invite USSD) ou via un lien sécurisé (carte).
+  /// Lance le paiement en ligne via ENKAP (Orange Money / MTN / Carte).
+  /// Le client règle sur la page sécurisée E-nkap (invite USSD avec son
+  /// code secret pour le Mobile Money, ou carte) ; la confirmation est
+  /// vérifiée automatiquement puis la facture est marquée payée.
   Future<void> _processOnlinePayment() async {
     final invoice = _selectedInvoice!;
 
-    // Vérifier le numéro de téléphone (pour Mobile Money)
-        final isCard = _selectedMethod == NochPayService.methodCard;
+    final isCard = _selectedMethod == EnkapService.methodCard;
     if (!isCard && (_phoneNumber.isEmpty || _phoneNumber.length < 9)) {
       _showSnackBar(
         'Veuillez saisir un numéro de téléphone valide (9 chiffres)',
@@ -148,14 +148,26 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       return;
     }
 
+    final methodName = _paymentMethods
+        .firstWhere((m) => m.id == _selectedMethod,
+            orElse: () => _paymentMethods.first)
+        .name;
+    final reference =
+        'FAC${invoice.invoiceNumber}-${DateTime.now().millisecondsSinceEpoch}';
+
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => NochPayPaymentDialog(
-        invoice: invoice,
+      builder: (dialogContext) => EnkapCheckoutDialog(
+        amount: invoice.totalAmount,
+        currency: 'XAF',
+        description: 'Paiement facture ${invoice.invoiceNumber}',
+        merchantReference: reference,
+        providerName: methodName,
         phoneNumber: _phoneNumber,
-        paymentMethod: _selectedMethod,
-        onSuccess: () {
+        onSuccess: () async {
+          await _markInvoicePaid(invoice);
+          if (!mounted) return;
           widget.onPaymentComplete();
           Navigator.pop(dialogContext);
           Navigator.pop(context);
@@ -163,6 +175,17 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
         onCancel: () {},
       ),
     );
+  }
+
+  /// Marque la facture comme payée après confirmation ENKAP.
+  Future<void> _markInvoicePaid(Invoice invoice) async {
+    final updated = invoice.copyWith(
+      status: InvoiceStatus.paid.value,
+      isSynced: false,
+    );
+    await _db.updateInvoice(updated);
+    await _notificationService.notifyInvoicePaid(invoice.invoiceNumber);
+    await _notificationService.notifyPaymentReceived(invoice.totalAmount);
   }
 
   Future<void> _processCashPayment() async {
@@ -280,7 +303,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       ),
     );
 
-        widget.onPaymentComplete();
+    widget.onPaymentComplete();
     Navigator.pop(context);
   }
 
@@ -474,15 +497,14 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                       ),
                       const SizedBox(height: 12),
 
-                      if (_selectedMethod != 'cash') ...[
+                      if (_selectedMethod != 'cash' &&
+                          _selectedMethod != EnkapService.methodCard) ...[
                         TextFormField(
                           enabled: !_isProcessing,
                           keyboardType: TextInputType.phone,
                           style: TextStyle(color: textColor),
                           decoration: InputDecoration(
-                            labelText: _selectedMethod == NochPayService.methodCard
-                                ? 'Numéro du client (facultatif)'
-                                : 'Numéro de téléphone du client',
+                            labelText: 'Numéro de téléphone du client',
                             labelStyle: TextStyle(color: subTextColor),
                             hintText: '6X XX XX XX XX',
                             hintStyle: TextStyle(
@@ -531,8 +553,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                                     color: Colors.white,
                                   ),
                                 )
-                                  : Icon(
-                                      _selectedMethod == 'cash'
+                              : Icon(
+                                  _selectedMethod == 'cash'
                                       ? (_selectedInvoice != null &&
                                               InvoiceStatus.fromValue(
                                                       _selectedInvoice!
@@ -582,7 +604,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                           Text(
                             _selectedMethod == 'cash'
                                 ? 'Validation manuelle — cash reçu'
-                                : 'Paiement sécurisé via NotchPay',
+                                : 'Paiement sécurisé via E-nkap',
                             style: TextStyle(
                                 fontSize: 12, color: subTextColor),
                           ),
@@ -637,7 +659,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
             ),
           ),
         );
-                  }).toList(),
+      }).toList(),
     );
   }
 

@@ -6,6 +6,7 @@
 //  vers l'offre/abonnement.
 //  Style : glassmorphisme (design system moderne).
 // ============================================================
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -29,7 +30,16 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
   final TemplateService _templateService = TemplateService();
   List<InvoiceTemplate> _adminTemplates = [];
   bool _loading = true;
-  String _selectedCategory = 'Tous';
+
+  /// Ordre d'affichage des sections de catégories (carousels).
+  static const List<String> _categoryOrder = [
+    'classique',
+    'moderne',
+    'elegant',
+    'premium',
+    'minimaliste',
+    'entreprise',
+  ];
 
   /// Libellé lisible d'une catégorie (ex. 'elegant' → 'Élégant').
   static String _categoryLabel(String c) {
@@ -73,6 +83,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     final subProvider = context.watch<SubscriptionProvider>();
     final authProvider = context.watch<AppAuthProvider>();
     final currentUserId = authProvider.user?.id ?? '';
+    final isAdmin = authProvider.user?.isAdmin == true;
     final canAccessPremium = subProvider.canAccessPremiumTemplates;
     final defaults = InvoiceTemplate.getDefaultTemplates();
 
@@ -83,16 +94,12 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
       ..._adminTemplates,
     ];
 
-    // 🏷️ Catégories distinctes (pour les filtres de la boutique)
-    final categories = <String>{'Tous'};
+    // 🏷️ Groupement des modèles par catégorie (sections en carousel).
+    final Map<String, List<InvoiceTemplate>> byCategory = {};
     for (final t in merged) {
-      categories.add(t.category.isEmpty ? 'classique' : t.category);
+      final cat = t.category.isEmpty ? 'classique' : t.category;
+      byCategory.putIfAbsent(cat, () => []).add(t);
     }
-    final filtered = _selectedCategory == 'Tous'
-        ? merged
-        : merged.where((t) =>
-            (t.category.isEmpty ? 'classique' : t.category) ==
-            _selectedCategory).toList();
 
     return GlassScaffold(
       appBar: AppBar(
@@ -149,73 +156,37 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            // 🏷️ Filtres par catégorie
-            SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  for (final c in categories)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(_categoryLabel(c)),
-                        selected: _selectedCategory == c,
-                        onSelected: (_) =>
-                            setState(() => _selectedCategory = c),
-                        selectedColor: const Color(0xFF4338CA),
-                        backgroundColor: theme.cardColor,
-                        labelStyle: TextStyle(
-                          color: _selectedCategory == c
-                              ? Colors.white
-                              : theme.textColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        side: BorderSide(
-                          color: _selectedCategory == c
-                              ? const Color(0xFF4338CA)
-                              : theme.dividerColor,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        showCheckmark: false,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Grille de modèles
+            // � Modèles classés par catégorie, chaque section en carousel.
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : GridView.builder(
+                  : ListView(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.all(16),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.64,
-                      ),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final template = filtered[index];
-                        // 🔓 Déverrouillé si : abonnement actif (accès à tout),
-                        // OU template non premium, OU template déjà acheté
-                        // par l'utilisateur (achat possible sans abonnement).
-                        final isOwned = currentUserId.isNotEmpty &&
-                            template.purchasedBy.contains(currentUserId);
-                        final isLocked = template.isPremium &&
-                            !canAccessPremium &&
-                            !isOwned;
-                        return _buildTemplateCard(
-                          template, isLocked, theme);
-                      },
+                      children: [
+                        for (final cat in _categoryOrder)
+                          if ((byCategory[cat] ?? []).isNotEmpty)
+                            _buildCategorySection(
+                              cat,
+                              byCategory[cat]!,
+                              currentUserId,
+                              isAdmin,
+                              canAccessPremium,
+                              theme,
+                            ),
+                        // Catégories personnalisées non prédéfinies.
+                        for (final cat in byCategory.keys)
+                          if (!_categoryOrder.contains(cat) &&
+                              byCategory[cat]!.isNotEmpty)
+                            _buildCategorySection(
+                              cat,
+                              byCategory[cat]!,
+                              currentUserId,
+                              isAdmin,
+                              canAccessPremium,
+                              theme,
+                            ),
+                      ],
                     ),
             ),
           ],
@@ -224,12 +195,77 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     );
   }
 
+  /// Section de boutique : titre de catégorie + carousel horizontal de modèles.
+  Widget _buildCategorySection(
+    String category,
+    List<InvoiceTemplate> templates,
+    String currentUserId,
+    bool isAdmin,
+    bool canAccessPremium,
+    ThemeProvider theme,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            _categoryLabel(category),
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: theme.textColor,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 250,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: templates.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final template = templates[index];
+              // 🔓 Déverrouillé si : abonnement actif (accès à tout),
+              // OU template non premium, OU template déjà acheté
+              // par l'utilisateur (achat possible sans abonnement).
+              final isOwned = currentUserId.isNotEmpty &&
+                  template.purchasedBy.contains(currentUserId);
+              final isLocked =
+                  template.isPremium && !canAccessPremium && !isOwned;
+              return SizedBox(
+                width: 190,
+                child: _buildTemplateCard(
+                  template,
+                  isLocked,
+                  theme,
+                  currentUserId,
+                  isAdmin,
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildTemplateCard(
-      InvoiceTemplate template, bool isLocked, ThemeProvider theme) {
+    InvoiceTemplate template,
+    bool isLocked,
+    ThemeProvider theme,
+    String currentUserId,
+    bool isAdmin,
+  ) {
     return GlassCard(
       padding: EdgeInsets.zero,
       borderRadius: BorderRadius.circular(20),
-      onTap: () => _handleTap(template, isLocked),
+      // 👆 Cliquer sur la facture → aperçu.
+      onTap: () => _openPreview(template),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -243,20 +279,21 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(19)),
                   ),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: template.primaryColor.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.description_outlined,
-                        color: template.primaryColor,
-                        size: 30,
-                      ),
-                    ),
-                  ),
+                  // 🖼️ Affiche l'image téléversée (JPEG/PNG) si présente,
+                  // sinon la vignette par défaut (icône document).
+                  child: (template.fileData.isNotEmpty &&
+                          template.fileType != 'pdf')
+                      ? ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(19)),
+                          child: Image.memory(
+                            base64Decode(template.fileData),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                _buildStoreFallback(template),
+                          ),
+                        )
+                      : _buildStoreFallback(template),
                 ),
                 // Badges Premium + Prix (en Wrap pour ne jamais déborder
                 // sur les petits écrans — pas de chevauchement)
@@ -352,108 +389,48 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                   ),
                 ],
                 const SizedBox(height: 8),
-                // 👁️ Aperçu + 🎨 Personnaliser (espace de travail drag & drop)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(9),
-                          border: Border.all(
-                            color: isLocked
-                                ? theme.subTextColor.withValues(alpha: 0.4)
-                                : theme.primaryColor.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(9),
-                            onTap: () => _openPreview(template),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.visibility_outlined,
-                                    color: isLocked
-                                        ? theme.subTextColor
-                                        : theme.primaryColor,
-                                    size: 14),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    'Aperçu',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isLocked
-                                          ? theme.subTextColor
-                                          : theme.primaryColor,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                // 🎨 Personnaliser — réservé à l'admin ou aux acheteurs.
+                Container(
+                  width: double.infinity,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
+                    ),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      onTap: () => _handleCustomize(
+                        template,
+                        isLocked,
+                        currentUserId,
+                        isAdmin,
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.tune_rounded,
+                              color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Personnaliser',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isLocked
-                                ? [theme.subTextColor.withValues(alpha: 0.5)]
-                                : [
-                                    const Color(0xFF4338CA),
-                                    const Color(0xFF7C3AED)
-                                  ],
-                          ),
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(9),
-                            onTap: () {
-                              if (isLocked) {
-                                _showUpgradeDialog();
-                              } else {
-                                _openWorkspace(template);
-                              }
-                            },
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.tune_rounded,
-                                    color: Colors.white, size: 14),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    'Personnaliser',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isLocked
-                                          ? Colors.white70
-                                          : Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -463,17 +440,50 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     );
   }
 
-  void _handleTap(InvoiceTemplate template, bool isLocked) {
-    // 💳 Template payant non acheté → propose l'achat.
+  /// Vignette par défaut (icône document) quand le modèle n'a pas
+  /// d'image téléversée ou que son fichier est un PDF.
+  Widget _buildStoreFallback(InvoiceTemplate template) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: template.primaryColor.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.description_outlined,
+          color: template.primaryColor,
+          size: 30,
+        ),
+      ),
+    );
+  }
+
+  /// Personnalisation réservée à l'admin et aux acheteurs du modèle.
+  void _handleCustomize(
+      InvoiceTemplate template, bool isLocked, String userId, bool isAdmin) {
+    final isOwner = userId.isNotEmpty && template.purchasedBy.contains(userId);
+    if (isAdmin || isOwner) {
+      _selectAndOpen(template);
+      return;
+    }
+    // 💳 Modèle payant non acheté → proposer l'achat pour personnaliser.
     if (template.price > 0 && !template.paid) {
       _showPurchaseDialog(template);
       return;
     }
     if (isLocked) {
       _showUpgradeDialog();
-    } else {
-      _selectAndOpen(template);
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'La personnalisation est réservée à l\'administrateur ou aux '
+          'acheteurs de ce modèle.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
   }
 
   /// Sélectionne le modèle comme actif (persistance locale) puis ouvre
