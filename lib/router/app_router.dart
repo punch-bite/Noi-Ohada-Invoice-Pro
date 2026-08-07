@@ -82,7 +82,13 @@ import '../screens/teams/teams_screen.dart';
 class AppRouter {
   static final Listenable authChangeNotifier = ValueNotifier<void>(null);
 
+  /// Clé globale du navigateur — utilisée par les services hors widget
+  /// (ex: DeepLinkService) pour naviguer et lire les providers.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   static final GoRouter router = GoRouter(
+    navigatorKey: navigatorKey,
     initialLocation: '/',
     refreshListenable: authChangeNotifier,
     redirect: (context, state) {

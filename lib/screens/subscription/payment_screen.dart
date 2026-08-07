@@ -17,6 +17,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../payment/mobile_money_webview.dart';
+// 🔥 SDK officiel flutter_notchpay (checkout intégré : MTN/Orange/Wave/Carte)
+import 'package:flutter_notchpay/flutter_notchpay.dart';
+import '../../services/config_service.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Plan plan;
@@ -227,7 +230,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-                Text(
+        // ===== Paiement express via le SDK officiel flutter_notchpay =====
+        _buildNotchPayExpressPay(primaryColor),
+        const SizedBox(height: 16),
+        Text(
           'Méthode de paiement',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
         ),
@@ -781,6 +787,163 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// Carte "Paiement express" : lance le checkout officiel flutter_notchpay.
+  /// Le SDK gère lui-même le choix du canal (MTN/Orange/Wave/Carte), la
+  /// saisie du téléphone, la page sécurisée et la vérification du statut.
+  Widget _buildNotchPayExpressPay(Color primaryColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [primaryColor, primaryColor.withOpacity(0.85)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: Colors.white, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Paiement express',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Réglez en quelques secondes : MTN MoMo, Orange Money, Wave ou carte bancaire.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _isProcessing ? null : _payWithNotchPaySdk,
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: Text(
+                'Payer ${widget.plan.getFormattedPrice()}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: primaryColor,
+                disabledBackgroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🔥 Paiement via le SDK officiel flutter_notchpay (checkout intégré).
+  /// Le SDK gère lui-même : choix du canal (MTN/Orange/Wave/Carte), saisie
+  /// du téléphone, page sécurisée et vérification automatique du statut.
+  /// En cas de succès, on active l'abonnement avec la référence renvoyée.
+  Future<void> _payWithNotchPaySdk() async {
+    setState(() {
+      _isProcessing = true;
+      _error = '';
+    });
+
+    try {
+      final authProvider = context.read<AppAuthProvider>();
+      final user = authProvider.user;
+
+      // (Ré)initialise le SDK au cas où la clé a changé.
+      final key = ConfigService.nochpayPublicKey.trim();
+      if (key.isEmpty) {
+        throw Exception('Clé publique NoChPay manquante');
+      }
+      NotchPay.init(publicKey: key);
+
+      final phone =
+          _phoneNumber.isNotEmpty ? _phoneNumber : (user?.phone ?? '');
+
+      final result = await NotchPay.instance.checkout(
+        context,
+        request: NotchPayCheckoutRequest(
+          amount: widget.plan.price,
+          currency: widget.plan.currency,
+          description: 'Abonnement ${widget.plan.name}',
+          customer: NotchPayCheckoutCustomer(
+            name: user?.displayName,
+            email: user?.email,
+            phone: phone.isEmpty ? null : phone,
+          ),
+          reference: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
+          metadata: {
+            'purpose': 'subscription',
+            'plan_id': widget.plan.id,
+            'user_id': user?.id ?? '',
+          },
+        ),
+        countryCode: 'cm',
+      );
+
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+
+      switch (result.status) {
+        case NotchPayCheckoutStatus.success:
+          final ref = result.payment?.reference ?? '';
+          setState(() {
+            _transactionId = ref;
+            _selectedMethod = 'notchpay_sdk';
+          });
+          await _completeSubscription();
+          break;
+        case NotchPayCheckoutStatus.cancelled:
+          setState(() => _error = 'Paiement annulé.');
+          _showSnackBar(
+            'Paiement annulé. Vous pouvez réessayer.',
+            Colors.orange,
+          );
+          break;
+        case NotchPayCheckoutStatus.failed:
+          setState(() => _error = result.message ?? 'Le paiement a échoué.');
+          _showSnackBar(_error, Colors.red);
+          break;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _error = 'Erreur: $e';
+      });
+      _showSnackBar(_error, Colors.red);
+    }
+  }
+
     Future<void> _processPayment() async {
     final category = _selectedPaymentMethod?.category;
     if (category == null) return;
@@ -808,8 +971,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         invoiceNumber: reference,
         description: 'Abonnement ${widget.plan.name}',
         paymentMethod: _selectedMethod,
-        customerName: null,
-        customerEmail: null,
+        customerName: authProvider.user?.displayName,
+        customerEmail: authProvider.user?.email,
         // 🔥 Métadonnées pour que le serveur de callback puisse activer
         // l'abonnement correspondant (user_id / plan_id / reference).
         metadata: {

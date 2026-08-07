@@ -21,6 +21,7 @@ import 'services/subscription_checker_service.dart';
 import 'services/hive_service.dart';
 import 'services/database_service.dart';
 import 'services/firestore_initializer.dart';
+import 'services/deep_link_service.dart';
 import 'services/boot_logger.dart' as boot;
 
 // Providers
@@ -189,6 +190,18 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
     await _writeLog('✅ SubscriptionChecker lancé');
   } catch (e) {
     await _writeLog('⚠️ SubscriptionChecker: $e');
+  }
+
+  // ===== DEEP LINKS (retour paiement NotchPay) =====
+  // Écoute `yourapp://payment?reference=...` pour confirmer le paiement
+  // et réactiver l'abonnement au retour dans l'app.
+  bootstrapContext.onStatusChange('Préparation des deep links...');
+  await _writeLog('🔗 DeepLinkService...');
+  try {
+    DeepLinkService.instance.start();
+    await _writeLog('✅ DeepLinkService lancé');
+  } catch (e) {
+    await _writeLog('⚠️ DeepLinkService: $e');
   }
 
   // 🔥 Synchronisation après lancement (en arrière-plan)

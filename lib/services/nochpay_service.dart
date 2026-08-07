@@ -42,10 +42,10 @@ class NochPayService {
     methodKudi,
   ];
 
-  // 🔥 URL de base (sandbox ou production)
-  static String get _baseUrl => ConfigService.isProduction
-      ? 'https://api.notchpay.co'
-      : 'https://api-sandbox.notchpay.co';
+  // 🔥 URL de base — l'API NoChPay est UNIQUE : https://api.notchpay.co.
+  // Le mode test/sandbox est géré par les CLÉS (sandbox vs live), PAS par un
+  // sous-domaine : api-sandbox.nochpay.co n'existe pas (échec de connexion).
+  static String get _baseUrl => 'https://api.notchpay.co';
 
   // 🔥 Clés depuis ConfigService (ou dotenv directement)
   static String get _publicKey => ConfigService.nochpayPublicKey; // pk_...
@@ -106,37 +106,32 @@ class NochPayService {
       final payload = {
         'amount': amount,
         'currency': currency,
-        // `phone` requis par la méthode officielle : on ne l'envoie que s'il
-        // est renseigné (la page Collect gère aussi la saisie côté client).
-        if (phoneNumber.isNotEmpty) 'phone': phoneNumber,
-        // Callback obligatoire dans la méthode officielle : si aucune API
-        // n'est configurée, on s'appuie sur le polling / webhook NoChPay.
-        if (apiBase.isNotEmpty)
-          'callback': '$apiBase/payment/callback',
-        // --- Champs optionnels (enrichissement) ---
-        'payment_method': paymentMethod,
         'reference': invoiceNumber,
         'description': description,
-        'customer': {
-          'name': customerName ?? 'Client',
-          'email': customerEmail ?? 'client@email.com',
-          'phone': phoneNumber,
-        },
+        // `phone` : requis côté NoChPay pour router le paiement.
+        if (phoneNumber.isNotEmpty) 'phone': phoneNumber,
+        if (customerName != null && customerName.isNotEmpty)
+          'name': customerName,
+        if (customerEmail != null && customerEmail.isNotEmpty)
+          'email': customerEmail,
+        // Callback : notifie notre serveur (Vercel) de la confirmation.
+        // ⚠️ Le serveur écoute sur /payment/callback (SINGULIER).
+        if (apiBase.isNotEmpty)
+          'callback': '$apiBase/payment/callback',
         'customer_meta': {
           'invoice_number': invoiceNumber,
           'source': 'noi_ohada_invoice_app',
-          'payment_method': paymentMethod,
           if (metadata != null) ...metadata,
         },
         if (items != null) 'items': items,
-        'mode': ConfigService.isProduction ? 'production' : 'sandbox',
       };
 
-      // ✅ Endpoint OFFICIEL : POST {base}/payment (singulier), conforme à
-      // la méthode de réception de paiement NotchPay.
+      // ✅ Endpoint OFFICIEL NoChPay : POST {base}/payments/initialize
+      // (voir SDK notchpay.js). Header Authorization = clé publique
+      // (SANS préfixe Bearer).
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/payment'),
+            Uri.parse('$_baseUrl/payments/initialize'),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': _publicKey,
@@ -311,7 +306,7 @@ class NochPayService {
     try {
       final channel = channelForMethod(method);
       final response = await _client
-          .post(
+          .put(
             Uri.parse('$_baseUrl/payments/$reference'),
             headers: {
               'Content-Type': 'application/json',
@@ -398,6 +393,40 @@ class NochPayService {
           'error': data['message'] ?? 'Erreur de vérification',
         };
       }
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Vérifie le statut d'un paiement via NOTRE serveur de callback
+  /// (GET /verify/:reference sur apiBaseUrl). Le serveur est la source de
+  /// vérité de l'activation : il reçoit le webhook NotchPay puis crée
+  /// l'abonnement Firestore. Réponse : {status, activated, subscriptionId}.
+  Future<Map<String, dynamic>> verifyPaymentViaServer(String reference) async {
+    final apiBase = ConfigService.apiBaseUrl.trim();
+    if (apiBase.isEmpty) {
+      return {'success': false, 'error': 'API_BASE_URL non configurée'};
+    }
+    try {
+      final response = await _client
+          .get(Uri.parse('$apiBase/verify/$reference'))
+          .timeout(const Duration(seconds: 10));
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        final activated = data['activated'] == true;
+        final status = data['status']?.toString() ?? 'pending';
+        return {
+          'success': true,
+          'status': status,
+          'activated': activated,
+          'is_success': activated || isPaymentSuccessful(status),
+          'subscription_id': data['subscriptionId'],
+        };
+      }
+      return {
+        'success': false,
+        'error': data['error'] ?? 'Erreur de vérification serveur',
+      };
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

@@ -125,11 +125,15 @@ class _DashboardHomeState extends State<DashboardHome> {
             color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
             child: Row(
               children: [
-                const Text(
-                  'Accueil',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    'Accueil',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -334,14 +338,17 @@ class _DashboardHomeState extends State<DashboardHome> {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Text(
-                    user?.displayName ?? 'Utilisateur',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
+                  Flexible(
+                    child: Text(
+                      user?.displayName ?? 'Utilisateur',
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(width: 8),
                   Container(
@@ -625,6 +632,8 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -658,12 +667,16 @@ class _DashboardHomeState extends State<DashboardHome> {
             children: [
               Icon(icon, color: textColor, size: 18),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -797,6 +810,8 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             Text(
               label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 9,
                 color: subTextColor,
@@ -1069,35 +1084,40 @@ class _DashboardHomeState extends State<DashboardHome> {
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isExpense ? Colors.red[700] : Colors.green[700],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColors['bg'],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _getStatusLabel(invoice.status),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 130),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      color: statusColors['text'],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isExpense ? Colors.red[700] : Colors.green[700],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusColors['bg'],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _getStatusLabel(invoice.status),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: statusColors['text'],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

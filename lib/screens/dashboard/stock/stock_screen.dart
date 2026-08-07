@@ -578,7 +578,9 @@ class _StockScreenState extends State<StockScreen> {
                         style: TextStyle(fontSize: 11, color: subTextColor, letterSpacing: 0.5),
                       ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         if (product.category.isNotEmpty)
                           Container(
@@ -596,7 +598,6 @@ class _StockScreenState extends State<StockScreen> {
                               ),
                             ),
                           ),
-                        if (product.category.isNotEmpty) const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
@@ -626,6 +627,8 @@ class _StockScreenState extends State<StockScreen> {
                 children: [
                   Text(
                     product.formattedPrice,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w900,
@@ -635,12 +638,16 @@ class _StockScreenState extends State<StockScreen> {
                   const SizedBox(height: 2),
                   Text(
                     'T: ${product.formattedStockValue}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 11, color: subTextColor),
                   ),
                   const SizedBox(height: 10),
-                  // Sélecteur de quantité en forme d'îlot tactile
+                  // Sélecteur de quantité en forme d'îlot tactile (largeur
+                  // bornée : texte avec ellipsis pour éviter le débordement)
                   Container(
                     height: 32,
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.grey[50],
@@ -650,7 +657,6 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           icon: Icon(Icons.remove_rounded, size: 14, color: subTextColor),
@@ -658,10 +664,12 @@ class _StockScreenState extends State<StockScreen> {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        Expanded(
                           child: Text(
                             '${product.quantity}',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 13,

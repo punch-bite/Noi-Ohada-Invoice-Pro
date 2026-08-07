@@ -200,7 +200,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        childAspectRatio: 0.72,
+                        childAspectRatio: 0.64,
                       ),
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
@@ -258,29 +258,32 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                     ),
                   ),
                 ),
-                // Badge premium / boutique
-                if (template.isPremium)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: GlassBadge(
-                      label: 'Premium',
-                      icon: Icons.stars_rounded,
-                      color: const Color(0xFFE9B949),
-                    ),
+                // Badges Premium + Prix (en Wrap pour ne jamais déborder
+                // sur les petits écrans — pas de chevauchement)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  right: 8,
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (template.isPremium)
+                        GlassBadge(
+                          label: 'Premium',
+                          icon: Icons.stars_rounded,
+                          color: const Color(0xFFE9B949),
+                        ),
+                      if (template.price > 0)
+                        GlassBadge(
+                          label:
+                              '${template.price.toStringAsFixed(0)} XAF',
+                          icon: Icons.sell_rounded,
+                          color: const Color(0xFF16A34A),
+                        ),
+                    ],
                   ),
-                // 💰 Badge prix de vente (template payant)
-                if (template.price > 0)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: GlassBadge(
-                      label:
-                          '${template.price.toStringAsFixed(0)} XAF',
-                      icon: Icons.sell_rounded,
-                      color: const Color(0xFF16A34A),
-                    ),
-                  ),
+                ),
                 if (isLocked)
                   Positioned.fill(
                     child: Container(
@@ -378,14 +381,18 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                         : theme.primaryColor,
                                     size: 14),
                                 const SizedBox(width: 4),
-                                Text(
-                                  'Aperçu',
-                                  style: TextStyle(
-                                    color: isLocked
-                                        ? theme.subTextColor
-                                        : theme.primaryColor,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                Flexible(
+                                  child: Text(
+                                    'Aperçu',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isLocked
+                                          ? theme.subTextColor
+                                          : theme.primaryColor,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -426,14 +433,18 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                 Icon(Icons.tune_rounded,
                                     color: Colors.white, size: 14),
                                 const SizedBox(width: 4),
-                                Text(
-                                  'Personnaliser',
-                                  style: TextStyle(
-                                    color: isLocked
-                                        ? Colors.white70
-                                        : Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                Flexible(
+                                  child: Text(
+                                    'Personnaliser',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isLocked
+                                          ? Colors.white70
+                                          : Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ],
