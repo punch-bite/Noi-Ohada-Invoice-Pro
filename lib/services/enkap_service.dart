@@ -21,6 +21,7 @@
 // Authentification : OAuth2 (WSO2 APIM) — jeton d'accès via
 // `Authorization: Bearer <token>`, renouvelable avec consumer key/secret.
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import '../services/config_service.dart';
 
@@ -43,7 +44,17 @@ class EnkapService {
   final http.Client _client = http.Client();
 
   String get _baseUrl => ConfigService.enkapBaseUrl;
+
+  /// Sur le web, l'API E-nkap refuse les appels navigateur (CORS → 403
+  /// « Invalid CORS request »). On relaie donc les appels via notre serveur
+  /// (Vercel) qui détient les secrets ENKAP. En natif, appel direct.
+  String get _serverBase => ConfigService.apiBaseUrl.trim();
+  bool get _useServerProxy => kIsWeb && _serverBase.isNotEmpty;
   bool get isConfigured => ConfigService.enkapConfigured;
+
+  /// Vrai si la configuration suffit (web → API_BASE_URL suffit, les
+  /// secrets ENKAP sont côté serveur).
+  bool get _configOk => _useServerProxy ? _serverBase.isNotEmpty : isConfigured;
 
   String? _cachedToken;
   DateTime? _tokenExpiry;
@@ -147,16 +158,17 @@ class EnkapService {
     String? phoneNumber,
     List<Map<String, dynamic>>? items,
   }) async {
-    if (!isConfigured) {
+    if (!_configOk) {
       return {
         'success': false,
-        'error':
-            'Configuration ENKAP manquante. Renseignez les clés ENKAP dans .env '
-            '(ENKAP_ACCESS_TOKEN ou ENKAP_CONSUMER_KEY/SECRET).',
+        'error': kIsWeb
+            ? 'Serveur de paiement non configuré. Lancez l\'app avec '
+                '--dart-define=API_BASE_URL=https://server-xi-two-23.vercel.app'
+            : 'Configuration ENKAP manquante. Renseignez les clés ENKAP dans '
+                '.env (ENKAP_ACCESS_TOKEN ou ENKAP_CONSUMER_KEY/SECRET).',
       };
     }
 
-    final token = await _getToken();
     final payload = <String, dynamic>{
       'currency': currency,
       'totalAmount': amount,
@@ -172,28 +184,64 @@ class EnkapService {
       if (items != null && items.isNotEmpty) 'items': items,
     };
 
-    final resp = await _client
-        .post(
-          Uri.parse('$_baseUrl/api/order'),
-          headers: _headers(token),
-          body: json.encode(payload),
-        )
-        .timeout(const Duration(seconds: 20));
+    try {
+      if (_useServerProxy) {
+        // Web : relais par notre serveur (qui détient les secrets ENKAP).
+        final resp = await _client
+            .post(
+              Uri.parse('$_serverBase/enkap/order'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: json.encode(payload),
+            )
+            .timeout(const Duration(seconds: 20));
+        final data = _decode(resp);
+        if (resp.statusCode == 200 || resp.statusCode == 201) {
+          return {
+            'success': data['success'] != false,
+            'orderTransactionId': data['orderTransactionId'],
+            'merchantReferenceId': data['merchantReferenceId'],
+            'redirectUrl': data['redirectUrl'],
+          };
+        }
+        return {
+          'success': false,
+          'error': data['error'] ??
+              data['message'] ??
+              'Erreur serveur (${resp.statusCode})',
+        };
+      }
 
-    final data = _decode(resp);
-    if (resp.statusCode == 201 || resp.statusCode == 200) {
+      final token = await _getToken();
+      final resp = await _client
+          .post(
+            Uri.parse('$_baseUrl/api/order'),
+            headers: _headers(token),
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
+      final data = _decode(resp);
+      if (resp.statusCode == 201 || resp.statusCode == 200) {
+        return {
+          'success': true,
+          'orderTransactionId': data['orderTransactionId'],
+          'merchantReferenceId': data['merchantReferenceId'],
+          'redirectUrl': data['redirectUrl'],
+        };
+      }
       return {
-        'success': true,
-        'orderTransactionId': data['orderTransactionId'],
-        'merchantReferenceId': data['merchantReferenceId'],
-        'redirectUrl': data['redirectUrl'],
+        'success': false,
+        'error': data['message'] ??
+            data['error'] ??
+            'Erreur ENKAP (${resp.statusCode})',
       };
+    } catch (e) {
+      // Ne JAMAIS lever ici : un échec réseau/CORS doit afficher une erreur
+      // dans le dialogue, pas bloquer sur un spinner infini.
+      return {'success': false, 'error': 'Erreur réseau : $e'};
     }
-    return {
-      'success': false,
-      'error':
-          data['message'] ?? data['error'] ?? 'Erreur ENKAP (${resp.statusCode})',
-    };
   }
 
   // ============================================================
@@ -203,12 +251,21 @@ class EnkapService {
   /// Interroge le statut d'un paiement (par référence marchand ou txid).
   Future<String> getStatus({String? txid, String? merchantReference}) async {
     try {
-      final token = await _getToken();
       final params = <String, String>{
         if (txid != null && txid.isNotEmpty) 'txid': txid,
         if (merchantReference != null && merchantReference.isNotEmpty)
           'orderMerchantId': merchantReference,
       };
+      if (_useServerProxy) {
+        final uri = Uri.parse('$_serverBase/enkap/order/status')
+            .replace(queryParameters: params);
+        final resp = await _client
+            .get(uri, headers: {'Accept': 'application/json'})
+            .timeout(const Duration(seconds: 15));
+        final data = _decode(resp);
+        return data['status'] ?? '';
+      }
+      final token = await _getToken();
       final uri = Uri.parse('$_baseUrl/api/order/status')
           .replace(queryParameters: params);
       final resp = await _client
@@ -227,12 +284,20 @@ class EnkapService {
     String? merchantReference,
   }) async {
     try {
-      final token = await _getToken();
       final params = <String, String>{
         if (txid != null && txid.isNotEmpty) 'txid': txid,
         if (merchantReference != null && merchantReference.isNotEmpty)
           'orderMerchantId': merchantReference,
       };
+      if (_useServerProxy) {
+        final uri = Uri.parse('$_serverBase/enkap/order')
+            .replace(queryParameters: params);
+        final resp = await _client
+            .get(uri, headers: {'Accept': 'application/json'})
+            .timeout(const Duration(seconds: 15));
+        return _decode(resp);
+      }
+      final token = await _getToken();
       final uri =
           Uri.parse('$_baseUrl/api/order').replace(queryParameters: params);
       final resp = await _client

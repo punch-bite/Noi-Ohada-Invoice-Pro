@@ -56,6 +56,7 @@ import '../screens/customization/invoice_customization_screen.dart';
 import '../screens/customization/template_store_screen.dart';
 import '../screens/customization/template_workspace_screen.dart';
 import '../screens/customization/template_preview_screen.dart';
+import '../screens/dev/enkap_test_screen.dart';
 import '../models/invoice_template.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
@@ -242,6 +243,12 @@ class AppRouter {
         path: '/templates/preview',
         builder: (context, state) =>
             TemplatePreviewScreen(template: state.extra as InvoiceTemplate),
+      ),
+
+      // 🧪 Test de paiement E-nkap (développeur)
+      GoRoute(
+        path: '/dev/enkap-test',
+        builder: (context, state) => const EnkapTestScreen(),
       ),
 
       // Notifications

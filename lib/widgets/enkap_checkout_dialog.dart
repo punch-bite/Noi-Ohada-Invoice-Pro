@@ -49,6 +49,7 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
   Timer? _pollTimer;
   int _pollAttempts = 0;
   bool _done = false;
+  bool _timedOut = false;
 
   @override
   void initState() {
@@ -63,15 +64,27 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
   }
 
   Future<void> _initiate() async {
-    final result = await _enkap.registerOrder(
-      amount: widget.amount,
-      currency: widget.currency,
-      description: widget.description,
-      merchantReference: widget.merchantReference,
-      customerName: widget.customerName,
-      customerEmail: widget.customerEmail,
-      phoneNumber: widget.phoneNumber,
-    );
+    Map<String, dynamic> result;
+    try {
+      result = await _enkap.registerOrder(
+        amount: widget.amount,
+        currency: widget.currency,
+        description: widget.description,
+        merchantReference: widget.merchantReference,
+        customerName: widget.customerName,
+        customerEmail: widget.customerEmail,
+        phoneNumber: widget.phoneNumber,
+      );
+    } catch (e) {
+      // Filet de sécurité : ne jamais rester sur « Initialisation… »
+      // (spinner infini) en cas d'exception inattendue.
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _error = 'Erreur réseau : $e';
+      });
+      return;
+    }
     if (!mounted) return;
     if (result['success'] == true) {
       setState(() {
@@ -88,9 +101,11 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
     }
   }
 
-  // ===== POLLING (web : vérification automatique du statut) =====
+  // ===== POLLING (vérification automatique du statut) =====
   void _startPolling() {
     _pollTimer?.cancel();
+    _pollAttempts = 0;
+    _timedOut = false;
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
       if (_done || !mounted) {
         timer.cancel();
@@ -98,7 +113,10 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
       }
       _pollAttempts++;
       if (_pollAttempts > 30) {
+        // Après ~2 min sans statut final, on affiche une sortie (pas de
+        // spinner infini) avec un bouton pour revérifier.
         timer.cancel();
+        if (mounted) setState(() => _timedOut = true);
         return;
       }
       final status =
@@ -167,6 +185,51 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
               Navigator.pop(context);
             },
             child: const Text('Fermer'),
+          ),
+        ],
+      );
+    }
+
+    if (_timedOut) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.hourglass_disabled,
+              size: 48, color: Colors.orange.shade400),
+          const SizedBox(height: 12),
+          const Text(
+            'Le paiement n\'a pas pu être confirmé',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Vérifiez que le paiement a bien été effectué, puis réessayez.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() => _timedOut = false);
+                    _startPolling();
+                  },
+                  child: const Text('Vérifier à nouveau'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _finish(success: false),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Fermer'),
+                ),
+              ),
+            ],
           ),
         ],
       );

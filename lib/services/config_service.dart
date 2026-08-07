@@ -141,7 +141,12 @@ class ConfigService {
   static String get defaultCurrency => _get('DEFAULT_CURRENCY', def: 'XAF');
   static double get defaultTaxRate =>
       double.tryParse(_get('DEFAULT_TAX_RATE', def: '18')) ?? 18.0;
-  static String get apiBaseUrl => _get('API_BASE_URL');
+  /// Serveur de callback + proxy ENKAP (Vercel) — URL publique. Utilisée par
+  /// le web pour relayer les appels ENKAP (l'API E-nkap bloque le CORS
+  /// navigateur) et par l'app pour les callbacks / intentions d'abonnement.
+  static const String _defaultApiBaseUrl =
+      'https://server-xi-two-23.vercel.app';
+  static String get apiBaseUrl => _get('API_BASE_URL', def: _defaultApiBaseUrl);
   static int get apiTimeout => _getInt('API_TIMEOUT', 30);
   static String get supportEmail => _get('SUPPORT_EMAIL');
   static String get supportPhone => _get('SUPPORT_PHONE');

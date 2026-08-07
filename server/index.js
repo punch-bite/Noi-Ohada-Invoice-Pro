@@ -205,6 +205,16 @@ app.use(
   })
 );
 
+// CORS pour le client web Flutter (le web relaie les appels ENKAP via ce
+// serveur, qui détient les secrets — l'API E-nkap refuse le CORS navigateur).
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // ============================================================
 //  ROUTES
 // ============================================================
@@ -311,6 +321,29 @@ app.post('/enkap/register', async (req, res) => {
   }
 });
 
+/// Page de retour ENKAP : après paiement, ENKAP redirige le client vers
+/// `<returnUrl>/<reference>?status=<status>`. On affiche une confirmation.
+app.get('/enkap/return/:reference', (req, res) => {
+  const reference = req.params.reference || '';
+  const status = req.query.status || '';
+  const ok = (status || '').toUpperCase() === 'CONFIRMED';
+  res.status(200).type('html').send(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paiement E-nkap</title>
+<style>body{font-family:system-ui,sans-serif;background:#f5f6fa;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#fff;border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.icon{font-size:56px} h1{font-size:20px;margin:12px 0 6px} p{color:#666;margin:4px 0;font-size:14px}
+.btn{display:inline-block;margin-top:18px;padding:12px 22px;border-radius:10px;background:#4338ca;color:#fff;text-decoration:none;font-weight:600}</style>
+</head><body><div class="card">
+<div class="icon">${ok ? '✅' : 'ℹ️'}</div>
+<h1>${ok ? 'Paiement confirmé' : 'Retour de paiement'}</h1>
+<p>Référence : <b>${reference}</b></p>
+<p>Statut : <b>${status || 'N/A'}</b></p>
+<p>Vous pouvez fermer cette page et revenir à l'application.</p>
+</div></body></html>`);
+});
+
 /// Callback instantané ENKAP (ITN) : ENKAP appelle
 /// `PUT <notificationUrl>/<merchantReference>` avec `{"status":"CONFIRMED"}`.
 /// On active l'abonnement correspondant si une intention a été enregistrée.
@@ -359,6 +392,154 @@ app.put('/enkap/callback/:reference', async (req, res) => {
   }
 });
 
+// ============================================================
+//  PROXY ENKAP (relais serveur → ENKAP, utilisé par le WEB)
+//
+//  L'API E-nkap refuse les appels depuis le navigateur (CORS :
+//  « Invalid CORS request » → 403). Les secrets ENKAP restent ici en
+//  variables d'environnement ; le client web ne parle qu'à ce serveur.
+// ============================================================
+const ENKAP_BASE = () =>
+  process.env.ENKAP_BASE_URL || 'https://api-v2.enkap.cm/purchase/v1.2';
+const ENKAP_TOKEN_URL = () =>
+  process.env.ENKAP_TOKEN_URL || 'https://api-v2.enkap.cm/token';
+
+let cachedEnkapToken = null;
+let cachedEnkapTokenExp = 0;
+
+async function getEnkapToken() {
+  const accessToken = (process.env.ENKAP_ACCESS_TOKEN || '').trim();
+  if (accessToken) return accessToken;
+  if (cachedEnkapToken && cachedEnkapTokenExp > Date.now()) {
+    return cachedEnkapToken;
+  }
+  const key = (process.env.ENKAP_CONSUMER_KEY || '').trim();
+  const secret = (process.env.ENKAP_CONSUMER_SECRET || '').trim();
+  if (!key || !secret) {
+    throw new Error('ENKAP_CONSUMER_KEY/SECRET non configurés côté serveur');
+  }
+  const resp = await fetch(ENKAP_TOKEN_URL(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: key,
+      client_secret: secret,
+    }).toString(),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    throw new Error(
+      data.error_description || data.error || `token ${resp.status}`
+    );
+  }
+  cachedEnkapToken = data.access_token;
+  const expires = Number(data.expires_in) || 259200;
+  cachedEnkapTokenExp = Date.now() + (expires - 60) * 1000;
+  return cachedEnkapToken;
+}
+
+async function enkapFetch(path, { method = 'GET', body } = {}) {
+  const token = await getEnkapToken();
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const resp = await fetch(`${ENKAP_BASE()}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await resp.text();
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch (_) {
+    /* corps non JSON */
+  }
+  return { status: resp.status, data, text };
+}
+
+/// POST /enkap/order — crée une commande ENKAP (relais web).
+app.post('/enkap/order', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const payload = {
+      currency: b.currency || 'XAF',
+      totalAmount: b.totalAmount,
+      description: b.description || '',
+      merchantReference: b.merchantReference || '',
+      langKey: b.langKey || 'fr',
+    };
+    if (b.customerName) payload.customerName = b.customerName;
+    if (b.email) payload.email = b.email;
+    if (b.phoneNumber) payload.phoneNumber = b.phoneNumber;
+    if (Array.isArray(b.items) && b.items.length) payload.items = b.items;
+
+    const { status, data, text } = await enkapFetch('/api/order', {
+      method: 'POST',
+      body: payload,
+    });
+    if (status !== 201 && status !== 200) {
+      return res.status(status).json({
+        success: false,
+        error: data.message || data.error || text || `ENKAP ${status}`,
+      });
+    }
+    res.json({
+      success: true,
+      orderTransactionId: data.orderTransactionId,
+      merchantReferenceId: data.merchantReferenceId,
+      redirectUrl: data.redirectUrl,
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/// GET /enkap/order/status?orderMerchantId=... — statut d'une commande.
+app.get('/enkap/order/status', async (req, res) => {
+  try {
+    const params = new URLSearchParams();
+    if (req.query.orderMerchantId) {
+      params.set('orderMerchantId', String(req.query.orderMerchantId));
+    }
+    if (req.query.txid) params.set('txid', String(req.query.txid));
+    const qs = params.toString();
+    const { status, data, text } = await enkapFetch(
+      `/api/order/status${qs ? `?${qs}` : ''}`
+    );
+    if (status !== 200) {
+      return res
+        .status(status)
+        .json({ status: '', error: data.message || text });
+    }
+    res.json({ status: data.status || '' });
+  } catch (e) {
+    res.status(500).json({ status: '', error: e.message });
+  }
+});
+
+/// GET /enkap/order?orderMerchantId=... — détails d'une commande.
+app.get('/enkap/order', async (req, res) => {
+  try {
+    const params = new URLSearchParams();
+    if (req.query.orderMerchantId) {
+      params.set('orderMerchantId', String(req.query.orderMerchantId));
+    }
+    if (req.query.txid) params.set('txid', String(req.query.txid));
+    const qs = params.toString();
+    const { status, data, text } = await enkapFetch(`/api/order${qs ? `?${qs}` : ''}`);
+    if (status !== 200) {
+      return res.status(status).json(data.message || data.error || text);
+    }
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/health', (req, res) =>
   res.json({ ok: true, service: 'noi-ohada-payment-callback', time: new Date().toISOString() })
 );
@@ -371,6 +552,9 @@ app.get('/', (req, res) =>
       'GET /verify/:reference',
       'POST /enkap/register',
       'PUT /enkap/callback/:reference',
+      'POST /enkap/order (proxy web)',
+      'GET /enkap/order/status (proxy web)',
+      'GET /enkap/order (proxy web)',
       'GET /health',
     ],
   })
