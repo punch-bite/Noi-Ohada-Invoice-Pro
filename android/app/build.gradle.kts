@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
@@ -21,6 +23,40 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("androidx.multidex:multidex:2.0.1")
 }
+
+// ============================================================
+// 🔐 SIGNATURE RELEASE
+// ------------------------------------------------------------
+// CodeMagic génère `android/app/upload-keystore.jks` et écrit les mots de
+// passe dans `android/local.properties` :
+//   release.keystore.password / release.key.alias / release.key.password
+//
+// Si le keystore est absent (build local), on retombe sur la signature DEBUG
+// (suffisant pour tester, PAS pour publier sur le Play Store). Pour publier,
+// laisser CodeMagic fournir le keystore via KEYSTORE_BASE64.
+// ============================================================
+val keystoreProperties = Properties()
+val keystorePropsFile = rootProject.file("local.properties")
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun keystoreProp(key: String, envName: String? = null): String? {
+    keystoreProperties.getProperty(key)?.takeIf { it.isNotBlank() }?.let { return it }
+    return envName?.let { System.getenv(it) }?.takeIf { it.isNotBlank() }
+}
+
+val releaseStoreFile = file(
+    keystoreProp("release.keystore.storeFile", "RELEASE_STORE_FILE")
+        ?: keystoreProp("UPLOAD_STORE_FILE", "UPLOAD_STORE_FILE")
+        ?: "upload-keystore.jks"
+)
+val ksStorePassword = keystoreProp("release.keystore.password", "KEYSTORE_PASSWORD")
+val ksKeyAlias = keystoreProp("release.key.alias", "KEY_ALIAS")
+val ksKeyPassword = keystoreProp("release.key.password", "KEY_PASSWORD")
+val hasReleaseKeystore =
+    releaseStoreFile.exists() &&
+        ksStorePassword != null && ksKeyAlias != null && ksKeyPassword != null
 
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
@@ -46,9 +82,25 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = ksStorePassword
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            // Keystore release si présent (build CodeMagic), sinon debug (local).
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

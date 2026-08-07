@@ -4,6 +4,9 @@ workflows:
     environment:
       vars:
         FLUTTER_VERSION: 3.41.9  # Ajustez si nécessaire
+        # URL du serveur de paiement (proxy ENKAP). Les secrets ENKAP ne
+        # sont JAMAIS embarqués dans l'APK : ils restent côté serveur (Vercel).
+        API_BASE_URL: "https://server-xi-two-23.vercel.app"
       flutter: stable
     scripts:
       - name: Décoder le Keystore JKS
@@ -24,12 +27,6 @@ workflows:
       #     echo "Génération de google-services.json..."
       #     echo $ANDROID_FIREBASE_JSON_BASE64 | base64 --decode > android/app/google-services.json
 
-      - name: Créer le fichier .env
-        script: |
-          echo "Génération du fichier .env pour le build..."
-          echo "API_URL=$API_URL" > .env
-          echo "ANOTHER_SECRET_KEY=$ANOTHER_SECRET_KEY" >> .env
-
       - name: Fix Android SDK 37 directory path
         script: |
           ln -s /usr/local/share/android-sdk/platforms/android-37.0 /usr/local/share/android-sdk/platforms/android-37
@@ -44,11 +41,11 @@ workflows:
 
       - name: Builder l'APK Release
         script: |
-          flutter build apk --release
+          flutter build apk --release --dart-define=API_BASE_URL=$API_BASE_URL
 
       - name: Builder l'App Bundle (AAB)
         script: |
-          flutter build appbundle --release
+          flutter build appbundle --release --dart-define=API_BASE_URL=$API_BASE_URL
 
       - name: Vérifier la signature
         script: |
