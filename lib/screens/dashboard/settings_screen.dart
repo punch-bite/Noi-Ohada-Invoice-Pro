@@ -131,6 +131,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Portefeuille',
+                  subtitle: 'Encaissements clients et retraits',
+                  onTap: () => context.push('/wallet'),
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  premium: !subscriptionProvider.canCollectClientPayments,
+                ),
+                _SettingsDivider(isDark: isDark),
+                _SettingsTile(
                   icon: Icons.cloud_upload_outlined,
                   title: 'Sauvegarde Google Drive',
                   subtitle: 'Synchroniser vos données (Business)',

@@ -1,17 +1,15 @@
 // ============================================================
-//  NOI OHADA Invoice Pro — Serveur de callback NotchPay
+//  NOI OHADA Invoice Pro — Serveur de callbacks (ENKAP)
 //
-//  Reçoit le callback / webhook NotchPay, vérifie la signature
-//  HMAC-SHA256 (header `x-notch-signature`) puis active
-//  l'abonnement de l'utilisateur dans Firestore (idempotent).
+//  Reçoit les callbacks de confirmation ENKAP (Orange Money / MTN / Carte)
+//  puis active l'abonnement de l'utilisateur dans Firestore (idempotent).
 //
 //  Endpoints :
-//    POST /payment/callback   ← appelé par NotchPay (webhook)
-//    GET  /verify/:reference  ← statut d'activation (polling)
+//    POST /enkap/register       ← intention d'abonnement (app)
+//    PUT  /enkap/callback/:ref  ← confirmation instantanée ENKAP (ITN)
+//    GET  /enkap/return/:ref    ← page de retour après paiement
+//    POST/GET /enkap/order[/status] ← proxy web → API E-nkap
 //    GET  /health
-//
-//  Variable d'environnement requise :
-//    NOCHPAY_WEBHOOK_SECRET    (secret du webhook NotchPay)
 //
 //  Connexion Firestore : clé de compte de service Firebase
 //    - FIREBASE_SERVICE_ACCOUNT (base64 du JSON) OU
@@ -19,7 +17,6 @@
 //    - serviceAccountKey.json à la racine du projet
 // ============================================================
 require('dotenv').config();
-const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -34,12 +31,6 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-
-// Secret lu À LA DEMANDE (robuste sur les fonctions serverless où les
-// variables d'environnement sont injectées à chaque requête).
-function getWebhookSecret() {
-  return process.env.NOCHPAY_WEBHOOK_SECRET || '';
-}
 
 // ============================================================
 //  FIREBASE ADMIN (contourne les règles, compte de service)
@@ -66,59 +57,6 @@ function initFirebase() {
 initFirebase();
 const db = getFirestore();
 const serverTimestamp = () => FieldValue.serverTimestamp();
-
-// ============================================================
-//  HELPERS
-// ============================================================
-function isPaymentSuccessful(status) {
-  const s = (status || '').toLowerCase();
-  return ['complete', 'paid', 'success', 'successful'].includes(s);
-}
-
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  return crypto.timingSafeEqual(bufA, bufB);
-}
-
-/// Vérifie la signature HMAC-SHA256 du webhook NotchPay.
-/// Header attendu : `x-notch-signature: sha256=<hex digest>`.
-function verifySignature(rawBody, signatureHeader) {
-  const webhookSecret = getWebhookSecret();
-  if (!webhookSecret) {
-    console.warn('⚠️ NOCHPAY_WEBHOOK_SECRET absent — signature non vérifiée');
-    return false;
-  }
-  const clean = (signatureHeader || '')
-    .trim()
-    .replace(/^sha256=/i, '');
-  if (!clean) return false;
-  const digest = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(rawBody, 'utf8')
-    .digest('hex');
-  return timingSafeEqual(digest, clean);
-}
-
-function extractTransaction(data) {
-  if (data && data.transaction && typeof data.transaction === 'object') {
-    return data.transaction;
-  }
-  if (data && typeof data === 'object') return data;
-  return {};
-}
-
-function extractMeta(txn, data) {
-  return (
-    txn.metadata ||
-    txn.customer_meta ||
-    txn.meta ||
-    data.metadata ||
-    data.customer_meta ||
-    {}
-  );
-}
 
 // ============================================================
 //  ACTIVATION DE L'ABONNEMENT (idempotente)
@@ -173,13 +111,13 @@ async function activateSubscription({
       userId,
       planId,
       status: 'active',
-      paymentMethod: paymentMethod || 'notchpay',
+      paymentMethod: paymentMethod || 'enkap',
       paymentId: reference,
       amount: amount || 0,
       currency: currency || 'XAF',
       autoRenew: true,
       canceledAt: null,
-      metadata: { notchpay_reference: reference, confirmed_by: 'server_callback' },
+      metadata: { enkap_reference: reference, confirmed_by: 'server_callback' },
       isActive: true,
       createdAt: serverTimestamp(),
       startDate: start,
@@ -195,15 +133,9 @@ async function activateSubscription({
 }
 
 // ============================================================
-//  MIDDLEWARE : capture du corps brut (pour la signature)
+//  MIDDLEWARE
 // ============================================================
-app.use(
-  express.json({
-    verify: (req, res, buf) => {
-      req.rawBody = buf;
-    },
-  })
-);
+app.use(express.json());
 
 // CORS pour le client web Flutter (le web relaie les appels ENKAP via ce
 // serveur, qui détient les secrets — l'API E-nkap refuse le CORS navigateur).
@@ -218,75 +150,6 @@ app.use((req, res, next) => {
 // ============================================================
 //  ROUTES
 // ============================================================
-
-/// Endpoint de callback appelé par NotchPay après un paiement.
-app.post('/payment/callback', async (req, res) => {
-  const signature =
-    req.headers['x-notch-signature'] ||
-    req.headers['x-notchpay-signature'] ||
-    '';
-
-  if (!verifySignature(req.rawBody, signature)) {
-    console.warn('❌ Signature invalide pour le callback');
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
-
-  const data = req.body || {};
-  const txn = extractTransaction(data);
-  const status = txn.status || data.status || '';
-
-  if (!isPaymentSuccessful(status)) {
-    console.log(`ℹ️ Paiement non finalisé (${status}) — ignoré`);
-    return res.status(200).json({ received: true, status: 'not-complete' });
-  }
-
-  const reference = txn.reference || data.reference || '';
-  const meta = extractMeta(txn, data);
-  const userId = meta.user_id || meta.userId || '';
-  const planId = meta.plan_id || meta.planId || '';
-
-  try {
-    const activated = await activateSubscription({
-      userId,
-      planId,
-      reference,
-      amount: txn.amount || data.amount || 0,
-      currency: txn.currency || data.currency || 'XAF',
-      paymentMethod: txn.payment_method || meta.payment_method || 'notchpay',
-    });
-    console.log(
-      `✅ Callback traité — ref=${reference} user=${userId} plan=${planId} activated=${activated}`
-    );
-    res.status(200).json({ received: true, activated });
-  } catch (e) {
-    console.error('❌ Erreur activation:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-/// Statut d'activation d'un paiement (pour le polling client).
-app.get('/verify/:reference', async (req, res) => {
-  const ref = req.params.reference;
-  try {
-    const snap = await db
-      .collection('subscriptions')
-      .where('paymentId', '==', ref)
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      return res.json({ reference: ref, status: 'pending', activated: false });
-    }
-    const s = snap.docs[0].data();
-    return res.json({
-      reference: ref,
-      status: s.status,
-      activated: s.status === 'active',
-      subscriptionId: snap.docs[0].id,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // ============================================================
 //  ENKAP (Maviance e-nkap) — callback de confirmation
@@ -546,12 +409,11 @@ app.get('/health', (req, res) =>
 
 app.get('/', (req, res) =>
   res.json({
-    service: 'NOI OHADA — callbacks paiement (NotchPay + ENKAP)',
+    service: 'NOI OHADA — callbacks paiement (ENKAP)',
     endpoints: [
-      'POST /payment/callback',
-      'GET /verify/:reference',
       'POST /enkap/register',
       'PUT /enkap/callback/:reference',
+      'GET /enkap/return/:reference',
       'POST /enkap/order (proxy web)',
       'GET /enkap/order/status (proxy web)',
       'GET /enkap/order (proxy web)',

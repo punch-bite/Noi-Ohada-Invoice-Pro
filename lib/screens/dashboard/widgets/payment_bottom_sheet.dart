@@ -2,9 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/subscription_provider.dart';
 import '../../../services/database_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../services/enkap_service.dart';
+import '../../../services/wallet_service.dart';
 import '../../../widgets/enkap_checkout_dialog.dart';
 import '../../../models/invoice.dart';
 import '../../../models/invoice_status.dart';
@@ -115,6 +118,20 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       return;
     }
 
+    // 💰 L'encaissement en ligne (ENKAP) est réservé aux plans payants.
+    // Le cash (validation manuelle) reste disponible pour tous.
+    if (_selectedMethod != 'cash') {
+      final subscription = context.read<SubscriptionProvider>();
+      if (!subscription.canCollectClientPayments) {
+        _showSnackBar(
+          'L\'encaissement en ligne est réservé aux plans payants. '
+          'Passez à un abonnement pour encaisser vos clients en ligne.',
+          Colors.orange,
+        );
+        return;
+      }
+    }
+
     if (_selectedMethod == 'cash') {
       await _processCashPayment();
     } else {
@@ -167,6 +184,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
         phoneNumber: _phoneNumber,
         onSuccess: () async {
           await _markInvoicePaid(invoice);
+          await _creditWallet(invoice, reference);
           if (!mounted) return;
           widget.onPaymentComplete();
           Navigator.pop(dialogContext);
@@ -186,6 +204,21 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     await _db.updateInvoice(updated);
     await _notificationService.notifyInvoicePaid(invoice.invoiceNumber);
     await _notificationService.notifyPaymentReceived(invoice.totalAmount);
+  }
+
+  /// 💰 Crédite le portefeuille marchand après un paiement en ligne confirmé.
+  /// L'argent est encaissé sur le compte ENKAP de la plateforme ; le
+  /// portefeuille interne crédite le marchand du montant de la facture.
+  Future<void> _creditWallet(Invoice invoice, String reference) async {
+    final auth = context.read<AppAuthProvider>();
+    final uid = auth.user?.id ?? '';
+    if (uid.isEmpty) return;
+    await WalletService().credit(
+      userId: uid,
+      amount: invoice.totalAmount,
+      reference: reference,
+      description: 'Paiement facture ${invoice.invoiceNumber}',
+    );
   }
 
   Future<void> _processCashPayment() async {

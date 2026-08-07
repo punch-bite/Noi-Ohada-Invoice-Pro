@@ -78,7 +78,7 @@ class SubscriptionService {
     final plan = await getPlan(planId) ?? Plan.getFreePlan();
 
     // ✅ Idempotence : si l'abonnement a déjà été activé (ex. via le serveur
-    // de callback NotchPay), on le renvoie sans en créer un doublon.
+    // de callback ENKAP), on le renvoie sans en créer un doublon.
     if (paymentId.isNotEmpty) {
       try {
         final existing = await _db

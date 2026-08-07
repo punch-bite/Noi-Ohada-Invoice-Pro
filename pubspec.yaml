@@ -41,7 +41,6 @@ dependencies:
   # --- Utilitaires & Sécurité ---
   dart_dash_otp: ^2.0.0
   crypto: ^3.0.6
-  qr_flutter: ^4.1.0
   mailer: ^6.4.0
   http: ^1.2.2
   dio: ^5.7.0

@@ -2,7 +2,7 @@
 //
 // 🔥 Configuration Firebase par plateforme (générée selon le modèle FlutterFire).
 // Ces valeurs sont PUBLIQUES (config client Firebase) — elles ne sont pas des secrets.
-// Les secrets (NochPay, SMTP…) sont injectés au build via --dart-define.
+// Les secrets (ENKAP, SMTP…) sont injectés au build via --dart-define.
 //
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'

@@ -187,5 +187,27 @@ service cloud.firestore {
     match /counters/{counterId} {
       allow read, write: if isSignedIn() && request.auth.uid == counterId;
     }
+
+    // ===========================================
+    // PORTEFEUILLE MARCHAND (encaissement client)
+    // ===========================================
+    match /wallets/{userId} {
+      allow read, write: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+    }
+    match /wallet_transactions/{id} {
+      allow read: if isSignedIn()
+        && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn()
+        && (isAdmin() || request.resource.data.userId == request.auth.uid);
+    }
+    match /wallet_withdrawals/{id} {
+      allow read: if isSignedIn()
+        && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      // La plateforme (admin) met à jour le statut (paid / rejected).
+      allow update: if isAdmin();
+    }
   }
 }

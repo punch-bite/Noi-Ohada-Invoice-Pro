@@ -16,7 +16,6 @@ import 'services/notification_service.dart';
 import 'services/reminder_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/stock_service.dart';
-import 'services/nochpay_service.dart';
 import 'services/subscription_checker_service.dart';
 import 'services/hive_service.dart';
 import 'services/database_service.dart';
@@ -38,7 +37,6 @@ import 'widgets/glass_app_background.dart';
 NotificationService? gNotificationService;
 ConnectivityService? gConnectivityService;
 StockService? gStockService;
-NochPayService? gNochPayService;
 
 /// Log de démarrage compatible web + mobile (délègue à boot_logger).
 Future<void> _writeLog(String message) => boot.writeBootLog(message);
@@ -67,13 +65,11 @@ class MyAppHost extends StatelessWidget {
     final notificationService = gNotificationService ?? NotificationService();
     final connectivityService = gConnectivityService ?? ConnectivityService();
     final stockService = gStockService ?? StockService();
-    final nochPayService = gNochPayService ?? NochPayService();
 
     return MyApp(
       notificationService: notificationService,
       connectivityService: connectivityService,
       stockService: stockService,
-      nochPayService: nochPayService,
     );
   }
 }
@@ -158,12 +154,10 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
   final notificationService = NotificationService();
   final connectivityService = ConnectivityService();
   final stockService = StockService();
-  final nochPayService = NochPayService();
 
   gNotificationService = notificationService;
   gConnectivityService = connectivityService;
   gStockService = stockService;
-  gNochPayService = nochPayService;
 
   try {
     await Future.any([
@@ -219,14 +213,12 @@ class MyApp extends StatelessWidget {
   final NotificationService notificationService;
   final ConnectivityService connectivityService;
   final StockService stockService;
-  final NochPayService nochPayService;
 
   const MyApp({
     super.key,
     required this.notificationService,
     required this.connectivityService,
     required this.stockService,
-    required this.nochPayService,
   });
 
   @override
@@ -247,7 +239,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: notificationService),
         ChangeNotifierProvider.value(value: connectivityService),
         Provider<StockService>.value(value: stockService),
-        Provider<NochPayService>.value(value: nochPayService),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

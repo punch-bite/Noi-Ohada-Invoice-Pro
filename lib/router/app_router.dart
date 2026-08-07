@@ -43,6 +43,7 @@ import '../screens/dashboard/suppliers/create_supplier_screen.dart';
 // Écrans - Utilitaires & Analytics
 import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
+import '../screens/dashboard/wallet_screen.dart';
 import '../screens/dashboard/company_config_screen.dart';
 import '../screens/dashboard/reminders_screen.dart';
 import '../screens/dashboard/relance_screen.dart';
@@ -76,6 +77,7 @@ import '../screens/admin/activity_logs_screen.dart';
 import '../screens/admin/admin_add_subscription_screen.dart';
 import '../screens/admin/admin_template_form_screen.dart';
 import '../screens/admin/admin_templates_screen.dart';
+import '../screens/admin/admin_withdrawals_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
 import '../screens/teams/teams_screen.dart';
@@ -362,6 +364,12 @@ class AppRouter {
         builder: (context, state) => const CompanyConfigScreen(),
       ),
 
+      // 💰 Portefeuille marchand (encaissements clients)
+      GoRoute(
+        path: '/wallet',
+        builder: (context, state) => const WalletScreen(),
+      ),
+
       // Fournisseurs
       GoRoute(
         path: '/suppliers',
@@ -446,6 +454,11 @@ class AppRouter {
             path: 'templates',
             name: 'admin-templates',
             builder: (context, state) => const AdminTemplatesScreen(),
+          ),
+          GoRoute(
+            path: 'withdrawals',
+            name: 'admin-withdrawals',
+            builder: (context, state) => const AdminWithdrawalsScreen(),
           ),
 
           // ✅ Gestion des plans personnalisés

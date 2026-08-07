@@ -258,6 +258,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
+                        onPressed: () => context.push('/admin/withdrawals'),
+                        icon: const Icon(Icons.account_balance_wallet_outlined),
+                        label: const Text('Traiter les retraits (portefeuille)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
                         onPressed: () => context.push('/admin/assign-plan'),
                         icon: const Icon(Icons.assignment_ind),
                         label: const Text('Affecter un plan à un utilisateur'),

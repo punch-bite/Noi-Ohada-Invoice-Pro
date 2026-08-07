@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 /// Énumération du cycle de vie d'une facture.
 ///
-/// Contrairement aux paiements en ligne (NochPay réservé aux abonnements),
+/// Contrairement aux paiements en ligne (ENKAP réservé aux abonnements),
 /// le cycle de facturation est validé **manuellement** par le commerçant :
 ///   brouillon → envoyée → en retard → payée
 /// Chaque transition est effectuée à la main via une validation énumérée.

@@ -111,6 +111,13 @@ class SubscriptionProvider extends ChangeNotifier {
     return hasPremiumAccess && effectivePlan.hasClientRelance;
   }
 
+  /// 💰 Encaissement des clients en ligne (ENKAP) + portefeuille marchand :
+  /// réservé aux plans PAYANTS (tous) avec un abonnement actif. Admin : toujours.
+  bool get canCollectClientPayments {
+    if (_authProvider.user?.isAdmin == true) return true;
+    return hasPremiumAccess && !(effectivePlan.isFree);
+  }
+
   // ===== LOAD PLANS =====
   Future<void> loadPlans() async {
     try {

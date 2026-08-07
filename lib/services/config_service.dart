@@ -1,6 +1,6 @@
 // lib/services/config_service.dart
 //
-// 🔐 Sécurité : les SECRETS (clés privées NochPay, webhook, SMTP…) ne sont
+// 🔐 Sécurité : les SECRETS (clés ENKAP, SMTP…) ne sont
 // JAMAIS embarqués dans le bundle. Ils sont injectés au build via
 // `--dart-define` et restent hors de l'APK.
 //
@@ -8,9 +8,7 @@
 // lues depuis un fichier `.env` NON embarqué, uniquement en développement.
 //
 // Injection en production :
-//   flutter build apk --dart-define=NOCHPAY_PRIVATE_KEY=sk_xxx \
-//                     --dart-define=NOCHPAY_WEBHOOK_SECRET=whsec_xxx \
-//                     --dart-define=SMTP_PASSWORD=xxx
+//   flutter build apk --dart-define=SMTP_PASSWORD=xxx
 //
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
@@ -90,21 +88,6 @@ class ConfigService {
   /// sur web. Correspond au client_id de type "web" dans google-services.json.
   static const String _defaultWebClientId =
       '942740787802-a5e4djanel0fk1edu1umdi1h3qm4l3e2.apps.googleusercontent.com';
-
-  // Nochpay — clé publique (publishable, toujours côté client) + secrets
-  // La clé publique `pk_` est CONÇUE pour être publique (comme une clé
-  // publishable Stripe) : elle vit dans le client par défaut. Elle peut être
-  // surchargée via --dart-define/.env (NOCHPAY_PUBLIC_KEY) en production.
-  static const String _defaultNochpayPublicKey =
-      'pk_test.udZRV3kzUtgQHymnJArUFnnSvZxww3WxH6WfSZWxNHJSPUf9bIoguBPpkR6aNtMX7RDA51j1mxYP23UB1i3D9BfrkGwwxAAgQAHmlSrUG1OjiNs4E7G2cpK5m14Vm';
-  static String get nochpayPublicKey {
-    final v = _secret('NOCHPAY_PUBLIC_KEY');
-    return v.isNotEmpty ? v : _defaultNochpayPublicKey;
-  }
-
-  static String get nochpayPrivateKey => _secret('NOCHPAY_PRIVATE_KEY');
-  static String get nochpayWebhookSecret => _secret('NOCHPAY_WEBHOOK_SECRET');
-  static bool get isProduction => _get('NOCHPAY_MODE') == 'production';
 
   // ENKAP (Maviance e-nkap) — paiement Mobile Money (Orange/MTN) + Carte.
   // Base de l'API de paiement (production par défaut).
