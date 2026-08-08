@@ -29,29 +29,67 @@ class TemplateElement {
   const TemplateElement(this.id, this.label, this.icon);
 }
 
+/// 🧩 CHAQUE VARIABLE de facture est un élément à part entière : déplaçable,
+/// redimensionnable et masquable individuellement (drag & drop).
 const List<TemplateElement> kTemplateElements = [
-  TemplateElement('header', 'En-tête', Icons.business_rounded),
-  TemplateElement('client', 'Client', Icons.person_rounded),
+  // En-tête société
+  TemplateElement('company_name', 'Nom société', Icons.business_rounded),
+  TemplateElement('company_address', 'Adresse société', Icons.location_on_outlined),
+  TemplateElement('company_phone', 'Tél société', Icons.phone_outlined),
+  TemplateElement('company_email', 'Email société', Icons.email_outlined),
+  TemplateElement('invoice_title', 'Titre FACTURE', Icons.title),
+  // Client
+  TemplateElement('client_name', 'Nom client', Icons.person_rounded),
+  TemplateElement('client_address', 'Adresse client', Icons.location_city_outlined),
+  TemplateElement('client_phone', 'Tél client', Icons.phone_iphone_outlined),
+  TemplateElement('client_email', 'Email client', Icons.alternate_email),
+  // Corps
   TemplateElement('items', 'Lignes', Icons.receipt_long_rounded),
-  TemplateElement('totals', 'Totaux', Icons.calculate_rounded),
+  TemplateElement('subtotal', 'Sous-total', Icons.calculate_outlined),
+  TemplateElement('tax_amount', 'TVA', Icons.percent),
+  TemplateElement('discount', 'Remise', Icons.local_offer_outlined),
+  TemplateElement('total_amount', 'Total', Icons.summarize_outlined),
+  // Pied de page
   TemplateElement('footer', 'Pied de page', Icons.text_snippet_rounded),
   TemplateElement('qr', 'QR Paiement', Icons.qr_code_rounded),
   TemplateElement('signature', 'Signature', Icons.draw_rounded),
 ];
 
-/// Sections de la facture : chaque élément est déplaçable et éditable.
+/// Sections de la facture : chaque VARIABLE est déplaçable et éditable.
 const Map<String, List<String>> kTemplateSections = {
-  'En-tête': ['header', 'client'],
-  'Corps': ['items', 'totals'],
+  'En-tête': [
+    'company_name',
+    'company_address',
+    'company_phone',
+    'company_email',
+    'invoice_title',
+  ],
+  'Client': [
+    'client_name',
+    'client_address',
+    'client_phone',
+    'client_email',
+  ],
+  'Corps': ['items', 'subtotal', 'tax_amount', 'discount', 'total_amount'],
   'Pied de page': ['footer', 'qr', 'signature'],
 };
 
-/// Position par défaut de chaque élément (x,y relatifs 0..1, scale).
+/// Position par défaut de chaque variable (x,y relatifs 0..1, scale).
 const Map<String, dynamic> kDefaultPositions = {
-  'header': {'x': 0.04, 'y': 0.04, 'scale': 1.0, 'visible': true},
-  'client': {'x': 0.04, 'y': 0.16, 'scale': 1.0, 'visible': true},
+  'company_name': {'x': 0.04, 'y': 0.04, 'scale': 1.0, 'visible': true},
+  'company_address': {'x': 0.04, 'y': 0.065, 'scale': 1.0, 'visible': true},
+  'company_phone': {'x': 0.04, 'y': 0.09, 'scale': 1.0, 'visible': true},
+  'company_email': {'x': 0.04, 'y': 0.115, 'scale': 1.0, 'visible': true},
+  'invoice_title': {'x': 0.58, 'y': 0.04, 'scale': 1.0, 'visible': true},
+  'client_name': {'x': 0.04, 'y': 0.16, 'scale': 1.0, 'visible': true},
+  'client_address': {'x': 0.04, 'y': 0.185, 'scale': 1.0, 'visible': true},
+  'client_phone': {'x': 0.04, 'y': 0.21, 'scale': 1.0, 'visible': true},
+  'client_email': {'x': 0.04, 'y': 0.235, 'scale': 1.0, 'visible': true},
   'items': {'x': 0.04, 'y': 0.30, 'scale': 1.0, 'visible': true},
-  'totals': {'x': 0.45, 'y': 0.62, 'scale': 1.0, 'visible': true},
+  'subtotal': {'x': 0.5, 'y': 0.60, 'scale': 1.0, 'visible': true},
+  'tax_amount': {'x': 0.5, 'y': 0.63, 'scale': 1.0, 'visible': true},
+  'discount': {'x': 0.5, 'y': 0.66, 'scale': 1.0, 'visible': true},
+  'total_amount': {'x': 0.5, 'y': 0.69, 'scale': 1.0, 'visible': true},
   'footer': {'x': 0.04, 'y': 0.85, 'scale': 1.0, 'visible': true},
   'qr': {'x': 0.04, 'y': 0.64, 'scale': 1.0, 'visible': true},
   'signature': {'x': 0.55, 'y': 0.86, 'scale': 1.0, 'visible': true},
@@ -643,95 +681,102 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
 
     Widget inner;
     switch (e.id) {
-      case 'header':
-        inner = Row(
+      case 'company_name':
+        inner = Text(
+          _companyName,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: primary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'company_address':
+        inner = Text(
+          _companyAddress,
+          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'company_phone':
+        inner = Text(
+          'Tél : +237 6 90 00 00 00',
+          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'company_email':
+        inner = Text(
+          'contact@ohada-invoice-pro.com',
+          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'invoice_title':
+        inner = Text(
+          'FACTURE',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: primary,
+            letterSpacing: 2,
+          ),
+          textAlign: TextAlign.right,
+        );
+      case 'client_name':
+        inner = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: width * 0.16,
-              height: width * 0.16,
-              decoration: BoxDecoration(
-                color: primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.business_rounded, color: primary, size: 18),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _companyName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: primary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    _companyAddress,
-                    style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
+            Text(
+              'Facturé à :',
+              style: TextStyle(
                 color: primary,
-                borderRadius: BorderRadius.circular(4),
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
               ),
-              child: const Text(
-                'FACTURE',
-                style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              _clientName,
+              style: TextStyle(
+                color: text,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         );
-      case 'client':
-        inner = Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: primary.withValues(alpha: 0.05),
-            border: Border.all(color: primary.withValues(alpha: 0.25)),
-            borderRadius: BorderRadius.circular(6),
+      case 'client_address':
+        inner = Text(
+          'Douala, Cameroun',
+          style: TextStyle(
+            color: text.withValues(alpha: 0.6),
+            fontSize: 9,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Facturé à :',
-                style: TextStyle(
-                  color: primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
-              ),
-              Text(
-                _clientName,
-                style: TextStyle(
-                  color: text,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 11,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                'Douala, Cameroun',
-                style: TextStyle(
-                  color: text.withValues(alpha: 0.6),
-                  fontSize: 9,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'client_phone':
+        inner = Text(
+          'Tél : +237 6 90 00 00 00',
+          style: TextStyle(
+            color: text.withValues(alpha: 0.6),
+            fontSize: 9,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      case 'client_email':
+        inner = Text(
+          'client@email.com',
+          style: TextStyle(
+            color: text.withValues(alpha: 0.6),
+            fontSize: 9,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         );
       case 'items':
         inner = Column(
@@ -788,21 +833,21 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
               ),
           ],
         );
-      case 'totals':
+      case 'subtotal':
+        inner = _totalRow('Sous-total', '175 000 XAF');
+      case 'tax_amount':
+        inner = _totalRow('TVA (18%)', '31 500 XAF');
+      case 'discount':
+        inner = _totalRow('Remise', '-5 000 XAF');
+      case 'total_amount':
         inner = Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.only(top: 4),
           decoration: BoxDecoration(
-            border: Border.all(color: primary.withValues(alpha: 0.25)),
-            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              top: BorderSide(color: primary.withValues(alpha: 0.4)),
+            ),
           ),
-          child: Column(
-            children: [
-              _totalRow('Sous-total', '175 000 XAF'),
-              _totalRow('TVA (18%)', '31 500 XAF'),
-              const Divider(height: 6),
-              _totalRow('TOTAL', '206 500 XAF', bold: true, primary: primary),
-            ],
-          ),
+          child: _totalRow('TOTAL', '206 500 XAF', bold: true, primary: primary),
         );
       case 'footer':
         inner = Text(

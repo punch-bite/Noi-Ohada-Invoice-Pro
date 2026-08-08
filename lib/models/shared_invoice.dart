@@ -9,7 +9,7 @@ class SharedInvoice {
   final String id;
 
   @HiveField(1)
-  final String invoiceId;
+  final String invoiceId; // id de la ressource partagée (facture, produit, client)
 
   @HiveField(2)
   final String teamId;
@@ -18,7 +18,7 @@ class SharedInvoice {
   final String sharedBy;
 
   @HiveField(4)
-  final List<String> sharedWith; // User IDs
+  final List<String> sharedWith; // User IDs (@mentions)
 
   @HiveField(5)
   final DateTime sharedAt;
@@ -32,6 +32,11 @@ class SharedInvoice {
   @HiveField(8)
   final bool isActive;
 
+  // Champs NON Hive (persistés uniquement en Firestore) : type de ressource
+  // partagée ('invoice' | 'product' | 'client') et nom lisible.
+  final String resourceType;
+  final String resourceName;
+
   SharedInvoice({
     String? id,
     required this.invoiceId,
@@ -42,6 +47,8 @@ class SharedInvoice {
     required this.sharedAt,
     this.expiresAt,
     this.isActive = true,
+    this.resourceType = 'invoice',
+    this.resourceName = '',
   })  : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toMap() {
@@ -55,6 +62,8 @@ class SharedInvoice {
       'permissionLevel': permissionLevel,
       'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
       'isActive': isActive,
+      'resourceType': resourceType,
+      'resourceName': resourceName,
     };
   }
 
@@ -69,6 +78,8 @@ class SharedInvoice {
       sharedAt: _parseDateTime(map['sharedAt']),
       expiresAt: map['expiresAt'] != null ? _parseDateTime(map['expiresAt']) : null,
       isActive: map['isActive'] ?? true,
+      resourceType: map['resourceType'] ?? 'invoice',
+      resourceName: map['resourceName'] ?? '',
     );
   }
 

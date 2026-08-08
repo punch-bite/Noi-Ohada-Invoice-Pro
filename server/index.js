@@ -324,7 +324,19 @@ async function enkapFetch(path, { method = 'GET', body } = {}) {
   return { status: resp.status, data, text };
 }
 
-/// POST /enkap/order — crée une commande ENKAP (relais web).
+/// URL de base publique du serveur (utilisée pour returnUrl / notificationUrl).
+const PUBLIC_BASE_URL = () =>
+  (process.env.PUBLIC_BASE_URL || '').trim() || 'https://server-xi-two-23.vercel.app';
+
+/// POST /enkap/order — crée une commande ENKAP (relais web/mobile).
+///
+/// Après création, on configure les URL de retour :
+///   - returnUrl        → <base>/enkap/return   (page de confirmation, l'app
+///                                               détecte le redirect pour finir)
+///   - notificationUrl  → <base>/enkap/callback (ITN instantané, active même
+///                                               si l'app est fermée)
+/// Sans ces URL, E-nkap ne redirige pas le client et n'envoie pas l'ITN →
+/// le paiement « tourne indéfiniment » puis expire côté client.
 app.post('/enkap/order', async (req, res) => {
   try {
     const b = req.body || {};
@@ -350,6 +362,22 @@ app.post('/enkap/order', async (req, res) => {
         error: data.message || data.error || text || `ENKAP ${status}`,
       });
     }
+
+    // Configure returnUrl + notificationUrl (best-effort : si le setup échoue,
+    // la commande est quand même valide, la confirmation se fera par polling).
+    const base = PUBLIC_BASE_URL();
+    try {
+      await enkapFetch('/api/order/setup', {
+        method: 'PUT',
+        body: {
+          returnUrl: `${base}/enkap/return`,
+          notificationUrl: `${base}/enkap/callback`,
+        },
+      });
+    } catch (setupErr) {
+      console.warn('⚠️ ENKAP /order/setup échoué (best-effort):', setupErr.message);
+    }
+
     res.json({
       success: true,
       orderTransactionId: data.orderTransactionId,
@@ -384,6 +412,30 @@ app.get('/enkap/order/status', async (req, res) => {
   }
 });
 
+/// PUT /enkap/order/setup — configure returnUrl + notificationUrl (relais
+/// mobile/web). Utilisé par l'app en relais serveur (best-effort).
+app.put('/enkap/order/setup', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const base = PUBLIC_BASE_URL();
+    const returnUrl = (b.returnUrl || '').trim() || `${base}/enkap/return`;
+    const notificationUrl =
+      (b.notificationUrl || '').trim() || `${base}/enkap/callback`;
+    const { status, data, text } = await enkapFetch('/api/order/setup', {
+      method: 'PUT',
+      body: { returnUrl, notificationUrl },
+    });
+    if (status !== 200) {
+      return res
+        .status(status)
+        .json({ success: false, error: data.message || text });
+    }
+    res.json({ success: true, returnUrl, notificationUrl });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 /// GET /enkap/order?orderMerchantId=... — détails d'une commande.
 app.get('/enkap/order', async (req, res) => {
   try {
@@ -407,16 +459,73 @@ app.get('/health', (req, res) =>
   res.json({ ok: true, service: 'noi-ohada-payment-callback', time: new Date().toISOString() })
 );
 
+// ============================================================
+//  ENVOI D'EMAIL (SMTP côté serveur)
+//
+//  Les secrets SMTP restent dans les variables d'environnement Vercel.
+//  Le client mobile n'a donc pas besoin d'embarquer les identifiants
+//  (impossible de façon sûre) ni d'ouvrir un port SMTP depuis le téléphone
+//  (souvent bloqué par les opérateurs → les mails « ne marchent pas » sur
+//  mobile). Le client POSTe ici, le serveur envoie via nodemailer.
+// ============================================================
+const nodemailer = require('nodemailer');
+
+app.post('/email/send', async (req, res) => {
+  try {
+    const { to, subject, body, html, cc, bcc } = req.body || {};
+    if (!to || (!body && !html)) {
+      return res.status(400).json({ error: 'to et (body|html) requis' });
+    }
+
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = Number(process.env.SMTP_PORT || 587);
+    const user = (process.env.SMTP_USERNAME || '').trim();
+    const pass = (process.env.SMTP_PASSWORD || '').trim();
+    const fromEmail = (process.env.SMTP_FROM_EMAIL || user).trim();
+    const fromName = (process.env.SMTP_FROM_NAME || 'OHADA Invoice Pro').trim();
+
+    if (!user || !pass) {
+      return res
+        .status(500)
+        .json({ error: 'SMTP non configuré côté serveur (SMTP_USERNAME/SMTP_PASSWORD)' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: Array.isArray(to) ? to.join(',') : String(to),
+      cc: cc ? (Array.isArray(cc) ? cc.join(',') : String(cc)) : undefined,
+      bcc: bcc ? (Array.isArray(bcc) ? bcc.join(',') : String(bcc)) : undefined,
+      subject: subject || 'OHADA Invoice Pro',
+      text: html ? undefined : body,
+      html: html || undefined,
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('❌ /email/send error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/', (req, res) =>
   res.json({
-    service: 'NOI OHADA — callbacks paiement (ENKAP)',
+    service: 'NOI OHADA — callbacks paiement (ENKAP) + email',
     endpoints: [
       'POST /enkap/register',
       'PUT /enkap/callback/:reference',
       'GET /enkap/return/:reference',
-      'POST /enkap/order (proxy web)',
-      'GET /enkap/order/status (proxy web)',
-      'GET /enkap/order (proxy web)',
+      'POST /enkap/order (proxy web/mobile)',
+      'GET /enkap/order/status (proxy web/mobile)',
+      'PUT /enkap/order/setup (proxy web/mobile)',
+      'GET /enkap/order (proxy web/mobile)',
+      'POST /email/send (SMTP côté serveur)',
       'GET /health',
     ],
   })

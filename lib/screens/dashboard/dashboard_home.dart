@@ -12,6 +12,7 @@ import '../../models/financial_stats.dart';
 import '../../widgets/notification_badge.dart';
 import '../../widgets/cloud_storage_info_banner.dart';
 import '../../widgets/marketing_carousel.dart';
+import '../../widgets/promo_section.dart';
 import 'widgets/payment_bottom_sheet.dart';
 
 class DashboardHome extends StatefulWidget {
@@ -221,6 +222,11 @@ class _DashboardHomeState extends State<DashboardHome> {
                       subTextColor: subTextColor,
                       cardColor: cardColor,
                     ),
+                    const SizedBox(height: 24),
+
+                    // 🎉 Carrousel publicitaire (défilement auto) : factures
+                    // Pro, relance, équipe, cloud Drive
+                    const PromoSection(),
                     const SizedBox(height: 24),
 
                     // Recent Clients

@@ -2,6 +2,7 @@
 //
 // 💰 Portefeuille marchand : solde des encaissements clients (ENKAP), historique
 // des crédits et demandes de retrait. Le retrait est traité par la plateforme.
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -240,15 +241,22 @@ class _WalletScreenState extends State<WalletScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // ===== Historique des crédits =====
-                    Text('Encaissements',
+                    // ===== Historique des transactions =====
+                    Text('Historique des transactions',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w700, color: text)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Encaissements clients, retraits payés et demandes.',
+                      style: TextStyle(fontSize: 12, color: sub),
+                    ),
                     const SizedBox(height: 8),
                     if (_transactions.isEmpty)
-                      _emptyBox('Aucun encaissement pour le moment.', sub)
+                      _emptyBox('Aucune transaction pour le moment.', sub)
                     else
-                      ..._transactions.take(20).map((t) => _txTile(t, isDark, text, sub)),
+                      ..._transactions
+                          .take(30)
+                          .map((t) => _txTile(t, isDark, text, sub)),
                     const SizedBox(height: 24),
 
                     // ===== Demandes de retrait =====
@@ -281,6 +289,21 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _txTile(Map<String, dynamic> t, bool isDark, Color text, Color sub) {
     final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+    final type = (t['type'] ?? 'credit').toString();
+    final isCredit = type == 'credit';
+    final color = isCredit ? Colors.green : Colors.red;
+
+    // Date lisible si présente.
+    final rawDate = t['createdAt'];
+    String dateLabel = '';
+    if (rawDate is Timestamp) {
+      final d = rawDate.toDate();
+      dateLabel = _formatDate(d);
+    } else if (rawDate is String && rawDate.isNotEmpty) {
+      final d = DateTime.tryParse(rawDate);
+      if (d != null) dateLabel = _formatDate(d);
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -290,26 +313,43 @@ class _WalletScreenState extends State<WalletScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.savings_outlined, color: Colors.green, size: 22),
+          Icon(
+            isCredit ? Icons.savings_outlined : Icons.outbox_rounded,
+            color: color,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t['description'] ?? 'Encaissement',
+                Text(t['description'] ?? (isCredit ? 'Encaissement' : 'Retrait'),
                     style: TextStyle(color: text, fontWeight: FontWeight.w600, fontSize: 13)),
+                if (dateLabel.isNotEmpty)
+                  Text(dateLabel,
+                      style: TextStyle(color: sub, fontSize: 11)),
                 if ((t['reference'] ?? '').toString().isNotEmpty)
-                  Text(t['reference'].toString(),
+                  Text('Réf: ${t['reference']}',
                       style: TextStyle(color: sub, fontSize: 11)),
               ],
             ),
           ),
-          Text('+${_fmt(amount)}',
-              style: const TextStyle(
-                  color: Colors.green, fontWeight: FontWeight.w700, fontSize: 13)),
+          Text(
+            isCredit ? '+${_fmt(amount)}' : '-${_fmt(amount)}',
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.w700, fontSize: 13),
+          ),
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime d) {
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    final hour = d.hour.toString().padLeft(2, '0');
+    final min = d.minute.toString().padLeft(2, '0');
+    return '$day/$month/${d.year} • $hour:$min';
   }
 
   Widget _withdrawalTile(Map<String, dynamic> w, bool isDark, Color text, Color sub) {

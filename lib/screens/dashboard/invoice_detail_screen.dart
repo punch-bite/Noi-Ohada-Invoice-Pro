@@ -310,13 +310,44 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       builder: (context) {
         String? selectedTeamId;
         String permissionLevel = 'read';
-        bool shareWithAll = true;
-        List<String> selectedMembers = [];
+        final Set<String> selectedMembers = {};
+        Map<String, Map<String, String>> profiles = {};
+        List<String> memberIds = [];
+        bool loadingMembers = false;
+
+        Future<void> loadMembers(String teamId) async {
+          setState(() => loadingMembers = true);
+          final team = await teamService.getTeam(teamId);
+          final profs = await teamService.getMemberProfiles(teamId);
+          final ids = <String>{
+            if (team != null) team.ownerId,
+            ...?team?.adminIds,
+            ...?team?.memberIds,
+          }..remove(auth.user!.id);
+          selectedMembers.clear();
+          if (!mounted) return;
+          setState(() {
+            memberIds = ids.toList();
+            profiles = profs;
+            loadingMembers = false;
+          });
+        }
+
+        String memberLabel(String uid) {
+          final name = profiles[uid]?['name'] ?? '';
+          if (name.isNotEmpty) return name;
+          final email = profiles[uid]?['email'] ?? '';
+          if (email.isNotEmpty) return email;
+          return 'Membre #${uid.substring(0, 6)}';
+        }
 
         return StatefulBuilder(
           builder: (context, setState) {
             return Container(
               padding: const EdgeInsets.all(24),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,8 +367,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                         child: Text(team.name),
                       );
                     }).toList(),
-                    onChanged: (value) =>
-                        setState(() => selectedTeamId = value),
+                    onChanged: (value) {
+                      setState(() => selectedTeamId = value);
+                      if (value != null) loadMembers(value);
+                    },
                   ),
                   const SizedBox(height: 12),
                   // Permission
@@ -363,50 +396,131 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  // Membres (@mention)
+                  Text(
+                    'Mentionner (@) les membres',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (loadingMembers)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else if (memberIds.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Aucun autre membre dans cette équipe.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 210),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          CheckboxListTile(
+                            dense: true,
+                            title: const Text('Tous les membres'),
+                            value:
+                                selectedMembers.length == memberIds.length,
+                            onChanged: (v) => setState(() {
+                              if (v == true) {
+                                selectedMembers.addAll(memberIds);
+                              } else {
+                                selectedMembers.clear();
+                              }
+                            }),
+                            activeColor:
+                                Theme.of(context).colorScheme.primary,
+                            controlAffinity: ListTileControlAffinity.leading,
+                          ),
+                          for (final uid in memberIds)
+                            CheckboxListTile(
+                              dense: true,
+                              value: selectedMembers.contains(uid),
+                              onChanged: (v) => setState(() {
+                                if (v == true) {
+                                  selectedMembers.add(uid);
+                                } else {
+                                  selectedMembers.remove(uid);
+                                }
+                              }),
+                              title: Text(
+                                '@${memberLabel(uid)}',
+                                style: TextStyle(
+                                  color: selectedMembers.contains(uid)
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                  fontWeight: selectedMembers.contains(uid)
+                                      ? FontWeight.w700
+                                      : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              activeColor:
+                                  Theme.of(context).colorScheme.primary,
+                              controlAffinity:
+                                  ListTileControlAffinity.leading,
+                            ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   // Bouton Partager
                   SizedBox(
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: selectedTeamId == null
-                          ? null
-                          : () async {
-                              // Récupérer les membres de l'équipe
-                              final team =
-                                  await teamService.getTeam(selectedTeamId!);
-                              if (team == null) return;
-
-                              // Partager avec tous les membres (sauf le propriétaire)
-                              final members = team.memberIds
-                                  .where((id) => id != auth.user!.id)
-                                  .toList();
-
-                              await teamService.shareInvoice(
-                                invoiceId: _invoice!.id,
-                                teamId: selectedTeamId!,
-                                sharedBy: auth.user!.id,
-                                sharedWith: members,
-                                permissionLevel: permissionLevel,
-                              );
-
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('Facture partagée avec succès !'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            },
+                      onPressed:
+                          selectedTeamId == null || selectedMembers.isEmpty
+                              ? null
+                              : () async {
+                                  await teamService.shareResource(
+                                    resourceId: _invoice!.id,
+                                    resourceType: 'invoice',
+                                    resourceName: _invoice!.invoiceNumber,
+                                    teamId: selectedTeamId!,
+                                    sharedBy: auth.user!.id,
+                                    sharedWith: selectedMembers.toList(),
+                                    permissionLevel: permissionLevel,
+                                  );
+                                  if (!mounted) return;
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Facture partagée avec ${selectedMembers.length} membre(s) ✅'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text('Partager'),
+                      child: Text(
+                        selectedMembers.isEmpty
+                            ? 'Partager'
+                            : 'Partager avec ${selectedMembers.length} membre(s)',
+                      ),
                     ),
                   ),
                 ],

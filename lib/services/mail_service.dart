@@ -1,6 +1,8 @@
 // lib/services/mail_service.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'config_service.dart';
@@ -41,9 +43,30 @@ class MailService {
     String? bcc,
     bool isHtml = false,
   }) async {
-    if (!isConfigured) {
-      debugPrint('⚠️ MailService non configuré. Vérifiez vos variables SMTP.');
-      return false;
+    // 📱 Sur mobile (natif), on privilégie l'envoi via notre serveur
+    // (SMTP côté serveur) : l'APK n'embarque PAS les secrets SMTP et le
+    // SMTP direct est souvent bloqué par les opérateurs mobiles → c'est
+    // pourquoi les mails « ne fonctionnaient pas » sur mobile.
+    if (!kIsWeb) {
+      final sent = await _sendViaServer(
+        to: to,
+        subject: subject,
+        body: body,
+        cc: cc,
+        bcc: bcc,
+        isHtml: isHtml,
+      );
+      if (sent) return true;
+      // Sinon on retombe sur l'envoi local si la config SMTP existe.
+      if (!isConfigured) {
+        debugPrint('⚠️ MailService non configuré localement (serveur KO).');
+        return false;
+      }
+    } else {
+      if (!isConfigured) {
+        debugPrint('⚠️ MailService non configuré. Vérifiez vos variables SMTP.');
+        return false;
+      }
     }
 
     try {
@@ -70,6 +93,45 @@ class MailService {
       return false;
     } catch (e) {
       debugPrint('❌ Erreur envoi email: $e');
+      return false;
+    }
+  }
+
+  /// Envoi via notre serveur (endpoint /email/send, SMTP côté serveur).
+  /// Best-effort : retourne false en cas d'échec réseau/serveur pour que
+  /// l'app puisse basculer sur l'envoi local.
+  static Future<bool> _sendViaServer({
+    required String to,
+    required String subject,
+    required String body,
+    String? cc,
+    String? bcc,
+    required bool isHtml,
+  }) async {
+    final apiBase = ConfigService.apiBaseUrl.trim();
+    if (apiBase.isEmpty) return false;
+    try {
+      final resp = await http
+          .post(
+            Uri.parse('$apiBase/email/send'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'to': to,
+              'subject': subject,
+              if (isHtml) 'html': body else 'body': body,
+              if (cc != null && cc.isNotEmpty) 'cc': cc,
+              if (bcc != null && bcc.isNotEmpty) 'bcc': bcc,
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        debugPrint('✅ Email envoyé via serveur → $to');
+        return true;
+      }
+      debugPrint('⚠️ Envoi serveur échoué (${resp.statusCode}) : ${resp.body}');
+      return false;
+    } catch (e) {
+      debugPrint('⚠️ Envoi serveur échoué (réseau) : $e');
       return false;
     }
   }

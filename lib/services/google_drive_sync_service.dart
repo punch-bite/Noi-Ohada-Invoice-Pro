@@ -17,6 +17,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'config_service.dart';
 import 'database_service.dart';
 
 class GoogleDriveSyncService {
@@ -66,7 +67,12 @@ class GoogleDriveSyncService {
   }
 
   // ===== AUTHENTIFICATION GOOGLE (scope Drive) =====
-  GoogleSignIn _signIn() => GoogleSignIn(scopes: [_driveScope]);
+  GoogleSignIn _signIn() => GoogleSignIn(
+        // clientId (web) requis pour le scope Drive sur navigateur. Sur
+        // mobile, google-sign_in utilise google-services.json / Info.plist.
+        clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
+        scopes: [_driveScope],
+      );
 
   /// Connecte le compte Google (ou renvoie celui déjà connecté).
   Future<GoogleSignInAccount?> signInWithGoogle() async {

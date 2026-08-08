@@ -65,6 +65,7 @@ import '../screens/notifications/notification_screen.dart';
 import '../screens/support/support_screen.dart';
 import '../screens/support/faq_screen.dart';
 import '../screens/support/contact_support_screen.dart';
+import '../screens/support/legal_screen.dart';
 import '../screens/security/security_screen.dart';
 import '../screens/security/sessions_screen.dart';
 
@@ -202,6 +203,27 @@ class AppRouter {
         path: '/support/contact',
         builder: (context, state) => const ContactSupportScreen(),
       ),
+      // Documents légaux
+      GoRoute(
+        path: '/support/legal/mentions',
+        builder: (context, state) =>
+            const LegalScreen(page: LegalPage.mentions),
+      ),
+      GoRoute(
+        path: '/support/legal/privacy',
+        builder: (context, state) =>
+            const LegalScreen(page: LegalPage.privacy),
+      ),
+      GoRoute(
+        path: '/support/legal/license',
+        builder: (context, state) =>
+            const LegalScreen(page: LegalPage.license),
+      ),
+      GoRoute(
+        path: '/support/legal/ownership',
+        builder: (context, state) =>
+            const LegalScreen(page: LegalPage.ownership),
+      ),
 
       // Sécurité & Sessions
       GoRoute(
@@ -241,10 +263,17 @@ class AppRouter {
             TemplatePreviewScreen(template: state.extra as InvoiceTemplate),
       ),
 
-      // 🧪 Test de paiement E-nkap (développeur)
+      // 🧪 Test de paiement E-nkap (développeur) — RÉSERVÉ À L'ADMIN.
       GoRoute(
         path: '/dev/enkap-test',
         builder: (context, state) => const EnkapTestScreen(),
+        redirect: (context, state) {
+          final auth = Provider.of<AppAuthProvider>(context, listen: false);
+          if (auth.user?.isAdmin != true) {
+            return '/dashboard';
+          }
+          return null;
+        },
       ),
 
       // Notifications

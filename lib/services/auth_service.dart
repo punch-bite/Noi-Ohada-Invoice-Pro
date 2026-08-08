@@ -184,12 +184,12 @@ class AuthService {
   /// document utilisateur existe dans Firestore (créé via _ensureUserDocument).
   Future<AppUser> signInWithGoogle() async {
     try {
-      // 🔥 Fournit le client ID Firebase (utilisé sur le web). Sur
-      // Android/iOS, le comportement par défaut (google-services.json /
-      // Info.plist) est conservé automatiquement.
-      final clientId = ConfigService.firebaseWebClientId;
+      // 🔥 Le `clientId` (client WEB) ne doit être fourni QUE sur le web.
+      // Sur Android/iOS, google_sign_in utilise automatiquement
+      // google-services.json / Info.plist : passer ici le client web casse la
+      // connexion mobile (erreurs « Developer error » / sign_in_failed).
       final googleSignIn = GoogleSignIn(
-        clientId: clientId.isEmpty ? null : clientId,
+        clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
         scopes: ['email', 'profile'],
       );
 

@@ -435,6 +435,28 @@ class DatabaseService {
     await _db.collection(notificationCol).doc(notification.id).set({
       ...notification.toMap(),
       'userId': uid,
+      // 🔧 La lecture trie par `createdAt` : on l'écrit explicitement
+      // (sinon les notifications n'apparaissent jamais dans la liste).
+      'createdAt': Timestamp.fromDate(notification.timestamp),
+      'recipients': [uid],
+      'createdBy': uid,
+    }, SetOptions(merge: true));
+  }
+
+  /// Enregistre une notification pour un AUTRE utilisateur (mention @ dans
+  /// un partage d'équipe). `createdBy` = émetteur (permis par les règles).
+  Future<void> saveNotificationForUser(
+    String userId,
+    AppNotification notification, {
+    String? createdBy,
+  }) async {
+    final uid = currentUserId ?? createdBy ?? '';
+    await _db.collection(notificationCol).doc(notification.id).set({
+      ...notification.toMap(),
+      'userId': userId,
+      'createdAt': Timestamp.fromDate(notification.timestamp),
+      'recipients': [userId],
+      'createdBy': createdBy ?? uid,
     }, SetOptions(merge: true));
   }
 

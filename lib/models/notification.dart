@@ -23,6 +23,7 @@ enum NotificationType {
   reminder_auto,             // Rappel automatique système
   low_stock,                 // Stock faible
   stock_out,                 // Rupture de stock
+  team_shared,               // Donnée partagée avec un membre d'équipe (@mention)
 }
 
 @HiveType(typeId: 9) // Ajuste le typeId selon ton registre Hive
@@ -154,6 +155,8 @@ class AppNotification {
         return Icons.warning_amber;
       case NotificationType.stock_out:
         return Icons.dangerous;
+      case NotificationType.team_shared:
+        return Icons.share;
       default:
         return Icons.notifications;
     }
@@ -187,6 +190,8 @@ class AppNotification {
         return Colors.orange;
       case NotificationType.stock_out:
         return Colors.red;
+      case NotificationType.team_shared:
+        return Colors.teal;
       default:
         return Colors.grey;
     }

@@ -19,8 +19,17 @@ class ConfigService {
 
   /// Lit un secret depuis --dart-define. En debug uniquement, on autorise
   /// un repli sur le fichier `.env` local (jamais embarqué dans l'APK).
+  //
+  // 🔴 NB : `String.fromEnvironment` exige un argument CONSTANT au niveau
+  // compilation. Appelé au runtime avec une variable, il lève
+  // UnsupportedError sous le compilateur web de dev (DDC) → on protège.
   static String _secret(String key) {
-    final fromEnv = String.fromEnvironment(key);
+    String fromEnv;
+    try {
+      fromEnv = String.fromEnvironment(key);
+    } catch (_) {
+      fromEnv = '';
+    }
     if (fromEnv.isNotEmpty) return fromEnv;
     if (kDebugMode) return _read(key);
     return '';
@@ -67,6 +76,25 @@ class ConfigService {
   }
 
   static String _get(String key, {String def = ''}) => _read(key, def: def);
+
+  /// Lit une valeur NON sensible : priorité à `--dart-define` (injectée au
+  /// build, ex. CodeMagic : `--dart-define=API_BASE_URL=...`), puis `.env`.
+  /// SANS cette lecture, le `--dart-define` serait un no-op (le getter ne
+  /// voyait que dotenv, jamais initialisé en release → toujours la valeur
+  /// par défaut).
+  static String _env(String key, {String def = ''}) {
+    // 🔴 try/catch : sur web dev (DDC), String.fromEnvironment avec un
+    // argument non-constant lève UnsupportedError → repli sur `.env`/défaut.
+    String fromEnv;
+    try {
+      fromEnv = String.fromEnvironment(key);
+    } catch (_) {
+      fromEnv = '';
+    }
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return _read(key, def: def);
+  }
+
   static bool _getBool(String key) => _read(key).toLowerCase() == 'true';
   static int _getInt(String key, int def) =>
       int.tryParse(_read(key)) ?? def;
@@ -94,8 +122,8 @@ class ConfigService {
   static const String _defaultEnkapBaseUrl =
       'https://api-v2.enkap.cm/purchase/v1.2';
   static String get enkapBaseUrl =>
-      _get('ENKAP_BASE_URL', def: _defaultEnkapBaseUrl);
-  static String get enkapTokenUrl => _get('ENKAP_TOKEN_URL');
+      _env('ENKAP_BASE_URL', def: _defaultEnkapBaseUrl);
+  static String get enkapTokenUrl => _env('ENKAP_TOKEN_URL');
   static String get enkapConsumerKey => _secret('ENKAP_CONSUMER_KEY');
   static String get enkapConsumerSecret => _secret('ENKAP_CONSUMER_SECRET');
   static String get enkapAccessToken => _secret('ENKAP_ACCESS_TOKEN');
@@ -129,7 +157,8 @@ class ConfigService {
   /// navigateur) et par l'app pour les callbacks / intentions d'abonnement.
   static const String _defaultApiBaseUrl =
       'https://server-xi-two-23.vercel.app';
-  static String get apiBaseUrl => _get('API_BASE_URL', def: _defaultApiBaseUrl);
+  // 🔧 `_env` : priorité au --dart-define (CodeMagic) puis .env puis défaut.
+  static String get apiBaseUrl => _env('API_BASE_URL', def: _defaultApiBaseUrl);
   static int get apiTimeout => _getInt('API_TIMEOUT', 30);
   static String get supportEmail => _get('SUPPORT_EMAIL');
   static String get supportPhone => _get('SUPPORT_PHONE');

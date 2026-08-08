@@ -4,8 +4,17 @@ workflows:
     environment:
       vars:
         FLUTTER_VERSION: 3.41.9  # Ajustez si nécessaire
-        # URL du serveur de paiement (proxy ENKAP). Les secrets ENKAP ne
-        # sont JAMAIS embarqués dans l'APK : ils restent côté serveur (Vercel).
+        # URL du serveur (Vercel). C'est LE point d'entrée de la NOUVELLE
+        # config :
+        #   - proxy de paiement ENKAP   → POST /enkap/order (+ setup returnUrl)
+        #   - envoi d'emails (mobile)   → POST /email/send (SMTP côté serveur)
+        #   - intentions d'abonnement   → POST /enkap/register
+        # Injectée via --dart-define et lue par ConfigService.apiBaseUrl
+        # (priorité --dart-define, puis .env, puis défaut).
+        #
+        # ⚠️ AUCUN secret (ENKAP_CONSUMER_*, SMTP_*) n'est embarqué dans l'APK :
+        # ils restent dans les variables d'environnement de Vercel. Configurer
+        # SMTP_HOST/PORT/USERNAME/PASSWORD/FROM_EMAIL côté Vercel.
         API_BASE_URL: "https://server-xi-two-23.vercel.app"
       flutter: stable
     scripts:
@@ -39,13 +48,17 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
+      - name: Analyse statique (gardé 0 erreur / 0 warning)
+        script: |
+          flutter analyze --no-pub
+
       - name: Builder l'APK Release
         script: |
-          flutter build apk --release --dart-define=API_BASE_URL=$API_BASE_URL
+          flutter build apk --release --dart-define="API_BASE_URL=$API_BASE_URL"
 
       - name: Builder l'App Bundle (AAB)
         script: |
-          flutter build appbundle --release --dart-define=API_BASE_URL=$API_BASE_URL
+          flutter build appbundle --release --dart-define="API_BASE_URL=$API_BASE_URL"
 
       - name: Vérifier la signature
         script: |

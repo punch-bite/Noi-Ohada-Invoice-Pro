@@ -382,6 +382,68 @@ class TeamService {
 
 // Dans TeamService
 
+  /// Partage une ressource (facture / produit / client) avec des membres de
+  /// l'équipe. Écrit un enregistrement `shared_invoices` (compatibilité avec
+  /// l'existant, champ `resourceType`), marque la ressource comme partagée
+  /// (lecture autorisée pour les membres via les règles Firestore) et envoie
+  /// une notification @mention à chaque destinataire.
+  Future<SharedInvoice> shareResource({
+    required String resourceId,
+    required String resourceType, // 'invoice' | 'product' | 'client'
+    required String resourceName,
+    required String teamId,
+    required String sharedBy,
+    required List<String> sharedWith,
+    String permissionLevel = 'read',
+    DateTime? expiresAt,
+  }) async {
+    final sharedInvoice = SharedInvoice(
+      invoiceId: resourceId,
+      teamId: teamId,
+      sharedBy: sharedBy,
+      sharedWith: sharedWith,
+      permissionLevel: permissionLevel,
+      expiresAt: expiresAt,
+      sharedAt: DateTime.now(),
+      resourceType: resourceType,
+      resourceName: resourceName,
+    );
+
+    await _db
+        .collection('shared_invoices')
+        .doc(sharedInvoice.id)
+        .set(sharedInvoice.toMap());
+
+    // Marque la ressource pour que les membres puissent la lire.
+    await _markResourceShared(
+      resourceType,
+      resourceId,
+      sharedWith,
+      teamId,
+    );
+
+    // Notifications @mention aux destinataires.
+    await _notifyMentioned(
+      resourceType: resourceType,
+      resourceName: resourceName,
+      teamId: teamId,
+      sharedBy: sharedBy,
+      sharedWith: sharedWith,
+      resourceId: resourceId,
+    );
+
+    await LoggerService.info(
+      'share_resource',
+      details:
+          '$resourceType $resourceId partagé avec ${sharedWith.length} membres',
+      targetId: resourceId,
+      targetType: resourceType,
+    );
+
+    return sharedInvoice;
+  }
+
+  /// Wrapper rétro-compatible : partage d'une facture.
   Future<void> shareInvoice({
     required String invoiceId,
     required String teamId,
@@ -390,63 +452,206 @@ class TeamService {
     String permissionLevel = 'read',
     DateTime? expiresAt,
   }) async {
+    await shareResource(
+      resourceId: invoiceId,
+      resourceType: 'invoice',
+      resourceName: invoiceId,
+      teamId: teamId,
+      sharedBy: sharedBy,
+      sharedWith: sharedWith,
+      permissionLevel: permissionLevel,
+      expiresAt: expiresAt,
+    );
+  }
+
+  /// Met à jour le document ressource (invoices/products/clients) avec les
+  /// listes `sharedWithUsers` / `sharedTeams` pour que les règles Firestore
+  /// autorisent la lecture par les membres.
+  Future<void> _markResourceShared(
+    String resourceType,
+    String resourceId,
+    List<String> userIds,
+    String teamId,
+  ) async {
+    final collection = _collectionFor(resourceType);
+    if (collection.isEmpty) return;
     try {
-      final sharedInvoice = SharedInvoice(
-        invoiceId: invoiceId,
-        teamId: teamId,
-        sharedBy: sharedBy,
-        sharedWith: sharedWith,
-        permissionLevel: permissionLevel,
-        expiresAt: expiresAt, sharedAt: DateTime.now(),
-      );
-
-      await _db
-          .collection('shared_invoices')
-          .doc(sharedInvoice.id)
-          .set(sharedInvoice.toMap());
-
-      await LoggerService.info(
-        'share_invoice',
-        details:
-            'Facture $invoiceId partagée avec ${sharedWith.length} membres',
-        targetId: invoiceId,
-        targetType: 'invoice',
-      );
+      final ref = _db.collection(collection).doc(resourceId);
+      final snap = await ref.get();
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      final users = Set<String>.from(data['sharedWithUsers'] ?? const [])
+        ..addAll(userIds);
+      final teams = Set<String>.from(data['sharedTeams'] ?? const [])
+        ..add(teamId);
+      await ref.update({
+        'sharedWithUsers': users.toList(),
+        'sharedTeams': teams.toList(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
-      throw Exception('Erreur partage facture: $e');
+      debugPrint('⚠️ _markResourceShared: $e');
     }
   }
 
-  Future<List<SharedInvoice>> getSharedInvoicesForUser(String userId) async {
+  /// Notifications @mention pour chaque membre mentionné dans le partage.
+  Future<void> _notifyMentioned({
+    required String resourceType,
+    required String resourceName,
+    required String teamId,
+    required String sharedBy,
+    required List<String> sharedWith,
+    required String resourceId,
+  }) async {
+    final sharerName = await _userDisplayName(sharedBy);
+    final team = await getTeam(teamId);
+    final teamName = team?.name ?? 'votre équipe';
+    final label = _resourceLabel(resourceType);
+
+    for (final uid in sharedWith) {
+      if (uid.isEmpty || uid == sharedBy) continue;
+      await _notificationService.addNotificationForUser(
+        userId: uid,
+        createdBy: sharedBy,
+        notification: AppNotification(
+          title: '🔗 Donnée partagée avec vous',
+          body:
+              '$sharerName vous a partagé « $resourceName » ($label) dans $teamName.',
+          type: NotificationType.team_shared.toString(),
+          referenceId: resourceId,
+          referenceType: resourceType,
+          data: {
+            'teamId': teamId,
+            'resourceType': resourceType,
+            'sharedBy': sharedBy,
+            'sharedByName': sharerName,
+          },
+        ),
+      );
+    }
+  }
+
+  /// Récupère les partages reçus par un utilisateur, tous types confondus
+  /// (ou filtrés par [resourceType]).
+  Future<List<SharedInvoice>> getSharedResourcesForUser(
+    String userId, {
+    String? resourceType,
+  }) async {
     try {
-      final snapshot = await _db
+      var query = _db
           .collection('shared_invoices')
           .where('sharedWith', arrayContains: userId)
-          .where('isActive', isEqualTo: true)
-          .get();
+          .where('isActive', isEqualTo: true);
+      if (resourceType != null) {
+        query = query.where('resourceType', isEqualTo: resourceType);
+      }
+      final snapshot = await query.get();
       return snapshot.docs
           .map((doc) => SharedInvoice.fromMap(doc.data(), documentId: doc.id))
           .toList();
     } catch (e) {
-      debugPrint('❌ Erreur getSharedInvoicesForUser: $e');
+      debugPrint('❌ Erreur getSharedResourcesForUser: $e');
       return [];
     }
   }
 
-  Future<List<SharedInvoice>> getSharedInvoicesByTeam(String teamId) async {
+  /// Récupère les partages d'une équipe, tous types (ou filtrés par
+  /// [resourceType]).
+  Future<List<SharedInvoice>> getSharedResourcesByTeam(
+    String teamId, {
+    String? resourceType,
+  }) async {
     try {
-      final snapshot = await _db
+      var query = _db
           .collection('shared_invoices')
           .where('teamId', isEqualTo: teamId)
-          .where('isActive', isEqualTo: true)
+          .where('isActive', isEqualTo: true);
+      if (resourceType != null) {
+        query = query.where('resourceType', isEqualTo: resourceType);
+      }
+      final snapshot = await query
+          .orderBy('sharedAt', descending: true)
           .get();
       return snapshot.docs
           .map((doc) => SharedInvoice.fromMap(doc.data(), documentId: doc.id))
           .toList();
     } catch (e) {
-      debugPrint('❌ Erreur getSharedInvoicesByTeam: $e');
+      debugPrint('❌ Erreur getSharedResourcesByTeam: $e');
       return [];
     }
+  }
+
+  /// Statistiques de partage d'une équipe (par type + montant total des
+  /// factures partagées lisible par l'appelant).
+  Future<Map<String, dynamic>> getTeamShareStats(String teamId) async {
+    final shares = await getSharedResourcesByTeam(teamId);
+    final byType = <String, int>{};
+    final distinctIds = <String, Set<String>>{};
+    for (final s in shares) {
+      final t = s.resourceType;
+      byType[t] = (byType[t] ?? 0) + 1;
+      distinctIds.putIfAbsent(t, () => {}).add(s.invoiceId);
+    }
+
+    // Montant total des factures partagées (les docs sont lisibles par les
+    // membres grâce à sharedWithUsers).
+    double totalAmount = 0;
+    final invoiceIds = distinctIds['invoice'] ?? {};
+    for (final id in invoiceIds) {
+      try {
+        final doc =
+            await _db.collection('invoices').doc(id).get();
+        if (!doc.exists) continue;
+        final data = doc.data() ?? {};
+        final amt = (data['total'] as num?)?.toDouble() ??
+            (data['totalAmount'] as num?)?.toDouble() ??
+            0;
+        totalAmount += amt;
+      } catch (_) {
+        // Ignoré : doc non lisible (pas encore marqué partagé).
+      }
+    }
+
+    return {
+      'totalShares': shares.length,
+      'invoices': byType['invoice'] ?? 0,
+      'products': byType['product'] ?? 0,
+      'clients': byType['client'] ?? 0,
+      'distinctInvoices': distinctIds['invoice']?.length ?? 0,
+      'distinctProducts': distinctIds['product']?.length ?? 0,
+      'distinctClients': distinctIds['client']?.length ?? 0,
+      'totalAmount': totalAmount,
+    };
+  }
+
+  /// Profils des membres d'une équipe : { uid → {email, name} }.
+  Future<Map<String, Map<String, String>>> getMemberProfiles(
+    String teamId,
+  ) async {
+    final team = await getTeam(teamId);
+    final result = <String, Map<String, String>>{};
+    if (team == null) return result;
+    final ids = <String>{
+      team.ownerId,
+      ...team.adminIds,
+      ...team.memberIds,
+    };
+    for (final uid in ids) {
+      if (uid.isEmpty || result.containsKey(uid)) continue;
+      try {
+        final doc = await _db.collection('users').doc(uid).get();
+        final data = doc.data() ?? {};
+        result[uid] = {
+          'email': data['email']?.toString() ?? '',
+          'name': data['displayName']?.toString() ??
+              data['name']?.toString() ??
+              '',
+        };
+      } catch (_) {
+        result[uid] = {'email': '', 'name': ''};
+      }
+    }
+    return result;
   }
 
   Future<void> revokeSharedInvoice(String sharedId) async {
@@ -467,5 +672,41 @@ class TeamService {
     }
   }
 
-  
+  // ===== HELPERS =====
+
+  String _collectionFor(String resourceType) {
+    switch (resourceType) {
+      case 'product':
+        return 'products';
+      case 'client':
+        return 'clients';
+      case 'invoice':
+      default:
+        return 'invoices';
+    }
+  }
+
+  String _resourceLabel(String resourceType) {
+    switch (resourceType) {
+      case 'product':
+        return 'produit';
+      case 'client':
+        return 'client';
+      case 'invoice':
+      default:
+        return 'facture';
+    }
+  }
+
+  Future<String> _userDisplayName(String userId) async {
+    try {
+      final doc = await _db.collection('users').doc(userId).get();
+      final data = doc.data();
+      return data?['displayName']?.toString() ??
+          data?['name']?.toString() ??
+          'Un membre';
+    } catch (_) {
+      return 'Un membre';
+    }
+  }
 }

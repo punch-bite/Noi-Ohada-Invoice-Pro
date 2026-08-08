@@ -32,6 +32,13 @@ service cloud.firestore {
       return isAdmin() || isOwner();
     }
 
+    // Lecture autorisée pour un membre d'équipe ayant reçu un partage.
+    // Le partage est matérialisé sur le document (sharedWithUsers) par l'émetteur.
+    function canReadSharedResource() {
+      return isSignedIn()
+        && (request.auth.uid in resource.data.sharedWithUsers);
+    }
+
     // Création autorisée : admin OU utilisateur authentifié propriétaire.
     // NB : le champ `userId` doit être présent pour les collections métier.
     function canWriteOwnResource() {
@@ -47,22 +54,22 @@ service cloud.firestore {
     // RESSOURCES "PAR UTILISATEUR"
     // ===========================================
     match /clients/{clientId} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
     }
     match /products/{productId} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
     }
     match /invoices/{invoiceId} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
     }
     match /suppliers/{id} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
     }
@@ -171,8 +178,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && (isAdmin() || isOwner());
-      allow write: if canWriteOwnResource();
+      // Lecture : admin, propriétaire, ou destinataire @mentionné.
+      allow read: if isSignedIn() && (isAdmin() || isOwner()
+        || (request.auth.uid in resource.data.recipients));
+      // Écriture : admin, propriétaire, ou créateur (@mention cross-user :
+      // on autorise la création de notifications adressées à un membre de la
+      // même équipe via le champ `createdBy` = émetteur).
+      allow write: if isAdmin() || isSignedIn() && (isNewOwner()
+        || request.resource.data.createdBy == request.auth.uid);
     }
     match /logs/{logId} {
       allow read, write: if isAdmin();

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/theme_provider.dart';
@@ -242,6 +243,17 @@ class CustomDrawer extends StatelessWidget {
                   textColor: textColor,
                   subTextColor: subTextColor,
                 ),
+                _buildTile(
+                  icon: Icons.share_outlined,
+                  label: 'Partager l\'application',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _shareApp(context);
+                  },
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
                 const Divider(),
                 _buildTile(
                   icon: Icons.logout,
@@ -272,6 +284,26 @@ class CustomDrawer extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Partage un lien de téléchargement de l'application.
+  static Future<void> _shareApp(BuildContext context) async {
+    const message = '🚀 Découvrez OHADA Invoice Pro — la facturation conforme '
+        'OHADA/SYSCOHADA : factures, devis, clients, stock, équipe et '
+        'paiement Mobile Money (Orange / MTN / carte).\n\n'
+        '👉 Téléchargez-la : https://ohada-invoice-pro.com';
+    try {
+      await SharePlus.instance.share(ShareParams(text: message));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Impossible de partager : $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildTile({

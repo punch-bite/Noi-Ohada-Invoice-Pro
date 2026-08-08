@@ -45,6 +45,24 @@ class NotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Crée une notification pour un AUTRE utilisateur (mention @ dans un
+  /// partage d'équipe). Ne l'ajoute PAS à la liste locale de l'émetteur.
+  Future<void> addNotificationForUser({
+    required String userId,
+    required AppNotification notification,
+    String? createdBy,
+  }) async {
+    try {
+      await _db.saveNotificationForUser(
+        userId,
+        notification,
+        createdBy: createdBy,
+      );
+    } catch (e) {
+      debugPrint('⚠️ addNotificationForUser: $e');
+    }
+  }
+
   Future<void> markAsRead(String id) async {
     final index = _notifications.indexWhere((n) => n.id == id);
     if (index != -1 && !_notifications[index].isRead) {

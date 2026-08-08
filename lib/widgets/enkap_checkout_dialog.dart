@@ -43,6 +43,7 @@ class EnkapCheckoutDialog extends StatefulWidget {
 class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
   final EnkapService _enkap = EnkapService();
   String? _redirectUrl;
+  String _orderTransactionId = '';
   bool _initializing = true;
   bool _loadingPage = true;
   String _error = '';
@@ -89,6 +90,7 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
     if (result['success'] == true) {
       setState(() {
         _redirectUrl = result['redirectUrl'] as String? ?? '';
+        _orderTransactionId = result['orderTransactionId']?.toString() ?? '';
         _initializing = false;
       });
       // Vérification du statut en arrière-plan (toutes plateformes).
@@ -112,22 +114,50 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
         return;
       }
       _pollAttempts++;
-      if (_pollAttempts > 30) {
-        // Après ~2 min sans statut final, on affiche une sortie (pas de
+      if (_pollAttempts > 45) {
+        // Après ~3 min sans statut final, on affiche une sortie (pas de
         // spinner infini) avec un bouton pour revérifier.
         timer.cancel();
         if (mounted) setState(() => _timedOut = true);
         return;
       }
-      final status =
-          await _enkap.getStatus(merchantReference: widget.merchantReference);
-      if (!mounted || _done) return;
-      if (EnkapService.isConfirmed(status)) {
-        _finish(success: true);
-      } else if (EnkapService.isFailed(status)) {
-        _finish(success: false);
-      }
+      await _checkStatus();
     });
+  }
+
+  /// Interroge le statut ENKAP : par référence marchand puis par txid
+  /// (certains environnements n'exposent le statut que via le txid).
+  Future<void> _checkStatus() async {
+    String status = '';
+    if (widget.merchantReference.isNotEmpty) {
+      status = await _enkap
+          .getStatus(merchantReference: widget.merchantReference);
+    }
+    if (status.isEmpty && _orderTransactionId.isNotEmpty) {
+      status = await _enkap.getStatus(txid: _orderTransactionId);
+    }
+    if (!mounted || _done) return;
+    if (EnkapService.isConfirmed(status)) {
+      _finish(success: true);
+    } else if (EnkapService.isFailed(status)) {
+      _finish(success: false);
+    }
+  }
+
+  /// Appelé quand la WebView navigue vers notre page de retour
+  /// (`/enkap/return/<ref>?status=...`). On déclenche une vérification
+  /// immédiate, et on termine si le statut est final.
+  Future<void> _handleReturnNavigation(Uri uri) async {
+    final path = uri.path;
+    if (!path.contains('/enkap/return')) return;
+    final status = uri.queryParameters['status'] ?? '';
+    if (EnkapService.isConfirmed(status)) {
+      _finish(success: true);
+    } else if (EnkapService.isFailed(status)) {
+      _finish(success: false);
+    } else {
+      await _checkStatus();
+    }
   }
 
   void _finish({required bool success}) {
@@ -263,6 +293,13 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
           },
           onPageFinished: (_) {
             if (mounted) setState(() => _loadingPage = false);
+          },
+          onUrlChange: (change) {
+            // Détection du retour E-nkap : quand la page redirige vers notre
+            // URL de retour, on vérifie le statut immédiatement (plus de
+            // spinner infini) et on termine si le paiement est confirmé.
+            final u = Uri.tryParse(change.url ?? '');
+            if (u != null) _handleReturnNavigation(u);
           },
         ),
       )

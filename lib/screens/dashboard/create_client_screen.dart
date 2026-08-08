@@ -136,14 +136,27 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     }
 
     // Vérifier les permissions
+    // 🔒 NB : on demande `PermissionType.read` (et non readWrite) car seul
+    // `READ_CONTACTS` est déclaré dans le manifest Android — demander
+    // readWrite échoue silencieusement et rend l'accès contacts impossible.
     final status =
-        await FlutterContacts.permissions.request(PermissionType.readWrite);
-    if (status != PermissionStatus.granted) {
+        await FlutterContacts.permissions.request(PermissionType.read);
+    if (status != PermissionStatus.granted &&
+        status != PermissionStatus.limited) {
+      // Si refusé définitivement, on propose d'ouvrir les réglages système.
+      final permanentlyDenied = status == PermissionStatus.permanentlyDenied ||
+          status == PermissionStatus.restricted;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
               'Permission d\'accès aux contacts refusée. Autorisez-la dans les paramètres du téléphone.'),
           backgroundColor: Colors.orange,
+          action: permanentlyDenied
+              ? SnackBarAction(
+                  label: 'Réglages',
+                  onPressed: () => FlutterContacts.permissions.openSettings(),
+                )
+              : null,
         ),
       );
       return;

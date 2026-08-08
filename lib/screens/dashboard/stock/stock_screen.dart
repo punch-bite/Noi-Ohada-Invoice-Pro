@@ -648,7 +648,7 @@ class _StockScreenState extends State<StockScreen> {
                   Container(
                     height: 32,
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 0),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.grey[50],
                       borderRadius: BorderRadius.circular(10),
@@ -657,6 +657,7 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
                           icon: Icon(Icons.remove_rounded, size: 14, color: subTextColor),

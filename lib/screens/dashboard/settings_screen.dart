@@ -227,16 +227,19 @@ class SettingsScreen extends StatelessWidget {
                   textColor: textColor,
                   subTextColor: subTextColor,
                 ),
-                _SettingsDivider(isDark: isDark),
-                _SettingsTile(
-                  icon: Icons.payment,
-                  title: 'Test paiement E-nkap',
-                  subtitle: 'Écran de test développeur',
-                  onTap: () => context.push('/dev/enkap-test'),
-                  isDark: isDark,
-                  textColor: textColor,
-                  subTextColor: subTextColor,
-                ),
+                // 🧪 Test paiement E-nkap — visible UNIQUEMENT pour l'admin.
+                if (authProvider.user?.isAdmin == true) ...[
+                  _SettingsDivider(isDark: isDark),
+                  _SettingsTile(
+                    icon: Icons.payment,
+                    title: 'Test paiement E-nkap',
+                    subtitle: 'Écran de test développeur (admin uniquement)',
+                    onTap: () => context.push('/dev/enkap-test'),
+                    isDark: isDark,
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                  ),
+                ],
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(
                   icon: Icons.logout,

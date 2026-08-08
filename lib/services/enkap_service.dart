@@ -229,6 +229,13 @@ class EnkapService {
           .timeout(const Duration(seconds: 20));
       final data = _decode(resp);
       if (resp.statusCode == 201 || resp.statusCode == 200) {
+        // Configure returnUrl + notificationUrl (best-effort) pour que le
+        // paiement redirige bien vers notre serveur et envoie l'ITN.
+        await setupOrder(
+          token: token,
+          returnUrl: '$_serverBase/enkap/return',
+          notificationUrl: '$_serverBase/enkap/callback',
+        );
         return {
           'success': true,
           'orderTransactionId': data['orderTransactionId'],
@@ -246,6 +253,47 @@ class EnkapService {
       // Ne JAMAIS lever ici : un échec réseau/CORS doit afficher une erreur
       // dans le dialogue, pas bloquer sur un spinner infini.
       return {'success': false, 'error': 'Erreur réseau : $e'};
+    }
+  }
+
+  /// Configure les URL de retour / notification d'une commande ENKAP
+  /// (`PUT /api/order/setup`). Best-effort : un échec ne bloque pas le
+  /// paiement (la confirmation se fera par polling).
+  Future<void> setupOrder({
+    String? token,
+    required String returnUrl,
+    required String notificationUrl,
+  }) async {
+    try {
+      if (_useServerProxy) {
+        await _client
+            .post(
+              Uri.parse('$_serverBase/enkap/order/setup'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: json.encode({
+                'returnUrl': returnUrl,
+                'notificationUrl': notificationUrl,
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+        return;
+      }
+      final tk = token ?? await _getToken();
+      await _client
+          .put(
+            Uri.parse('$_baseUrl/api/order/setup'),
+            headers: _headers(tk),
+            body: json.encode({
+              'returnUrl': returnUrl,
+              'notificationUrl': notificationUrl,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // Ignoré : le setup est best-effort.
     }
   }
 
