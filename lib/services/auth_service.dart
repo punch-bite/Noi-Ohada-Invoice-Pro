@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
-import 'config_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -179,41 +178,45 @@ class AuthService {
   }
 
     /// Se connecte avec un compte Google.
-  /// Utilise `google_sign_in` pour obtenir le compte Google puis échange
-  /// le jeton avec Firebase Authentication. Ensuite, on s'assure que le
-  /// document utilisateur existe dans Firestore (créé via _ensureUserDocument).
+  /// - 🌐 Web : on laisse FIREBASE gérer le popup OAuth (`signInWithPopup`
+  ///   avec GoogleAuthProvider). C'est beaucoup plus fiable que le plugin
+  ///   `google_sign_in_web` qui exige un client OAuth manuel + redirect URIs
+  ///   autorisés (sinon erreur « popup_closed »). Firebase utilise ses
+  ///   propres redirect URIs (firebaseapp.com) automatiquement.
+  /// - 📱 Android/iOS : `google_sign_in` SANS clientId (google-services.json /
+  ///   Info.plist), puis échange du jeton avec Firebase.
   Future<AppUser> signInWithGoogle() async {
     try {
-      // 🔥 Le `clientId` (client WEB) ne doit être fourni QUE sur le web.
-      // Sur Android/iOS, google_sign_in utilise automatiquement
-      // google-services.json / Info.plist : passer ici le client web casse la
-      // connexion mobile (erreurs « Developer error » / sign_in_failed).
-      final googleSignIn = GoogleSignIn(
-        clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
-        scopes: ['email', 'profile'],
-      );
+      final UserCredential userCredential;
+      String? googleDisplayName;
 
-      final googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        throw Exception('Connexion Google annulée.');
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        userCredential = await _auth.signInWithPopup(provider);
+      } else {
+        final googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          throw Exception('Connexion Google annulée.');
+        }
+        googleDisplayName = googleUser.displayName;
+        final googleAuth = await googleUser.authentication;
+        if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+          throw Exception('Authentification Google incomplète. Réessayez.');
+        }
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        userCredential = await _auth.signInWithCredential(credential);
       }
 
-      final googleAuth = await googleUser.authentication;
-      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        throw Exception('Authentification Google incomplète. Réessayez.');
-      }
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user!;
 
       // ✅ Mise à jour du nom affiché si absent
       if (user.displayName == null || user.displayName!.isEmpty) {
-        await user
-            .updateDisplayName(googleUser.displayName ?? 'Utilisateur Google');
+        await user.updateDisplayName(
+            googleDisplayName ?? 'Utilisateur Google');
       }
 
       // 🔥 Garantit la création du document profil dans Firestore

@@ -4,8 +4,15 @@
 // l'argent est encaissé sur le compte ENKAP de la PLATEFORME. Le portefeuille
 // interne crédite alors le marchand du montant. Le marchand demande un retrait,
 // la plateforme le paie (portail ENKAP / banque) puis met à jour le statut.
+//
+// 🔒 SÉCURITÉ : le solde n'est PLUS modifiable par le client. Le crédit passe
+// par le serveur (POST /wallet/credit) qui VÉRIFIE la confirmation E-nkap
+// avant de créditer — un utilisateur ne peut pas s'auto-créditer.
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'config_service.dart';
 
 class WalletService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -24,7 +31,11 @@ class WalletService {
     }
   }
 
-  /// Crédite le portefeuille de façon atomique et journalise la transaction.
+  /// Crédite le portefeuille de façon sécurisée et journalise la transaction.
+  ///
+  /// 🔒 Le crédit passe par le SERVEUR (`POST /wallet/credit`) qui vérifie
+  /// auprès d'E-nkap que la commande est bien CONFIRMÉE avant de créditer
+  /// (le client ne peut plus s'auto-créditer un solde arbitraire).
   /// Appelé après la confirmation d'un paiement en ligne (ENKAP).
   Future<bool> credit({
     required String userId,
@@ -33,35 +44,29 @@ class WalletService {
     required String description,
   }) async {
     if (userId.isEmpty || amount <= 0) return false;
+    final apiBase = ConfigService.apiBaseUrl.trim();
+    if (apiBase.isEmpty) return false;
     try {
-      final walletRef = _db.collection('wallets').doc(userId);
-      await _db.runTransaction((tx) async {
-        final snap = await tx.get(walletRef);
-        final current = (snap.data()?['balance'] as num?)?.toDouble() ?? 0;
-        tx.set(
-          walletRef,
-          {
-            'userId': userId,
-            'balance': current + amount,
-            'currency': 'XAF',
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      });
-
-      await _db.collection('wallet_transactions').add({
-        'userId': userId,
-        'type': 'credit',
-        'amount': amount,
-        'currency': 'XAF',
-        'reference': reference,
-        'description': description,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      return true;
+      final resp = await http
+          .post(
+            Uri.parse('$apiBase/wallet/credit'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'userId': userId,
+              'amount': amount,
+              'reference': reference,
+              'description': description,
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+      final ok = resp.statusCode == 200;
+      if (!ok) {
+        debugPrint(
+            '⚠️ credit wallet serveur: ${resp.statusCode} ${resp.body}');
+      }
+      return ok;
     } catch (e) {
-      debugPrint('⚠️ credit wallet: $e');
+      debugPrint('⚠️ credit wallet serveur (réseau): $e');
       return false;
     }
   }

@@ -294,6 +294,18 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
           onPageFinished: (_) {
             if (mounted) setState(() => _loadingPage = false);
           },
+          // 🔒 Sécurité : on ne charge QUE des URLs http(s). On bloque les
+          // schémas dangereux (javascript:, file:, data:, tel:...) qui
+          // pourraient être injectés par la page ou un lien malveillant.
+          onNavigationRequest: (request) {
+            final u = Uri.tryParse(request.url);
+            if (u == null) return NavigationDecision.prevent;
+            final scheme = u.scheme.toLowerCase();
+            if (scheme != 'http' && scheme != 'https') {
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
           onUrlChange: (change) {
             // Détection du retour E-nkap : quand la page redirige vers notre
             // URL de retour, on vérifie le statut immédiatement (plus de
