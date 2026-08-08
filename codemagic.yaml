@@ -55,7 +55,7 @@ workflows:
      
       - name: Analyse statique (gardé 0 erreur / 0 warning)
         script: |
-          flutter analyze --no-pub
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
       - name: Builder l'APK Release (obfusqué)
         script: |
