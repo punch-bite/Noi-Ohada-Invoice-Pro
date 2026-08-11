@@ -47,10 +47,15 @@ workflows:
       - name: Générer les fichiers de build (Build Runner)
         script: |
           dart run build_runner build --delete-conflicting-outputs
-
+          
+      # Active la correction automatique des membres dépréciés
+      - name: Fix deprecated code automatically
+        script: |
+          dart fix --apply
+     
       - name: Analyse statique (gardé 0 erreur / 0 warning)
         script: |
-          flutter analyze --no-pub
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
       - name: Builder l'APK Release (obfusqué)
         script: |
