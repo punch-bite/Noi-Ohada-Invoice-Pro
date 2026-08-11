@@ -11,6 +11,7 @@ import '../../../models/client.dart';
 import '../../../models/invoice.dart';
 import '../../../models/invoice_template.dart';
 import '../../../models/line_item.dart';
+import 'template_custom_service.dart';
 
 class PrintingService {
   
@@ -77,36 +78,307 @@ class PrintingService {
             ),
           );
 
+    // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping
+    // enregistrés dans l'espace de travail drag & drop). Sans positions,
+    // on garde le layout fixe historique.
+    final custom = await TemplateCustomService.loadCustom(template.id);
+    final positions = custom.positions.isNotEmpty
+        ? custom.positions
+        : Map<String, dynamic>.from(template.positions);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: pw.ThemeData.withFont(base: baseFont),
-        margin: const pw.EdgeInsets.all(32),
-        build: (pw.Context context) => [
-          pw.Stack(
-            children: [
-              if (background != null) background,
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(invoice, company, template),
-                  pw.SizedBox(height: 16),
-                  _buildClientInfo(client, template),
-                  pw.SizedBox(height: 16),
-                  _buildItemsTable(invoice, template),
-                  pw.SizedBox(height: 16),
-                  _buildTotals(invoice, template),
-                  pw.SizedBox(height: 16),
-                  _buildFooter(company, template),
-                ],
-              ),
-            ],
-          ),
-        ],
+        margin: positions.isEmpty
+            ? const pw.EdgeInsets.all(32)
+            : pw.EdgeInsets.zero,
+        build: (pw.Context context) => positions.isEmpty
+            ? [
+                pw.Stack(
+                  children: [
+                    if (background != null) background,
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(invoice, company, template),
+                        pw.SizedBox(height: 16),
+                        _buildClientInfo(client, template),
+                        pw.SizedBox(height: 16),
+                        _buildItemsTable(invoice, template),
+                        pw.SizedBox(height: 16),
+                        _buildTotals(invoice, template),
+                        pw.SizedBox(height: 16),
+                        _buildFooter(company, template),
+                      ],
+                    ),
+                  ],
+                ),
+              ]
+            : [
+                _buildPositionedLayout(
+                  context,
+                  positions,
+                  invoice,
+                  client,
+                  company,
+                  template,
+                  background: background,
+                ),
+              ],
       ),
     );
 
     return pdf.save();
+  }
+
+  // ============================================================
+  //  RENDU POSITIONNÉ (customisation drag & drop)
+  //  Place chaque variable visible à ses coordonnées relatives (0..1) sur la
+  //  page A4, en respectant la visibilité et l'échelle choisies.
+  // ============================================================
+  static pw.Widget _buildPositionedLayout(
+    pw.Context context,
+    Map<String, dynamic> positions,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    pw.Widget? background,
+  }) {
+    final pageW = PdfPageFormat.a4.width;
+    final pageH = PdfPageFormat.a4.height;
+    final children = <pw.Widget>[
+      // Base pleine page : donne une taille au Stack (sinon il collapserait
+      // car tous ses enfants sont positionnés).
+      pw.SizedBox(width: pageW, height: pageH),
+      // `background` est déjà un Positioned.fill → enfant direct du Stack.
+      if (background != null) background,
+    ];
+
+    positions.forEach((id, raw) {
+      if (raw is! Map) return;
+      final visible = (raw['visible'] as bool?) ?? true;
+      if (!visible) return;
+      final x = ((raw['x'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
+      final y = ((raw['y'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
+      final scale = ((raw['scale'] as num?) ?? 1.0).toDouble().clamp(0.5, 2.5);
+
+      final widget = _variableWidget(id, scale, invoice, client, company, template);
+      if (widget == null) return;
+
+      // Les blocs larges (tableau des lignes) ont besoin d'une largeur bornée.
+      final width = id == 'items' ? (pageW - 48) * 0.92 : null;
+
+      children.add(
+        pw.Positioned(
+          left: x * pageW,
+          top: y * pageH,
+          child: width == null
+              ? widget
+              : pw.SizedBox(width: width, child: widget),
+        ),
+      );
+    });
+
+    return pw.Stack(children: children);
+  }
+
+  /// Retourne le widget PDF d'une variable de facture (ou null si à masquer).
+  static pw.Widget? _variableWidget(
+    String id,
+    double scale,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template,
+  ) {
+    final primary = _getPdfColor(template.primaryColor);
+    final text = _getPdfColor(template.textColor);
+    final fs = (template.fontSize * scale).clamp(6, 40).toDouble();
+    final sub = _withOpacity(text, 0.6);
+
+    switch (id) {
+      case 'logo':
+        if (!template.showLogo || company.logoPath.isEmpty) return null;
+        final bytes = _logoBytesFromPath(company.logoPath);
+        if (bytes == null) return null;
+        return pw.Image(
+          pw.MemoryImage(bytes),
+          width: 72 * scale,
+          height: 72 * scale,
+          fit: pw.BoxFit.contain,
+        );
+      case 'company_name':
+        return pw.Text(
+          company.name,
+          style: pw.TextStyle(
+            fontSize: 18 * scale,
+            fontWeight: pw.FontWeight.bold,
+            color: primary,
+          ),
+        );
+      case 'company_address':
+        return pw.Text(
+          company.address,
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_phone':
+        return pw.Text(
+          'Tél: ${company.phone}',
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_email':
+        return pw.Text(
+          'Email: ${company.email}',
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'invoice_title':
+        return pw.Text(
+          invoice.isDevis ? 'DEVIS' : 'FACTURE',
+          style: pw.TextStyle(
+            fontSize: 26 * scale,
+            fontWeight: pw.FontWeight.bold,
+            color: primary,
+          ),
+          textAlign: pw.TextAlign.right,
+        );
+      case 'client_name':
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Facturé à :',
+              style: pw.TextStyle(
+                fontSize: 10 * scale,
+                fontWeight: pw.FontWeight.bold,
+                color: primary,
+              ),
+            ),
+            pw.Text(
+              client.name,
+              style: pw.TextStyle(
+                fontSize: 12 * scale,
+                fontWeight: pw.FontWeight.bold,
+                color: text,
+              ),
+            ),
+          ],
+        );
+      case 'client_address':
+        return pw.Text(
+          client.address,
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_phone':
+        return pw.Text(
+          'Tél: ${client.phone}',
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_email':
+        return pw.Text(
+          client.email,
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'items':
+        return _buildItemsTable(invoice, template);
+      case 'subtotal':
+        return _totalRowPdf(
+          'Sous-total',
+          '${invoice.subtotal.toStringAsFixed(0)} FCFA',
+          text,
+          fs,
+        );
+      case 'tax_amount':
+        return _totalRowPdf(
+          'TVA (${invoice.taxRate}%)',
+          '${invoice.taxAmount.toStringAsFixed(0)} FCFA',
+          text,
+          fs,
+        );
+      case 'discount':
+        if (invoice.discount <= 0) return null;
+        return _totalRowPdf(
+          'Remise',
+          '-${invoice.discount.toStringAsFixed(0)} FCFA',
+          PdfColors.red,
+          fs,
+        );
+      case 'total_amount':
+        return pw.Container(
+          padding: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(
+            color: _withOpacity(primary, 0.1),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: _totalRowPdf(
+            'TOTAL TTC',
+            '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
+            primary,
+            16 * scale,
+            bold: true,
+          ),
+        );
+      case 'footer':
+        return _buildFooter(company, template);
+      case 'qr':
+        if (!template.showPaymentQR) return null;
+        return pw.Text(
+          '📱 Paiement Mobile Money accepté',
+          style: pw.TextStyle(fontSize: 10 * scale, color: primary),
+        );
+      case 'signature':
+        return pw.SizedBox(
+          width: 160 * scale,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(height: 1, color: PdfColors.grey600),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Signature',
+                style: pw.TextStyle(
+                  fontSize: 9 * scale,
+                  color: _withOpacity(text, 0.6),
+                ),
+              ),
+            ],
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
+  /// Ligne de total (label + valeur) pour le rendu positionné.
+  static pw.Widget _totalRowPdf(
+    String label,
+    String value,
+    PdfColor color,
+    double fs, {
+    bool bold = false,
+  }) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.end,
+      children: [
+        pw.Text(
+          '$label: ',
+          style: pw.TextStyle(
+            fontSize: fs,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            color: color,
+          ),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: fs,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   /// Extrait les octets de l'image téléversée du modèle (arrière-plan).

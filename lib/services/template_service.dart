@@ -1,7 +1,10 @@
 // lib/services/template_service.dart
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/invoice_template.dart';
+import 'config_service.dart';
 
 class TemplateService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -22,6 +25,52 @@ class TemplateService {
     } catch (e) {
       debugPrint('❌ Erreur getAllTemplates: $e');
       return [];
+    }
+  }
+
+  /// Modèles achetés / disponibles pour l'utilisateur ("Mes modèles").
+  /// Un modèle gratuit (prix admin = 0) est utilisable par tous.
+  Future<List<InvoiceTemplate>> getMyTemplates(String userId) async {
+    final all = await getAllTemplates();
+    return all
+        .where((t) => t.purchasedBy.contains(userId) || t.price <= 0)
+        .toList();
+  }
+
+  /// 🔒 Achat sécurisé via le SERVEUR (`POST /template/purchase`).
+  ///
+  /// Le serveur vérifie (si total > 0) que la commande ENKAP est bien
+  /// CONFIRMÉE avant de débloquer les modèles (ajout à `purchasedBy` via le
+  /// SDK admin). Les modèles GRATUITS (prix = 0) sont débloqués SANS
+  /// paiement. `reference` = null pour un panier 100 % gratuit.
+  Future<bool> purchaseTemplates({
+    required String userId,
+    required List<String> templateIds,
+    String? reference,
+  }) async {
+    if (userId.isEmpty || templateIds.isEmpty) return false;
+    final apiBase = ConfigService.apiBaseUrl.trim();
+    if (apiBase.isEmpty) return false;
+    try {
+      final resp = await http
+          .post(
+            Uri.parse('$apiBase/template/purchase'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'userId': userId,
+              'templateIds': templateIds,
+              'reference': reference,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      final ok = resp.statusCode == 200;
+      if (!ok) {
+        debugPrint('⚠️ purchaseTemplates serveur: ${resp.statusCode} ${resp.body}');
+      }
+      return ok;
+    } catch (e) {
+      debugPrint('⚠️ purchaseTemplates (réseau): $e');
+      return false;
     }
   }
 

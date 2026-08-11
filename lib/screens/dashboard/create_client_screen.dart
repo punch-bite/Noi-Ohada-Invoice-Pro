@@ -34,6 +34,10 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   bool _isSaving = false;
   bool _isLoadingContacts = false;
 
+  // 🔍 Recherche dans le dialogue d'import des contacts.
+  final _contactSearchController = TextEditingController();
+  String _contactQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +57,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     _taxIdController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _contactSearchController.dispose();
     super.dispose();
   }
 
@@ -209,6 +214,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     final isDark = theme.isDarkMode;
     final textColor = theme.textColor;
     final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
 
     showDialog(
       context: context,
@@ -227,64 +233,129 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         ),
         content: SizedBox(
           width: double.maxFinite,
-          height: 400,
-          child: contacts.isEmpty
-              ? Center(
-                  child: Text(
-                    'Aucun contact disponible',
-                    style: TextStyle(color: subTextColor),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: contacts.length,
-                  itemBuilder: (context, index) {
-                    final contact = contacts[index];
-                    final displayName = contact.displayName ?? 'Sans nom';
-                    final phones = contact.phones;
-                    final emails = contact.emails;
-                    final addresses = contact.addresses;
+          height: 440,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              // 🔍 Filtre sur le nom, le téléphone et l'email.
+              final filtered = _contactQuery.isEmpty
+                  ? contacts
+                  : contacts.where((c) {
+                      final q = _contactQuery.toLowerCase();
+                      final name = (c.displayName ?? '').toLowerCase();
+                      final phone = c.phones.isNotEmpty
+                          ? c.phones.first.number.toLowerCase()
+                          : '';
+                      final email = c.emails.isNotEmpty
+                          ? c.emails.first.address.toLowerCase()
+                          : '';
+                      return name.contains(q) ||
+                          phone.contains(q) ||
+                          email.contains(q);
+                    }).toList();
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: theme.primaryColor.withOpacity(0.1),
-                        child: Text(
-                          displayName.isNotEmpty
-                              ? displayName[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: theme.primaryColor,
-                            fontWeight: FontWeight.bold,
+              return Column(
+                children: [
+                  // ===== Barre de recherche =====
+                  TextField(
+                    controller: _contactSearchController,
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
+                      hintText: 'Rechercher un contact…',
+                      hintStyle: TextStyle(color: subTextColor),
+                      prefixIcon: Icon(Icons.search, color: primaryColor),
+                      suffixIcon: _contactQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _contactSearchController.clear();
+                                setState(() => _contactQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor:
+                          isDark ? Colors.grey[800] : Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                    ),
+                    onChanged: (v) =>
+                        setState(() => _contactQuery = v),
+                  ),
+                  const SizedBox(height: 10),
+                  // ===== Liste filtrée =====
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              _contactQuery.isEmpty
+                                  ? 'Aucun contact disponible'
+                                  : 'Aucun contact ne correspond à la recherche',
+                              style: TextStyle(color: subTextColor),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final contact = filtered[index];
+                              final displayName =
+                                  contact.displayName ?? 'Sans nom';
+                              final phones = contact.phones;
+                              final emails = contact.emails;
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor:
+                                      primaryColor.withOpacity(0.1),
+                                  child: Text(
+                                    displayName.isNotEmpty
+                                        ? displayName[0].toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  displayName,
+                                  style: TextStyle(color: textColor),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    if (phones.isNotEmpty)
+                                      Text(
+                                        phones.first.number,
+                                        style: TextStyle(
+                                            color: subTextColor,
+                                            fontSize: 12),
+                                      ),
+                                    if (emails.isNotEmpty)
+                                      Text(
+                                        emails.first.address,
+                                        style: TextStyle(
+                                            color: subTextColor,
+                                            fontSize: 12),
+                                      ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  _fillClientFromContact(contact);
+                                  Navigator.pop(context);
+                                },
+                              );
+                            },
                           ),
-                        ),
-                      ),
-                      title: Text(
-                        displayName,
-                        style: TextStyle(color: textColor),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (phones.isNotEmpty)
-                            Text(
-                              phones.first.number,
-                              style:
-                                  TextStyle(color: subTextColor, fontSize: 12),
-                            ),
-                          if (emails.isNotEmpty)
-                            Text(
-                              emails.first.address,
-                              style:
-                                  TextStyle(color: subTextColor, fontSize: 12),
-                            ),
-                        ],
-                      ),
-                      onTap: () {
-                        _fillClientFromContact(contact);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
         actions: [
           TextButton(

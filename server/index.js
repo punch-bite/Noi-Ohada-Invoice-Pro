@@ -28,6 +28,7 @@ const {
   applicationDefault,
 } = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -70,7 +71,7 @@ async function activateSubscription({
   paymentMethod,
 }) {
   if (!userId || !planId) {
-    console.warn('⚠️ metadata sans user_id/plan_id — activation impossible');
+    logger.warn('⚠️ metadata sans user_id/plan_id — activation impossible');
     return false;
   }
 
@@ -82,7 +83,7 @@ async function activateSubscription({
       interval = planDoc.data().interval;
     }
   } catch (e) {
-    console.warn('⚠️ plan introuvable, interval défaut month', e.message);
+    logger.warn('⚠️ plan introuvable, interval défaut month', { error: e.message });
   }
 
   return db.runTransaction(async (tx) => {
@@ -150,18 +151,37 @@ app.use((req, res, next) => {
 
 // ====== CORS RESTREINT (allowlist) — anti-falsification cross-origin ======
 // L'ancien `Access-Control-Allow-Origin: *` permettait à n'importe quel site
-// d'appeler ces endpoints depuis un navigateur. On n'autorise que les origines
-// connues (domaine public + localhost de dev + notre propre serveur).
+// d'appeler ces endpoints depuis un navigateur. On autorise :
+//   - les origines explicitement listées (domaine public de production),
+//   - TOUT `localhost` / `127.0.0.1` quel que soit le port (Flutter web en
+//     dev utilise un port aléatoire à chaque lancement → sans ça, le
+//     paiement échoue en dev par CORS),
+//   - les aperçus Vercel (`*.vercel.app`).
 const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGINS ||
-    'https://ohada-invoice-pro.com,http://localhost:3000,http://localhost:5000,http://localhost:8080,http://localhost:61860')
+  (process.env.ALLOWED_ORIGINS || 'https://ohada-invoice-pro.com')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
 );
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+      return true; // développement local (port quelconque)
+    }
+    if (host.endsWith('.vercel.app')) return true; // aperçus Vercel
+    return ALLOWED_ORIGINS.has(origin);
+  } catch (_) {
+    return false;
+  }
+}
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
@@ -253,7 +273,7 @@ app.post(
       });
     res.status(201).json({ ok: true, reference });
   } catch (e) {
-    console.error('❌ /enkap/register error:', e);
+    logger.error('❌ /enkap/register error:', { error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -320,12 +340,12 @@ app.put('/enkap/callback/:reference', async (req, res) => {
       if (activated) await ref.delete();
     }
 
-    console.log(
+    logger.info(
       `✅ ENKAP callback — ref=${reference} status=${status || 'N/A'} confirmed=${confirmed} activated=${activated}`
     );
     res.status(200).json({ received: true, confirmed, activated });
   } catch (e) {
-    console.error('❌ /enkap/callback error:', e);
+    logger.error('❌ /enkap/callback error:', { error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -450,7 +470,7 @@ app.post('/enkap/order', async (req, res) => {
         },
       });
     } catch (setupErr) {
-      console.warn('⚠️ ENKAP /order/setup échoué (best-effort):', setupErr.message);
+      logger.warn('⚠️ ENKAP /order/setup échoué (best-effort):', { error: setupErr.message });
     }
 
     res.json({
@@ -605,7 +625,7 @@ app.post(
 
       res.json({ ok: true });
     } catch (e) {
-      console.error('❌ /email/send error:', e.message);
+      logger.error('❌ /email/send error:', { error: e.message });
       res.status(500).json({ error: e.message });
     }
   }
@@ -695,7 +715,98 @@ app.post(
 
       res.json({ ok: true });
     } catch (e) {
-      console.error('❌ /wallet/credit error:', e.message);
+      logger.error('❌ /wallet/credit error:', { error: e.message });
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+
+// ============================================================
+//  ACHAT DE MODÈLES DE FACTURE (déblocage sécurisé)
+//
+//  🔒 Le client ne peut PLUS marquer lui-même un modèle comme acheté
+//  (règles : écriture templates = admin uniquement). Ici :
+//    1. Si le panier contient un modèle PAYANT → une `reference` ENKAP
+//       confirmée est requise (le serveur vérifie auprès d'E-nkap).
+//    2. Les modèles GRATUITS (prix 0 défini par l'admin) sont débloqués
+//       SANS paiement.
+//    3. Le serveur ajoute l'userId à `purchasedBy` (idempotent) via le
+//       SDK admin (contourne les règles → seule vraie autorité).
+// ============================================================
+app.post(
+  '/template/purchase',
+  rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'tpl' }),
+  async (req, res) => {
+    try {
+      const { userId, templateIds, reference } = req.body || {};
+      if (
+        !userId ||
+        !Array.isArray(templateIds) ||
+        templateIds.length === 0 ||
+        templateIds.length > 50
+      ) {
+        return res.status(400).json({ error: 'userId/templateIds requis' });
+      }
+
+      // Charge les modèles (doc id = id du modèle). Les id inconnus (ex.
+      // modèles "par défaut" définis en code, toujours gratuits) sont
+      // ignorés : ils sont disponibles sans déblocage serveur.
+      const templates = [];
+      for (const id of templateIds) {
+        const doc = await db.collection('templates').doc(String(id)).get();
+        if (doc.exists) templates.push({ id: doc.id, data: doc.data() });
+      }
+      if (templates.length === 0) {
+        // Rien à persister (modèles par défaut) → succès sans action.
+        return res.json({ ok: true, unlocked: 0, total: templateIds.length, paid: 0 });
+      }
+
+      // Y a-t-il des modèles PAYANTS dans le panier ?
+      const paidTemplates = templates.filter((t) => (t.data.price || 0) > 0);
+      if (paidTemplates.length > 0) {
+        if (!reference) {
+          return res
+            .status(400)
+            .json({ error: 'Paiement requis (référence manquante)' });
+        }
+        // Vérifie auprès d'E-nkap que la commande est bien confirmée.
+        let status = '';
+        try {
+          const r = await enkapFetch(
+            `/api/order/status?orderMerchantId=${encodeURIComponent(reference)}`
+          );
+          status = (r.data && r.data.status) || '';
+        } catch (_) {
+          /* traité plus bas */
+        }
+        if (!['CONFIRMED', 'COMPLETED'].includes(status.toUpperCase())) {
+          return res.status(400).json({
+            error: `Paiement non confirmé par ENKAP (${status || 'inconnu'})`,
+          });
+        }
+      }
+
+      // Déblocage idempotent : ajoute l'userId à `purchasedBy`.
+      let unlocked = 0;
+      for (const t of templates) {
+        const pb = Array.isArray(t.data.purchasedBy) ? t.data.purchasedBy : [];
+        if (!pb.includes(userId)) {
+          await db.collection('templates').doc(t.id).update({
+            purchasedBy: [...pb, userId],
+            updatedAt: serverTimestamp(),
+          });
+          unlocked++;
+        }
+      }
+
+      res.json({
+        ok: true,
+        unlocked,
+        total: templates.length,
+        paid: paidTemplates.length,
+      });
+    } catch (e) {
+      logger.error('❌ /template/purchase error:', { error: e.message });
       res.status(500).json({ error: e.message });
     }
   }
@@ -713,10 +824,27 @@ app.get('/', (req, res) =>
       'PUT /enkap/order/setup (proxy web/mobile)',
       'GET /enkap/order (proxy web/mobile)',
       'POST /email/send (SMTP côté serveur)',
+      'POST /wallet/credit (vérifié ENKAP)',
+      'POST /template/purchase (vérifié ENKAP)',
       'GET /health',
     ],
   })
 );
+
+// ============================================================
+//  MIDDLEWARE D'ERREURS GLOBAL (journalisation)
+// ============================================================
+// Toute erreur non capturée est journalisée (console + fichier) avant de
+// répondre 500. NB : les handlers utilisent déjà try/catch ; celui-ci est
+// un filet de sécurité pour les erreurs inattendues.
+app.use((err, req, res, next) => {
+  logger.error(
+    `Unhandled error on ${req.method} ${req.originalUrl}`,
+    { error: err && err.message, stack: err && err.stack }
+  );
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Erreur interne du serveur' });
+});
 
 // ============================================================
 //  EXPORT POUR VERCEL / EXÉCUTION DIRECTE
@@ -727,7 +855,7 @@ module.exports = app;
 // Exécution directe (node index.js / npm start) : on écoute.
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🚀 Callback NotchPay écoute sur le port ${PORT}`);
-    console.log(`   Webhook secret configuré : ${getWebhookSecret() ? 'oui' : 'NON (⚠️)'}`);
+    logger.info(`🚀 Serveur prêt sur le port ${PORT}`);
+    logger.info(`Webhook secret configuré : ${getWebhookSecret() ? 'oui' : 'NON (⚠️)'}`);
   });
 }

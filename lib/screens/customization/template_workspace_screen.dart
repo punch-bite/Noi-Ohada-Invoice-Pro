@@ -33,6 +33,7 @@ class TemplateElement {
 /// redimensionnable et masquable individuellement (drag & drop).
 const List<TemplateElement> kTemplateElements = [
   // En-tête société
+  TemplateElement('logo', 'Logo', Icons.image_outlined),
   TemplateElement('company_name', 'Nom société', Icons.business_rounded),
   TemplateElement('company_address', 'Adresse société', Icons.location_on_outlined),
   TemplateElement('company_phone', 'Tél société', Icons.phone_outlined),
@@ -58,6 +59,7 @@ const List<TemplateElement> kTemplateElements = [
 /// Sections de la facture : chaque VARIABLE est déplaçable et éditable.
 const Map<String, List<String>> kTemplateSections = {
   'En-tête': [
+    'logo',
     'company_name',
     'company_address',
     'company_phone',
@@ -76,10 +78,11 @@ const Map<String, List<String>> kTemplateSections = {
 
 /// Position par défaut de chaque variable (x,y relatifs 0..1, scale).
 const Map<String, dynamic> kDefaultPositions = {
-  'company_name': {'x': 0.04, 'y': 0.04, 'scale': 1.0, 'visible': true},
-  'company_address': {'x': 0.04, 'y': 0.065, 'scale': 1.0, 'visible': true},
-  'company_phone': {'x': 0.04, 'y': 0.09, 'scale': 1.0, 'visible': true},
-  'company_email': {'x': 0.04, 'y': 0.115, 'scale': 1.0, 'visible': true},
+  'logo': {'x': 0.04, 'y': 0.02, 'scale': 1.0, 'visible': true},
+  'company_name': {'x': 0.22, 'y': 0.04, 'scale': 1.0, 'visible': true},
+  'company_address': {'x': 0.22, 'y': 0.065, 'scale': 1.0, 'visible': true},
+  'company_phone': {'x': 0.22, 'y': 0.09, 'scale': 1.0, 'visible': true},
+  'company_email': {'x': 0.22, 'y': 0.115, 'scale': 1.0, 'visible': true},
   'invoice_title': {'x': 0.58, 'y': 0.04, 'scale': 1.0, 'visible': true},
   'client_name': {'x': 0.04, 'y': 0.16, 'scale': 1.0, 'visible': true},
   'client_address': {'x': 0.04, 'y': 0.185, 'scale': 1.0, 'visible': true},
@@ -681,6 +684,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
 
     Widget inner;
     switch (e.id) {
+      case 'logo':
+        inner = Container(
+          width: width * 0.14,
+          height: width * 0.14,
+          decoration: BoxDecoration(
+            color: primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: primary.withValues(alpha: 0.3)),
+          ),
+          child: Icon(Icons.business_rounded, color: primary, size: 20),
+        );
       case 'company_name':
         inner = Text(
           _companyName,

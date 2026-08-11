@@ -95,6 +95,15 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
       });
       // Vérification du statut en arrière-plan (toutes plateformes).
       _startPolling();
+
+      // 🔒 Filet de sécurité : si la WebView ne signale jamais la fin du
+      // chargement (page avec iframes / navigations internes), on masque
+      // quand même l'overlay après 12 s → plus de spinner infini.
+      Timer(const Duration(seconds: 12), () {
+        if (mounted && _loadingPage) {
+          setState(() => _loadingPage = false);
+        }
+      });
     } else {
       setState(() {
         _initializing = false;
@@ -294,14 +303,18 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
           onPageFinished: (_) {
             if (mounted) setState(() => _loadingPage = false);
           },
-          // 🔒 Sécurité : on ne charge QUE des URLs http(s). On bloque les
-          // schémas dangereux (javascript:, file:, data:, tel:...) qui
-          // pourraient être injectés par la page ou un lien malveillant.
+          // 🔒 Sécurité : on bloque UNIQUEMENT les schémas d'injection
+          // dangereux (javascript:, file:, data:, vbscript:). On laisse
+          // passer tel:/sms:/intent:... sinon le flux Mobile Money E-nkap
+          // (USSD/appels) ne se charge pas → spinner infini sur mobile.
           onNavigationRequest: (request) {
             final u = Uri.tryParse(request.url);
             if (u == null) return NavigationDecision.prevent;
             final scheme = u.scheme.toLowerCase();
-            if (scheme != 'http' && scheme != 'https') {
+            if (scheme == 'javascript' ||
+                scheme == 'file' ||
+                scheme == 'data' ||
+                scheme == 'vbscript') {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;

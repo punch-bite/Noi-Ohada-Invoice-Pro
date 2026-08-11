@@ -16,6 +16,7 @@ import 'services/notification_service.dart';
 import 'services/reminder_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/stock_service.dart';
+import 'services/template_cart.dart';
 import 'services/subscription_checker_service.dart';
 import 'services/hive_service.dart';
 import 'services/database_service.dart';
@@ -239,6 +240,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: notificationService),
         ChangeNotifierProvider.value(value: connectivityService),
         Provider<StockService>.value(value: stockService),
+        // 🛒 Panier de modèles de factures (singleton) — requis par la
+        // boutique et le checkout (`context.watch<TemplateCart>()`).
+        ChangeNotifierProvider<TemplateCart>.value(value: TemplateCart.instance),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

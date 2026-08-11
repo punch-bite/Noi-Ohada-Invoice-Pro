@@ -15,6 +15,7 @@ import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/template_cart.dart';
 import '../../services/template_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../widgets/glass_widgets.dart';
@@ -85,6 +86,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     final currentUserId = authProvider.user?.id ?? '';
     final isAdmin = authProvider.user?.isAdmin == true;
     final canAccessPremium = subProvider.canAccessPremiumTemplates;
+    final cart = context.watch<TemplateCart>();
     final defaults = InvoiceTemplate.getDefaultTemplates();
 
     // Fusion : modèles par défaut, puis ceux créés par l'admin (sans doublons)
@@ -119,6 +121,45 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
           icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Mes modèles',
+            icon: Icon(Icons.folder_outlined, color: theme.textColor),
+            onPressed: () => context.push('/templates/mine'),
+          ),
+          IconButton(
+            tooltip: 'Panier',
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(Icons.shopping_cart_outlined, color: theme.textColor),
+                if (cart.count > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                          minWidth: 15, minHeight: 15),
+                      child: Text(
+                        '${cart.count}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: () => context.push('/templates/checkout'),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -189,8 +230,57 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                       ],
                     ),
             ),
+            // 🛒 Barre de panier (récapitulatif + accès au checkout).
+            if (cart.count > 0)
+              _buildCartBar(cart, theme),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Barre de panier affichée en bas de la boutique.
+  Widget _buildCartBar(TemplateCart cart, ThemeProvider theme) {
+    final total = cart.total;
+    final fmt =
+        '${total.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ' ')} XAF';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        border: Border(
+          top: BorderSide(
+            color: theme.isDarkMode ? Colors.grey[800]! : Colors.grey[200]!,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.shopping_cart_outlined,
+              color: theme.primaryColor, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${cart.count} modèle(s) • ${total > 0 ? fmt : 'Gratuit'}',
+              style: TextStyle(
+                color: theme.textColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => context.push('/templates/checkout'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Commander'),
+          ),
+        ],
       ),
     );
   }
@@ -232,10 +322,13 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
               // 🔓 Déverrouillé si : abonnement actif (accès à tout),
               // OU template non premium, OU template déjà acheté
               // par l'utilisateur (achat possible sans abonnement).
-              final isOwned = currentUserId.isNotEmpty &&
-                  template.purchasedBy.contains(currentUserId);
-              final isLocked =
-                  template.isPremium && !canAccessPremium && !isOwned;
+              // 🔓 Accessible si : admin, modèle déjà acheté, ou modèle
+              // GRATUIT (prix = 0 défini par l'admin). Sinon → à acheter.
+              final isOwned = isAdmin ||
+                  (currentUserId.isNotEmpty &&
+                      template.purchasedBy.contains(currentUserId)) ||
+                  template.price <= 0;
+              final isLocked = !isOwned;
               return SizedBox(
                 width: 190,
                 child: _buildTemplateCard(
@@ -546,45 +639,26 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     );
   }
 
-  /// 💳 Achète un template payant : ajoute l'UID à `purchasedBy` et marque
-  /// `paid`. Un utilisateur en plan gratuit peut acheter (aucun abonnement
-  /// requis) ; l'abonnement actif donne accès à tous sans achat.
-  Future<void> _purchaseTemplate(InvoiceTemplate template) async {
-    final authProvider = context.read<AppAuthProvider>();
-    final userId = authProvider.user?.id ?? '';
-    if (userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Connectez-vous pour acheter ce modèle'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+  /// 💳 Achat d'un modèle → ajout au PANIER puis checkout sécurisé.
+  /// Le déblocage est vérifié côté SERVEUR (`POST /template/purchase`) :
+  ///  - modèles gratuits (prix admin = 0) → débloqués SANS paiement ;
+  ///  - modèles payants → règlement ENKAP avant déblocage.
+  void _purchaseTemplate(InvoiceTemplate template) {
+    final cart = TemplateCart.instance;
+    if (cart.contains(template.id)) {
+      context.push('/templates/checkout');
       return;
     }
-
-    try {
-      final updated = template.copyWith(
-        purchasedBy: [...template.purchasedBy, userId],
-        paid: true,
-      );
-      await _templateService.updateTemplate(updated);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Modèle acheté avec succès !'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _loadTemplates();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur d\'achat : $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
+    cart.add(template);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${template.name} ajouté au panier 🛒'),
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 1200),
+      ),
+    );
+    context.push('/templates/checkout');
   }
 
   void _showUpgradeDialog() {

@@ -55,6 +55,8 @@ import '../screens/status/no_internet_screen.dart';
 
 import '../screens/customization/invoice_customization_screen.dart';
 import '../screens/customization/template_store_screen.dart';
+import '../screens/customization/template_checkout_screen.dart';
+import '../screens/customization/my_templates_screen.dart';
 import '../screens/customization/template_workspace_screen.dart';
 import '../screens/customization/template_preview_screen.dart';
 import '../screens/dev/enkap_test_screen.dart';
@@ -249,6 +251,16 @@ class AppRouter {
       GoRoute(
         path: '/templates',
         builder: (context, state) => const TemplateStoreScreen(),
+      ),
+      // 🛒 Checkout du panier de modèles (paiement ENKAP ou gratuit)
+      GoRoute(
+        path: '/templates/checkout',
+        builder: (context, state) => const TemplateCheckoutScreen(),
+      ),
+      // 📁 Mes modèles (espace de stockage des modèles achetés)
+      GoRoute(
+        path: '/templates/mine',
+        builder: (context, state) => const MyTemplatesScreen(),
       ),
       // Espace de travail drag & drop (personnalisation visuelle)
       GoRoute(
