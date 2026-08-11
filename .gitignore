@@ -75,7 +75,8 @@ Thumbs.db
 serviceAccountKey.json
 base64.txt
 node_modules/
-# ENKAP reference docs (API) — not to commit
+# ENKAP reference docs (API) ï¿½ not to commit
 enkap_integration.pdf
 enkap_integration.txt
 enkap_swagger.json
+design/

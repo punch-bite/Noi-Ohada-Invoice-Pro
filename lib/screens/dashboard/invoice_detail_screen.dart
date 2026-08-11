@@ -770,26 +770,48 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildInfoRow(
-                    'Date',
-                    DateFormat('dd/MM/yyyy').format(_invoice!.issueDate),
+                    'DATE D\'ÉMISSION',
+                    DateFormat('dd MMM yyyy').format(_invoice!.issueDate),
                     isDark,
                     textColor,
                     subTextColor,
                   ),
                   _buildInfoRow(
-                    'Échéance',
-                    DateFormat('dd/MM/yyyy').format(_invoice!.dueDate),
+                    'DATE D\'ÉCHÉANCE',
+                    DateFormat('dd MMM yyyy').format(_invoice!.dueDate),
                     isDark,
                     textColor,
                     subTextColor,
                   ),
-                  _buildInfoRow(
-                    'Client',
+                  const Divider(height: 24),
+                  Text(
+                    'FACTURÉ À',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: subTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
                     _client?.name ?? 'Client inconnu',
-                    isDark,
-                    textColor,
-                    subTextColor,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
                   ),
+                  if (_client != null && _client!.address.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _client!.address,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: subTextColor,
+                      ),
+                    ),
+                  ],
                   const Divider(height: 24),
                   Text(
                     'Produits',
@@ -800,52 +822,187 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ..._invoice!.items.map((item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                item.description,
-                                style: TextStyle(color: textColor),
+                  // 🧾 Table OHADA (structure exigée) : en-têtes + lignes
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: isDark
+                          ? Colors.white.withOpacity(0.03)
+                          : Colors.transparent,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Column(
+                      children: [
+                        // En-têtes de colonnes
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                flex: 6,
+                                child: Text(
+                                  'Désignation',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                    color: Colors.grey,
+                                  ),
+                                ),
                               ),
-                            ),
-                            Text(
-                              '${item.quantity} x ',
-                              style: TextStyle(color: textColor),
-                            ),
-                            Text(
-                              '${item.unitPrice.toStringAsFixed(0)} FCFA',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                color: textColor,
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Qté',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                    color: subTextColor,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'PU',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                    color: subTextColor,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Total',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      )),
+                        const SizedBox(height: 4),
+                        ..._invoice!.items.map((item) {
+                          final lineTotal =
+                              item.quantity * item.unitPrice;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isDark
+                                      ? Colors.white.withOpacity(0.06)
+                                      : Colors.grey[200]!,
+                                  width: 0.6,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 6,
+                                  child: Text(
+                                    item.description,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: textColor,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    item.quantity.toString(),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    item.unitPrice.toStringAsFixed(0),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    lineTotal.toStringAsFixed(0),
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
                   const Divider(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      Text(
-                        '${_invoice!.totalAmount.toStringAsFixed(0)} FCFA',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ],
+                  // Totaux (maquette : Sous-total HT / TVA / TOTAL TTC)
+                  _buildTotalRow(
+                    'Sous-total HT',
+                    '${_invoice!.subtotal.toStringAsFixed(0)} FCFA',
+                    textColor,
+                    subTextColor,
+                    isTotal: false,
+                    highlight: false,
+                  ),
+                  const SizedBox(height: 6),
+                  _buildTotalRow(
+                    'TVA (${_invoice!.taxRate.toStringAsFixed(0)}%)',
+                    '${(_invoice!.totalAmount - _invoice!.subtotal).toStringAsFixed(0)} FCFA',
+                    textColor,
+                    subTextColor,
+                    isTotal: false,
+                    highlight: false,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildTotalRow(
+                    'TOTAL TTC',
+                    '${_invoice!.totalAmount.toStringAsFixed(0)} FCFA',
+                    textColor,
+                    subTextColor,
+                    isTotal: true,
+                    highlight: true,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Montant exprimé en FCFA',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: subTextColor,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -968,6 +1125,49 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTotalRow(
+    String label,
+    String value,
+    Color textColor,
+    Color subTextColor, {
+    required bool isTotal,
+    required bool highlight,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isTotal ? 16 : 13,
+            fontWeight: isTotal ? FontWeight.w800 : FontWeight.w500,
+            color: isTotal ? textColor : subTextColor,
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: highlight ? 12 : 0, vertical: highlight ? 6 : 0),
+          decoration: highlight
+              ? BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primaryColor, const Color(0xFF7C3AED)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                )
+              : null,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: isTotal ? 18 : 14,
+              fontWeight: FontWeight.w800,
+              color: highlight ? Colors.white : primaryColor,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

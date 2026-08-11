@@ -6,6 +6,7 @@ import '../models/team.dart';
 import '../models/team_invitation.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
+import '../services/mail_service.dart';
 
 class TeamService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -225,7 +226,29 @@ class TeamService {
           .doc(invitation.id)
           .set(invitation.toMap());
 
-      // Notification
+      // 📧 Email d'invitation (best-effort) : envoi via MailService (SMTP
+      // local ou serveur /email/send). Un échec d'email ne doit PAS
+      // annuler l'invitation (elle reste accessible in-app).
+      try {
+        // Lien d'acceptation : l'invité devra être connecté pour rejoindre
+        // l'équipe ; on cible la liste des invitations de son compte.
+        const acceptLink =
+            'https://ohada-invoice-pro.com/teams/invitations';
+        await MailService.sendHtmlEmail(
+          to: invitedEmail,
+          subject: '📨 Invitation à rejoindre l\'équipe ${team.name}',
+          htmlBody: MailService.getTeamInvitationTemplate(
+            inviterName: 'Un administrateur',
+            teamName: team.name,
+            acceptLink: acceptLink,
+            roleLabel: role == 'admin' ? 'Administrateur' : 'Membre',
+          ),
+        );
+      } catch (e) {
+        debugPrint('⚠️ Envoi email d\'invitation échoué (best-effort) : $e');
+      }
+
+      // Notification in-app
       await _notificationService.addNotification(
         AppNotification(
           title: '📨 Invitation à rejoindre une équipe',

@@ -1,0 +1,201 @@
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,100..1000&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary": "#ffffff", "on-surface-variant": "#464554", "on-tertiary-fixed-variant": "#7d2d00", "secondary-container": "#8a4cfc", "on-tertiary": "#ffffff", "inverse-on-surface": "#f3effb", "on-primary-fixed-variant": "#372abf", "primary-container": "#4338ca", "tertiary-fixed-dim": "#ffb597", "on-error-container": "#93000a", "surface-container-highest": "#e4e1ed", "background": "#fcf8ff", "on-tertiary-container": "#ffb393", "inverse-primary": "#c3c0ff", "on-secondary-fixed-variant": "#5a00c6", "secondary": "#712ae2", "primary": "#2a14b4", "on-primary-fixed": "#100069", "surface-variant": "#e4e1ed", "outline-variant": "#c7c4d7", "on-primary": "#ffffff", "on-primary-container": "#c1beff", "secondary-fixed-dim": "#d2bbff", "surface-bright": "#fcf8ff", "tertiary-container": "#8f3400", "surface-container": "#f0ecf8", "surface-container-lowest": "#ffffff", "surface-container-high": "#eae6f3", "on-tertiary-fixed": "#360f00", "tertiary-fixed": "#ffdbcd", "surface-container-low": "#f6f2fe", "primary-fixed": "#e3dfff", "surface": "#fcf8ff", "surface-tint": "#5148d7", "secondary-fixed": "#eaddff", "outline": "#777586", "error": "#ba1a1a", "on-secondary-fixed": "#25005a", "surface-dim": "#dcd8e4", "on-secondary-container": "#fffbff", "inverse-surface": "#302f39", "on-surface": "#1b1b23", "tertiary": "#692400", "on-background": "#1b1b23", "error-container": "#ffdad6", "on-error": "#ffffff", "primary-fixed-dim": "#c3c0ff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "unit": "4px", "card-gap": "20px", "container-padding": "24px", "gutter": "16px" }, "fontFamily": { "headline-lg-mobile": ["Roboto Flex"], "label-md": ["Roboto Flex"], "body-md": ["Roboto Flex"], "headline-lg": ["Roboto Flex"], "body-lg": ["Roboto Flex"], "title-md": ["Roboto Flex"], "headline-xl": ["Roboto Flex"] }, "fontSize": { "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }] } } } }</script><style>@layer base { .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } body { -webkit-tap-highlight-color: transparent; } } .glass-header { background: rgba(252, 248, 255, 0.8); backdrop-filter: blur(12px); shadow-shadow-[0_1px_8px_rgba(0,0,0,0.04)]; }</style></head><body class="bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe glass-header"><div class="h-16 px-container-padding flex items-center justify-between"><div class="flex items-center gap-4"><h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Clients</h1></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="pt-16 min-h-screen pb-24 bg-background"><div class="flex flex-col w-full px-4 gap-6 pb-24">
+<!-- Screen Header -->
+<div class="flex flex-col gap-2 mt-2">
+<h2 class="text-headline-lg-mobile font-headline-lg-mobile text-primary tracking-tight">Nouveau Client</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">Ajoutez un contact pour simplifier votre facturation conforme OHADA.</p>
+</div>
+<!-- Client Type Toggle -->
+<div class="relative bg-surface-container rounded-xl p-1 flex shadow-sm isolate">
+<div class="absolute inset-y-1 left-1 w-[calc(50%-4px)] bg-surface rounded-lg shadow-sm transition-transform duration-300 ease-in-out z-0" id="type-indicator"></div>
+<button class="flex-1 relative z-10 py-3 text-center text-label-md font-label-md transition-colors text-primary" id="btn-company" onclick="selectType('company')">
+      ENTREPRISE
+    </button>
+<button class="flex-1 relative z-10 py-3 text-center text-label-md font-label-md transition-colors text-on-surface-variant" id="btn-individual" onclick="selectType('individual')">
+      PARTICULIER
+    </button>
+</div>
+<!-- Main Form Glass Card -->
+<div class="bg-surface/80 backdrop-blur-xl rounded-2xl p-5 shadow-[0_8px_32px_rgba(42,20,180,0.06)] relative overflow-hidden group">
+<!-- Glass Edge Highlight -->
+<div class="absolute inset-0 rounded-2xl pointer-events-none" style="background: linear-gradient(180deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 20%);"></div>
+<form class="flex flex-col gap-5 relative z-10" id="client-form" onsubmit="event.preventDefault(); animateSuccess();">
+<!-- Identity Section -->
+<div class="flex flex-col gap-4">
+<h3 class="text-title-md font-title-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">badge</span>
+          Identité
+        </h3>
+<!-- Company Name -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30 focus-within:border-primary/50 focus-within:bg-surface transition-colors" id="field-name-container">
+<label class="block text-label-md font-label-md text-primary mb-1" for="client-name" id="label-name">Raison Sociale</label>
+<input class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none placeholder-on-surface-variant/40" id="client-name" placeholder="Ex: Groupe Palmeraie SA" required="" type="text"/>
+</div>
+<!-- Tax ID (IFU) - Only for Company -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30 focus-within:border-primary/50 focus-within:bg-surface transition-colors transition-all duration-300" id="field-ifu">
+<label class="block text-label-md font-label-md text-primary mb-1" for="client-ifu">NIF / IFU <span class="text-error">*</span></label>
+<input class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none placeholder-on-surface-variant/40" id="client-ifu" placeholder="Numéro d'Identification Fiscale" type="text"/>
+<p class="text-[10px] text-on-surface-variant mt-1 italic">Requis pour la facturation OHADA B2B</p>
+</div>
+</div>
+<!-- Divider -->
+<div class="h-px w-full bg-gradient-to-r from-transparent via-outline-variant/40 to-transparent my-1"></div>
+<!-- Contact Section -->
+<div class="flex flex-col gap-4">
+<h3 class="text-title-md font-title-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">contact_mail</span>
+          Contact
+        </h3>
+<div class="grid grid-cols-1 gap-4">
+<!-- Email -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30 focus-within:border-primary/50 focus-within:bg-surface transition-colors">
+<label class="block text-label-md font-label-md text-primary mb-1" for="client-email">Email</label>
+<input class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none placeholder-on-surface-variant/40" id="client-email" placeholder="contact@entreprise.com" type="email"/>
+</div>
+<!-- Phone -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30 focus-within:border-primary/50 focus-within:bg-surface transition-colors">
+<label class="block text-label-md font-label-md text-primary mb-1" for="client-phone">Téléphone</label>
+<div class="flex items-center gap-2">
+<span class="text-on-surface-variant text-body-lg font-body-lg">+225</span>
+<input class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none placeholder-on-surface-variant/40" id="client-phone" placeholder="01 23 45 67 89" type="tel"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Divider -->
+<div class="h-px w-full bg-gradient-to-r from-transparent via-outline-variant/40 to-transparent my-1"></div>
+<!-- Address Section -->
+<div class="flex flex-col gap-4">
+<h3 class="text-title-md font-title-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">location_on</span>
+          Localisation
+        </h3>
+<!-- Address Textarea -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30 focus-within:border-primary/50 focus-within:bg-surface transition-colors">
+<label class="block text-label-md font-label-md text-primary mb-1" for="client-address">Adresse de Facturation</label>
+<textarea class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none placeholder-on-surface-variant/40 resize-none" id="client-address" placeholder="Rue, Quartier, Ville..." rows="2"></textarea>
+</div>
+<!-- Mini Map Placeholder -->
+<div class="w-full h-32 rounded-xl bg-surface-container overflow-hidden relative shadow-inner">
+<div class="w-full h-full bg-cover bg-center" data-location="Abidjan, Plateau" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDkYEq_NyaB3_H_-jZ0Ca6p75iIN9zgQUb0IkmE8ktl8fOt7AwBPT2wLE9AtRMzaJIrLWPvLG_U8zuTM8GW0Jkv2oYqvWH9kRMtyCa5hlOKwywFwZiyUgFoFgD6QUz8ukYL2d9M1aDUlVQqfilMSIXsX11LZHNxU3R_AzrJibkribTk2k6XBYWpQxii6lIQ3unQogqnpVQvLR_Mf_wyCHgfc1tvcf7rsEJ68yQIFp_Bw6Gy6eLsk04TQ')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-surface/80 to-transparent flex items-end p-2 pointer-events-none">
+<span class="text-[10px] font-label-md text-on-surface font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">my_location</span>
+               Aperçu localisation
+             </span>
+</div>
+</div>
+</div>
+<!-- Divider -->
+<div class="h-px w-full bg-gradient-to-r from-transparent via-outline-variant/40 to-transparent my-1"></div>
+<!-- Preferences Section -->
+<div class="flex flex-col gap-4">
+<h3 class="text-title-md font-title-md text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">tune</span>
+          Préférences
+        </h3>
+<!-- Payment Terms -->
+<div class="relative bg-surface-container/50 rounded-xl px-4 py-3 border border-outline-variant/30">
+<label class="block text-label-md font-label-md text-primary mb-1" for="payment-terms">Conditions de Paiement</label>
+<div class="relative">
+<select class="w-full bg-transparent text-body-lg font-body-lg text-on-surface focus:outline-none appearance-none pr-8" id="payment-terms">
+<option value="reception">À réception</option>
+<option selected="" value="15">15 jours</option>
+<option value="30">30 jours nets</option>
+<option value="45">45 jours fin de mois</option>
+<option value="60">60 jours</option>
+</select>
+<span class="material-symbols-outlined absolute right-0 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- Submit Button -->
+<div class="mt-4">
+<button class="w-full h-14 rounded-[14px] bg-gradient-to-r from-primary to-secondary text-on-primary font-title-md text-title-md flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(67,56,202,0.3)] hover:shadow-[0_6px_20px_rgba(67,56,202,0.4)] transition-all active:scale-[0.98] overflow-hidden relative group" id="submit-btn" type="submit">
+<!-- Button Glow -->
+<div class="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="material-symbols-outlined transition-transform duration-300" id="submit-icon">person_add</span>
+<span id="submit-text">Enregistrer le client</span>
+</button>
+</div>
+</form>
+</div>
+</div>
+<script>
+  let currentType = 'company';
+
+  function selectType(type) {
+    if (currentType === type) return;
+    
+    currentType = type;
+    const indicator = document.getElementById('type-indicator');
+    const btnCompany = document.getElementById('btn-company');
+    const btnIndividual = document.getElementById('btn-individual');
+    const labelName = document.getElementById('label-name');
+    const inputName = document.getElementById('client-name');
+    const fieldIfu = document.getElementById('field-ifu');
+
+    if (type === 'individual') {
+      indicator.style.transform = 'translateX(100%)';
+      
+      btnCompany.classList.replace('text-primary', 'text-on-surface-variant');
+      btnIndividual.classList.replace('text-on-surface-variant', 'text-primary');
+      
+      labelName.textContent = 'Nom et Prénoms';
+      inputName.placeholder = 'Ex: Koffi Kouassi Jean';
+      
+      // Hide IFU field with animation
+      fieldIfu.style.opacity = '0';
+      fieldIfu.style.height = '0px';
+      fieldIfu.style.padding = '0px';
+      fieldIfu.style.marginBottom = '0px';
+      fieldIfu.style.overflow = 'hidden';
+      setTimeout(() => fieldIfu.classList.add('hidden'), 300);
+
+    } else {
+      indicator.style.transform = 'translateX(0)';
+      
+      btnIndividual.classList.replace('text-primary', 'text-on-surface-variant');
+      btnCompany.classList.replace('text-on-surface-variant', 'text-primary');
+      
+      labelName.textContent = 'Raison Sociale';
+      inputName.placeholder = 'Ex: Groupe Palmeraie SA';
+      
+      // Show IFU field
+      fieldIfu.classList.remove('hidden');
+      setTimeout(() => {
+        fieldIfu.style.opacity = '1';
+        fieldIfu.style.height = 'auto'; // Will snap slightly, but usually fine for form toggles
+        fieldIfu.style.padding = '0.75rem 1rem'; // py-3 px-4 equivalent
+      }, 10);
+    }
+  }
+
+  function animateSuccess() {
+    const btn = document.getElementById('submit-btn');
+    const icon = document.getElementById('submit-icon');
+    const text = document.getElementById('submit-text');
+
+    // Simple success animation
+    btn.classList.replace('from-primary', 'from-[#008A4D]'); // Greenish
+    btn.classList.replace('to-secondary', 'to-[#00B464]');
+    btn.style.boxShadow = '0 4px 16px rgba(0, 180, 100, 0.3)';
+    
+    icon.textContent = 'check_circle';
+    icon.classList.add('scale-125');
+    text.textContent = 'Client Enregistré';
+
+    setTimeout(() => {
+      // Reset after 2s (normally would route away)
+      btn.classList.replace('from-[#008A4D]', 'from-primary');
+      btn.classList.replace('to-[#00B464]', 'to-secondary');
+      btn.style.boxShadow = '';
+      icon.textContent = 'person_add';
+      icon.classList.remove('scale-125');
+      text.textContent = 'Enregistrer le client';
+      
+      // Clear form
+      document.getElementById('client-form').reset();
+    }, 2000);
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary"><div class="flex justify-around items-center h-16 px-gutter"><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="dashboard" href="#"><span class="material-symbols-outlined">dashboard</span><span class="font-label-md text-label-md">Tableau</span></a><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="invoices" href="#"><span class="material-symbols-outlined">description</span><span class="font-label-md text-label-md">Factures</span></a><a aria-current="page" class="flex flex-col items-center gap-1 transition-colors w-16 text-primary" data-path="clients" href="#"><span class="material-symbols-outlined">group</span><span class="font-label-md text-label-md">Clients</span></a><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="settings" href="#"><span class="material-symbols-outlined">settings</span><span class="font-label-md text-label-md">Réglages</span></a></div></nav></body></html>

@@ -101,50 +101,79 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             )),
             const SizedBox(height: 24),
 
-            // Bouton de souscription
-            SizedBox(
+            // Bouton de souscription (dégradé indigo→violet + flèche)
+            Container(
               width: double.infinity,
               height: 56,
-              child: ElevatedButton(
-                onPressed: _selectedPlan != null && !_selectedPlan!.isFree
-                    ? () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PaymentScreen(
-                              plan: _selectedPlan!,
-                              onPaymentComplete: () {
-                                // Recharger les données après paiement
-                              },
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryColor.withOpacity(0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: _selectedPlan != null && !_selectedPlan!.isFree
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PaymentScreen(
+                                plan: _selectedPlan!,
+                                onPaymentComplete: () {
+                                  // Recharger les données après paiement
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      : _selectedPlan != null && _selectedPlan!.isFree
+                          ? () {
+                              _activateFreePlan(
+                                context,
+                                authProvider,
+                                subscriptionProvider,
+                                primaryColor,
+                              );
+                            }
+                          : null,
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _selectedPlan != null && _selectedPlan!.isFree
+                                ? 'Activer le plan gratuit'
+                                : 'Souscrire à ${_selectedPlan?.name ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
                           ),
-                        );
-                      }
-                    : _selectedPlan != null && _selectedPlan!.isFree
-                        ? () {
-                            _activateFreePlan(
-                              context,
-                              authProvider,
-                              subscriptionProvider,
-                              primaryColor,
-                            );
-                          }
-                        : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 4,
-                ),
-                child: Text(
-                  _selectedPlan != null && _selectedPlan!.isFree
-                      ? 'Activer le plan gratuit'
-                      : 'Souscrire à ${_selectedPlan?.name ?? ''}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                        ),
+                        if (_selectedPlan != null &&
+                            !_selectedPlan!.isFree) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward_rounded,
+                              color: Colors.white, size: 20),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -198,15 +227,25 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           color: cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? primaryColor : (isDark ? Colors.grey[700]! : Colors.grey[200]!),
-            width: isSelected ? 2 : 1,
+            color: isSelected
+                ? primaryColor
+                : (isPopular
+                    ? primaryColor.withOpacity(0.4)
+                    : (isDark ? Colors.grey[700]! : Colors.grey[200]!)),
+            width: isSelected ? 2 : (isPopular ? 1.5 : 1),
           ),
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withOpacity(0.18),
+                blurRadius: 24,
+                offset: const Offset(0, 6),
+              )
+            else if (isPopular)
+              BoxShadow(
+                color: primaryColor.withOpacity(0.08),
                 blurRadius: 20,
-                offset: const Offset(0, 5),
+                offset: const Offset(0, 4),
               ),
           ],
         ),
@@ -242,15 +281,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: primaryColor,
+                      color: primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: primaryColor.withOpacity(0.25),
+                        width: 1,
+                      ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'POPULAIRE',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: primaryColor,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ),

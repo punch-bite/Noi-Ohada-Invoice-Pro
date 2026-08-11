@@ -390,6 +390,24 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
             ),
           ],
         ),
+        const SizedBox(height: 4),
+        // 🛟 Filet de sécurité : si la WebView intégrée échoue (page bloquée
+        // par le navigateur WebView, JavaScript désactivé, etc.), l'utilisateur
+        // peut toujours ouvrir la page de paiement dans son navigateur externe.
+        TextButton.icon(
+          onPressed: () async {
+            final uri = Uri.tryParse(url);
+            if (uri != null) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+          icon: Icon(Icons.open_in_new,
+              size: 16, color: theme.colorScheme.primary),
+          label: Text(
+            'Ouvrir dans le navigateur',
+            style: TextStyle(fontSize: 12, color: theme.colorScheme.primary),
+          ),
+        ),
       ],
     );
   }

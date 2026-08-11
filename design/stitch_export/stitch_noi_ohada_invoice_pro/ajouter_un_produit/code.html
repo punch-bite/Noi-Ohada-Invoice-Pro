@@ -1,0 +1,125 @@
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,100..1000&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary": "#ffffff", "on-surface-variant": "#464554", "on-tertiary-fixed-variant": "#7d2d00", "secondary-container": "#8a4cfc", "on-tertiary": "#ffffff", "inverse-on-surface": "#f3effb", "on-primary-fixed-variant": "#372abf", "primary-container": "#4338ca", "tertiary-fixed-dim": "#ffb597", "on-error-container": "#93000a", "surface-container-highest": "#e4e1ed", "background": "#fcf8ff", "on-tertiary-container": "#ffb393", "inverse-primary": "#c3c0ff", "on-secondary-fixed-variant": "#5a00c6", "secondary": "#712ae2", "primary": "#2a14b4", "on-primary-fixed": "#100069", "surface-variant": "#e4e1ed", "outline-variant": "#c7c4d7", "on-primary": "#ffffff", "on-primary-container": "#c1beff", "secondary-fixed-dim": "#d2bbff", "surface-bright": "#fcf8ff", "tertiary-container": "#8f3400", "surface-container": "#f0ecf8", "surface-container-lowest": "#ffffff", "surface-container-high": "#eae6f3", "on-tertiary-fixed": "#360f00", "tertiary-fixed": "#ffdbcd", "surface-container-low": "#f6f2fe", "primary-fixed": "#e3dfff", "surface": "#fcf8ff", "surface-tint": "#5148d7", "secondary-fixed": "#eaddff", "outline": "#777586", "error": "#ba1a1a", "on-secondary-fixed": "#25005a", "surface-dim": "#dcd8e4", "on-secondary-container": "#fffbff", "inverse-surface": "#302f39", "on-surface": "#1b1b23", "tertiary": "#692400", "on-background": "#1b1b23", "error-container": "#ffdad6", "on-error": "#ffffff", "primary-fixed-dim": "#c3c0ff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "unit": "4px", "card-gap": "20px", "container-padding": "24px", "gutter": "16px" }, "fontFamily": { "headline-lg-mobile": ["Roboto Flex"], "label-md": ["Roboto Flex"], "body-md": ["Roboto Flex"], "headline-lg": ["Roboto Flex"], "body-lg": ["Roboto Flex"], "title-md": ["Roboto Flex"], "headline-xl": ["Roboto Flex"] }, "fontSize": { "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }] } } } }</script><style>@layer base { .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } body { -webkit-tap-highlight-color: transparent; } } .glass-header { background: rgba(252, 248, 255, 0.8); backdrop-filter: blur(12px); shadow-shadow-[0_1px_8px_rgba(0,0,0,0.04)]; }</style></head><body class="bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 pt-safe glass-header"><div class="h-16 px-container-padding flex items-center justify-between"><div class="flex items-center gap-4"><h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary">Dashboard</h1></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></header><main class="pt-16 min-h-screen pb-24 bg-background"><div class="flex flex-col w-full px-container-padding pb-[20px] gap-card-gap">
+<!-- Header Section -->
+<div class="flex flex-col gap-2 mt-2">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-title-md text-title-md text-on-surface">Nouveau Produit</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Ajoutez un article au catalogue de stock.</p>
+</div>
+<div class="h-10 w-10 rounded-full bg-primary-container/20 flex items-center justify-center text-primary backdrop-blur-md shadow-sm border border-white/40">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+</div>
+</div>
+<!-- Image Upload Section -->
+<div class="relative w-full rounded-2xl bg-surface-container-low/50 backdrop-blur-xl border border-white/60 p-6 flex flex-col items-center justify-center gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.04)] text-center cursor-pointer overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+<div class="h-16 w-16 rounded-full bg-surface shadow-sm border border-white/80 flex items-center justify-center text-primary z-10 relative">
+<span class="material-symbols-outlined text-[32px]">add_photo_alternate</span>
+</div>
+<div class="z-10 relative">
+<p class="font-label-md text-label-md text-on-surface">Ajouter une photo</p>
+<p class="font-body-md text-body-md text-on-surface-variant text-[12px] mt-1">PNG, JPG jusqu'à 5MB</p>
+</div>
+</div>
+<!-- Main Info Card -->
+<div class="rounded-2xl bg-surface-container-lowest/60 backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.03)] border-t border-white/60 p-5 flex flex-col gap-5 relative overflow-hidden">
+<div class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-[18px]">info</span>
+<h3 class="font-label-md text-label-md text-primary uppercase tracking-wider">Informations Générales</h3>
+</div>
+<!-- Field: Name -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Nom du produit</label>
+<input class="w-full bg-white/40 border border-outline-variant rounded-xl px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all placeholder:text-on-surface-variant/50 backdrop-blur-sm shadow-inner shadow-black/5" placeholder="Ex: Ordinateur Portable Pro" type="text"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Field: SKU -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Référence (SKU)</label>
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-high/30 border border-outline-variant/50 rounded-xl pl-4 pr-10 py-3 font-body-md text-body-md text-on-surface-variant focus:outline-none transition-all" readonly="" type="text" value="PROD-8492"/>
+<span class="material-symbols-outlined absolute right-3 text-on-surface-variant/50 text-[18px]">autorenew</span>
+</div>
+</div>
+<!-- Field: Category -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Catégorie</label>
+<div class="relative">
+<select class="w-full appearance-none bg-white/40 border border-outline-variant rounded-xl pl-4 pr-10 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5">
+<option>Électronique</option>
+<option>Fournitures</option>
+<option>Services</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Pricing Card -->
+<div class="rounded-2xl bg-surface-container-lowest/60 backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.03)] border-t border-white/60 p-5 flex flex-col gap-5 relative overflow-hidden">
+<div class="absolute -left-10 -bottom-10 w-32 h-32 bg-secondary/5 rounded-full blur-2xl pointer-events-none"></div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-secondary text-[18px]">payments</span>
+<h3 class="font-label-md text-label-md text-secondary uppercase tracking-wider">Tarification &amp; Taxes</h3>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Field: Purchase Price -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Prix d'achat (HT)</label>
+<div class="relative flex items-center">
+<input class="w-full bg-white/40 border border-outline-variant rounded-xl pl-4 pr-12 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5" placeholder="0.00" type="number"/>
+<span class="absolute right-4 font-label-md text-label-md text-on-surface-variant/60">FCFA</span>
+</div>
+</div>
+<!-- Field: Unit Price -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Prix unitaire (HT)</label>
+<div class="relative flex items-center">
+<input class="w-full bg-white/40 border border-outline-variant rounded-xl pl-4 pr-12 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5" placeholder="0.00" type="number"/>
+<span class="absolute right-4 font-label-md text-label-md text-on-surface-variant/60">FCFA</span>
+</div>
+</div>
+</div>
+<!-- Field: TVA -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Taux de TVA</label>
+<div class="relative">
+<select class="w-full appearance-none bg-white/40 border border-outline-variant rounded-xl pl-4 pr-10 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5">
+<option>18% (Standard OHADA)</option>
+<option>19.25% (Spécifique)</option>
+<option>0% (Exonéré)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Stock Card -->
+<div class="rounded-2xl bg-surface-container-lowest/60 backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.03)] border-t border-white/60 p-5 flex flex-col gap-5 relative overflow-hidden">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-tertiary text-[18px]">shelves</span>
+<h3 class="font-label-md text-label-md text-tertiary uppercase tracking-wider">Gestion des Stocks</h3>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Field: Initial Stock -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Stock Initial</label>
+<input class="w-full bg-white/40 border border-outline-variant rounded-xl px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5" placeholder="0" type="number"/>
+</div>
+<!-- Field: Reorder Level -->
+<div class="relative">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">Seuil d'alerte</label>
+<input class="w-full bg-white/40 border border-outline-variant rounded-xl px-4 py-3 font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:bg-white/80 transition-all backdrop-blur-sm shadow-inner shadow-black/5" placeholder="5" type="number"/>
+</div>
+</div>
+</div>
+<!-- Submit Button -->
+<div class="mt-4 pb-4">
+<button class="w-full rounded-2xl bg-gradient-to-r from-primary to-secondary py-4 px-6 flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-[0.98] transition-transform">
+<span class="font-title-md text-title-md text-on-primary">Enregistrer le produit</span>
+<span class="material-symbols-outlined text-on-primary">check_circle</span>
+</button>
+</div>
+</div></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary"><div class="flex justify-around items-center h-16 px-gutter"><a aria-current="page" class="flex flex-col items-center gap-1 transition-colors w-16 text-primary" data-path="dashboard" href="#"><span class="material-symbols-outlined">dashboard</span><span class="font-label-md text-label-md">Tableau</span></a><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="invoices" href="#"><span class="material-symbols-outlined">description</span><span class="font-label-md text-label-md">Factures</span></a><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="clients" href="#"><span class="material-symbols-outlined">group</span><span class="font-label-md text-label-md">Clients</span></a><a class="flex flex-col items-center gap-1 text-on-surface-variant transition-colors w-16" data-path="settings" href="#"><span class="material-symbols-outlined">settings</span><span class="font-label-md text-label-md">Réglages</span></a></div></nav></body></html>

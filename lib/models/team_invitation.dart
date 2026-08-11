@@ -50,7 +50,8 @@ class TeamInvitation {
     DateTime? expiresAt,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
-        expiresAt = expiresAt ?? DateTime.now().add(const Duration(days: 7));
+        // ⏱️ Durée de validité : 1 jour (les invitations expirent en 24 h).
+        expiresAt = expiresAt ?? DateTime.now().add(const Duration(days: 1));
 
   Map<String, dynamic> toMap() {
     return {
@@ -78,7 +79,7 @@ class TeamInvitation {
       status: map['status'] ?? 'pending',
       createdAt: _parseDateTime(map['createdAt']),
       respondedAt: map['respondedAt'] != null ? _parseDateTime(map['respondedAt']) : null,
-      expiresAt: map['expiresAt'] != null ? _parseDateTime(map['expiresAt']) : DateTime.now().add(const Duration(days: 7)),
+      expiresAt: map['expiresAt'] != null ? _parseDateTime(map['expiresAt']) : DateTime.now().add(const Duration(days: 1)),
     );
   }
 

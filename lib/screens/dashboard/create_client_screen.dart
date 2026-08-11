@@ -33,6 +33,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
 
   bool _isSaving = false;
   bool _isLoadingContacts = false;
+  bool _isCompany = true; // true = ENTREPRISE, false = PARTICULIER
+  String _paymentTerms = '15 jours';
 
   // 🔍 Recherche dans le dialogue d'import des contacts.
   final _contactSearchController = TextEditingController();
@@ -412,9 +414,9 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     return GlassScaffold(
       appBar: AppBar(
         title: Text(
-          isEditing ? 'Modifier le client' : 'Nouveau client',
+          isEditing ? 'Modifier le client' : 'Nouveau Client',
           style: TextStyle(
-              color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
+              color: textColor, fontSize: 18, fontWeight: FontWeight.w700),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -465,35 +467,55 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Raccourci d'import depuis le répertoire (carte soft)
-                if (!isEditing)
-                  GlassCard(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 14),
-                    borderRadius: BorderRadius.circular(16),
+                // Sous-titre explicatif
+                Text(
+                  'Ajoutez un contact pour simplifier votre facturation '
+                  'conforme OHADA.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: themeProvider.subTextColor,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ===== Type : ENTREPRISE / PARTICULIER =====
+                if (!isEditing) ...[
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: themeProvider.isDarkMode
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: themeProvider.isDarkMode
+                            ? Colors.grey[800]!
+                            : Colors.grey[300]!,
+                        width: 1,
+                      ),
+                    ),
                     child: Row(
                       children: [
-                        Icon(Icons.contact_phone,
-                            color: primaryColor, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Appuyez sur l\'icône en haut à droite pour importer depuis votre répertoire',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: themeProvider.subTextColor,
-                            ),
-                          ),
-                        ),
+                        _buildTypeSegment(true, 'ENTREPRISE', primaryColor),
+                        _buildTypeSegment(false, 'PARTICULIER', primaryColor),
                       ],
                     ),
                   ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 20),
+                ],
+
+                // ===== IDENTITÉ =====
+                _buildSectionTitle('IDENTITÉ', themeProvider.subTextColor),
+                const SizedBox(height: 10),
                 GlassTextField(
                   controller: _nameController,
-                  label: 'Nom complet *',
-                  prefixIcon: Icons.person_outline,
+                  label: _isCompany ? 'Raison Sociale *' : 'Nom complet *',
+                  prefixIcon: _isCompany
+                      ? Icons.business_outlined
+                      : Icons.person_outline,
                   textCapitalization: TextCapitalization.words,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -502,18 +524,33 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 14),
+                if (_isCompany) ...[
+                  const SizedBox(height: 14),
+                  GlassTextField(
+                    controller: _taxIdController,
+                    label: 'NIF / IFU *',
+                    prefixIcon: Icons.numbers_outlined,
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Requis pour la facturation OHADA B2B',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: themeProvider.subTextColor,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+
+                // ===== CONTACT =====
+                _buildSectionTitle('CONTACT', themeProvider.subTextColor),
+                const SizedBox(height: 10),
                 GlassTextField(
-                  controller: _addressController,
-                  label: 'Adresse *',
-                  prefixIcon: Icons.location_on_outlined,
-                  textCapitalization: TextCapitalization.words,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Veuillez saisir l\'adresse';
-                    }
-                    return null;
-                  },
+                  controller: _emailController,
+                  label: 'Email',
+                  prefixIcon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 14),
                 GlassTextField(
@@ -528,22 +565,75 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
+
+                // ===== LOCALISATION =====
+                _buildSectionTitle('LOCALISATION', themeProvider.subTextColor),
+                const SizedBox(height: 10),
                 GlassTextField(
-                  controller: _emailController,
-                  label: 'Email',
-                  prefixIcon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
+                  controller: _addressController,
+                  label: 'Adresse de Facturation',
+                  prefixIcon: Icons.location_on_outlined,
+                  textCapitalization: TextCapitalization.words,
                 ),
-                const SizedBox(height: 14),
-                GlassTextField(
-                  controller: _taxIdController,
-                  label: 'NUI / RCCM',
-                  prefixIcon: Icons.numbers_outlined,
+                const SizedBox(height: 20),
+
+                // ===== PRÉFÉRENCES =====
+                _buildSectionTitle('PRÉFÉRENCES', themeProvider.subTextColor),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () =>
+                      _showPaymentTermsDialog(themeProvider, primaryColor),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: themeProvider.isDarkMode
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: themeProvider.isDarkMode
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.04),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.schedule_outlined,
+                            color: primaryColor.withValues(alpha: 0.7),
+                            size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Conditions de Paiement',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: themeProvider.subTextColor,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _paymentTerms,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(Icons.arrow_drop_down,
+                            color: themeProvider.subTextColor, size: 20),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
+
+                // ===== Bouton d'enregistrement =====
                 GradientButton(
-                  label: isEditing ? 'Sauvegarder' : 'Ajouter le client',
+                  label: isEditing ? 'Sauvegarder' : 'Enregistrer le client',
                   icon: Icons.check_circle_outline_rounded,
                   height: 52,
                   loading: _isSaving,
@@ -555,5 +645,100 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
         ),
       ),
     );
+  }
+
+  /// Segment ENTREPRISE / PARTICULIER.
+  Widget _buildTypeSegment(bool value, String label, Color primaryColor) {
+    final selected = _isCompany == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _isCompany = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFF8A4CFC)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF8A4CFC).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: selected
+                  ? Colors.white
+                  : (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[300]
+                      : Colors.grey[600]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Titre de section (maquette : MAJUSCULES gris).
+  Widget _buildSectionTitle(String title, Color subColor) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1,
+        color: subColor,
+      ),
+    );
+  }
+
+  /// Dialogue de choix des conditions de paiement.
+  Future<void> _showPaymentTermsDialog(
+      ThemeProvider theme, Color primaryColor) async {
+    const options = ['À réception', '15 jours', '30 jours', '45 jours', '60 jours'];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            const Text(
+              'Conditions de paiement',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...options.map((opt) => ListTile(
+                  leading: Icon(
+                    _paymentTerms == opt
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: _paymentTerms == opt ? primaryColor : Colors.grey,
+                  ),
+                  title: Text(opt),
+                  onTap: () => Navigator.pop(context, opt),
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      setState(() => _paymentTerms = selected);
+    }
   }
 }

@@ -129,19 +129,21 @@ class _DashboardHomeState extends State<DashboardHome> {
                 const Text(
                   'Accueil',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 const Spacer(),
-                // Notification avec badge
+                // Notification avec badge (bouton rond + pastille rouge)
                 NotificationBadge(
                   onTap: () => context.push('/notifications'),
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[800] : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.notifications_outlined,
@@ -195,21 +197,21 @@ class _DashboardHomeState extends State<DashboardHome> {
                       CloudStorageInfoBanner(isFreePlan: true, compact: true),
                     const SizedBox(height: 16),
 
-                    // Stats
+                    // 💳 Balance (Solde Total FCFA) — en haut selon la maquette
+                    _buildBalanceCard(
+                      isDark: isDark,
+                      primaryColor: primaryColor,
+                      textColor: textColor,
+                      cardColor: cardColor,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Stats (Moy. Facture / Taux paiement)
                     _buildFinancialStats(
                       isDark: isDark,
                       primaryColor: primaryColor,
                       textColor: textColor,
                       subTextColor: subTextColor,
-                      cardColor: cardColor,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Balance
-                    _buildBalanceCard(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
                       cardColor: cardColor,
                     ),
                     const SizedBox(height: 24),
@@ -341,13 +343,13 @@ class _DashboardHomeState extends State<DashboardHome> {
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: isActive
-                          ? Colors.green.withOpacity(0.15)
-                          : Colors.orange.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
+                          ? const Color(0xFF4338CA).withOpacity(0.1)
+                          : const Color(0xFFE9B949).withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(999),
                       border: Border.all(
                         color: isActive
-                            ? Colors.green.withOpacity(0.3)
-                            : Colors.orange.withOpacity(0.3),
+                            ? const Color(0xFF4338CA).withOpacity(0.25)
+                            : const Color(0xFFE9B949).withOpacity(0.5),
                         width: 1,
                       ),
                     ),
@@ -355,17 +357,22 @@ class _DashboardHomeState extends State<DashboardHome> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isActive ? Icons.check_circle : Icons.warning,
-                          size: 12,
-                          color: isActive ? Colors.green : Colors.orange,
+                          isActive ? Icons.verified : Icons.star,
+                          size: 13,
+                          color: isActive
+                              ? const Color(0xFF4338CA)
+                              : const Color(0xFFB8860B),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          planName,
+                          planName.toUpperCase(),
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: isActive ? Colors.green : Colors.orange,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: isActive
+                                ? const Color(0xFF4338CA)
+                                : const Color(0xFFB8860B),
                           ),
                         ),
                       ],
@@ -525,18 +532,20 @@ class _DashboardHomeState extends State<DashboardHome> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Total balance',
+            'Solde Total (FCFA)',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.7),
+              letterSpacing: 0.4,
+              color: Colors.white.withOpacity(0.8),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            _financialStats.getFormattedAverageInvoice(),
+            _financialStats.getFormattedTotalRevenue(),
             style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
               color: Colors.white,
             ),
           ),
@@ -544,19 +553,19 @@ class _DashboardHomeState extends State<DashboardHome> {
           Row(
             children: [
               _buildBalanceItem(
-                label: 'Payé',
+                label: 'Encaissé',
                 value: _financialStats.getFormattedTotalPaid(),
-                color: Colors.greenAccent,
+                color: const Color(0xFF34D399),
               ),
               _buildBalanceItem(
                 label: 'En attente',
                 value: _financialStats.getFormattedTotalPending(),
-                color: Colors.orangeAccent,
+                color: const Color(0xFFFBBF24),
               ),
               _buildBalanceItem(
                 label: 'En retard',
                 value: _financialStats.getFormattedTotalOverdue(),
-                color: Colors.redAccent,
+                color: const Color(0xFFF87171),
               ),
             ],
           ),
@@ -608,21 +617,39 @@ class _DashboardHomeState extends State<DashboardHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.white.withOpacity(0.7),
-            ),
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 4),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
           ),
         ],

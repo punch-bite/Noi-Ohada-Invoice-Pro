@@ -134,6 +134,29 @@ class ConfigService {
           enkapConsumerSecret.isNotEmpty &&
           enkapTokenUrl.isNotEmpty);
 
+  /// Vrai si des secrets ENKAP sont injectés AU BUILD via `--dart-define`
+  /// (donc réellement embarqués, disponibles même en release).
+  ///
+  /// Contrairement à [enkapConfigured], ce getter IGNORE le fichier `.env`
+  /// (qui n'est jamais embarqué dans l'APK et peut contenir des clés de dev
+  /// expirées/invalides). Il sert à décider si l'app peut appeler ENKAP en
+  /// direct ou doit passer par le serveur proxy (qui détient les bons secrets).
+  static bool get enkapSecretsAtBuild {
+    String f(String key) {
+      try {
+        return String.fromEnvironment(key);
+      } catch (_) {
+        return '';
+      }
+    }
+
+    final t = f('ENKAP_ACCESS_TOKEN').trim();
+    final k = f('ENKAP_CONSUMER_KEY').trim();
+    final s = f('ENKAP_CONSUMER_SECRET').trim();
+    final u = f('ENKAP_TOKEN_URL').trim();
+    return t.isNotEmpty || (k.isNotEmpty && s.isNotEmpty && u.isNotEmpty);
+  }
+
   // SMTP — SECRET (--dart-define uniquement)
   static String get smtpHost => _get('SMTP_HOST', def: 'smtp.gmail.com');
   static int get smtpPort => _getInt('SMTP_PORT', 587);

@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                                    // Logo de la marque (verre dépoli + halo)
+                                    // Logo de la marque (verre dépoli + halo + ring)
                   Container(
                     width: 76,
                     height: 76,
@@ -168,6 +168,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           offset: const Offset(0, 8),
                         ),
                       ],
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        width: 3,
+                      ),
                     ),
                     child: const Icon(Icons.receipt_long_rounded,
                         color: Colors.white, size: 34),
@@ -203,38 +207,45 @@ class _LoginScreenState extends State<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
                     enabled: !_isLoading,
-                    style: TextStyle(color: text, fontSize: 14),
+                    style: TextStyle(color: text, fontSize: 15),
                     decoration: InputDecoration(
-                      labelText: 'Email',
+                      labelText: 'Adresse e-mail',
                       hintText: 'exemple@email.com',
-                      labelStyle: TextStyle(color: sub, fontSize: 14),
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      labelStyle: TextStyle(
+                        color: sub,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                       hintStyle:
                           TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
                       prefixIcon:
-                          Icon(Icons.email_outlined, color: primary, size: 20),
+                          Icon(Icons.mail_outline, color: primary, size: 20),
                       filled: true,
-                      fillColor: theme.cardColor,
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.5),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           width: 1,
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           width: 1,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                            color: primary.withValues(alpha: 0.8), width: 1),
+                            color: primary.withValues(alpha: 0.8), width: 1.5),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: 16, vertical: 18),
                     ),
                     validator: (v) {
                       if (v?.trim().isEmpty == true) {
@@ -256,11 +267,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     onFieldSubmitted: (_) => _login(),
                     obscureText: _obscurePassword,
                     enabled: !_isLoading,
-                    style: TextStyle(color: text, fontSize: 14),
+                    style: TextStyle(color: text, fontSize: 15),
                     decoration: InputDecoration(
                       labelText: 'Mot de passe',
                       hintText: '••••••••',
-                      labelStyle: TextStyle(color: sub, fontSize: 14),
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      labelStyle: TextStyle(
+                        color: sub,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                       hintStyle:
                           TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
                       prefixIcon: Icon(Icons.lock_outline_rounded,
@@ -277,28 +293,30 @@ class _LoginScreenState extends State<LoginScreen> {
                             () => _obscurePassword = !_obscurePassword),
                       ),
                       filled: true,
-                      fillColor: theme.cardColor,
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.5),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           width: 1,
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
                           color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                          width: 0.6,
+                          width: 1,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                            color: primary.withValues(alpha: 0.8), width: 1),
+                            color: primary.withValues(alpha: 0.8), width: 1.5),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: 16, vertical: 18),
                     ),
                     validator: (v) {
                       if (v?.isEmpty == true) {

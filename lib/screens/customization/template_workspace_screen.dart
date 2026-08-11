@@ -592,9 +592,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       top: y * h,
       width: elemWidth,
       child: GestureDetector(
+        // 🔧 Clic = sélection uniquement (pas de popup) : le panneau
+        // « Éléments » s'ouvre via le bouton FAB.
         onTap: () {
           setState(() => _selectedElement = e.id);
-          _openToolbar();
         },
         onPanUpdate: (details) {
           if (!isSelected) setState(() => _selectedElement = e.id);

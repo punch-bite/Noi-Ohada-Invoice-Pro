@@ -85,6 +85,9 @@ class PrintingService {
     final positions = custom.positions.isNotEmpty
         ? custom.positions
         : Map<String, dynamic>.from(template.positions);
+    final mapping = custom.mapping.isNotEmpty
+        ? custom.mapping
+        : Map<String, String>.from(template.mapping);
 
     pdf.addPage(
       pw.MultiPage(
@@ -123,6 +126,7 @@ class PrintingService {
                   client,
                   company,
                   template,
+                  mapping: mapping,
                   background: background,
                 ),
               ],
@@ -144,6 +148,7 @@ class PrintingService {
     Client client,
     Company company,
     InvoiceTemplate template, {
+    Map<String, String> mapping = const {},
     pw.Widget? background,
   }) {
     final pageW = PdfPageFormat.a4.width;
@@ -164,7 +169,7 @@ class PrintingService {
       final y = ((raw['y'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
       final scale = ((raw['scale'] as num?) ?? 1.0).toDouble().clamp(0.5, 2.5);
 
-      final widget = _variableWidget(id, scale, invoice, client, company, template);
+      final widget = _variableWidget(id, scale, invoice, client, company, template, mapping: mapping);
       if (widget == null) return;
 
       // Les blocs larges (tableau des lignes) ont besoin d'une largeur bornée.
@@ -184,6 +189,134 @@ class PrintingService {
     return pw.Stack(children: children);
   }
 
+  /// Valeur PDF d'une variable de facture (pour le mapping).
+  /// Retourne le widget correspondant à la variable, ou null si inconnue.
+  static pw.Widget? _variableValue(
+    String varName,
+    double scale,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    required PdfColor primary,
+    required PdfColor text,
+    required double fs,
+    required PdfColor sub,
+  }) {
+    switch (varName) {
+      case 'invoice_number':
+        return pw.Text(
+          invoice.invoiceNumber,
+          style: pw.TextStyle(
+            fontSize: 12 * scale,
+            fontWeight: pw.FontWeight.bold,
+            color: text,
+          ),
+        );
+      case 'issue_date':
+        return pw.Text(
+          _formatDate(invoice.issueDate),
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'due_date':
+        return pw.Text(
+          _formatDate(invoice.dueDate),
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_name':
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Facturé à :',
+              style: pw.TextStyle(
+                fontSize: 10 * scale,
+                fontWeight: pw.FontWeight.bold,
+                color: primary,
+              ),
+            ),
+            pw.Text(
+              client.name,
+              style: pw.TextStyle(
+                fontSize: 12 * scale,
+                fontWeight: pw.FontWeight.bold,
+                color: text,
+              ),
+            ),
+          ],
+        );
+      case 'client_email':
+        return pw.Text(
+          client.email,
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_phone':
+        return pw.Text(
+          'Tél: ${client.phone}',
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_name':
+        return pw.Text(
+          company.name,
+          style: pw.TextStyle(
+            fontSize: 18 * scale,
+            fontWeight: pw.FontWeight.bold,
+            color: primary,
+          ),
+        );
+      case 'company_address':
+        return pw.Text(
+          company.address,
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_tax_id':
+        return pw.Text(
+          company.taxId.isEmpty ? 'N° TVA: —' : 'N° TVA: ${company.taxId}',
+          style: pw.TextStyle(fontSize: fs, color: sub),
+        );
+      case 'subtotal':
+        return _totalRowPdf(
+          'Sous-total',
+          '${invoice.subtotal.toStringAsFixed(0)} FCFA',
+          text,
+          fs,
+        );
+      case 'tax_amount':
+        return _totalRowPdf(
+          'TVA (${invoice.taxRate}%)',
+          '${invoice.taxAmount.toStringAsFixed(0)} FCFA',
+          text,
+          fs,
+        );
+      case 'total_amount':
+        return pw.Container(
+          padding: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(
+            color: _withOpacity(primary, 0.1),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: _totalRowPdf(
+            'TOTAL TTC',
+            '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
+            primary,
+            16 * scale,
+            bold: true,
+          ),
+        );
+      case 'status':
+        return pw.Text(
+          _statusLabel(invoice.status),
+          style: pw.TextStyle(
+            fontSize: 10 * scale,
+            fontWeight: pw.FontWeight.bold,
+            color: primary,
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
   /// Retourne le widget PDF d'une variable de facture (ou null si à masquer).
   static pw.Widget? _variableWidget(
     String id,
@@ -191,12 +324,25 @@ class PrintingService {
     Invoice invoice,
     Client client,
     Company company,
-    InvoiceTemplate template,
-  ) {
+    InvoiceTemplate template, {
+    Map<String, String> mapping = const {},
+  }) {
     final primary = _getPdfColor(template.primaryColor);
     final text = _getPdfColor(template.textColor);
     final fs = (template.fontSize * scale).clamp(6, 40).toDouble();
     final sub = _withOpacity(text, 0.6);
+
+    // 🧩 MAPPING : si l'utilisateur a réassigné une variable de facture à cet
+    // élément dans l'espace de travail, on rend la variable mappée à la place
+    // du contenu par défaut de l'élément.
+    final mappedVar = mapping[id];
+    if (mappedVar != null && mappedVar.isNotEmpty) {
+      final mapped = _variableValue(
+        mappedVar, scale, invoice, client, company, template,
+        primary: primary, text: text, fs: fs, sub: sub,
+      );
+      if (mapped != null) return mapped;
+    }
 
     switch (id) {
       case 'logo':
@@ -954,6 +1100,31 @@ class PrintingService {
   }
 
   // ===== FONCTIONS UTILITAIRES =====
+
+  /// Formate une date en « 12 Oct 2023 ».
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+      'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  /// Libellé lisible du statut d'une facture.
+  static String _statusLabel(String status) {
+    switch (status) {
+      case 'paid':
+        return 'Payée';
+      case 'sent':
+        return 'En attente';
+      case 'overdue':
+        return 'En retard';
+      case 'cancelled':
+        return 'Annulée';
+      default:
+        return 'Brouillon';
+    }
+  }
 
   static PdfColor _getPdfColor(Color color) {
     return PdfColor(

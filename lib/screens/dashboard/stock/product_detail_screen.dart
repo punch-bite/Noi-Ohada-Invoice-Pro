@@ -1,6 +1,8 @@
 // lib/screens/stock/product_detail_screen.dart
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
@@ -158,7 +160,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Fiche produit principale
+            // Hero image (photo du produit si présente)
+            if (product.imagePath != null && product.imagePath!.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.memory(
+                  _decodeImage(product.imagePath!),
+                  fit: BoxFit.cover,
+                  height: 180,
+                  width: double.infinity,
+                  errorBuilder: (_, __, ___) => _buildHeroFallback(product, statusColor),
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+
+            // Fiche produit principale (maquette : héro + infos)
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -176,6 +193,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -219,7 +237,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              product.category.isNotEmpty ? product.category : 'Sans catégorie',
+                              product.description.isNotEmpty
+                                  ? product.description
+                                  : (product.category.isNotEmpty ? product.category : 'Sans catégorie'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: subTextColor,
@@ -236,7 +256,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               child: Text(
                                 isOut 
                                     ? 'RUPTURE DE STOCK' 
-                                    : (isLow ? 'STOCK FAIBLE' : 'STOCK CONFORME'),
+                                    : (isLow ? 'STOCK FAIBLE' : 'EN STOCK'),
                                 style: TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
@@ -254,6 +274,77 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Divider(height: 1, thickness: 1),
                   ),
+                  // RÉFÉRENCE (SKU) + Fournisseur
+                  _buildLabelValueRow('RÉFÉRENCE (SKU)',
+                      product.barcode?.isNotEmpty == true ? product.barcode! : '—'),
+                  const SizedBox(height: 12),
+                  _buildLabelValueRow('FOURNISSEUR', _supplierName),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          size: 12,
+                          color: primaryColor.withValues(alpha: 0.7),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Voir le profil',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Divider(height: 1, thickness: 1),
+                  ),
+                  // État du Stock : jauge (quantité / seuil / max)
+                  Text(
+                    'État du Stock',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: subTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${product.quantity} ${product.unit}s DISPONIBLES',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Jauge proportionnelle (0 → max = quantité*2 pour perspective)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: (product.quantity / (product.minStock * 3))
+                          .clamp(0.0, 1.0),
+                      minHeight: 8,
+                      backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '0   Seuil: ${product.minStock}   Max: ${product.minStock * 3}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: subTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   // Grille des valeurs clés
                   Row(
                     children: [
@@ -268,8 +359,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                       Expanded(
                         child: _buildInfoTile(
-                          'Prix de vente',
-                          '${product.price.toStringAsFixed(0)} FCFA',
+                          'Point de commande',
+                          '${product.minStock} ${product.unit}s',
                           textColor,
                           subTextColor,
                           isDark,
@@ -282,8 +373,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     children: [
                       Expanded(
                         child: _buildInfoTile(
-                          'Seuil minimal',
-                          '${product.minStock} ${product.unit}',
+                          'Unité de mesure',
+                          product.unit,
                           textColor,
                           subTextColor,
                           isDark,
@@ -305,57 +396,92 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
             const SizedBox(height: 18),
 
-            // Boutons d'ajustements de stock express
+            // Tarification (maquette : achat HT / vente HT / marge / TVA)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+                border: Border.all(
+                  color: isDark ? Colors.grey[900]! : Colors.grey[100]!,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tarification',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _buildLabelValueRow(
+                      'Prix d\'achat unitaire (HT)',
+                      '${product.costPrice.toStringAsFixed(0)} FCFA'),
+                  const SizedBox(height: 10),
+                  _buildLabelValueRow(
+                      'Prix de vente unitaire (HT)',
+                      '${product.price.toStringAsFixed(0)} FCFA'),
+                  const SizedBox(height: 10),
+                  _buildMarginRow(product),
+                  const SizedBox(height: 10),
+                  _buildLabelValueRow('TVA Applicable', 'Normale (18%)'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Boutons d'action (maquette : Modifier / Ajuster le stock)
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => CreateDeliveryScreen(
-                            productId: product.id,
-                            productName: product.name,
-                            type: DeliveryType.incoming,
-                          ),
+                          builder: (context) =>
+                              CreateProductScreen(product: product),
                         ),
                       ).then((_) => _loadData());
                     },
-                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                    label: const Text('Réception', style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Modifier',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryColor,
+                      side: BorderSide(color: primaryColor, width: 1.5),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CreateDeliveryScreen(
-                            productId: product.id,
-                            productName: product.name,
-                            type: DeliveryType.outgoing,
-                          ),
-                        ),
-                      ).then((_) => _loadData());
-                    },
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                    label: const Text('Livraison', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () => _showAdjustStockDialog(
+                        product, textColor, subTextColor, cardColor),
+                    icon: const Icon(Icons.tune_rounded, size: 18),
+                    label: const Text('Ajuster le stock',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
+                      backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                     ),
                   ),
                 ),
@@ -387,25 +513,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Dernières opérations',
+                        'Historique',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: textColor,
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey[900] : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      TextButton(
+                        onPressed: () {},
                         child: Text(
-                          '${_deliveries.length} total',
+                          'VOIR TOUT',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: subTextColor,
+                            letterSpacing: 0.3,
+                            color: primaryColor,
                           ),
                         ),
                       ),
@@ -445,6 +568,114 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Nom du fournisseur (repli : libellé générique si absent).
+  String get _supplierName {
+    final sid = _product?.supplierId;
+    if (sid == null || sid.isEmpty) return 'Non assigné';
+    // StockService ne charge pas les fournisseurs ; on affiche l'ID tronqué.
+    return sid.length > 14 ? 'Fournisseur #${sid.substring(0, 8)}' : sid;
+  }
+
+  /// Décode une image base64 (donnée URI) en bytes.
+  Uint8List _decodeImage(String dataUri) {
+    try {
+      final idx = dataUri.indexOf(',');
+      if (dataUri.startsWith('data:') && idx != -1) {
+        return base64Decode(dataUri.substring(idx + 1));
+      }
+      return base64Decode(dataUri);
+    } catch (_) {
+      return Uint8List(0);
+    }
+  }
+
+  Widget _buildHeroFallback(Product product, Color statusColor) {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            statusColor.withOpacity(0.15),
+            statusColor.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Center(
+        child: Icon(Icons.inventory_2_outlined, color: statusColor, size: 56),
+      ),
+    );
+  }
+
+  /// Ligne « label en MAJUSCULES gris + valeur » (style fiche maquette).
+  Widget _buildLabelValueRow(String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: isDark ? Colors.grey[500] : Colors.grey[600],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : const Color(0xFF14161C),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Ligne de marge bénéficiaire (achat → vente) avec pourcentage.
+  Widget _buildMarginRow(Product product) {
+    final margin = product.price - product.costPrice;
+    final marginPct = product.price > 0 ? (margin / product.price * 100) : 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            'Marge bénéficiaire',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: isDark ? Colors.grey[500] : Colors.grey[600],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Text(
+            '${margin.toStringAsFixed(0)} FCFA (${marginPct.toStringAsFixed(1)}%)',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF16A34A),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -576,6 +807,69 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ],
       ),
     );
+  }
+
+  /// Dialogue « Ajuster le stock » : choix Réception (+) / Livraison (−).
+  Future<void> _showAdjustStockDialog(Product product, Color textColor,
+      Color subTextColor, Color cardColor) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            const Text(
+              'Ajuster le stock',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${product.name} — ${product.quantity} ${product.unit}s',
+              style: TextStyle(fontSize: 12, color: subTextColor),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFF16A34A),
+                child: Icon(Icons.arrow_downward, color: Colors.white),
+              ),
+              title: const Text('Réception', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Entrée de stock (achat, retour)'),
+              onTap: () => Navigator.pop(context, 'incoming'),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFF59E0B),
+                child: Icon(Icons.arrow_upward, color: Colors.white),
+              ),
+              title: const Text('Livraison', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Sortie de stock (vente, ajustement)'),
+              onTap: () => Navigator.pop(context, 'outgoing'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (choice == null) return;
+    final type =
+        choice == 'incoming' ? DeliveryType.incoming : DeliveryType.outgoing;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateDeliveryScreen(
+          productId: product.id,
+          productName: product.name,
+          type: type,
+        ),
+      ),
+    );
+    if (mounted) await _loadData();
   }
 
   void _showDeleteDialog(Color textColor, Color subTextColor, Color cardColor) {

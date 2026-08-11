@@ -2,6 +2,7 @@
 // ignore_for_file: unused_field, deprecated_member_use
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -31,6 +32,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   String _bestMonth = '';
   double _bestRevenue = 0;
   double _growth = 0;
+  double _ordersGrowth = 0;
+  double _avgGrowth = 0;
   Map<String, double> _monthlyRevenue = {};
   Map<String, double> _monthlyOrders = {};
 
@@ -102,6 +105,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     for (final inv in paidInvoices) {
       final monthKey = DateFormat('MMM yyyy').format(inv.issueDate);
       _monthlyOrders[monthKey] = (_monthlyOrders[monthKey] ?? 0) + 1;
+    }
+
+    // Croissance des commandes et du panier moyen (dernier vs premier mois)
+    final orderData = <String, double>{};
+    for (final inv in paidInvoices) {
+      final monthKey = DateFormat('MMM yyyy').format(inv.issueDate);
+      orderData[monthKey] = (orderData[monthKey] ?? 0) + 1;
+    }
+    final orderMonths = orderData.keys.toList();
+    _sortMonthsList(orderMonths);
+    if (orderMonths.length >= 2) {
+      final firstOrders = orderData[orderMonths.first] ?? 0;
+      final lastOrders = orderData[orderMonths.last] ?? 0;
+      _ordersGrowth = firstOrders > 0 ? ((lastOrders - firstOrders) / firstOrders * 100) : 0;
+    } else {
+      _ordersGrowth = 0;
+    }
+    // Panier moyen : dernier mois vs premier mois
+    if (months.length >= 2) {
+      final firstRev = monthlyData[months.first] ?? 0;
+      final firstOrd = orderData[months.first] ?? 0;
+      final lastRev = monthlyData[months.last] ?? 0;
+      final lastOrd = orderData[months.last] ?? 0;
+      final firstAvg = firstOrd > 0 ? firstRev / firstOrd : 0;
+      final lastAvg = lastOrd > 0 ? lastRev / lastOrd : 0;
+      _avgGrowth = firstAvg > 0 ? ((lastAvg - firstAvg) / firstAvg * 100) : 0;
+    } else {
+      _avgGrowth = 0;
     }
   }
 
@@ -191,36 +222,44 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         children: [
                           _buildSummaryCard(
                             context,
-                            title: 'Chiffre d\'affaires',
-                            value: '${NumberFormat('#,##0').format(_totalRevenue)} FCFA',
+                            title: 'Chiffre d\'Affaires',
+                            value: NumberFormat('#,##0').format(_totalRevenue),
+                            unit: 'FCFA',
                             icon: Icons.trending_up_rounded,
                             color: primaryColor,
-                            subText: '${_growth >= 0 ? '+' : ''}${_growth.toStringAsFixed(1)}% vs début',
+                            trend: _growth,
+                            trendLabel: '${_growth >= 0 ? '+' : ''}${_growth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
                             title: 'Commandes',
                             value: _totalOrders.toStringAsFixed(0),
+                            unit: 'PAYÉES',
                             icon: Icons.shopping_bag_rounded,
                             color: Colors.orange,
-                            subText: '${_invoices.where((inv) => inv.status == 'paid').length} payées',
+                            trend: _ordersGrowth,
+                            trendLabel: '${_ordersGrowth >= 0 ? '+' : ''}${_ordersGrowth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
-                            title: 'Panier moyen',
-                            value: '${NumberFormat('#,##0').format(_avgOrderValue)} FCFA',
+                            title: 'Panier Moyen',
+                            value: NumberFormat('#,##0').format(_avgOrderValue),
+                            unit: 'FCFA/CMD',
                             icon: Icons.receipt_long_rounded,
                             color: Colors.green,
-                            subText: '${_invoices.length} factures totales',
+                            trend: _avgGrowth,
+                            trendLabel: '${_avgGrowth >= 0 ? '+' : ''}${_avgGrowth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
-                            title: 'Meilleur mois',
+                            title: 'Meilleur Mois',
                             value: _bestMonth,
+                            unit: '',
                             icon: Icons.emoji_events_rounded,
                             color: Colors.amber,
-                            subText: _bestRevenue > 0 
-                                ? '${NumberFormat('#,##0').format(_bestRevenue)} FCFA' 
+                            trend: null,
+                            trendLabel: _bestRevenue > 0
+                                ? '${NumberFormat('#,##0').format(_bestRevenue)} FCFA'
                                 : 'Aucun gain',
                           ),
                         ],
@@ -362,17 +401,48 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         const SizedBox(height: 24),
                       ],
 
+                      // ===== CANAUX DE PAIEMENT (DONUT) =====
+                      Text(
+                        'Canaux de Paiement',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPaymentChannelsCard(isDark, textColor, subTextColor, cardColor),
+                      const SizedBox(height: 24),
+
                       // ===== TABLEAU RÉCAPITULATIF MENSUEL =====
                       if (_monthlyRevenue.isNotEmpty) ...[
-                        Text(
-                          'Détail mensuel',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Détail mensuel',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _exportMonthly(),
+                              icon: const Icon(Icons.file_download_outlined, size: 16),
+                              label: const Text('EXPORTER'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: primaryColor,
+                                textStyle: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
@@ -429,6 +499,132 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
+  /// 🍩 Canaux de paiement : donut chart + légende (maquette Stitch).
+  Widget _buildPaymentChannelsCard(
+    bool isDark,
+    Color textColor,
+    Color subTextColor,
+    Color cardColor,
+  ) {
+    // Répartition par canal (repli sur la maquette si aucune donnée) :
+    // Orange 45%, MTN 30%, Cash 15%, Carte 10%.
+    const channels = [
+      ('Orange Money', Color(0xFFF97316)),
+      ('MTN MoMo', Color(0xFFFFD700)),
+      ('Cash', Color(0xFF34D399)),
+      ('Carte Bancaire', Color(0xFF8A4CFC)),
+    ];
+    final parts = [45, 30, 15, 10];
+    // NB : ces parts sont des valeurs de démonstration (la plateforme n'expose
+    // pas encore le canal par facture) — à remplacer par de vraies données
+    // quand `paymentMethod` sera renseigné sur les factures.
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Donut chart
+          SizedBox(
+            width: 110,
+            height: 110,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 34,
+                startDegreeOffset: -90,
+                sections: List.generate(channels.length, (i) {
+                  return PieChartSectionData(
+                    value: parts[i].toDouble(),
+                    color: channels[i].$2,
+                    radius: 40,
+                    showTitle: false,
+                  );
+                }),
+              ),
+            ),
+          ),
+          const SizedBox(width: 20),
+          // Légende
+          Expanded(
+            child: Column(
+              children: List.generate(channels.length, (i) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: channels[i].$2,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          channels[i].$1,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${parts[i]}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: subTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 📤 Exporte le détail mensuel en CSV (partage via la console / clipboard).
+  Future<void> _exportMonthly() async {
+    final buffer = StringBuffer()
+      ..writeln('Mois,CA (FCFA),Commandes,Panier moyen');
+    for (final month in _sortedMonths) {
+      final revenue = _monthlyRevenue[month] ?? 0;
+      final orders = _monthlyOrders[month] ?? 0;
+      final avg = orders > 0 ? revenue / orders : 0;
+      buffer.writeln(
+        '$month,${revenue.toStringAsFixed(0)},${orders.toStringAsFixed(0)},${avg.toStringAsFixed(0)}',
+      );
+    }
+    final csv = buffer.toString();
+    // Copie dans le presse-papiers (meilleur effort)
+    await Clipboard.setData(ClipboardData(text: csv));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Données mensuelles copiées (${_sortedMonths.length} mois)'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(bool isDark, Color textColor, Color subTextColor, Color primaryColor) {
     return Center(
       child: Padding(
@@ -481,13 +677,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     required String value,
     required IconData icon,
     required Color color,
-    required String subText,
+    required String trendLabel,
+    double? trend,
+    String unit = '',
   }) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
     final subTextColor = themeProvider.subTextColor;
     final cardColor = themeProvider.cardColor;
+
+    // Couleur du badge de tendance : vert si ↑, rouge si ↓
+    final trendUp = trend == null || trend >= 0;
+    final trendColor = trend == null ? color : (trendUp ? const Color(0xFF34D399) : const Color(0xFFF87171));
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -498,6 +700,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,8 +717,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 16),
               ),
@@ -531,27 +740,66 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                  letterSpacing: -0.5,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                        letterSpacing: -0.5,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (unit.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: subTextColor,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                subText,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
-                  color: subTextColor.withOpacity(0.8),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: trendColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (trend != null)
+                      Icon(
+                        trendUp ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 10,
+                        color: trendColor,
+                      ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        trendLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: trendColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

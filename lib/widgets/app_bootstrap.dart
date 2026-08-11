@@ -110,15 +110,21 @@ class _AppBootstrapState extends State<AppBootstrap>
     final step = _controller.value;
     final progress = ((step / 0.7).clamp(0.0, 1.0)).clamp(0.0, 1.0);
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF2A2A72), Color(0xFF5B3B8C), Color(0xFF7C3AED)],
+    // 🔧 Ce splash est rendu DIRECTEMENT sous runApp (avant le MaterialApp),
+    // donc sans Directionality/MediaQuery matériel : on fournit la direction
+    // de lecture explicitement, sinon Scaffold lève
+    // « No Directionality widget found » en debug sur TOUTES plateformes.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2A2A72), Color(0xFF5B3B8C), Color(0xFF7C3AED)],
+            ),
           ),
-        ),
         child: Stack(
           children: [
             // Halo décoratif animé
@@ -261,6 +267,7 @@ class _AppBootstrapState extends State<AppBootstrap>
             ),
           ],
         ),
+      ),
       ),
     );
   }

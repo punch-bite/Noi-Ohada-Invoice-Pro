@@ -32,6 +32,9 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   // 🧩 Positions personnalisées (drag & drop) → l'aperçu reflète
   // les modifications faites dans l'espace de travail.
   Map<String, dynamic> _customPositions = {};
+  // 🧩 Mapping personnalisé (élément → variable de facture) → l'aperçu
+  // respecte les réassignations faites dans l'espace de travail.
+  Map<String, String> _customMapping = {};
 
   /// Positions effectives à utiliser : les personnalisations locales si
   /// présentes, sinon les positions par défaut du modèle. Si les deux sont
@@ -60,6 +63,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         _company = company;
         _backgroundBytes = _decodeBackground();
         _customPositions = custom.positions;
+        _customMapping = custom.mapping;
         // _settings = settings ?? InvoiceSettings();
         _isLoading = false;
       });
@@ -438,6 +442,116 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     return Stack(children: children);
   }
 
+  /// Valeur d'affichage d'une variable de facture (pour le mapping).
+  /// Retourne le widget correspondant à la variable, ou null si inconnue.
+  Widget? _variableValue(String varName, double scale) {
+    final template = widget.template;
+    final company = _company;
+    final primary = template.primaryColor;
+    final text = template.textColor;
+    final fs = (template.fontSize * scale).clamp(6.0, 40.0);
+    final sub = text.withOpacity(0.6);
+
+    switch (varName) {
+      case 'invoice_number':
+        return Text(
+          'FAC-2024-001',
+          style: TextStyle(fontSize: 12 * scale, fontWeight: FontWeight.bold, color: text),
+        );
+      case 'issue_date':
+        return Text(
+          '12 Oct 2023',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'due_date':
+        return Text(
+          '12 Nov 2023',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_name':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Facturé à :',
+              style: TextStyle(
+                fontSize: 10 * scale,
+                fontWeight: FontWeight.bold,
+                color: primary,
+              ),
+            ),
+            Text(
+              'Client SARL',
+              style: TextStyle(
+                fontSize: 12 * scale,
+                fontWeight: FontWeight.bold,
+                color: text,
+              ),
+            ),
+          ],
+        );
+      case 'client_email':
+        return Text(
+          'client@exemple.com',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'client_phone':
+        return Text(
+          'Tél: +237 6XX XX XX XX',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_name':
+        return Text(
+          company?.name ?? 'OHADA Invoice Pro',
+          style: TextStyle(
+            fontSize: 18 * scale,
+            fontWeight: FontWeight.bold,
+            color: primary,
+          ),
+        );
+      case 'company_address':
+        return Text(
+          company?.address ?? '',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'company_tax_id':
+        return Text(
+          'N° TVA: M01234567890A',
+          style: TextStyle(fontSize: fs, color: sub),
+        );
+      case 'subtotal':
+        return _totalRow('Sous-total', '100 000 FCFA', text, fs);
+      case 'tax_amount':
+        return _totalRow('TVA (18%)', '18 000 FCFA', text, fs);
+      case 'total_amount':
+        return Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: _totalRow(
+            'TOTAL TTC',
+            '118 000 FCFA',
+            primary,
+            16 * scale,
+            bold: true,
+          ),
+        );
+      case 'status':
+        return Text(
+          'Payée',
+          style: TextStyle(
+            fontSize: 10 * scale,
+            fontWeight: FontWeight.bold,
+            color: primary,
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
   /// Widget Flutter d'une variable de facture (ou null si à masquer).
   /// Miroir de `printing_service._variableWidget` pour l'aperçu.
   Widget? _variableWidget(String id, double scale) {
@@ -447,6 +561,15 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     final text = template.textColor;
     final fs = (template.fontSize * scale).clamp(6.0, 40.0);
     final sub = text.withOpacity(0.6);
+
+    // 🧩 MAPPING : si l'utilisateur a réassigné une variable de facture à cet
+    // élément dans l'espace de travail, on rend la variable mappée à la place
+    // du contenu par défaut de l'élément.
+    final mappedVar = _customMapping[id];
+    if (mappedVar != null && mappedVar.isNotEmpty) {
+      final mapped = _variableValue(mappedVar, scale);
+      if (mapped != null) return mapped;
+    }
 
     switch (id) {
       case 'logo':

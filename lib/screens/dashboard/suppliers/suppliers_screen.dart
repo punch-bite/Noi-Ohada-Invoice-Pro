@@ -7,6 +7,7 @@ import '../../../services/supplier_service.dart';
 import '../../../services/stock_service.dart';
 import '../../../models/supplier.dart';
 import 'create_supplier_screen.dart';
+import 'supplier_detail_screen.dart';
 
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({super.key});
@@ -21,6 +22,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   List<Supplier> _suppliers = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  bool? _filterActive; // null = tous, true = actifs, false = inactifs
 
   @override
   void initState() {
@@ -44,13 +46,74 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 
   List<Supplier> get _filteredSuppliers {
-    if (_searchQuery.isEmpty) return _suppliers;
+    var result = _suppliers;
+    if (_filterActive != null) {
+      result =
+          result.where((s) => s.isActive == _filterActive).toList();
+    }
+    if (_searchQuery.isEmpty) return result;
     final query = _searchQuery.toLowerCase().trim();
-    return _suppliers.where((s) =>
+    return result.where((s) =>
       s.name.toLowerCase().contains(query) ||
       s.email.toLowerCase().contains(query) ||
       s.phone.contains(query)
     ).toList();
+  }
+
+  Widget _buildFilterChip(String label, bool selected) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (label == 'Tous') {
+            _filterActive = null;
+          } else if (label == 'Actifs') {
+            _filterActive = true;
+          } else {
+            _filterActive = false;
+          }
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF8A4CFC)
+              : (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E2433)
+                  : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: selected
+              ? Border.all(color: const Color(0xFF8A4CFC))
+              : Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[300]!,
+                  width: 1,
+                ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF8A4CFC).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected
+                ? Colors.white
+                : (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[300]
+                    : Colors.grey[700]),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteSupplier(Supplier supplier) async {
@@ -145,20 +208,29 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               : RefreshIndicator(
                   onRefresh: _loadSuppliers,
                   color: primaryColor,
-                  child: ListView.builder(
+                  child: ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _filteredSuppliers.length,
-                    itemBuilder: (context, index) {
-                      final supplier = _filteredSuppliers[index];
-                      return _buildSupplierCard(
-                        supplier,
-                        isDark,
-                        textColor,
-                        subTextColor,
-                        cardColor,
-                        primaryColor,
-                      );
-                    },
+                    children: [
+                      // 🏷️ Chips de filtre (maquette gestion_des_fournisseurs)
+                      Row(
+                        children: [
+                          _buildFilterChip('Tous', _filterActive == null),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('Actifs', _filterActive == true),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('Inactifs', _filterActive == false),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ..._filteredSuppliers.map((supplier) => _buildSupplierCard(
+                            supplier,
+                            isDark,
+                            textColor,
+                            subTextColor,
+                            cardColor,
+                            primaryColor,
+                          )),
+                    ],
                   ),
                 ),
       floatingActionButton: FloatingActionButton(
@@ -186,6 +258,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       color: cardColor,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
@@ -193,16 +266,26 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           width: 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  SupplierDetailScreen(supplier: supplier),
+            ),
+          ).then((_) => _loadSuppliers());
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
             Container(
               width: 50,
               height: 50,
               decoration: BoxDecoration(
                 color: primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
@@ -290,6 +373,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               ],
             ),
           ],
+          ),
         ),
       ),
     );

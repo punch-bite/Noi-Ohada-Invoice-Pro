@@ -1,0 +1,335 @@
+<html lang="fr"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,100..1000&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#1b1b23", "on-primary": "#ffffff", "inverse-on-surface": "#f3effb", "surface-container": "#f0ecf8", "primary-fixed": "#e3dfff", "error": "#ba1a1a", "secondary-fixed-dim": "#d2bbff", "surface-container-lowest": "#ffffff", "surface-container-low": "#f6f2fe", "primary-fixed-dim": "#c3c0ff", "tertiary": "#692400", "surface-container-highest": "#e4e1ed", "on-tertiary-fixed": "#360f00", "inverse-surface": "#302f39", "surface-variant": "#e4e1ed", "secondary-fixed": "#eaddff", "tertiary-fixed": "#ffdbcd", "error-container": "#ffdad6", "surface-bright": "#fcf8ff", "primary": "#2a14b4", "surface-dim": "#dcd8e4", "on-primary-container": "#c1beff", "on-surface-variant": "#464554", "surface-container-high": "#eae6f3", "on-secondary": "#ffffff", "background": "#fcf8ff", "on-secondary-fixed": "#25005a", "secondary": "#712ae2", "secondary-container": "#8a4cfc", "on-primary-fixed": "#100069", "outline": "#777586", "surface": "#fcf8ff", "on-tertiary-container": "#ffb393", "on-primary-fixed-variant": "#372abf", "on-tertiary": "#ffffff", "tertiary-fixed-dim": "#ffb597", "on-error": "#ffffff", "tertiary-container": "#8f3400", "surface-tint": "#5148d7", "on-tertiary-fixed-variant": "#7d2d00", "on-secondary-container": "#fffbff", "on-secondary-fixed-variant": "#5a00c6", "on-background": "#1b1b23", "outline-variant": "#c7c4d7", "primary-container": "#4338ca", "on-error-container": "#93000a", "inverse-primary": "#c3c0ff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "unit": "4px", "container-padding": "24px", "card-gap": "20px", "gutter": "16px" }, "fontFamily": { "label-md": ["Roboto Flex"], "body-md": ["Roboto Flex"], "headline-xl": ["Roboto Flex"], "title-md": ["Roboto Flex"], "body-lg": ["Roboto Flex"], "headline-lg-mobile": ["Roboto Flex"], "headline-lg": ["Roboto Flex"] }, "fontSize": { "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "800" }], "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }], "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700" }] } } } };</script><style>@layer base { body { overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } .glass-effect { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); background: rgba(252, 248, 255, 0.8); } </style></head><body class="bg-background font-body-md text-on-background min-h-screen"><header class="fixed top-0 w-full z-40 glass-effect pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-gutter flex items-center justify-between"><div class="flex items-center gap-3"><button class="w-10 h-10 flex items-center justify-center"><span class="material-symbols-outlined text-on-surface">menu</span></button><img alt="Logo NOI OHADA Invoice Pro" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCevokFTsxTx1AkQ_PIXsTx6b7vDSAcvUAYBHSIyuem6iBMaispR7xT1c2YPpVL6mZm8baE3EuYxhaXoB58axZNldSdnh86EgLXRmaXrpCREp6IE9KhTprOiN3IxivdwRIXqiAWXErgE7HXJFqK0LfLsNHL6pAeUvlVavbfiEJGP-MZqnABywaAhAVnAgDxM2F03VEVCPzwUaT9VvJGMENH7qJV_0smdcRe0y5VL9GTvNe1B_2l7vkEag"/><span class="font-title-md text-title-md text-on-surface">Dashboard</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCxRp3OXUzJxHa38bAfdDV8rFXOE04V7dsw1_DvkM3_BZHFI1PWBkYzDAMN0Bi5cFjBQD24b0RwUTbxlQHPNMslwZV58c_mz2xO-G7H7-MkO37Ke6fCKpOWWvuPRjR6gPihp_3T6UV-uvUSxx2BgmX-wKGx1dF6j-rBRsKfGwt9pH93wgx-OuP01Eei0GlhZKwFZXoLDsajPRve7_wyOg3orQA9uuacs9gcUWAq2ZgCX3wI62zgmScWQ"/></div></header><main class="relative pt-16 pb-24 px-container-padding min-h-screen bg-surface"><div class="flex flex-col w-full relative">
+<!-- Global Shader Background -->
+<!-- STITCH_SHADER_START:ANIMATION_29 class="fixed inset-0 w-full h-full -z-10 opacity-40" -->
+<div class="fixed inset-0 w-full h-full -z-10 opacity-40" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_29" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_29');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+    vec2 uv = v_texCoord;
+    
+    // Background colors based on the design system (Indigo/Violet)
+    vec3 color1 = vec3(0.26, 0.22, 0.79); // #4338ca
+    vec3 color2 = vec3(0.49, 0.23, 0.93); // #7c3aed
+    vec3 color3 = vec3(0.96, 0.95, 0.99); // surface
+    
+    float noise = sin(uv.x * 10.0 + u_time * 0.5) * 0.5 + 0.5;
+    noise += cos(uv.y * 8.0 - u_time * 0.3) * 0.5 + 0.5;
+    noise *= 0.5;
+    
+    vec3 finalColor = mix(color1, color2, noise + sin(u_time * 0.2) * 0.2);
+    finalColor = mix(finalColor, color3, (1.0 - uv.y) * 0.3);
+    
+    gl_FragColor = vec4(finalColor * 0.9 + 0.1, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_29 -->
+<!-- Presentation Container -->
+<div class="relative w-full h-[75vh] max-h-[700px] min-h-[500px] rounded-[32px] overflow-hidden bg-surface-container/60 backdrop-blur-2xl shadow-[0_8px_32px_rgba(42,20,180,0.08)] border-t border-white/60">
+<!-- Slides Track -->
+<div class="flex w-full h-full transition-transform duration-500 ease-out" id="carousel-track" style="transform: translateX(0%);">
+<!-- Slide 1: Bienvenue -->
+<div class="min-w-full flex-shrink-0 flex flex-col items-center justify-center p-8 text-center gap-6 h-full">
+<div class="w-32 h-32 rounded-full p-2 bg-surface-container-highest shadow-xl flex items-center justify-center mb-4 transition-transform duration-700 hover:scale-105">
+<img alt="OHADA Invoice Pro Logo" class="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida/AP1WRLvEDjmu_ZaqpKbT3Ccv2vMG4C_3i3kaKWj9BorwEtGYbpLKGX9CMIMkzzF7w8gwGuAin6QpWabs6--EQ7p4NvOP3Xct_q_iNCCFORFlBlnlOCvChtHlY88IrUcW23kRGncX7Wd-zSHtsDQFbftY_2WN7kq6nasVEv4BCUeyakp1ZNVeqWSVi6GwrA8KtqA1jT7_spRXPlQUUha4nJKyXLecaTkiTtivGmrkAiAEejEUADRXLYDJmM4NgIx4"/>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">La facturation intelligente aux normes <span class="text-primary bg-primary/10 px-2 py-1 rounded-lg">OHADA</span></h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-sm">Découvrez un espace de travail lumineux et conçu pour la rigueur comptable africaine.</p>
+<button class="next-slide-btn mt-4 px-8 py-4 bg-gradient-to-r from-primary-container to-secondary-container text-on-primary font-title-md text-title-md rounded-2xl shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2">
+          Commencer <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+<!-- Slide 2: Gestion Multi-Devises -->
+<div class="min-w-full flex-shrink-0 flex flex-col items-center justify-center p-8 text-center gap-6 h-full">
+<div class="relative w-48 h-48 bg-secondary-container/20 rounded-[32px] border border-white/50 shadow-inner flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-[80px] text-primary" id="currency-icon" style="transition: all 0.3s ease;">account_balance</span>
+<!-- Decorative particles -->
+<div class="absolute top-4 left-4 w-3 h-3 bg-secondary rounded-full animate-ping opacity-50"></div>
+<div class="absolute bottom-6 right-6 w-4 h-4 bg-primary rounded-full animate-pulse opacity-40"></div>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-2">Gestion Multi-Devises</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-sm">Facturez en FCFA, EUR ou USD en un clic avec une conversion fluide et transparente.</p>
+<div class="flex gap-4 mt-2">
+<span class="px-4 py-2 bg-surface shadow-sm rounded-xl font-label-md text-label-md text-primary ring-1 ring-primary/20">FCFA</span>
+<span class="px-4 py-2 bg-surface shadow-sm rounded-xl font-label-md text-label-md text-secondary ring-1 ring-secondary/20">EUR</span>
+<span class="px-4 py-2 bg-surface shadow-sm rounded-xl font-label-md text-label-md text-tertiary ring-1 ring-tertiary/20">USD</span>
+</div>
+</div>
+<!-- Slide 3: Conformité & Rigueur -->
+<div class="min-w-full flex-shrink-0 flex flex-col items-center justify-center p-8 text-center gap-6 h-full">
+<div class="w-40 h-40 flex items-center justify-center relative">
+<!-- Pulse rings -->
+<div class="absolute inset-0 bg-[#E9B949]/20 rounded-full animate-ping opacity-75" style="animation-duration: 3s;"></div>
+<div class="absolute inset-4 bg-[#E9B949]/40 rounded-full animate-ping opacity-50" style="animation-duration: 3s; animation-delay: 0.5s;"></div>
+<!-- Golden Seal -->
+<div class="relative w-24 h-24 bg-gradient-to-br from-[#FDE68A] to-[#D97706] rounded-full shadow-xl flex items-center justify-center border-4 border-white/80">
+<span class="material-symbols-outlined text-white text-[48px]">verified</span>
+</div>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Conformité <span class="text-[#D97706]">SYSCOHADA</span></h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-sm">Vos documents respectent à 100% les exigences comptables de l'espace OHADA, garantis sans erreur.</p>
+</div>
+<!-- Slide 4: Analytiques & Équipes -->
+<div class="min-w-full flex-shrink-0 flex flex-col items-center justify-center p-8 text-center gap-6 h-full">
+<div class="relative w-full h-48 max-w-[280px]">
+<!-- Floating Screens -->
+<div class="absolute left-0 top-4 w-32 h-40 bg-surface rounded-xl shadow-lg border border-white/50 overflow-hidden transform -rotate-6" id="float-screen-1">
+<img alt="Analytics View" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCa1j8m67_Z9WWwzVwaPajJv7OzdXeBSe7wBqHUaLeEwamRphi86DR6ZUH1XcFmSOw0UC__ATDxVRx2VK0oia2DEdiTfuUXAeyTz4S_uQlI2iX-MMId6Rpu-Nqze6_0NG73lvHcjMhj6VKcHqNDfKBsvk7poo36g6xOrfDgG9Y5Geli77hMUhVE44RwDNk0jxB4GBIiUvro5jTc7MoDI6UrH_5uv1zLfXjjPwBxne0sV6QdjissD8ZYg"/>
+</div>
+<div class="absolute right-0 bottom-0 w-36 h-44 bg-surface rounded-xl shadow-xl border border-white/60 overflow-hidden transform rotate-3 z-10" id="float-screen-2">
+<img alt="Team View" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvuOTXrAMPwa7TUNIasuqYRVCZlBoEh-QkXso0YLj8TtcFzKyw4tVHbqAeGVJxYxZ9AvTxgK2gyzPX0aGeLQa0sUH0whrBZHyGMtIkeoZ5UFceDipbVFfwksVFGz3nez4NDX2l3s73p9lsQw0Y3RAnjLmWn2nmVxHyT8bR5VuelZojqyrGl19jcA_5bFryz6J9om8Z55aZFCr3wGhhF7xEbgQOasxOt8fFZbPRd4K-tUmWkRuZccLMHg"/>
+</div>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-4">Analytiques &amp; Équipes</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-sm">Pilotez votre croissance et collaborez avec votre équipe en temps réel sur la même plateforme.</p>
+</div>
+<!-- Slide 5: Prêt à commencer ? -->
+<div class="min-w-full flex-shrink-0 flex flex-col items-center justify-center p-8 text-center gap-6 h-full">
+<div class="w-20 h-20 bg-primary-fixed rounded-[24px] flex items-center justify-center shadow-md mb-2">
+<span class="material-symbols-outlined text-primary text-[40px]">rocket_launch</span>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Prêt à transformer votre facturation ?</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Rejoignez des milliers d'entreprises performantes.</p>
+<div class="flex flex-col w-full gap-4 mt-4">
+<button class="w-full py-4 bg-gradient-to-r from-primary-container to-secondary-container text-on-primary font-title-md text-title-md rounded-xl shadow-lg hover:shadow-[0_8px_24px_rgba(67,56,202,0.3)] transition-all">
+            Essai gratuit 14 jours
+          </button>
+<a class="font-label-md text-label-md text-primary mt-2" href="#">Vous avez déjà un compte ? Se connecter</a>
+</div>
+</div>
+</div>
+<!-- Navigation Overlays -->
+<button class="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-surface/50 backdrop-blur-md text-on-surface rounded-full shadow-md border border-white/40 opacity-0 transition-opacity" id="prev-btn">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-surface/50 backdrop-blur-md text-on-surface rounded-full shadow-md border border-white/40 opacity-100 transition-opacity" id="next-btn">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+<!-- Pagination Dots -->
+<div class="absolute bottom-6 left-0 right-0 flex justify-center gap-2" id="pagination-dots">
+<button class="w-2 h-2 rounded-full bg-primary transition-all duration-300 w-6"></button>
+<button class="w-2 h-2 rounded-full bg-primary/20 transition-all duration-300 hover:bg-primary/50"></button>
+<button class="w-2 h-2 rounded-full bg-primary/20 transition-all duration-300 hover:bg-primary/50"></button>
+<button class="w-2 h-2 rounded-full bg-primary/20 transition-all duration-300 hover:bg-primary/50"></button>
+<button class="w-2 h-2 rounded-full bg-primary/20 transition-all duration-300 hover:bg-primary/50"></button>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const track = document.getElementById('carousel-track');
+    const dots = document.getElementById('pagination-dots').children;
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const nextSlideBtns = document.querySelectorAll('.next-slide-btn');
+    
+    let currentSlide = 0;
+    const totalSlides = 5;
+    
+    // Variables for touch/swipe
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+
+    function updateCarousel() {
+      // Update transform
+      track.style.transform = `translateX(-${currentSlide * 100}%)`;
+      
+      // Update dots
+      Array.from(dots).forEach((dot, index) => {
+        if (index === currentSlide) {
+          dot.className = 'w-6 h-2 rounded-full bg-primary transition-all duration-300';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-primary/20 transition-all duration-300 hover:bg-primary/50 cursor-pointer';
+        }
+      });
+      
+      // Update nav buttons visibility
+      prevBtn.style.opacity = currentSlide === 0 ? '0' : '1';
+      prevBtn.style.pointerEvents = currentSlide === 0 ? 'none' : 'auto';
+      
+      nextBtn.style.opacity = currentSlide === totalSlides - 1 ? '0' : '1';
+      nextBtn.style.pointerEvents = currentSlide === totalSlides - 1 ? 'none' : 'auto';
+    }
+
+    function goToNextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateCarousel();
+      }
+    }
+
+    function goToPrevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateCarousel();
+      }
+    }
+
+    // Event Listeners
+    nextBtn.addEventListener('click', goToNextSlide);
+    prevBtn.addEventListener('click', goToPrevSlide);
+    nextSlideBtns.forEach(btn => btn.addEventListener('click', goToNextSlide));
+    
+    Array.from(dots).forEach((dot, index) => {
+      dot.addEventListener('click', () => {
+        currentSlide = index;
+        updateCarousel();
+      });
+    });
+
+    // Touch events for swipe
+    track.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      isDragging = true;
+      track.style.transition = 'none';
+    }, { passive: true });
+
+    track.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      currentX = e.touches[0].clientX;
+      const diff = currentX - startX;
+      // Calculate pixel to percentage roughly
+      const trackWidth = track.offsetWidth;
+      const percentageMoved = (diff / trackWidth) * 100;
+      
+      // Clamp the drag visually
+      let targetTranslate = -(currentSlide * 100) + percentageMoved;
+      if (targetTranslate > 0) targetTranslate = targetTranslate * 0.2; // Resistance at start
+      if (targetTranslate < -((totalSlides - 1) * 100)) {
+        const excess = targetTranslate + ((totalSlides - 1) * 100);
+        targetTranslate = -((totalSlides - 1) * 100) + (excess * 0.2); // Resistance at end
+      }
+      
+      track.style.transform = `translateX(${targetTranslate}%)`;
+    }, { passive: true });
+
+    track.addEventListener('touchend', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      track.style.transition = 'transform 500ms ease-out';
+      
+      const diff = currentX - startX;
+      if (Math.abs(diff) > 50) { // Threshold for swipe
+        if (diff > 0) goToPrevSlide();
+        else goToNextSlide();
+      } else {
+        updateCarousel(); // Snap back
+      }
+    });
+
+    // Custom animation loop for Slide 2 (Currencies)
+    const currencyIcon = document.getElementById('currency-icon');
+    const currencies = ['account_balance', 'euro', 'attach_money'];
+    let curIdx = 0;
+    setInterval(() => {
+      if (currentSlide === 1) { // Only animate if visible
+        currencyIcon.style.opacity = '0';
+        currencyIcon.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+          curIdx = (curIdx + 1) % currencies.length;
+          currencyIcon.textContent = currencies[curIdx];
+          currencyIcon.style.opacity = '1';
+          currencyIcon.style.transform = 'scale(1)';
+        }, 300);
+      }
+    }, 2000);
+
+    // Custom animation for floating screens on Slide 4
+    let time = 0;
+    const s1 = document.getElementById('float-screen-1');
+    const s2 = document.getElementById('float-screen-2');
+    
+    function animateFloat() {
+      if (currentSlide === 3) {
+        time += 0.05;
+        const y1 = Math.sin(time) * 8;
+        const y2 = Math.cos(time) * 10;
+        s1.style.transform = `translateY(${y1}px) rotate(-6deg)`;
+        s2.style.transform = `translateY(${y2}px) rotate(3deg)`;
+      }
+      requestAnimationFrame(animateFloat);
+    }
+    animateFloat();
+
+    // Init
+    updateCarousel();
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-40 glass-effect pb-safe shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="h-16 flex items-center justify-around"><a aria-current="page" class="flex flex-col items-center justify-center w-full h-full transition-colors text-primary font-bold" data-path="dashboard" href="#"><span class="material-symbols-outlined">home</span><span class="font-label-md text-label-md">Accueil</span></a><a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant transition-colors" data-path="invoices" href="#"><span class="material-symbols-outlined">description</span><span class="font-label-md text-label-md">Factures</span></a><a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant transition-colors" data-path="clients" href="#"><span class="material-symbols-outlined">group</span><span class="font-label-md text-label-md">Clients</span></a><a class="flex flex-col items-center justify-center w-full h-full text-on-surface-variant transition-colors" data-path="inventory" href="#"><span class="material-symbols-outlined">inventory_2</span><span class="font-label-md text-label-md">Stock</span></a></div></nav></body></html>

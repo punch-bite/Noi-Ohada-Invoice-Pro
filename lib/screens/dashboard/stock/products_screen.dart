@@ -156,23 +156,30 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   onRefresh: _loadProducts,
                   color: primaryColor,
                   strokeWidth: 2.5,
-                  child: ListView.builder(
+                  child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics(),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    itemCount: _filteredProducts.length,
-                    itemBuilder: (context, index) {
-                      final product = _filteredProducts[index];
-                      return _buildProductCard(
-                        product,
+                    children: [
+                      // 📊 Cartes résumé (Total / Alertes / Valeur stock)
+                      _buildSummaryCards(
                         isDark,
                         textColor,
                         subTextColor,
                         primaryColor,
                         cardColor,
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 16),
+                      ..._filteredProducts.map((product) => _buildProductCard(
+                            product,
+                            isDark,
+                            textColor,
+                            subTextColor,
+                            primaryColor,
+                            cardColor,
+                          )),
+                    ],
                   ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
@@ -209,6 +216,171 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 📊 Cartes résumé du stock (maquette gestion_du_stock) : Total Produits,
+  /// Alertes Stock et Valeur du Stock (carte dégradée pleine largeur).
+  Widget _buildSummaryCards(
+    bool isDark,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor,
+    Color cardColor,
+  ) {
+    final total = _products.length;
+    final lowCount = _products.where((p) => p.isLowStock).length;
+    final outCount = _products.where((p) => p.isOutOfStock).length;
+    final totalValue = _products.fold<double>(
+      0,
+      (sum, p) => sum + (p.price * p.quantity),
+    );
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                icon: Icons.inventory_2,
+                label: 'Total Produits',
+                value: total.toString(),
+                color: primaryColor,
+                isDark: isDark,
+                cardColor: cardColor,
+                textColor: textColor,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildSummaryCard(
+                icon: Icons.warning_amber_rounded,
+                label: 'Alertes Stock',
+                value: '${lowCount + outCount}',
+                color: const Color(0xFFEF4444),
+                isDark: isDark,
+                cardColor: cardColor,
+                textColor: textColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Valeur du stock (dégradé pleine largeur)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF4338CA),
+                const Color(0xFF8A4CFC),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF4338CA).withOpacity(0.25),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Colors.white24,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'VALEUR DU STOCK',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Text(
+                '${totalValue.toStringAsFixed(0)} FCFA',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+            ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

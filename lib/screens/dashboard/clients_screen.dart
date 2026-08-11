@@ -177,18 +177,27 @@ class _ClientsScreenState extends State<ClientsScreen> {
         ),
         child: Row(
           children: [
-            // Avatar
+            // Avatar (rond, dégradé indigo→violet pour le premium)
             Container(
               width: 50,
               height: 50,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
                     _getColorForClient(client.id),
                     _getColorForClient(client.id).withOpacity(0.6),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(14),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: _getColorForClient(client.id).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
               child: Center(
                 child: Text(
@@ -255,7 +264,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 ],
               ),
             ),
-            // Badge Deals
+            // Badge Deals (maquette : "N factures")
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -263,7 +272,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                '${_getClientDeals(client.id)} deals',
+                '${_getClientDeals(client.id)} factures',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,

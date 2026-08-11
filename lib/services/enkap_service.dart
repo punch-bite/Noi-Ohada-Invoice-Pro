@@ -49,13 +49,16 @@ class EnkapService {
   /// « Invalid CORS request ») : on relaie TOUJOURS via notre serveur
   /// (Vercel), qui détient les secrets ENKAP.
   ///
-  /// En natif (Android/iOS), on relaie aussi via le serveur lorsque les
-  /// secrets ENKAP ne sont pas embarqués dans l'app (cas standard : l'APK
-  /// ne contient JAMAIS les secrets). Si des secrets sont injectés au build
-  /// via --dart-define, on appelle ENKAP en direct.
+  /// En natif (Android/iOS), on relaie AUSSI via le serveur par défaut :
+  /// les secrets ENKAP ne sont JAMAIS embarqués dans l'APK, et le fichier
+  /// `.env` de développement (non embarqué) peut contenir des clés
+  /// expirées/invalides qui feraient échouer un appel direct → commande
+  /// jamais créée → spinner infini et pas de lien de redirection.
+  /// Seul un apport RÉEL de secrets au build (--dart-define) autorise un
+  /// appel direct.
   String get _serverBase => ConfigService.apiBaseUrl.trim();
   bool get _useServerProxy =>
-      kIsWeb || (!isConfigured && _serverBase.isNotEmpty);
+      kIsWeb || (!ConfigService.enkapSecretsAtBuild && _serverBase.isNotEmpty);
   bool get isConfigured => ConfigService.enkapConfigured;
 
   /// Vrai si la configuration suffit : le serveur (proxy) est joignable,
