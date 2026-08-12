@@ -387,7 +387,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                         begin: Alignment.bottomCenter,
                                         end: Alignment.topCenter,
                                         colors: [
-                                          primaryColor.withOpacity(0.4),
+                                          primaryColor.withValues(alpha: 0.4),
                                           primaryColor,
                                         ],
                                       ),
@@ -636,7 +636,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.08),
+                color: primaryColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Icon(Icons.analytics_rounded, size: 32, color: primaryColor),
@@ -702,7 +702,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -717,7 +717,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 16),
@@ -773,7 +773,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: trendColor.withOpacity(0.12),
+                  color: trendColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(

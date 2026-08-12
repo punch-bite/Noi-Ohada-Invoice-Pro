@@ -156,7 +156,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
               gradient: LinearGradient(
                 colors: [
                   _getColorForClient(client.id),
-                  _getColorForClient(client.id).withOpacity(0.6),
+                  _getColorForClient(client.id).withValues(alpha: 0.6),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
@@ -252,7 +252,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
     Color primaryColor,
   ) {
         return Container(
-      color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.6),
+      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.6),
       child: Row(
         children: [
           _buildTab('Aperçu', 0, textColor, primaryColor),
@@ -363,7 +363,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
@@ -393,7 +393,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
@@ -459,7 +459,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-          color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -614,7 +614,7 @@ class _ClientDetailScreenState extends State<ClientDetailScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(14),
           ),
           child: InkWell(

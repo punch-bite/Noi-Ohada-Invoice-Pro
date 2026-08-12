@@ -257,10 +257,10 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.08),
+                  color: Colors.green.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.green.withOpacity(0.3),
+                    color: Colors.green.withValues(alpha: 0.3),
                     width: 1,
                   ),
                 ),
@@ -482,7 +482,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: primaryColor.withOpacity(0.08),
+                          color: primaryColor.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -541,7 +541,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                             labelStyle: TextStyle(color: subTextColor),
                             hintText: '6X XX XX XX XX',
                             hintStyle: TextStyle(
-                                color: subTextColor.withOpacity(0.5)),
+                                color: subTextColor.withValues(alpha: 0.5)),
                             prefixIcon: Icon(Icons.phone, color: subTextColor),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -670,7 +670,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                 CircleAvatar(
                   radius: 14,
                   backgroundColor:
-                      isReached ? status.color : Colors.grey.withOpacity(0.2),
+                      isReached ? status.color : Colors.grey.withValues(alpha: 0.2),
                   child: Icon(
                     idx < currentIndex ? Icons.check : Icons.circle,
                     size: idx < currentIndex ? 16 : 10,
@@ -710,7 +710,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? method.color.withOpacity(isDark ? 0.15 : 0.08)
+              ? method.color.withValues(alpha: isDark ? 0.15 : 0.08)
               : (isDark ? Colors.grey[900] : Colors.grey[50]),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(

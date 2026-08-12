@@ -77,7 +77,7 @@ class PdfService {
         pw.Text('NUI: ${client.taxId} | Tél: ${client.phone}', style: const pw.TextStyle(fontSize: 10)),
       ]));
 
-  static pw.Widget _buildItemsTable(Invoice invoice) => pw.Table.fromTextArray(
+  static pw.Widget _buildItemsTable(Invoice invoice) => pw.TableHelper.fromTextArray(
         headers: ['Désignation', 'Qté', 'PU HT', 'TVA', 'Total'],
         data: invoice.items.map((item) => [
               item.description,

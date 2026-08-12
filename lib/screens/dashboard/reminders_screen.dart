@@ -166,7 +166,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: reminder.statusColor.withOpacity(0.12),
+                        color: reminder.statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -182,7 +182,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.12),
+                        color: Colors.blue.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -231,14 +231,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today_rounded, size: 14, color: subTextColor.withOpacity(0.8)),
+                    Icon(Icons.calendar_today_rounded, size: 14, color: subTextColor.withValues(alpha: 0.8)),
                     const SizedBox(width: 6),
                     Text(
                       'Échéance : $formattedDueDate',
                       style: TextStyle(fontSize: 12, color: subTextColor),
                     ),
                     const Spacer(),
-                    Icon(Icons.alarm_rounded, size: 14, color: subTextColor.withOpacity(0.8)),
+                    Icon(Icons.alarm_rounded, size: 14, color: subTextColor.withValues(alpha: 0.8)),
                     const SizedBox(width: 6),
                     Text(
                       'Rappel : $formattedReminderDate',
@@ -251,9 +251,9 @@ class _RemindersScreenState extends State<RemindersScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.08),
+                      color: Colors.red.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.withOpacity(0.15)),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +286,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.08),
+              color: primaryColor.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.notifications_off_outlined, size: 48, color: primaryColor),

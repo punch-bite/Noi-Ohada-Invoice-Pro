@@ -658,8 +658,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           CircleAvatar(
             radius: 16,
             backgroundColor: isAdmin
-                ? Colors.purple.withOpacity(0.2)
-                : Colors.blue.withOpacity(0.2),
+                ? Colors.purple.withValues(alpha: 0.2)
+                : Colors.blue.withValues(alpha: 0.2),
             child: Text(
               (name.isNotEmpty ? name : memberId).substring(0, 1).toUpperCase(),
               style: TextStyle(
@@ -695,7 +695,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.2),
+                          color: Colors.amber.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -707,7 +707,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: Colors.purple.withOpacity(0.2),
+                          color: Colors.purple.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(

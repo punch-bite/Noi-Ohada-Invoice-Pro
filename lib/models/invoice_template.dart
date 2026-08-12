@@ -131,9 +131,9 @@ class InvoiceTemplate {
     this.mapping = const {},
     this.category = 'classique',
     this.positions = const {},
-  })  : primaryColorValue = primaryColor?.value ?? 0xFF1976D2,
-        textColorValue = textColor?.value ?? 0xFF000000,
-        backgroundColorValue = backgroundColor?.value ?? 0xFFFFFFFF;
+  })  : primaryColorValue = primaryColor?.toARGB32() ?? 0xFF1976D2,
+        textColorValue = textColor?.toARGB32() ?? 0xFF000000,
+        backgroundColorValue = backgroundColor?.toARGB32() ?? 0xFFFFFFFF;
 
   // Constructeur Firestore
   factory InvoiceTemplate.fromFirestore(DocumentSnapshot doc) {

@@ -1,5 +1,6 @@
 // lib/screens/customization/template_preview_screen.dart
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -16,7 +17,13 @@ import '../../widgets/logo_image.dart';
 
 class TemplatePreviewScreen extends StatefulWidget {
   final InvoiceTemplate template;
-  const TemplatePreviewScreen({super.key, required this.template});
+  final InvoiceSettings? settings;
+
+  const TemplatePreviewScreen({
+    super.key,
+    required this.template,
+    this.settings,
+  });
 
   @override
   State<TemplatePreviewScreen> createState() => _TemplatePreviewScreenState();
@@ -25,7 +32,7 @@ class TemplatePreviewScreen extends StatefulWidget {
 class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   final DatabaseService _db = DatabaseService();
   Company? _company;
-  final InvoiceSettings _settings = InvoiceSettings();
+  late InvoiceSettings _settings;
   bool _isLoading = true;
   // 🖼️ Image téléversée du modèle : arrière-plan de l'aperçu.
   Uint8List? _backgroundBytes;
@@ -44,9 +51,13 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           ? _customPositions
           : Map<String, dynamic>.from(widget.template.positions);
 
+  // Note: settings are stored in `_settings`. Template default values are
+  // accessed via `widget.template` where needed. No extra getters required.
+
   @override
   void initState() {
     super.initState();
+    _settings = widget.settings ?? InvoiceSettings.defaultSettings;
     _loadData();
   }
 
@@ -55,8 +66,6 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     // Charge les personnalisations (positions + mapping) du modèle pour
     // que l'aperçu affiche exactement ce qui a été configuré en drag & drop.
     final custom = await TemplateCustomService.loadCustom(widget.template.id);
-    // Chargez également vos paramètres enregistrés s'ils existent en base de données
-    // final settings = await _db.getInvoiceSettings();
 
     if (mounted) {
       setState(() {
@@ -64,7 +73,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         _backgroundBytes = _decodeBackground();
         _customPositions = custom.positions;
         _customMapping = custom.mapping;
-        // _settings = settings ?? InvoiceSettings();
+        _settings = widget.settings ?? InvoiceSettings.defaultSettings;
         _isLoading = false;
       });
     }
@@ -108,7 +117,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.check_circle_outline, color: widget.template.primaryColor, size: 26),
+            icon: Icon(Icons.check_circle_outline, color: _settings.primaryColor, size: 26),
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -124,120 +133,119 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Center(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Container principal de la facture
-                        Container(
-                          width: 420,
-                          decoration: BoxDecoration(
-                            color: widget.template.backgroundColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: _settings.showBorder
-                                ? Border.all(
-                                    color: widget.template.primaryColor.withOpacity(0.35),
-                                    width: 1.5,
-                                  )
-                                : Border.all(
-                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final pageWidth = min(420.0, constraints.maxWidth - 32);
+                return Center(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: pageWidth),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 420,
+                                decoration: BoxDecoration(
+                                  color: _settings.backgroundColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: _settings.showBorder
+                                      ? Border.all(
+                                          color: _settings.primaryColor.withValues(alpha: 0.35),
+                                          width: 1.5,
+                                        )
+                                      : Border.all(
+                                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                                        ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Stack(
+                                    children: [
+                                      if (_backgroundBytes != null)
+                                        Positioned.fill(
+                                          child: Opacity(
+                                            opacity: 0.35,
+                                            child: Image.memory(
+                                              _backgroundBytes!,
+                                              fit: BoxFit.fill,
+                                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                            ),
+                                          ),
+                                        ),
+                                      if (_positions.isNotEmpty)
+                                        _buildPositionedLayout()
+                                      else
+                                        Padding(
+                                          padding: const EdgeInsets.all(24),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              _buildHeader(),
+                                              const Divider(height: 24, thickness: 1),
+                                              if (_settings.showClientInfo) ...[
+                                                _buildClientSection(),
+                                                const SizedBox(height: 16),
+                                              ],
+                                              _buildItemsTable(),
+                                              const SizedBox(height: 16),
+                                              _buildTotalsAndQR(),
+                                              const SizedBox(height: 16),
+                                              _buildFooter(),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-                                blurRadius: 15,
-                                offset: const Offset(0, 5),
+                                ),
                               ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Stack(
-                              children: [
-                                // 🖼️ Image téléversée du modèle en arrière-plan.
-                                if (_backgroundBytes != null)
-                                  Positioned.fill(
-                                    child: Opacity(
-                                      opacity: 0.35,
-                                      child: Image.memory(
-                                        _backgroundBytes!,
-                                        fit: BoxFit.fill,
-                                        errorBuilder: (_, __, ___) =>
-                                            const SizedBox.shrink(),
+                              if (_settings.showWatermark)
+                                IgnorePointer(
+                                  child: Transform.rotate(
+                                    angle: -0.35,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: _settings.primaryColor.withValues(alpha: 0.12),
+                                          width: 2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        _settings.watermarkText.toUpperCase(),
+                                        style: TextStyle(
+                                          color: _settings.primaryColor.withValues(alpha: 0.09),
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.5,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                // 🧩 Si l'utilisateur a personnalisé le modèle
-                                // (drag & drop : positions + mapping), on rend le
-                                // layout POSITIONNÉ pour refléter exactement ses
-                                // modifications. Sinon → layout fixe historique.
-                                if (_positions.isNotEmpty)
-                                  _buildPositionedLayout()
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _buildHeader(),
-                                        const Divider(height: 24, thickness: 1),
-                                        if (_settings.showClientInfo) ...[
-                                          _buildClientSection(),
-                                          const SizedBox(height: 16),
-                                        ],
-                                        _buildItemsTable(),
-                                        const SizedBox(height: 16),
-                                        _buildTotalsAndQR(),
-                                        const SizedBox(height: 16),
-                                        _buildFooter(),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Filigrane (Watermark) optionnel
-                        if (_settings.showWatermark)
-                          IgnorePointer(
-                            child: Transform.rotate(
-                              angle: -0.35,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: widget.template.primaryColor.withOpacity(0.12),
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Text(
-                                  _settings.watermarkText.toUpperCase(),
-                                  style: TextStyle(
-                                    color: widget.template.primaryColor.withOpacity(0.09),
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
+                            ],
                           ),
-                      ],
+                          const SizedBox(height: 20),
+                          _buildActionButtons(theme),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    // 🛒 Boutons d'achat / panier sous l'aperçu.
-                    _buildActionButtons(theme),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
     );
   }
@@ -450,7 +458,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     final primary = template.primaryColor;
     final text = template.textColor;
     final fs = (template.fontSize * scale).clamp(6.0, 40.0);
-    final sub = text.withOpacity(0.6);
+    final sub = text.withValues(alpha: 0.6);
 
     switch (varName) {
       case 'invoice_number':
@@ -527,7 +535,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         return Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: primary.withOpacity(0.1),
+            color: primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: _totalRow(
@@ -560,7 +568,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     final primary = template.primaryColor;
     final text = template.textColor;
     final fs = (template.fontSize * scale).clamp(6.0, 40.0);
-    final sub = text.withOpacity(0.6);
+    final sub = text.withValues(alpha: 0.6);
 
     // 🧩 MAPPING : si l'utilisateur a réassigné une variable de facture à cet
     // élément dans l'espace de travail, on rend la variable mappée à la place
@@ -662,7 +670,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         return Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: primary.withOpacity(0.1),
+            color: primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: _totalRow(
@@ -765,17 +773,17 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                 if (company?.address.isNotEmpty == true)
                   Text(
                     company!.address,
-                    style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7)),
+                    style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7)),
                   ),
                 if (company?.phone.isNotEmpty == true)
                   Text(
                     'Tél: ${company!.phone}',
-                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.6)),
+                    style: TextStyle(fontSize: 10, color: textColor.withValues(alpha: 0.6)),
                   ),
                 if (company?.email.isNotEmpty == true)
                   Text(
                     'Email: ${company!.email}',
-                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.6)),
+                    style: TextStyle(fontSize: 10, color: textColor.withValues(alpha: 0.6)),
                   ),
               ],
             ],
@@ -809,8 +817,8 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: primaryColor.withOpacity(0.04),
-        border: Border.all(color: primaryColor.withOpacity(0.15)),
+        color: primaryColor.withValues(alpha: 0.04),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.15)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -831,11 +839,11 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           ),
           Text(
             'Douala, Cameroun',
-            style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 11),
+            style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 11),
           ),
           Text(
             'Tél: +237 6XX XX XX XX',
-            style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 11),
+            style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 11),
           ),
         ],
       ),
@@ -849,7 +857,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: primaryColor.withOpacity(0.2)),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -898,7 +906,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: primaryColor.withOpacity(0.1),
+                      color: primaryColor.withValues(alpha: 0.1),
                       width: _sampleItems.last == item ? 0 : 1,
                     ),
                   ),
@@ -956,13 +964,13 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              border: Border.all(color: primaryColor.withOpacity(0.2)),
+              border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               Icons.qr_code_scanner_rounded, 
               size: 64, 
-              color: textColor.withOpacity(0.8),
+              color: textColor.withValues(alpha: 0.8),
             ),
           )
         else
@@ -974,7 +982,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.05),
+              color: primaryColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -983,7 +991,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Sous-total:', style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7))),
+                    Text('Sous-total:', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
                     Text('100 000 FCFA', style: TextStyle(fontSize: 11, color: textColor)),
                   ],
                 ),
@@ -992,7 +1000,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('TVA (18%):', style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.7))),
+                      Text('TVA (18%):', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
                       Text('18 000 FCFA', style: TextStyle(fontSize: 11, color: textColor)),
                     ],
                   ),
@@ -1029,14 +1037,14 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            border: Border.all(color: template.primaryColor.withOpacity(0.15)),
+            border: Border.all(color: template.primaryColor.withValues(alpha: 0.15)),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             _company?.legalText ?? 'Conforme aux normes OHADA et SYSCOHADA',
             style: TextStyle(
               fontSize: 9,
-              color: textColor.withOpacity(0.55),
+              color: textColor.withValues(alpha: 0.55),
               fontStyle: FontStyle.italic,
             ),
             textAlign: TextAlign.center,
@@ -1048,7 +1056,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
             'Conditions de règlement : Paiement à réception.',
             style: TextStyle(
               fontSize: 8.5, 
-              color: textColor.withOpacity(0.5),
+              color: textColor.withValues(alpha: 0.5),
             ),
             textAlign: TextAlign.center,
           ),

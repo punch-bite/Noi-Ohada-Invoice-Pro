@@ -73,10 +73,10 @@ class InvoiceSettings {
     this.showPaymentTerms = true,
     this.showTaxDetails = true,
     this.watermarkText = 'OHADA Invoice Pro',
-  })  : primaryColorValue = primaryColor?.value ?? 0xFF1A237E,
-        secondaryColorValue = secondaryColor?.value ?? 0xFF3949AB,
-        backgroundColorValue = backgroundColor?.value ?? 0xFFFFFFFF,
-        textColorValue = textColor?.value ?? 0xFF1A1A1A;
+  })  : primaryColorValue = primaryColor?.toARGB32() ?? 0xFF1A237E,
+        secondaryColorValue = secondaryColor?.toARGB32() ?? 0xFF3949AB,
+        backgroundColorValue = backgroundColor?.toARGB32() ?? 0xFFFFFFFF,
+        textColorValue = textColor?.toARGB32() ?? 0xFF1A1A1A;
 
   // Constructeur pour Firestore
   factory InvoiceSettings.fromFirestore(Map<String, dynamic> map) {

@@ -216,13 +216,13 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       cursorColor: theme.primaryColor,
             decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: theme.subTextColor.withOpacity(0.8), fontSize: 14),
+        labelStyle: TextStyle(color: theme.subTextColor.withValues(alpha: 0.8), fontSize: 14),
         floatingLabelStyle: TextStyle(color: theme.primaryColor),
-        prefixIcon: Icon(icon, color: theme.primaryColor.withOpacity(0.6), size: 22),
+        prefixIcon: Icon(icon, color: theme.primaryColor.withValues(alpha: 0.6), size: 22),
         filled: true,
         fillColor: theme.isDarkMode
-            ? Colors.white.withOpacity(0.06)
-            : Colors.white.withOpacity(0.7),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         alignLabelWithHint: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
@@ -232,8 +232,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: theme.isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.04)),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.04)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -271,7 +271,7 @@ class _ProfileAvatar extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: theme.primaryColor.withOpacity(0.2),
+              color: theme.primaryColor.withValues(alpha: 0.2),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),

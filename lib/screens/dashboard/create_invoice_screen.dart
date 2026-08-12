@@ -144,7 +144,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     onSelected: (_) => setState(() => _isDevis = false),
                     selectedColor: primary,
                     backgroundColor:
-                        isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                     labelStyle: TextStyle(color: !_isDevis ? Colors.white : sub),
                   ),
                   const SizedBox(width: 8),
@@ -154,7 +154,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     onSelected: (_) => setState(() => _isDevis = true),
                     selectedColor: primary,
                     backgroundColor:
-                        isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                     labelStyle: TextStyle(color: _isDevis ? Colors.white : sub),
                   ),
                 ],
@@ -170,11 +170,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   labelText: 'Client',
                   hintText: 'Sélectionner un client',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
-                  hintStyle: TextStyle(color: sub.withOpacity(0.5)),
+                  hintStyle: TextStyle(color: sub.withValues(alpha: 0.5)),
                   prefixIcon: Icon(Icons.person_outline, color: sub),
                   suffixIcon: Icon(Icons.arrow_drop_down, color: sub),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -201,7 +201,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Produit',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
@@ -225,7 +225,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Qté',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
@@ -249,7 +249,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Prix',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
@@ -298,10 +298,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   labelText: 'Frais de livraison',
                   hintText: '0',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
-                  hintStyle: TextStyle(color: sub.withOpacity(0.5)),
+                  hintStyle: TextStyle(color: sub.withValues(alpha: 0.5)),
                   prefixIcon: Icon(Icons.local_shipping, color: sub),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -327,7 +327,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'TVA %',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
@@ -352,7 +352,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText: 'Remise',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
-                        fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
@@ -381,7 +381,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   labelText: 'Notes',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
                   filled: true,
-                  fillColor: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,
@@ -399,7 +399,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
@@ -436,7 +436,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.7),
+        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -541,7 +541,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                           return ListTile(
                             leading: CircleAvatar(
                               radius: 16,
-                              backgroundColor: theme.primaryColor.withOpacity(0.1),
+                              backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
                               child: Text(p.name.isNotEmpty ? p.name[0] : 'P',
                                   style: TextStyle(color: theme.primaryColor)),
                             ),

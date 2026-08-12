@@ -298,10 +298,28 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (progress) {
-            if (mounted) setState(() => _loadingPage = progress < 100);
+            if (!mounted) return;
+            setState(() {
+              _loadingPage = progress < 100;
+            });
+          },
+          onPageStarted: (_) {
+            if (!mounted) return;
+            setState(() {
+              _loadingPage = true;
+            });
           },
           onPageFinished: (_) {
-            if (mounted) setState(() => _loadingPage = false);
+            if (!mounted) return;
+            setState(() {
+              _loadingPage = false;
+            });
+          },
+          onWebResourceError: (_) {
+            if (!mounted) return;
+            setState(() {
+              _loadingPage = false;
+            });
           },
           // 🔒 Sécurité : on bloque UNIQUEMENT les schémas d'injection
           // dangereux (javascript:, file:, data:, vbscript:). On laisse
@@ -320,9 +338,6 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
             return NavigationDecision.navigate;
           },
           onUrlChange: (change) {
-            // Détection du retour E-nkap : quand la page redirige vers notre
-            // URL de retour, on vérifie le statut immédiatement (plus de
-            // spinner infini) et on termine si le paiement est confirmé.
             final u = Uri.tryParse(change.url ?? '');
             if (u != null) _handleReturnNavigation(u);
           },

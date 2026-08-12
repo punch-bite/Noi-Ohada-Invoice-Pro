@@ -209,14 +209,14 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     height: 80,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primary, primary.withOpacity(0.75)],
+                        colors: [primary, primary.withValues(alpha: 0.75)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: primary.withOpacity(0.2),
+                          color: primary.withValues(alpha: 0.2),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         )
@@ -248,7 +248,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.08),
+                        color: primary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -437,7 +437,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         leading: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 20),

@@ -117,7 +117,7 @@ class _AdminAssignPlanScreenState extends State<AdminAssignPlanScreen> {
                     decoration: InputDecoration(
                       labelText: 'Utilisateur *',
                       labelStyle: TextStyle(color: sub),
-                      prefixIcon: Icon(Icons.person, color: primary.withOpacity(0.5)),
+                      prefixIcon: Icon(Icons.person, color: primary.withValues(alpha: 0.5)),
                       filled: true,
                       fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
@@ -143,7 +143,7 @@ class _AdminAssignPlanScreenState extends State<AdminAssignPlanScreen> {
                     decoration: InputDecoration(
                       labelText: 'Plan *',
                       labelStyle: TextStyle(color: sub),
-                      prefixIcon: Icon(Icons.subscriptions, color: primary.withOpacity(0.5)),
+                      prefixIcon: Icon(Icons.subscriptions, color: primary.withValues(alpha: 0.5)),
                       filled: true,
                       fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
@@ -168,7 +168,7 @@ class _AdminAssignPlanScreenState extends State<AdminAssignPlanScreen> {
                     decoration: InputDecoration(
                       labelText: 'Durée (mois) *',
                       labelStyle: TextStyle(color: sub),
-                      prefixIcon: Icon(Icons.timer, color: primary.withOpacity(0.5)),
+                      prefixIcon: Icon(Icons.timer, color: primary.withValues(alpha: 0.5)),
                       filled: true,
                       fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),

@@ -93,7 +93,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   Widget _buildCard(List<Widget> children) => Card(
     elevation: 0,
     color: Theme.of(context).cardColor,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5))),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.5))),
     child: Column(children: children),
   );
 
@@ -112,7 +112,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     trailing: Switch.adaptive(value: value, onChanged: onChanged),
   );
 
-  Widget _buildDivider() => Divider(height: 1, indent: 16, endIndent: 16, color: Theme.of(context).dividerColor.withOpacity(0.5));
+  Widget _buildDivider() => Divider(height: 1, indent: 16, endIndent: 16, color: Theme.of(context).dividerColor.withValues(alpha: 0.5));
 
   // --- Logiques ---
   
@@ -311,7 +311,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).dividerColor.withOpacity(0.15),
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SelectableText(

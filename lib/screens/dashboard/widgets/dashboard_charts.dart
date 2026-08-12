@@ -119,7 +119,7 @@ class DashboardCharts extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w600,
-                              color: subTextColor.withOpacity(0.8),
+                              color: subTextColor.withValues(alpha: 0.8),
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -132,7 +132,7 @@ class DashboardCharts extends StatelessWidget {
                                 end: Alignment.topCenter,
                                 colors: [
                                   primaryColor,
-                                  primaryColor.withOpacity(0.7),
+                                  primaryColor.withValues(alpha: 0.7),
                                 ],
                               ),
                               // Arrondi uniquement sur le haut pour préserver l'alignement sur la base du graphique

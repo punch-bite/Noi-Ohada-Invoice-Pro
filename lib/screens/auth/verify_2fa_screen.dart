@@ -284,9 +284,9 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.08),
+                          color: Colors.red.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.red.withOpacity(0.2)),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                         ),
                         child: Row(
                           children: [

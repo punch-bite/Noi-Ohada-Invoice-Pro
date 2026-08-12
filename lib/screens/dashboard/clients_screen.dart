@@ -187,13 +187,13 @@ class _ClientsScreenState extends State<ClientsScreen> {
                   end: Alignment.bottomRight,
                   colors: [
                     _getColorForClient(client.id),
-                    _getColorForClient(client.id).withOpacity(0.6),
+                    _getColorForClient(client.id).withValues(alpha: 0.6),
                   ],
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: _getColorForClient(client.id).withOpacity(0.3),
+                    color: _getColorForClient(client.id).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -268,7 +268,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(

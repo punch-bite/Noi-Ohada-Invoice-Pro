@@ -114,7 +114,7 @@ class DashboardStats extends StatelessWidget {
                 Icon(
                   icon,
                   size: 16,
-                  color: color.withOpacity(0.8),
+                  color: color.withValues(alpha: 0.8),
                 ),
               ],
             ),
@@ -133,7 +133,7 @@ class DashboardStats extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 // Utilisation d'une opacité dynamique pour s'adapter au Dark Mode sans délaver la couleur
-                color: badgeColor.withOpacity(0.1),
+                color: badgeColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(

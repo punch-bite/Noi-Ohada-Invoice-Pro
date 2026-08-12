@@ -728,8 +728,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: isDark
-                    ? Colors.white.withOpacity(0.06)
-                    : Colors.white.withOpacity(0.85),
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -827,7 +827,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       color: isDark
-                          ? Colors.white.withOpacity(0.03)
+                          ? Colors.white.withValues(alpha: 0.03)
                           : Colors.transparent,
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -908,7 +908,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                               border: Border(
                                 bottom: BorderSide(
                                   color: isDark
-                                      ? Colors.white.withOpacity(0.06)
+                                      ? Colors.white.withValues(alpha: 0.06)
                                       : Colors.grey[200]!,
                                   width: 0.6,
                                 ),
@@ -1058,7 +1058,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         color: _selectedTemplate!.backgroundColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _selectedTemplate!.primaryColor.withOpacity(0.3),
+          color: _selectedTemplate!.primaryColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -1112,7 +1112,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: _selectedTemplate!.primaryColor.withOpacity(0.1),
+              color: _selectedTemplate!.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

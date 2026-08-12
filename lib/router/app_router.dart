@@ -60,6 +60,7 @@ import '../screens/customization/my_templates_screen.dart';
 import '../screens/customization/template_workspace_screen.dart';
 import '../screens/customization/template_preview_screen.dart';
 import '../screens/dev/enkap_test_screen.dart';
+import '../models/invoice_settings.dart';
 import '../models/invoice_template.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
@@ -265,14 +266,33 @@ class AppRouter {
       // Espace de travail drag & drop (personnalisation visuelle)
       GoRoute(
         path: '/templates/workspace',
-        builder: (context, state) =>
-            TemplateWorkspaceScreen(template: state.extra as InvoiceTemplate),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is InvoiceTemplate) {
+            return TemplateWorkspaceScreen(template: extra);
+          }
+          if (extra is Map<String, dynamic> && extra['template'] is InvoiceTemplate) {
+            return TemplateWorkspaceScreen(template: extra['template'] as InvoiceTemplate);
+          }
+          return const SizedBox.shrink();
+        },
       ),
       // Aperçu d'un modèle (rendu avec données d'exemple)
       GoRoute(
         path: '/templates/preview',
-        builder: (context, state) =>
-            TemplatePreviewScreen(template: state.extra as InvoiceTemplate),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is InvoiceTemplate) {
+            return TemplatePreviewScreen(template: extra);
+          }
+          if (extra is Map<String, dynamic> && extra['template'] is InvoiceTemplate) {
+            return TemplatePreviewScreen(
+              template: extra['template'] as InvoiceTemplate,
+              settings: extra['settings'] as InvoiceSettings?,
+            );
+          }
+          return const SizedBox.shrink();
+        },
       ),
 
       // 🧪 Test de paiement E-nkap (développeur) — RÉSERVÉ À L'ADMIN.

@@ -160,13 +160,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               decoration: InputDecoration(
                 hintText: 'Rechercher une facture...',
                 hintStyle: TextStyle(
-                  color: subTextColor.withOpacity(0.6),
+                  color: subTextColor.withValues(alpha: 0.6),
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
                 ),
                 prefixIcon: Icon(
                   Icons.search_rounded,
-                  color: _isSearchFocused ? primaryColor : subTextColor.withOpacity(0.5),
+                  color: _isSearchFocused ? primaryColor : subTextColor.withValues(alpha: 0.5),
                   size: 20,
                 ),
                 suffixIcon: _searchQuery.isNotEmpty
@@ -174,7 +174,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         icon: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: subTextColor.withOpacity(0.1),
+                            color: subTextColor.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -267,8 +267,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: invoice.isDevis 
-                            ? Colors.orange.withOpacity(0.1) 
-                            : Colors.blue.withOpacity(0.1),
+                            ? Colors.orange.withValues(alpha: 0.1) 
+                            : Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -295,7 +295,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: statusColors['bg']!.withOpacity(0.15),
+                        color: statusColors['bg']!.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -365,7 +365,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.08),
+              color: primaryColor.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(Icons.receipt_long_outlined, size: 32, color: primaryColor),

@@ -78,7 +78,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.blue.withOpacity(0.1),
+          backgroundColor: Colors.blue.withValues(alpha: 0.1),
           child: Text(
             team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
             style: const TextStyle(fontWeight: FontWeight.bold),

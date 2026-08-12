@@ -290,11 +290,11 @@ class SettingsScreen extends StatelessWidget {
         return Container(
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.06)
-            : Colors.white.withOpacity(0.7),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
           width: 0.5,
         ),
       ),
@@ -312,7 +312,7 @@ class SettingsScreen extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [primaryColor, primaryColor.withOpacity(0.8)],
+                      colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -355,7 +355,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 Icon(
                   Icons.chevron_right,
-                  color: subTextColor.withOpacity(0.7),
+                  color: subTextColor.withValues(alpha: 0.7),
                   size: 20,
                 ),
               ],
@@ -391,11 +391,11 @@ class SettingsScreen extends StatelessWidget {
         return Container(
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.06)
-            : Colors.white.withOpacity(0.7),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
           width: 0.5,
         ),
       ),
@@ -508,7 +508,7 @@ class SettingsScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -589,7 +589,7 @@ class SettingsScreen extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Annuler',
-              style: TextStyle(color: textColor.withOpacity(0.7)),
+              style: TextStyle(color: textColor.withValues(alpha: 0.7)),
             ),
           ),
           TextButton(
@@ -640,7 +640,7 @@ class _SettingsTile extends StatelessWidget {
     return ListTile(
       leading: Icon(
         icon,
-        color: isDanger ? Colors.redAccent : textColor.withOpacity(0.8),
+        color: isDanger ? Colors.redAccent : textColor.withValues(alpha: 0.8),
         size: 22,
       ),
       title: Row(

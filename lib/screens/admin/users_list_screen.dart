@@ -152,7 +152,7 @@ class _UsersListScreenState extends State<UsersListScreen> {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: user.isAdmin ? Colors.purple.withOpacity(0.1) : primary.withOpacity(0.1),
+          backgroundColor: user.isAdmin ? Colors.purple.withValues(alpha: 0.1) : primary.withValues(alpha: 0.1),
           child: Text(
             user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
             style: TextStyle(fontWeight: FontWeight.bold, color: user.isAdmin ? Colors.purple : primary),
@@ -165,7 +165,7 @@ class _UsersListScreenState extends State<UsersListScreen> {
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.purple.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                 child: const Text('ADMIN', style: TextStyle(fontSize: 9, color: Colors.purple, fontWeight: FontWeight.bold)),
               ),
             ]
@@ -183,7 +183,7 @@ class _UsersListScreenState extends State<UsersListScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_search_rounded, size: 64, color: sub.withOpacity(0.5)),
+          Icon(Icons.person_search_rounded, size: 64, color: sub.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
           Text('Aucun résultat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: text)),
         ],

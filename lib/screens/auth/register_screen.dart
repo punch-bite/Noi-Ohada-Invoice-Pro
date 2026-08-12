@@ -260,9 +260,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.08),
+                            color: Colors.red.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.red.withOpacity(0.2)),
+                            border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                           ),
                           child: Row(
                             children: [
@@ -410,7 +410,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         suffixIcon: IconButton(
           icon: Icon(
             obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, 
-            color: theme.subTextColor.withOpacity(0.7), 
+            color: theme.subTextColor.withValues(alpha: 0.7), 
             size: 20,
           ),
           onPressed: toggle,

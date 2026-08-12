@@ -118,7 +118,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: isCurrent
-                ? Colors.green.withOpacity(0.1)
+                ? Colors.green.withValues(alpha: 0.1)
                 : (isDark ? Colors.grey[800]! : const Color(0xFFE8EAF6)),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -157,7 +157,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
             ? Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

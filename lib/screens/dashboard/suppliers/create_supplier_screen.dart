@@ -268,7 +268,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                             value: _isActive,
                             onChanged: (value) =>
                                 setState(() => _isActive = value),
-                            activeColor: primaryColor,
+                            activeThumbColor: primaryColor,
+                            activeTrackColor: primaryColor,
                           ),
                         ],
                       ),

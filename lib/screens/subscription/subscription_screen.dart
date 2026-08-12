@@ -114,7 +114,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withOpacity(0.35),
+                    color: primaryColor.withValues(alpha: 0.35),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
@@ -230,20 +230,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             color: isSelected
                 ? primaryColor
                 : (isPopular
-                    ? primaryColor.withOpacity(0.4)
+                    ? primaryColor.withValues(alpha: 0.4)
                     : (isDark ? Colors.grey[700]! : Colors.grey[200]!)),
             width: isSelected ? 2 : (isPopular ? 1.5 : 1),
           ),
           boxShadow: [
             if (isSelected)
               BoxShadow(
-                color: primaryColor.withOpacity(0.18),
+                color: primaryColor.withValues(alpha: 0.18),
                 blurRadius: 24,
                 offset: const Offset(0, 6),
               )
             else if (isPopular)
               BoxShadow(
-                color: primaryColor.withOpacity(0.08),
+                color: primaryColor.withValues(alpha: 0.08),
                 blurRadius: 20,
                 offset: const Offset(0, 4),
               ),
@@ -281,10 +281,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.1),
+                      color: primaryColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: primaryColor.withOpacity(0.25),
+                        color: primaryColor.withValues(alpha: 0.25),
                         width: 1,
                       ),
                     ),
@@ -406,10 +406,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
+                color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: Colors.orange.withOpacity(0.3),
+                  color: Colors.orange.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),

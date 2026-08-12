@@ -287,12 +287,12 @@ class _DashboardHomeState extends State<DashboardHome> {
             height: 48,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [primaryColor, primaryColor.withOpacity(0.7)],
+                colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
               ),
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: primaryColor.withOpacity(0.3),
+                  color: primaryColor.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -343,13 +343,13 @@ class _DashboardHomeState extends State<DashboardHome> {
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: isActive
-                          ? const Color(0xFF4338CA).withOpacity(0.1)
-                          : const Color(0xFFE9B949).withOpacity(0.18),
+                          ? const Color(0xFF4338CA).withValues(alpha: 0.1)
+                          : const Color(0xFFE9B949).withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
                         color: isActive
-                            ? const Color(0xFF4338CA).withOpacity(0.25)
-                            : const Color(0xFFE9B949).withOpacity(0.5),
+                            ? const Color(0xFF4338CA).withValues(alpha: 0.25)
+                            : const Color(0xFFE9B949).withValues(alpha: 0.5),
                         width: 1,
                       ),
                     ),
@@ -462,7 +462,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
               blurRadius: 5,
             ),
           ],
@@ -475,7 +475,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(icon, color: color, size: 14),
@@ -517,12 +517,12 @@ class _DashboardHomeState extends State<DashboardHome> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withOpacity(0.7)],
+          colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.3),
+            color: primaryColor.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -536,7 +536,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             style: TextStyle(
               fontSize: 14,
               letterSpacing: 0.4,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
           const SizedBox(height: 6),
@@ -575,7 +575,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               _buildActionButton(
                 icon: Icons.add,
                 label: 'Facture',
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 textColor: Colors.white,
                 onTap: () {
                   context.push('/dashboard/invoices/create');
@@ -585,7 +585,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               _buildActionButton(
                 icon: Icons.person_add,
                 label: 'Client',
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 textColor: Colors.white,
                 onTap: () {
                   context.push('/dashboard/clients/create');
@@ -595,7 +595,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               _buildActionButton(
                 icon: Icons.payment,
                 label: 'Payer',
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 textColor: Colors.white,
                 onTap: () {
                   _showPaymentDialog();
@@ -635,7 +635,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -672,7 +672,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -799,10 +799,10 @@ class _DashboardHomeState extends State<DashboardHome> {
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2), width: 1),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
               blurRadius: 5,
             ),
           ],
@@ -927,12 +927,12 @@ class _DashboardHomeState extends State<DashboardHome> {
               height: 60,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [color, color.withOpacity(0.6)],
+                  colors: [color, color.withValues(alpha: 0.6)],
                 ),
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withOpacity(0.3),
+                    color: color.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -1046,7 +1046,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 5,
           ),
         ],

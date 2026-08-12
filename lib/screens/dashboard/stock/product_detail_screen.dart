@@ -76,7 +76,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
@@ -183,7 +183,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.05),
+                    color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -203,8 +203,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              statusColor.withOpacity(0.22),
-                              statusColor.withOpacity(0.06),
+                              statusColor.withValues(alpha: 0.22),
+                              statusColor.withValues(alpha: 0.06),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -250,7 +250,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                               decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.12),
+                                color: statusColor.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -316,33 +316,62 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    '${product.quantity} ${product.unit}s DISPONIBLES',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${product.quantity}',
+                          style: TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            product.unit,
+                            style: TextStyle(fontSize: 11, color: subTextColor),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isOut ? 'RUPTURE' : (isLow ? 'SEUIL' : 'EN STOCK'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  // Jauge proportionnelle (0 → max = quantité*2 pour perspective)
+                  const SizedBox(height: 10),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
                       value: (product.quantity / (product.minStock * 3))
                           .clamp(0.0, 1.0),
-                      minHeight: 8,
+                      minHeight: 10,
                       backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
                       valueColor: AlwaysStoppedAnimation<Color>(statusColor),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '0   Seuil: ${product.minStock}   Max: ${product.minStock * 3}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: subTextColor,
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Seuil: ${product.minStock} ${product.unit}',
+                        style: TextStyle(fontSize: 11, color: subTextColor),
+                      ),
+                      Text(
+                        'Max: ${product.minStock * 3} ${product.unit}',
+                        style: TextStyle(fontSize: 11, color: subTextColor),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   // Grille des valeurs clés
@@ -404,7 +433,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.05),
+                    color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -497,7 +526,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.05),
+                    color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -541,7 +570,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 32),
                         child: Column(
                           children: [
-                            Icon(Icons.history_rounded, color: subTextColor.withOpacity(0.4), size: 44),
+                            Icon(Icons.history_rounded, color: subTextColor.withValues(alpha: 0.4), size: 44),
                             const SizedBox(height: 10),
                             Text(
                               'Aucun mouvement pour le moment.',
@@ -599,8 +628,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            statusColor.withOpacity(0.15),
-            statusColor.withOpacity(0.05),
+            statusColor.withValues(alpha: 0.15),
+            statusColor.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(24),
@@ -689,7 +718,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[900]!.withOpacity(0.3) : Colors.grey[50],
+        color: isDark ? Colors.grey[900]!.withValues(alpha: 0.3) : Colors.grey[50],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.grey[900]! : Colors.grey[100]!,
@@ -742,8 +771,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: isIncoming
-                  ? Colors.green.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.1),
+                  ? Colors.green.withValues(alpha: 0.1)
+                  : Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -791,7 +820,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: stateColor.withOpacity(0.12),
+              color: stateColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

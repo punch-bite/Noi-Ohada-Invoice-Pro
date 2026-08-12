@@ -138,7 +138,7 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.08),
+              color: primaryColor.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.history_rounded, size: 48, color: primaryColor),
@@ -197,7 +197,7 @@ class LogTile extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         leading: CircleAvatar(
           radius: 18,
-          backgroundColor: primaryColor.withOpacity(0.1),
+          backgroundColor: primaryColor.withValues(alpha: 0.1),
           child: Icon(
             _getLogIcon(log.action), 
             color: primaryColor, 
@@ -223,7 +223,7 @@ class LogTile extends StatelessWidget {
         trailing: Text(
           formattedDate,
           style: TextStyle(
-            color: subTextColor.withOpacity(0.8),
+            color: subTextColor.withValues(alpha: 0.8),
             fontSize: 11,
           ),
         ),

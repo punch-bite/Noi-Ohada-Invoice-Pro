@@ -550,7 +550,7 @@ class ThemeService {
   }
 
   static ThemeData getSystemTheme() {
-    final brightness = WidgetsBinding.instance.window.platformBrightness;
+    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     return brightness == Brightness.dark ? getDarkTheme() : getLightTheme();
   }
 

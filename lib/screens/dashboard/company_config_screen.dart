@@ -282,7 +282,7 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
       style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: text.withOpacity(0.7)),
+          color: text.withValues(alpha: 0.7)),
     );
   }
 
@@ -355,11 +355,11 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
             decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: sub, fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.6)),
+        prefixIcon: Icon(icon, size: 20, color: primary.withValues(alpha: 0.6)),
         filled: true,
         fillColor: isDark
-            ? Colors.white.withOpacity(0.06)
-            : Colors.white.withOpacity(0.7),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -367,12 +367,12 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.04)),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.04)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+          borderSide: BorderSide(color: primary.withValues(alpha: 0.8), width: 1.2),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -391,11 +391,11 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
         labelText: 'Devise',
         labelStyle: TextStyle(color: sub, fontSize: 13),
         prefixIcon: Icon(Icons.monetization_on_outlined,
-            size: 20, color: primary.withOpacity(0.6)),
+            size: 20, color: primary.withValues(alpha: 0.6)),
         filled: true,
         fillColor: isDark
-            ? Colors.white.withOpacity(0.06)
-            : Colors.white.withOpacity(0.7),
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -403,12 +403,12 @@ class _CompanyConfigScreenState extends State<CompanyConfigScreen> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.04)),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.04)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: primary.withOpacity(0.8), width: 1.2),
+          borderSide: BorderSide(color: primary.withValues(alpha: 0.8), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         isDense: true,

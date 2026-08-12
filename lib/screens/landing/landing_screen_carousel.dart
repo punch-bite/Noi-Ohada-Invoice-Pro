@@ -114,7 +114,7 @@ class _LandingScreenState extends State<LandingScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: slide.gradient),
               borderRadius: BorderRadius.circular(32),
-              boxShadow: [BoxShadow(color: slide.gradient[0].withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+              boxShadow: [BoxShadow(color: slide.gradient[0].withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
             ),
             child: Icon(slide.icon, size: 80, color: Colors.white),
           ),
@@ -134,7 +134,7 @@ class _LandingScreenState extends State<LandingScreen> {
       width: _currentPage == index ? 24 : 8,
       height: 8,
       decoration: BoxDecoration(
-        color: _currentPage == index ? theme.primaryColor : theme.subTextColor.withOpacity(0.2),
+        color: _currentPage == index ? theme.primaryColor : theme.subTextColor.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(4),
       ),
     );

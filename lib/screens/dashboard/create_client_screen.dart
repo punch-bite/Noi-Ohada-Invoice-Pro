@@ -311,7 +311,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                               return ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor:
-                                      primaryColor.withOpacity(0.1),
+                                      primaryColor.withValues(alpha: 0.1),
                                   child: Text(
                                     displayName.isNotEmpty
                                         ? displayName[0].toUpperCase()

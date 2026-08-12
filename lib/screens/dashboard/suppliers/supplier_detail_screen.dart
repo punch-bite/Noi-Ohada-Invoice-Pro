@@ -105,7 +105,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -119,7 +119,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: primary.withOpacity(0.12),
+                          color: primary.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -162,8 +162,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: s.isActive
-                              ? Colors.green.withOpacity(0.12)
-                              : Colors.grey.withOpacity(0.15),
+                              ? Colors.green.withValues(alpha: 0.12)
+                              : Colors.grey.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -262,7 +262,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.inventory_2_outlined, size: 40, color: sub.withOpacity(0.5)),
+                    Icon(Icons.inventory_2_outlined, size: 40, color: sub.withValues(alpha: 0.5)),
                     const SizedBox(height: 10),
                     Text(
                       'Aucun produit lié à ce fournisseur',
@@ -325,7 +325,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 16),
@@ -381,8 +381,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  statusColor.withOpacity(0.2),
-                  statusColor.withOpacity(0.06),
+                  statusColor.withValues(alpha: 0.2),
+                  statusColor.withValues(alpha: 0.06),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
@@ -438,7 +438,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

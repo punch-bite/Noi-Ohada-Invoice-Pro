@@ -1128,9 +1128,9 @@ class PrintingService {
 
   static PdfColor _getPdfColor(Color color) {
     return PdfColor(
-      color.red / 255,
-      color.green / 255,
-      color.blue / 255,
+      color.r,
+      color.g,
+      color.b,
     );
   }
 

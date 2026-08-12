@@ -227,7 +227,7 @@ class _StockScreenState extends State<StockScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: product.statusColor.withOpacity(0.1),
+                    color: product.statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -264,9 +264,9 @@ class _StockScreenState extends State<StockScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.12),
+        color: Colors.orange.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -570,7 +570,7 @@ class _StockScreenState extends State<StockScreen> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF4338CA).withOpacity(0.25),
+                color: const Color(0xFF4338CA).withValues(alpha: 0.25),
                 blurRadius: 14,
                 offset: const Offset(0, 6),
               ),
@@ -596,7 +596,7 @@ class _StockScreenState extends State<StockScreen> {
                 child: Text(
                   'VALEUR DU STOCK',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
@@ -644,7 +644,7 @@ class _StockScreenState extends State<StockScreen> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 16),
@@ -701,7 +701,7 @@ class _StockScreenState extends State<StockScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withOpacity(0.2) : Colors.grey.withOpacity(0.06),
+            color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -723,8 +723,8 @@ class _StockScreenState extends State<StockScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      product.statusColor.withOpacity(0.25),
-                      product.statusColor.withOpacity(0.1),
+                      product.statusColor.withValues(alpha: 0.25),
+                      product.statusColor.withValues(alpha: 0.1),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -784,7 +784,7 @@ class _StockScreenState extends State<StockScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: primaryColor.withOpacity(0.08),
+                              color: primaryColor.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -799,7 +799,7 @@ class _StockScreenState extends State<StockScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: product.statusColor.withOpacity(0.12),
+                            color: product.statusColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -953,7 +953,7 @@ class _StockScreenState extends State<StockScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.08),
+                color: primaryColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.inventory_2_rounded, size: 70, color: primaryColor),

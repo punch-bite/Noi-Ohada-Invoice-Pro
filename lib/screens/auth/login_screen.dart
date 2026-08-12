@@ -218,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                       hintStyle:
-                          TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
+                          TextStyle(color: sub.withValues(alpha: 0.5), fontSize: 14),
                       prefixIcon:
                           Icon(Icons.mail_outline, color: primary, size: 20),
                       filled: true,
@@ -278,7 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                       hintStyle:
-                          TextStyle(color: sub.withOpacity(0.5), fontSize: 14),
+                          TextStyle(color: sub.withValues(alpha: 0.5), fontSize: 14),
                       prefixIcon: Icon(Icons.lock_outline_rounded,
                           color: primary, size: 20),
                       suffixIcon: IconButton(
@@ -286,7 +286,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _obscurePassword
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
-                          color: sub.withOpacity(0.7),
+                          color: sub.withValues(alpha: 0.7),
                           size: 20,
                         ),
                         onPressed: () => setState(
@@ -394,9 +394,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.08),
+                        color: Colors.red.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.red.withOpacity(0.2)),
+                        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                       ),
                       child: Row(
                         children: [

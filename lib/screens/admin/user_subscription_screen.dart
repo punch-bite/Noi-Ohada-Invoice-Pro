@@ -251,7 +251,7 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
                   OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               enabledBorder: OutlineInputBorder(
                 borderSide:
-                    BorderSide(color: theme.subTextColor.withOpacity(0.5)),
+                    BorderSide(color: theme.subTextColor.withValues(alpha: 0.5)),
               ),
             ),
             items: _plans
@@ -395,10 +395,10 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.08),
+                    color: statusColor.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: statusColor.withOpacity(0.2), width: 0.5),
+                        color: statusColor.withValues(alpha: 0.2), width: 0.5),
                   ),
                   child: Text(
                     subscription.isActive
@@ -530,7 +530,7 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.08),
+                color: primaryColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.subscriptions_rounded,

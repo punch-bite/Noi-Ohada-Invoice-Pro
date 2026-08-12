@@ -135,11 +135,11 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
     _descriptionController.text = template.description;
     _fontSizeController.text = template.fontSize.toString();
     _primaryColorController.text =
-        '#${template.primaryColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+        '#${template.primaryColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _textColorController.text =
-        '#${template.textColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+        '#${template.textColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _backgroundColorController.text =
-        '#${template.backgroundColor.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+        '#${template.backgroundColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     _showLogo = template.showLogo;
     _showTaxDetails = template.showTaxDetails;
     _showPaymentTerms = template.showPaymentTerms;
@@ -773,7 +773,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: subTextColor, fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primaryColor.withOpacity(0.5)),
+        prefixIcon: Icon(icon, size: 20, color: primaryColor.withValues(alpha: 0.5)),
         filled: true,
         fillColor: cardColor,
         enabledBorder: OutlineInputBorder(
@@ -824,7 +824,7 @@ class _AdminTemplateFormScreenState extends State<AdminTemplateFormScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: subTextColor, fontSize: 13),
-        prefixIcon: Icon(Icons.palette_outlined, size: 20, color: primaryColor.withOpacity(0.5)),
+        prefixIcon: Icon(Icons.palette_outlined, size: 20, color: primaryColor.withValues(alpha: 0.5)),
         filled: true,
         fillColor: cardColor,
         enabledBorder: OutlineInputBorder(

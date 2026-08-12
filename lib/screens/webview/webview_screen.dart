@@ -176,7 +176,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 if (_isLoading)
                   Container(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     child: const Center(
                       child: CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A237E)),

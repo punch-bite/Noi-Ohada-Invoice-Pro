@@ -31,7 +31,7 @@ class CustomDrawer extends StatelessWidget {
             width: double.infinity,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [primaryColor, primaryColor.withOpacity(0.7)],
+                colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
               ),
             ),
             child: Column(
@@ -41,7 +41,7 @@ class CustomDrawer extends StatelessWidget {
                 // Avatar centré
                 CircleAvatar(
                   radius: 32,
-                  backgroundColor: Colors.white.withOpacity(0.3),
+                  backgroundColor: Colors.white.withValues(alpha: 0.3),
                   child: Text(
                     user?.displayName.isNotEmpty == true
                         ? user!.displayName[0].toUpperCase()
@@ -69,7 +69,7 @@ class CustomDrawer extends StatelessWidget {
                 Text(
                   user?.email ?? 'user@email.com',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 13,
                   ),
                   textAlign: TextAlign.center, // ✅ Centré
@@ -82,7 +82,7 @@ class CustomDrawer extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(

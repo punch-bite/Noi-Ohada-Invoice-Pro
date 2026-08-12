@@ -93,7 +93,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF8A4CFC).withOpacity(0.3),
+                    color: const Color(0xFF8A4CFC).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -284,7 +284,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
+                color: primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -321,7 +321,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.2),
+                            color: Colors.grey.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
@@ -387,7 +387,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.business, size: 80, color: primaryColor.withOpacity(0.8)),
+              Icon(Icons.business, size: 80, color: primaryColor.withValues(alpha: 0.8)),
               const SizedBox(height: 16),
               Text(
                 'Aucun fournisseur',

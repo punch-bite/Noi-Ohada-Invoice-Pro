@@ -181,7 +181,7 @@ class TemplateCard extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: template.primaryColor.withOpacity(0.12),
+                            color: template.primaryColor.withValues(alpha: 0.12),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -194,7 +194,7 @@ class TemplateCard extends StatelessWidget {
                     ),
                     if (isLocked)
                       Container(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withValues(alpha: 0.4),
                         child: Center(
                           child: Container(
                             padding: const EdgeInsets.all(8),

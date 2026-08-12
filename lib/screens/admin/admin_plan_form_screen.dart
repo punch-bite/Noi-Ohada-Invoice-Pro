@@ -280,7 +280,7 @@ class _AdminPlanFormScreenState extends State<AdminPlanFormScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: sub, fontSize: 13),
-        prefixIcon: Icon(icon, size: 20, color: primary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, size: 20, color: primary.withValues(alpha: 0.5)),
         filled: true,
         fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
@@ -308,7 +308,7 @@ class _AdminPlanFormScreenState extends State<AdminPlanFormScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: sub, fontSize: 13),
-        prefixIcon: Icon(Icons.calendar_today, size: 20, color: primary.withOpacity(0.5)),
+        prefixIcon: Icon(Icons.calendar_today, size: 20, color: primary.withValues(alpha: 0.5)),
         filled: true,
         fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),

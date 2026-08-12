@@ -127,7 +127,7 @@ class _InvitationsScreenState extends State<InvitationsScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Colors.green.withOpacity(0.1),
+                  backgroundColor: Colors.green.withValues(alpha: 0.1),
                   child: const Icon(Icons.groups, size: 20, color: Colors.green),
                 ),
                 const SizedBox(width: 12),

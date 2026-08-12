@@ -383,10 +383,36 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                   for (final id in entry.value)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: _buildToolbarChip(
-                        _elementById(id),
-                        theme,
-                        setSheetState,
+                      child: LongPressDraggable<String>(
+                        data: id,
+                        feedback: Material(
+                          color: Colors.transparent,
+                          child: Opacity(
+                            opacity: 0.92,
+                            child: _buildToolbarChip(
+                              _elementById(id),
+                              theme,
+                              setSheetState,
+                              isFeedback: true,
+                            ),
+                          ),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.4,
+                          child: _buildToolbarChip(
+                            _elementById(id),
+                            theme,
+                            setSheetState,
+                          ),
+                        ),
+                        child: _buildToolbarChip(
+                          _elementById(id),
+                          theme,
+                          setSheetState,
+                        ),
+                        onDragStarted: () {
+                          setState(() => _selectedElement = id);
+                        },
                       ),
                     ),
                 ],
@@ -417,8 +443,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         orElse: () => kTemplateElements.first,
       );
 
-  Widget _buildToolbarChip(
-      TemplateElement e, ThemeProvider theme, StateSetter setSheetState) {
+    Widget _buildToolbarChip(
+      TemplateElement e, ThemeProvider theme, StateSetter setSheetState,
+      {bool isFeedback = false}) {
     final isSelected = _selectedElement == e.id;
     return GestureDetector(
       onTap: () {

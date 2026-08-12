@@ -95,7 +95,7 @@ class _NotificationsCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: notification.color.withOpacity(0.1),
+                      color: notification.color.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
@@ -179,7 +179,7 @@ class _ActivitiesCard extends StatelessWidget {
                   Icon(
                     Icons.circle,
                     size: 4,
-                    color: primaryColor.withOpacity(0.6),
+                    color: primaryColor.withValues(alpha: 0.6),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
