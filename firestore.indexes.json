@@ -74,32 +74,6 @@
       ]
     },
     {
-      "collectionGroup": "team_invitations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "teamId", "order": "ASCENDING" },
-        { "fieldPath": "invitedEmail", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "team_invitations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "invitedEmail", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "team_permissions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "teamId", "order": "ASCENDING" },
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "resourceType", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "shared_invoices",
       "queryScope": "COLLECTION",
       "fields": [

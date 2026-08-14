@@ -22,7 +22,6 @@ import '../models/invoice_template.dart';
 import '../models/financial_stats.dart';
 import '../models/activity_log.dart';
 import '../models/team.dart';
-import '../models/team_invitation.dart';
 import '../models/shared_invoice.dart';
 
 class HiveService {
@@ -74,9 +73,8 @@ class HiveService {
     registerAdapter(AppUserAdapter());
     registerAdapter(AppNotificationAdapter()); // typeId 16
     registerAdapter(ActivityLogAdapter()); // typeId 17
-    registerAdapter(TeamAdapter()); // typeId 18
-    registerAdapter(TeamInvitationAdapter()); // typeId 19
-    registerAdapter(SharedInvoiceAdapter()); // typeId 20
+    registerAdapter(TeamAdapter()); // typeId 20
+    registerAdapter(SharedInvoiceAdapter()); // typeId 23
   }
 
   static Future<void> _openAllBoxes() async {

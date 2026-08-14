@@ -71,7 +71,8 @@ class _StockScreenState extends State<StockScreen> {
           content: Text('Erreur chargement: $e'),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       setState(() => _filteredProducts = []);
@@ -84,10 +85,12 @@ class _StockScreenState extends State<StockScreen> {
     var list = List<Product>.from(_products);
 
     if (_searchQuery.isNotEmpty) {
-      list = list.where((p) =>
-        p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        (p.barcode?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false)
-      ).toList();
+      list = list
+          .where((p) =>
+              p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              (p.barcode?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
+                  false))
+          .toList();
     }
 
     if (_selectedCategory != null && _selectedCategory!.isNotEmpty) {
@@ -118,7 +121,8 @@ class _StockScreenState extends State<StockScreen> {
           content: const Text('La quantité ne peut pas être négative'),
           backgroundColor: Colors.orangeAccent,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -140,7 +144,8 @@ class _StockScreenState extends State<StockScreen> {
           content: Text('Erreur mise à jour: $e'),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -153,12 +158,14 @@ class _StockScreenState extends State<StockScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            Icon(Icons.warning_amber_rounded,
+                color: Colors.redAccent, size: 28),
             SizedBox(width: 10),
             Text('Confirmation', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Text('Voulez-vous vraiment supprimer définitivement "${product.name}" ?'),
+        content: Text(
+            'Voulez-vous vraiment supprimer définitivement "${product.name}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -170,7 +177,8 @@ class _StockScreenState extends State<StockScreen> {
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text('Supprimer'),
           ),
@@ -210,7 +218,8 @@ class _StockScreenState extends State<StockScreen> {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
             SizedBox(width: 10),
-            Text('Stock critique', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Stock critique',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         content: SizedBox(
@@ -233,15 +242,20 @@ class _StockScreenState extends State<StockScreen> {
                   child: Center(
                     child: Text(
                       product.name[0].toUpperCase(),
-                      style: TextStyle(color: product.statusColor, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: product.statusColor,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
-                title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text('En stock : ${product.quantity} (Seuil : ${product.minStock})'),
+                title: Text(product.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                    'En stock : ${product.quantity} (Seuil : ${product.minStock})'),
                 trailing: Text(
                   product.formattedPrice,
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.redAccent),
                 ),
               );
             },
@@ -275,7 +289,10 @@ class _StockScreenState extends State<StockScreen> {
           Expanded(
             child: Text(
               '${lowStock.length} produit(s) en alerte stock',
-              style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600, fontSize: 13),
+              style: const TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
             ),
           ),
           Material(
@@ -288,7 +305,10 @@ class _StockScreenState extends State<StockScreen> {
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Text(
                   'Consulter',
-                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -314,7 +334,8 @@ class _StockScreenState extends State<StockScreen> {
         backgroundColor: isDark ? const Color(0xFF151515) : Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: textColor, size: 20),
           onPressed: () => context.go('/dashboard'),
         ),
         title: _isSearching
@@ -332,9 +353,11 @@ class _StockScreenState extends State<StockScreen> {
                     hintText: 'Rechercher un produit...',
                     hintStyle: TextStyle(color: subTextColor, fontSize: 14),
                     border: InputBorder.none,
-                    prefixIcon: Icon(Icons.search_rounded, color: subTextColor, size: 20),
+                    prefixIcon: Icon(Icons.search_rounded,
+                        color: subTextColor, size: 20),
                     suffixIcon: IconButton(
-                      icon: Icon(Icons.close_rounded, color: subTextColor, size: 18),
+                      icon: Icon(Icons.close_rounded,
+                          color: subTextColor, size: 18),
                       onPressed: () {
                         setState(() {
                           _searchController.clear();
@@ -356,7 +379,10 @@ class _StockScreenState extends State<StockScreen> {
               )
             : Text(
                 'Gestion de Stock',
-                style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18),
+                style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18),
               ),
         actions: [
           if (!_isSearching)
@@ -367,7 +393,8 @@ class _StockScreenState extends State<StockScreen> {
           // Filtre catégorie
           PopupMenuButton<String>(
             icon: Icon(Icons.filter_list_rounded, color: textColor),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onSelected: (value) {
               setState(() {
                 _selectedCategory = value.isEmpty ? null : value;
@@ -387,7 +414,8 @@ class _StockScreenState extends State<StockScreen> {
                   child: Row(
                     children: [
                       if (_selectedCategory == cat)
-                        Icon(Icons.check_rounded, color: primaryColor, size: 16),
+                        Icon(Icons.check_rounded,
+                            color: primaryColor, size: 16),
                       const SizedBox(width: 8),
                       Text(cat),
                     ],
@@ -400,7 +428,8 @@ class _StockScreenState extends State<StockScreen> {
           // Tri
           PopupMenuButton<String>(
             icon: Icon(Icons.sort_rounded, color: textColor),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onSelected: (value) {
               setState(() {
                 _sortOption = value;
@@ -431,7 +460,8 @@ class _StockScreenState extends State<StockScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredProducts.isEmpty
-                    ? _buildEmptyState(isDark, textColor, subTextColor, primaryColor)
+                    ? _buildEmptyState(
+                        isDark, textColor, subTextColor, primaryColor)
                     : RefreshIndicator(
                         onRefresh: _loadProducts,
                         color: primaryColor,
@@ -441,7 +471,8 @@ class _StockScreenState extends State<StockScreen> {
                           physics: const AlwaysScrollableScrollPhysics(
                             parent: BouncingScrollPhysics(),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           children: [
                             // 📊 Cartes résumé (maquette inventaire)
                             _buildSummaryCards(
@@ -452,46 +483,24 @@ class _StockScreenState extends State<StockScreen> {
                             ),
                             const SizedBox(height: 16),
                             // En-tête Inventaire
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Inventaire',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: textColor,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () {},
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        'Voir tout',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: primaryColor,
-                                        ),
-                                      ),
-                                      Icon(Icons.chevron_right,
-                                          size: 16, color: primaryColor),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Inventaire',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: textColor,
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            ..._filteredProducts.map((product) =>
-                                _buildProductCard(
-                                  product,
-                                  isDark,
-                                  textColor,
-                                  subTextColor,
-                                  cardColor,
-                                  primaryColor,
-                                )),
+                            ..._filteredProducts
+                                .map((product) => _buildProductCard(
+                                      product,
+                                      isDark,
+                                      textColor,
+                                      subTextColor,
+                                      cardColor,
+                                      primaryColor,
+                                    )),
                           ],
                         ),
                       ),
@@ -502,13 +511,15 @@ class _StockScreenState extends State<StockScreen> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const CreateProductScreen()),
+            MaterialPageRoute(
+                builder: (context) => const CreateProductScreen()),
           ).then((_) => _loadProducts());
         },
         backgroundColor: primaryColor,
         elevation: 4,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Produit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text('Produit',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -681,7 +692,9 @@ class _StockScreenState extends State<StockScreen> {
         else
           const SizedBox(width: 18),
         const SizedBox(width: 10),
-        Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+        Text(title,
+            style: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
       ],
     );
   }
@@ -701,7 +714,9 @@ class _StockScreenState extends State<StockScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.06),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.2)
+                : Colors.grey.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -712,156 +727,225 @@ class _StockScreenState extends State<StockScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              // Avatar / photo du produit
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      product.statusColor.withValues(alpha: 0.25),
-                      product.statusColor.withValues(alpha: 0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: product.imagePath != null &&
-                          product.imagePath!.isNotEmpty
-                      ? LogoImage(
-                          path: product.imagePath,
-                          width: 58,
-                          height: 58,
-                          fit: BoxFit.cover,
-                        )
-                      : Center(
-                          child: Text(
-                            product.name[0].toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: product.statusColor,
-                            ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () async {
+              await context.push('/dashboard/stock/products/${product.id}');
+              if (mounted) _loadProducts();
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Ligne principale : avatar, infos, prix et menu
+                  Row(
+                    children: [
+                      // Avatar / photo du produit
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              product.statusColor.withValues(alpha: 0.25),
+                              product.statusColor.withValues(alpha: 0.1),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              // Détails textuels du produit
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: product.imagePath != null &&
+                                  product.imagePath!.isNotEmpty
+                              ? LogoImage(
+                                  path: product.imagePath,
+                                  width: 58,
+                                  height: 58,
+                                  fit: BoxFit.cover,
+                                )
+                              : Center(
+                                  child: Text(
+                                    product.name[0].toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: product.statusColor,
+                                    ),
+                                  ),
+                                ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (product.barcode != null && product.barcode!.isNotEmpty)
-                      Text(
-                        'REF: ${product.barcode}',
-                        style: TextStyle(fontSize: 11, color: subTextColor, letterSpacing: 0.5),
-                      ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        if (product.category.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              product.category.toUpperCase(),
+                      const SizedBox(width: 14),
+                      // Détails textuels du produit
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              product.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 9,
-                                color: primaryColor,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
                               ),
                             ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: product.statusColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            product.statusLabel.toUpperCase(),
+                            const SizedBox(height: 2),
+                            if (product.barcode != null &&
+                                product.barcode!.isNotEmpty)
+                              Text(
+                                'REF: ${product.barcode}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: subTextColor,
+                                    letterSpacing: 0.5),
+                              ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                if (product.category.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      product.category.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: product.statusColor
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    product.statusLabel.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: product.statusColor,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Prix et valeur totale du stock
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            product.formattedPrice,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 9,
-                              color: product.statusColor,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              color: primaryColor,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'T: ${product.formattedStockValue}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, color: subTextColor),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      // Menu contextuel discret
+                      SizedBox(
+                        width: 32,
+                        child: PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert_rounded,
+                              color: subTextColor, size: 20),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      CreateProductScreen(product: product),
+                                ),
+                              ).then((_) => _loadProducts());
+                            } else if (value == 'delete') {
+                              _deleteProduct(product);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Modifier'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline,
+                                      color: Colors.redAccent, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Supprimer',
+                                      style:
+                                          TextStyle(color: Colors.redAccent)),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Section de droite : Prix et Ajustement (largeur bornée pour
-              // éviter le chevauchement avec le champ quantité sur petit écran)
-              SizedBox(
-                width: 86,
-                child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    product.formattedPrice,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: primaryColor,
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'T: ${product.formattedStockValue}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: subTextColor),
-                  ),
-                  const SizedBox(height: 10),
-                  // Sélecteur de quantité en forme d'îlot tactile (largeur
-                  // bornée : texte avec ellipsis pour éviter le débordement)
+                  const SizedBox(height: 12),
+                  // Sélecteur de quantité pleine largeur sous la carte
                   Container(
-                    height: 32,
+                    height: 36,
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.grey[50],
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
                       ),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.remove_rounded, size: 14, color: subTextColor),
+                          icon: Icon(Icons.remove_rounded,
+                              size: 16, color: subTextColor),
                           onPressed: () => _updateQuantity(product, -1),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          constraints:
+                              const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
                         Expanded(
                           child: Text(
@@ -871,67 +955,25 @@ class _StockScreenState extends State<StockScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w900,
-                              fontSize: 13,
+                              fontSize: 14,
                               color: textColor,
                             ),
                           ),
                         ),
                         IconButton(
-                          icon: Icon(Icons.add_rounded, size: 14, color: primaryColor),
+                          icon: Icon(Icons.add_rounded,
+                              size: 16, color: primaryColor),
                           onPressed: () => _updateQuantity(product, 1),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          constraints:
+                              const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
                       ],
                     ),
                   ),
                 ],
-                ),
               ),
-              // Menu contextuel discret (largeur fixe pour éviter le
-              // chevauchement avec le champ quantité sur petit écran)
-              SizedBox(
-                width: 32,
-                child: PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert_rounded, color: subTextColor, size: 20),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CreateProductScreen(product: product),
-                        ),
-                      ).then((_) => _loadProducts());
-                    } else if (value == 'delete') {
-                      _deleteProduct(product);
-                    }
-                  },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined, size: 18),
-                        SizedBox(width: 8),
-                        Text('Modifier'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                        SizedBox(width: 8),
-                        Text('Supprimer', style: TextStyle(color: Colors.redAccent)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -956,7 +998,8 @@ class _StockScreenState extends State<StockScreen> {
                 color: primaryColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.inventory_2_rounded, size: 70, color: primaryColor),
+              child: Icon(Icons.inventory_2_rounded,
+                  size: 70, color: primaryColor),
             ),
             const SizedBox(height: 24),
             Text(
@@ -987,7 +1030,8 @@ class _StockScreenState extends State<StockScreen> {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const CreateProductScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const CreateProductScreen()),
                   ).then((_) => _loadProducts());
                 },
                 icon: const Icon(Icons.add_rounded),
@@ -995,8 +1039,10 @@ class _StockScreenState extends State<StockScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                   elevation: 0,
                 ),
               ),

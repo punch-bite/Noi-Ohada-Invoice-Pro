@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../models/shared_invoice.dart';
 import '../../models/team.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/stock_service.dart';
@@ -34,6 +35,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   List<SharedInvoice> _shares = [];
   Map<String, dynamic> _stats = {};
   bool _sharing = false;
+  bool _addingMember = false;
 
   @override
   void initState() {
@@ -121,11 +123,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          if (isOwner || isAdmin)
-            IconButton(
-              icon: Icon(Icons.person_add, color: textColor),
-              onPressed: () => context.push('/teams/${_team!.id}/invite'),
-            ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: textColor),
             onSelected: (value) {
@@ -199,13 +196,28 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               const SizedBox(height: 24),
 
               // ===== Liste des membres =====
-              Text(
-                'Membres (${_team!.memberIds.length})',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Membres (${_team!.memberIds.length})',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                  if (isOwner || isAdmin)
+                    TextButton.icon(
+                      onPressed: _addingMember ? null : _showAddMemberDialog,
+                      icon: const Icon(Icons.person_add_alt_1, size: 18),
+                      label: const Text('Ajouter'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: primaryColor,
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               ListView.builder(
@@ -724,15 +736,36 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, size: 16, color: subTextColor),
               onSelected: (value) async {
-                if (value == 'promote') {
-                  await _teamService.promoteToAdmin(_team!.id, memberId);
+                try {
+                  if (value == 'promote') {
+                    await _teamService.promoteToAdmin(
+                      teamId: _team!.id,
+                      userId: memberId,
+                      requestedBy: currentUserId,
+                    );
+                  } else if (value == 'demote') {
+                    await _teamService.demoteFromAdmin(
+                      teamId: _team!.id,
+                      userId: memberId,
+                      requestedBy: currentUserId,
+                    );
+                  } else if (value == 'remove') {
+                    await _teamService.removeMember(
+                      teamId: _team!.id,
+                      userId: memberId,
+                      requestedBy: currentUserId,
+                    );
+                  }
+                  if (!mounted) return;
                   _loadData();
-                } else if (value == 'demote') {
-                  await _teamService.demoteFromAdmin(_team!.id, memberId);
-                  _loadData();
-                } else if (value == 'remove') {
-                  await _teamService.removeMember(_team!.id, memberId);
-                  _loadData();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Erreur: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               },
               itemBuilder: (context) => [
@@ -757,6 +790,152 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     );
   }
 
+  Future<void> _showAddMemberDialog() async {
+    final sub = context.read<SubscriptionProvider>();
+    final current = _team!.memberIds.length;
+    final max = sub.maxTeamMembers;
+    if (max > 0 && current >= max) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Limite de membres atteinte pour votre formule'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final theme = context.read<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
+    final emailController = TextEditingController();
+    String role = 'member';
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Text('Ajouter un membre'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Saisissez l\'email du compte NOI OHADA du membre. '
+                    'Il pourra consulter et partager les données de l\'équipe.',
+                    style: TextStyle(fontSize: 12, color: subTextColor),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
+                      labelText: 'Email du membre *',
+                      labelStyle: TextStyle(color: subTextColor),
+                      prefixIcon:
+                          Icon(Icons.email_outlined, color: primaryColor),
+                      filled: true,
+                      fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: role,
+                    style: TextStyle(color: textColor),
+                    dropdownColor: isDark ? Colors.grey[850] : Colors.white,
+                    decoration: InputDecoration(
+                      labelText: 'Rôle',
+                      labelStyle: TextStyle(color: subTextColor),
+                      prefixIcon: Icon(Icons.admin_panel_settings,
+                          color: primaryColor),
+                      filled: true,
+                      fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'member', child: Text('Membre')),
+                      DropdownMenuItem(
+                          value: 'admin', child: Text('Administrateur')),
+                    ],
+                    onChanged: (v) =>
+                        setDialogState(() => role = v ?? 'member'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Annuler'),
+              ),
+              ElevatedButton(
+                onPressed: () =>
+                    Navigator.pop(dialogContext, emailController.text.trim()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Ajouter'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    emailController.dispose();
+
+    if (email == null || email.isEmpty) return;
+    if (!email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email invalide'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    if (uid.isEmpty) return;
+    setState(() => _addingMember = true);
+    try {
+      await _teamService.addMemberByEmail(
+        teamId: _team!.id,
+        email: email,
+        role: role,
+        requestedBy: uid,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Membre ajouté à l\'équipe'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _addingMember = false);
+    }
+  }
+
   Future<void> _leaveTeam() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -774,7 +953,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       ),
     );
     if (confirm == true) {
-      await _teamService.removeMember(_team!.id, context.read<AppAuthProvider>().user!.id);
+      await _teamService.leaveTeam(
+        teamId: _team!.id,
+        userId: context.read<AppAuthProvider>().user!.id,
+      );
       if (mounted) context.pop();
     }
   }

@@ -1,11 +1,8 @@
-
 // lib/router/app_router.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
-import 'package:noi_ohada_invoice_pro/screens/teams/invitations_screen.dart';
-import 'package:noi_ohada_invoice_pro/screens/teams/invite_member_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_detail_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -26,7 +23,6 @@ import '../screens/auth/verify_2fa_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/dashboard/profile_update_screen.dart';
 import '../screens/dashboard/stock/stock_screen.dart';
-import '../screens/dashboard/stock/products_screen.dart';
 import '../screens/dashboard/stock/product_detail_screen.dart';
 import '../screens/dashboard/stock/create_delivery_screen.dart';
 
@@ -51,7 +47,6 @@ import '../screens/dashboard/drive_sync_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
-
 
 import '../screens/customization/invoice_customization_screen.dart';
 import '../screens/customization/template_store_screen.dart';
@@ -182,17 +177,6 @@ class AppRouter {
           return TeamDetailScreen(teamId: id);
         },
       ),
-      GoRoute(
-        path: '/teams/:id/invite',
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return InviteMemberScreen(teamId: id);
-        },
-      ),
-      GoRoute(
-        path: '/teams/invitations',
-        builder: (context, state) => const InvitationsScreen(),
-      ),
       // Support
       GoRoute(
         path: '/support',
@@ -214,13 +198,11 @@ class AppRouter {
       ),
       GoRoute(
         path: '/support/legal/privacy',
-        builder: (context, state) =>
-            const LegalScreen(page: LegalPage.privacy),
+        builder: (context, state) => const LegalScreen(page: LegalPage.privacy),
       ),
       GoRoute(
         path: '/support/legal/license',
-        builder: (context, state) =>
-            const LegalScreen(page: LegalPage.license),
+        builder: (context, state) => const LegalScreen(page: LegalPage.license),
       ),
       GoRoute(
         path: '/support/legal/ownership',
@@ -238,7 +220,7 @@ class AppRouter {
         builder: (context, state) => const SessionsScreen(),
       ),
 
-            // Customisation visuelle des factures
+      // Customisation visuelle des factures
       GoRoute(
         path: '/customization',
         builder: (context, state) => const InvoiceCustomizationScreen(),
@@ -271,8 +253,10 @@ class AppRouter {
           if (extra is InvoiceTemplate) {
             return TemplateWorkspaceScreen(template: extra);
           }
-          if (extra is Map<String, dynamic> && extra['template'] is InvoiceTemplate) {
-            return TemplateWorkspaceScreen(template: extra['template'] as InvoiceTemplate);
+          if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
+            return TemplateWorkspaceScreen(
+                template: extra['template'] as InvoiceTemplate);
           }
           return const SizedBox.shrink();
         },
@@ -285,7 +269,8 @@ class AppRouter {
           if (extra is InvoiceTemplate) {
             return TemplatePreviewScreen(template: extra);
           }
-          if (extra is Map<String, dynamic> && extra['template'] is InvoiceTemplate) {
+          if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
             return TemplatePreviewScreen(
               template: extra['template'] as InvoiceTemplate,
               settings: extra['settings'] as InvoiceSettings?,
@@ -352,10 +337,6 @@ class AppRouter {
       GoRoute(
         path: '/dashboard/stock',
         builder: (context, state) => const StockScreen(),
-      ),
-      GoRoute(
-        path: '/dashboard/stock/products',
-        builder: (context, state) => const ProductsScreen(),
       ),
       GoRoute(
         path: '/dashboard/stock/products/:id',

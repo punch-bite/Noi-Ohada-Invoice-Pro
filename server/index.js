@@ -812,6 +812,192 @@ app.post(
   }
 );
 
+// ============================================================
+//  GESTION DES MEMBRES D'ÉQUIPE (via SDK admin)
+//
+//  🔒 Le client ne peut PAS écrire sur `teams` (règles : seul le
+//  propriétaire / admin global), ni résoudre un email → UID (lecture
+//  `users` restreinte), ni révoquer l'accès d'un membre sur les ressources
+//  des autres. Cet endpoint centralise ces opérations (SDK admin) :
+//    add      : ajoute un membre par EMAIL (résout email → UID)
+//    remove   : retire un membre + révoque son accès aux partages
+//    promote / demote : change le rôle (admin), utilisable par un admin
+//    leave    : un membre quitte + perd l'accès aux partages
+// ============================================================
+app.post(
+  '/team/manage-member',
+  rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'team' }),
+  async (req, res) => {
+    try {
+      const { action, teamId, userId, email, role, requestedBy } =
+        req.body || {};
+      if (!teamId || !requestedBy) {
+        return res.status(400).json({ error: 'teamId/requestedBy requis' });
+      }
+
+      const teamRef = db.collection('teams').doc(teamId);
+      const teamSnap = await teamRef.get();
+      if (!teamSnap.exists) {
+        return res.status(404).json({ error: 'Équipe non trouvée' });
+      }
+      const team = teamSnap.data() || {};
+      if (team.isActive === false) {
+        return res.status(400).json({ error: 'Équipe désactivée' });
+      }
+      const admins = Array.isArray(team.adminIds) ? team.adminIds : [];
+      const members = Array.isArray(team.memberIds) ? team.memberIds : [];
+      const isManager =
+        team.ownerId === requestedBy || admins.includes(requestedBy);
+
+      // ===== ADD : ajouter un membre par email =====
+      if (action === 'add') {
+        if (!isManager) {
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        if (!email || !isValidEmail(email)) {
+          return res.status(400).json({ error: 'Email invalide' });
+        }
+        const memberRole = role === 'admin' ? 'admin' : 'member';
+        // Résout l'email → UID via la collection `users` (le module Auth
+        // firebase-admin tire `jose`, un paquet ESM incompatible avec le
+        // runtime Vercel → on l'évite ici). Firebase Auth normalise les
+        // emails en minuscules, on compare donc en minuscules.
+        const emailKey = String(email).trim().toLowerCase();
+        const userSnap = await db
+          .collection('users')
+          .where('email', '==', emailKey)
+          .limit(1)
+          .get();
+        if (userSnap.empty) {
+          return res
+            .status(404)
+            .json({ error: 'Aucun compte NOI OHADA avec cet email' });
+        }
+        const memberUid = userSnap.docs[0].id;
+        const userData = userSnap.docs[0].data() || {};
+        if (members.includes(memberUid) || admins.includes(memberUid)) {
+          return res.json({ ok: true, alreadyMember: true, uid: memberUid });
+        }
+        await teamRef.update({
+          memberIds: FieldValue.arrayUnion([memberUid]),
+          adminIds:
+            memberRole === 'admin'
+              ? FieldValue.arrayUnion([memberUid])
+              : FieldValue.arrayRemove([memberUid]),
+          updatedAt: serverTimestamp(),
+        });
+        logger.info('team add-member', {
+          teamId,
+          uid: memberUid,
+          by: requestedBy,
+        });
+        return res.json({
+          ok: true,
+          uid: memberUid,
+          name: userData.displayName || userData.name || '',
+          email: userData.email || emailKey,
+        });
+      }
+
+      // ===== REMOVE / LEAVE : retirer un membre + révoquer l'accès =====
+      if (action === 'remove' || action === 'leave') {
+        if (!userId) {
+          return res.status(400).json({ error: 'userId requis' });
+        }
+        if (action === 'remove') {
+          if (!isManager) {
+            return res.status(403).json({ error: 'Non autorisé' });
+          }
+        } else if (userId !== requestedBy) {
+          // leave : on ne peut quitter que soi-même.
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        if (team.ownerId === userId) {
+          return res
+            .status(400)
+            .json({ error: 'Le propriétaire ne peut pas être retiré' });
+        }
+        await teamRef.update({
+          memberIds: FieldValue.arrayRemove([userId]),
+          adminIds: FieldValue.arrayRemove([userId]),
+          updatedAt: serverTimestamp(),
+        });
+        // Révocation : désactive les partages qui mentionnaient ce membre et
+        // le retire des ressources partagées (il perd l'accès).
+        const shares = await db
+          .collection('shared_invoices')
+          .where('teamId', '==', teamId)
+          .where('isActive', '==', true)
+          .get();
+        for (const s of shares.docs) {
+          const d = s.data() || {};
+          if (!Array.isArray(d.sharedWith) || !d.sharedWith.includes(userId)) {
+            continue;
+          }
+          await s.ref.update({ isActive: false, expiresAt: serverTimestamp() });
+          if (d.resourceType && d.invoiceId) {
+            const coll =
+              d.resourceType === 'product'
+                ? 'products'
+                : d.resourceType === 'client'
+                ? 'clients'
+                : 'invoices';
+            try {
+              await db
+                .collection(coll)
+                .doc(d.invoiceId)
+                .update({ sharedWithUsers: FieldValue.arrayRemove([userId]) });
+            } catch (_) {
+              /* doc introuvable / déjà retiré */
+            }
+          }
+        }
+        logger.info('team remove/leave', {
+          teamId,
+          userId,
+          action,
+          by: requestedBy,
+        });
+        return res.json({ ok: true });
+      }
+
+      // ===== PROMOTE / DEMOTE : changement de rôle =====
+      if (action === 'promote' || action === 'demote') {
+        if (!isManager) {
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        if (!userId) {
+          return res.status(400).json({ error: 'userId requis' });
+        }
+        if (team.ownerId === userId && action === 'demote') {
+          return res
+            .status(400)
+            .json({ error: 'Le propriétaire ne peut pas être rétrogradé' });
+        }
+        await teamRef.update({
+          adminIds:
+            action === 'promote'
+              ? FieldValue.arrayUnion([userId])
+              : FieldValue.arrayRemove([userId]),
+          updatedAt: serverTimestamp(),
+        });
+        logger.info('team promote/demote', {
+          teamId,
+          userId,
+          action,
+          by: requestedBy,
+        });
+        return res.json({ ok: true });
+      }
+
+      return res.status(400).json({ error: 'Action inconnue' });
+    } catch (e) {
+      logger.error('❌ /team/manage-member error:', { error: e.message });
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
+
 app.get('/', (req, res) =>
   res.json({
     service: 'NOI OHADA — callbacks paiement (ENKAP) + email',
@@ -826,6 +1012,7 @@ app.get('/', (req, res) =>
       'POST /email/send (SMTP côté serveur)',
       'POST /wallet/credit (vérifié ENKAP)',
       'POST /template/purchase (vérifié ENKAP)',
+      'POST /team/manage-member (gestion des membres équipe)',
       'GET /health',
     ],
   })

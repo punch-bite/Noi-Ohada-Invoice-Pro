@@ -162,17 +162,6 @@ class CustomDrawer extends StatelessWidget {
                   premium: !subscriptionProvider.hasTeamAccess,
                 ),
                 _buildTile(
-                  icon: Icons.mail_outline,
-                  label: 'Invitations',
-                  onTap: () {
-                    Navigator.pop(context);
-                    context.push('/teams/invitations');
-                  },
-                  isDark: isDark,
-                  textColor: textColor,
-                  subTextColor: subTextColor,
-                ),
-                _buildTile(
                   icon: Icons.alarm_outlined,
                   label: 'Rappels',
                   onTap: () {

@@ -289,45 +289,4 @@ class MailService {
 ''';
   }
 
-  /// 📨 Email d'invitation à rejoindre une équipe (avec lien d'acceptation).
-  static String getTeamInvitationTemplate({
-    required String inviterName,
-    required String teamName,
-    required String acceptLink,
-    required String roleLabel,
-  }) {
-    return '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #4338CA, #7C3AED); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { padding: 20px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px; }
-    .footer { text-align: center; padding: 15px; color: #777; font-size: 12px; }
-    .btn { background: #4338CA; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; }
-    .badge { display: inline-block; background: #E9B949; color: #7A5C00; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header"><h1>Invitation à rejoindre une équipe</h1></div>
-    <div class="content">
-      <h2>Bonjour,</h2>
-      <p><strong>$inviterName</strong> vous invite à rejoindre l'équipe <strong>$teamName</strong> sur <strong>Noi OHADA Invoice Pro</strong>.</p>
-      <p>Rôle proposé : <span class="badge">${roleLabel.toUpperCase()}</span></p>
-      <p>Cliquez sur le bouton ci-dessous pour accepter l'invitation :</p>
-      <p style="text-align:center;"><a href="$acceptLink" class="btn">Accepter l'invitation</a></p>
-      <p><em>Cette invitation expire dans 1 jour.</em></p>
-      <p>Si vous n'êtes pas concerné, ignorez cet email.</p>
-      <p>Cordialement,<br>L'équipe OHADA Invoice Pro</p>
-    </div>
-    <div class="footer">&copy; 2026 OHADA Invoice Pro - Tous droits réservés</div>
-  </div>
-</body>
-</html>
-''';
-  }
 }

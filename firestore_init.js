@@ -409,16 +409,6 @@ async function initializeFirestore() {
     await db.collection('teams').doc('team_1').set(team);
     console.log('✅ Équipe créée');
 
-    // --- Invitation d'équipe ---
-    const teamInvitation = { id: 'invite_1', teamId: 'team_1', invitedEmail: 'membre@exemple.com', invitedBy: ADMIN_UID, role: 'member', invitationToken: 'token_exemple', status: 'pending', expiresAt: new Date(Date.now() + 7*24*3600*1000), createdAt: new Date() };
-    await db.collection('team_invitations').doc('invite_1').set(teamInvitation);
-    console.log('✅ Invitation créée');
-
-    // --- Permission d'équipe ---
-    const teamPermission = { id: 'perm_1', teamId: 'team_1', userId: ADMIN_UID, resourceType: 'invoice', canRead: true, canWrite: true, canDelete: false, grantedBy: ADMIN_UID, createdAt: new Date() };
-        await db.collection('team_permissions').doc('perm_1').set(teamPermission);
-    console.log('✅ Permission créée');
-
     // --- Synchronisation Google Drive (état) ---
     const driveSync = { id: 'drive_sync_1', userId: ADMIN_UID, enabled: false, folderId: '', lastSyncAt: null, intervalDays: 7, createdAt: new Date(), updatedAt: new Date() };
     await db.collection('drive_sync').doc('drive_sync_1').set(driveSync);

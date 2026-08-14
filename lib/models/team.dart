@@ -88,8 +88,6 @@ class Team {
     return DateTime.now();
   }
 
-  bool get isOwner => false; // Remplacé par une méthode avec userId
-
   bool isOwnerOf(String userId) => ownerId == userId;
   bool isAdmin(String userId) => adminIds.contains(userId);
   bool isMember(String userId) => memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
