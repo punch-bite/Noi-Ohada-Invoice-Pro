@@ -119,9 +119,9 @@ class _LandingScreenState extends State<LandingScreen> {
             child: Icon(slide.icon, size: 80, color: Colors.white),
           ),
           const SizedBox(height: 48),
-          Text(slide.title, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.textColor)),
+          Text(slide.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.textColor)),
           const SizedBox(height: 16),
-          Text(slide.description, textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: theme.subTextColor, height: 1.5)),
+          Text(slide.description, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: theme.subTextColor, height: 1.5)),
         ],
       ),
     );

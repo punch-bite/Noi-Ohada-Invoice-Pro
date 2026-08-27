@@ -15,7 +15,7 @@ const db = getFirestore();
 // ============================================
 // ID ADMIN (⚠️ à remplacer par l'UID réel Firebase Auth)
 // ============================================
-const ADMIN_UID = 'admin_user_id';
+const ADMIN_UID = crypto.randomUUID();
 
 // ============================================
 // 1. PLANS
@@ -187,10 +187,10 @@ const defaultTemplate = {
 // ============================================
 const adminUser = {
   id: ADMIN_UID, // ⚠️ À remplacer par l'UID réel de votre admin
-  email: 'admin@ohada-invoice-pro.com',
+  email: 'nixmmobilier@gmail.com',
   displayName: 'Administrateur',
-  phone: '+237 6XX XX XX XX',
-  companyName: 'NoiOHADA Invoice Pro',
+  phone: '+237 620409383',
+  companyName: 'NOI OHADA Invoice Pro',
   companyAddress: 'Douala, Cameroun',
   taxId: 'RC123456789',
   subscriptionId: 'sub_admin_default',
@@ -205,7 +205,7 @@ const adminUser = {
 // ============================================
 const adminSubscription = {
   id: 'sub_admin_default',
-  userId: ADMIN_UID, // ⚠️ Même UID que ci-dessus
+  userId: adminUser.id, // ⚠️ Même UID que ci-dessus
   planId: 'unlimited',
   startDate: new Date('2024-01-01'),
   endDate: new Date('2099-12-31'),
@@ -230,7 +230,7 @@ const adminSubscription = {
 // ============================================
 const supplier = {
   id: 'supplier_1',
-  userId: ADMIN_UID,
+  userId: adminUser.id,
   name: 'Fournisseur Exemple SARL',
   email: 'contact@fournisseur.com',
   phone: '+237 6XX XX XX XX',
@@ -249,7 +249,7 @@ const supplier = {
 // ============================================
 const product = {
   id: 'product_1',
-  userId: ADMIN_UID,
+  userId: adminUser.id,
   name: 'Ordinateur portable HP',
   description: 'Ordinateur portable HP EliteBook',
   category: 'Électronique',
@@ -272,7 +272,7 @@ const product = {
 // ============================================
 const client = {
   id: 'client_1',
-  userId: ADMIN_UID,
+  userId: adminUser.id,
   name: 'Client Exemple SARL',
   address: 'Douala, Cameroun',
   taxId: 'RC1122334455',
@@ -289,7 +289,7 @@ const client = {
 // ============================================
 const invoice = {
   id: 'invoice_1',
-  userId: ADMIN_UID, // ⚠️ Requis par les règles de sécurité
+  userId: adminUser.id, // ⚠️ Requis par les règles de sécurité
   companyId: 'default_company',
   clientId: 'client_1',
   invoiceNumber: 'FA-2026-001',
@@ -323,10 +323,10 @@ const invoice = {
 // ============================================
 const log = {
   id: 'log_1',
-  userId: ADMIN_UID,
-  userEmail: 'admin@ohada-invoice-pro.com',
+  userId: adminUser.id,
+  userEmail: adminUser.email,
   action: 'login',
-  targetId: ADMIN_UID,
+  targetId: adminUser.id,
   targetType: 'user',
   details: { ip: '192.168.1.1', device: 'Chrome' },
   timestamp: new Date()

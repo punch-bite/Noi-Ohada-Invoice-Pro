@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_detail_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/team_invitations_screen.dart';
 import 'package:provider/provider.dart';
 
 // Modèles
@@ -12,6 +13,7 @@ import '../models/plan.dart';
 
 // Providers
 import '../providers/auth_provider.dart';
+import '../providers/subscription_provider.dart';
 
 // Écrans - Auth / Landing
 import '../screens/auth/login_screen.dart';
@@ -168,7 +170,18 @@ class AppRouter {
       ),
       GoRoute(
         path: '/teams/create',
+        // 🔒 L'équipe est une fonctionnalité premium : la création est
+        // redirigée vers l'abonnement pour les utilisateurs gratuits.
+        redirect: (context, state) {
+          final sub = Provider.of<SubscriptionProvider>(context, listen: false);
+          if (!sub.hasTeamAccess) return '/subscription';
+          return null;
+        },
         builder: (context, state) => const CreateTeamScreen(),
+      ),
+      GoRoute(
+        path: '/teams/invitations',
+        builder: (context, state) => const TeamInvitationsScreen(),
       ),
       GoRoute(
         path: '/teams/:id',

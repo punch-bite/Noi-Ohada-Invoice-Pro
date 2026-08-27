@@ -4,16 +4,24 @@
 // Les notifications sont stockées dans la collection `notifications`,
 // scopée par l'UID, et gardées en mémoire pour une UI réactive.
 //
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../models/notification.dart';
 import '../services/database_service.dart';
+import '../widgets/app_toast.dart';
 
 class NotificationService extends ChangeNotifier {
   final DatabaseService _db = DatabaseService();
 
   // Utilisation d'une liste locale pour optimiser l'accès UI (cache mémoire)
   List<AppNotification> _notifications = [];
+
+  // Écoute temps réel (toast des invitations d'équipe).
+  StreamSubscription<List<AppNotification>>? _sub;
+  String? _listeningUid;
+  bool _firstEmission = true;
+  final Set<String> _seenTeamInviteIds = {};
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
@@ -23,6 +31,7 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> init() async {
     await refresh();
+    startListening();
     notifyListeners();
   }
 
@@ -32,9 +41,63 @@ class NotificationService extends ChangeNotifier {
       final items = await _db.getNotifications();
       _notifications = items;
       notifyListeners();
+      startListening();
     } catch (e) {
       debugPrint('⚠️ NotificationService.refresh: $e');
     }
+  }
+
+  /// Écoute en temps réel les notifications de l'utilisateur connecté.
+  /// Affiche un TOAST (SnackBar global) quand une invitation d'équipe arrive
+  /// en direct, et met à jour la liste en mémoire.
+  void startListening() {
+    final uid = _db.currentUserId;
+    if (uid == null || uid.isEmpty) return;
+    if (_listeningUid == uid && _sub != null) return; // déjà en écoute
+    _sub?.cancel();
+    _listeningUid = uid;
+    try {
+      _sub = _db.notificationsStream(uid).listen(
+        (items) {
+          _notifications = items;
+          if (_firstEmission) {
+            // Ne toaste pas les notifications déjà présentes au démarrage.
+            _firstEmission = false;
+            _seenTeamInviteIds
+              ..clear()
+              ..addAll(items.map((n) => n.id));
+          } else {
+            for (final n in items) {
+              if (!_seenTeamInviteIds.contains(n.id) &&
+                  (n.type == 'team_invite' ||
+                      n.type == 'team_invite_accepted')) {
+                _seenTeamInviteIds.add(n.id);
+                showAppToast('${n.title}\n${n.body}');
+              }
+            }
+          }
+          notifyListeners();
+        },
+        onError: (Object e) {
+          debugPrint('⚠️ notificationsStream: $e');
+        },
+      );
+    } catch (e) {
+      debugPrint('⚠️ NotificationService.startListening: $e');
+    }
+  }
+
+  void stopListening() {
+    _sub?.cancel();
+    _sub = null;
+    _listeningUid = null;
+    _firstEmission = true;
+  }
+
+  @override
+  void dispose() {
+    stopListening();
+    super.dispose();
   }
 
   // --- Opérations CRUD persistées (Firestore) ---

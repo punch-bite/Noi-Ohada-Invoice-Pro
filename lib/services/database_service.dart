@@ -429,6 +429,22 @@ class DatabaseService {
     }).toList();
   }
 
+  /// Stream EN TEMPS RÉEL des notifications de l'utilisateur (même requête
+  /// que [getNotifications] → même index composite). Utilisé pour afficher
+  /// un toast dès qu'une invitation d'équipe arrive.
+  Stream<List<AppNotification>> notificationsStream(String uid) {
+    return _db
+        .collection(notificationCol)
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              return AppNotification.fromMap(data);
+            }).toList());
+  }
+
   Future<void> saveNotification(AppNotification notification) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifie');

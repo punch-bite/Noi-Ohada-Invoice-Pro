@@ -24,6 +24,8 @@ enum NotificationType {
   low_stock,                 // Stock faible
   stock_out,                 // Rupture de stock
   team_shared,               // Donnée partagée avec un membre d'équipe (@mention)
+  team_invite,               // Invitation à rejoindre une équipe (à accepter)
+  team_invite_accepted,      // Un invité a accepté/refusé l'invitation
 }
 
 @HiveType(typeId: 9) // Ajuste le typeId selon ton registre Hive
@@ -157,6 +159,10 @@ class AppNotification {
         return Icons.dangerous;
       case NotificationType.team_shared:
         return Icons.share;
+      case NotificationType.team_invite:
+        return Icons.mail_outline;
+      case NotificationType.team_invite_accepted:
+        return Icons.group_add;
       default:
         return Icons.notifications;
     }
@@ -191,6 +197,10 @@ class AppNotification {
       case NotificationType.stock_out:
         return Colors.red;
       case NotificationType.team_shared:
+        return Colors.teal;
+      case NotificationType.team_invite:
+        return Colors.indigo;
+      case NotificationType.team_invite_accepted:
         return Colors.teal;
       default:
         return Colors.grey;

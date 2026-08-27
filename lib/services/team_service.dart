@@ -102,6 +102,7 @@ class TeamService {
     String? userId,
     String? email,
     String? role,
+    String? invitationId,
     required String requestedBy,
   }) async {
     final apiBase = ConfigService.apiBaseUrl.trim();
@@ -118,6 +119,7 @@ class TeamService {
             'userId': userId,
             'email': email,
             'role': role,
+            'invitationId': invitationId,
             'requestedBy': requestedBy,
           }),
         )
@@ -134,20 +136,69 @@ class TeamService {
     return body;
   }
 
-  /// Ajoute un membre par EMAIL (le serveur résout email → UID).
-  Future<Map<String, dynamic>> addMemberByEmail({
+  /// Invite un membre par EMAIL. Le serveur crée une invitation EN ATTENTE,
+  /// envoie une notification (toast) à l'invité et un EMAIL ; l'invité devra
+  /// l'accepter pour rejoindre l'équipe.
+  Future<Map<String, dynamic>> inviteMember({
     required String teamId,
     required String email,
     required String role,
     required String requestedBy,
   }) {
     return _manageMember(
-      action: 'add',
+      action: 'invite',
       teamId: teamId,
       email: email,
       role: role,
       requestedBy: requestedBy,
     );
+  }
+
+  /// L'invité ACCEPTE une invitation → devient membre de l'équipe.
+  /// Le propriétaire est prévenu par notification (+ email).
+  Future<void> acceptInvitation({
+    required String invitationId,
+    required String requestedBy,
+  }) async {
+    await _manageMember(
+      action: 'accept',
+      teamId: '',
+      invitationId: invitationId,
+      requestedBy: requestedBy,
+    );
+  }
+
+  /// L'invité REFUSE une invitation.
+  Future<void> declineInvitation({
+    required String invitationId,
+    required String requestedBy,
+  }) async {
+    await _manageMember(
+      action: 'decline',
+      teamId: '',
+      invitationId: invitationId,
+      requestedBy: requestedBy,
+    );
+  }
+
+  /// Liste les invitations EN ATTENTE d'un utilisateur.
+  /// Retourne une liste de maps : {id, teamId, teamName, inviterName,
+  /// inviterUid, role, createdAt}.
+  Future<List<Map<String, dynamic>>> getMyInvitations(String userId) async {
+    final body = await _manageMember(
+      action: 'get-invitations',
+      teamId: '',
+      userId: userId,
+      requestedBy: userId,
+    );
+    final list = body['invitations'];
+    if (list is List) {
+      return list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
   }
 
   /// Retire un membre (propriétaire/admin) et révoque son accès aux

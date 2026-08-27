@@ -11,6 +11,9 @@ import 'package:noi_ohada_invoice_pro/services/connectivity_service.dart';
 import 'package:noi_ohada_invoice_pro/services/hive_service.dart';
 import 'package:noi_ohada_invoice_pro/services/logger_service.dart';
 import 'package:noi_ohada_invoice_pro/services/config_service.dart';
+import 'package:noi_ohada_invoice_pro/widgets/glass_widgets.dart';
+
+import 'helpers/fake_firebase.dart';
 
 void main() {
   // Initialisation avant les tests
@@ -20,6 +23,9 @@ void main() {
     await HiveService.initForTest();
     await ConfigService.init();
     await LoggerService.init();
+    // NotificationService → DatabaseService → Firestore : nécessite une app
+    // Firebase initialisée (fake officiel, sans réseau).
+    await setupFakeFirebaseForTests();
   });
 
   // Nettoyage après les tests
@@ -98,10 +104,10 @@ void main() {
     expect(find.byType(TextFormField), findsNWidgets(2));
     
     // Vérifier la présence du bouton de connexion
-    expect(find.byType(ElevatedButton), findsOneWidget);
+    expect(find.byType(GradientButton), findsOneWidget);
   });
 
-  testWidgets('Login button is disabled when fields are empty', (WidgetTester tester) async {
+  testWidgets('Login button is present and enabled', (WidgetTester tester) async {
     final notificationService = NotificationService();
     final connectivityService = ConnectivityService();
 
@@ -130,11 +136,13 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Vérifier que le bouton est activé
-    final button = tester.widget<ElevatedButton>(
-      find.widgetWithText(ElevatedButton, 'Se connecter'),
+    // Vérifier que le bouton de connexion est présent et actif
+    final button = tester.widget<GradientButton>(
+      find.widgetWithText(GradientButton, 'Se connecter'),
     );
-    expect(button.enabled, isTrue);
+    expect(button.label, 'Se connecter');
+    expect(button.onPressed, isNotNull);
+    expect(button.loading, isFalse);
   });
 
   testWidgets('Login screen shows logo and app name', (WidgetTester tester) async {

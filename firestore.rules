@@ -178,6 +178,19 @@ service cloud.firestore {
     }
 
     // ===========================================
+    // INVITATIONS D'ÉQUIPE
+    // ===========================================
+    // Créées et traitées par le SERVEUR (SDK admin, contourne les règles).
+    // Le client peut seulement LIRE les invitations qui le concernent
+    // (invité) ou celles de ses équipes (pour afficher les statuts).
+    match /team_invitations/{invitationId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || resource.data.inviteeUid == request.auth.uid
+        || isTeamMember(resource.data.teamId, request.auth.uid));
+      allow write: if isAdmin();
+    }
+
+    // ===========================================
     // SYSTÈME
     // ===========================================
     match /templates/{templateId} {

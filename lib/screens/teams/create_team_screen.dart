@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/team_service.dart';
 
@@ -29,6 +30,23 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
 
   Future<void> _createTeam() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // 🔒 Équipe = fonctionnalité premium : bloquée pour les utilisateurs
+    // gratuits (le routeur redirige aussi /teams/create → /subscription).
+    final sub = context.read<SubscriptionProvider>();
+    if (!sub.hasTeamAccess) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La gestion d\'équipe est réservée aux abonnés premium',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      context.push('/subscription');
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -74,6 +92,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
     final subTextColor = theme.subTextColor;
     final primaryColor = theme.primaryColor;
     final bgColor = theme.backgroundColor;
+    final hasTeamAccess = context.watch<SubscriptionProvider>().hasTeamAccess;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -87,7 +106,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: _isLoading ? null : _createTeam,
+            onPressed: (_isLoading || !hasTeamAccess) ? null : _createTeam,
             child: const Text('Créer'),
           ),
         ],
@@ -100,6 +119,59 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
+                    // 🔒 Verrou premium : l'équipe n'est pas dispo en gratuit.
+                    if (!hasTeamAccess) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE9B949).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFFE9B949).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.lock_outline,
+                                    color: Color(0xFFB8860B), size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Fonctionnalité premium',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF7A5A00),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'La gestion d\'équipe est réservée aux abonnés premium. '
+                              'Passez à un plan payant pour créer et gérer vos équipes.',
+                              style: TextStyle(fontSize: 12.5, color: subTextColor),
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => context.push('/subscription'),
+                                icon: const Icon(Icons.workspace_premium, size: 18),
+                                label: const Text('Débloquer l\'équipe'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                     // Icône
                     Container(
                       width: 80,

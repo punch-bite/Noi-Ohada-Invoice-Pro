@@ -813,13 +813,87 @@ app.post(
 );
 
 // ============================================================
+//  HELPERS ÉQUIPES : EMAIL (nodemailer) + NOTIFICATION Firestore
+// ============================================================
+// NB : `nodemailer` est déjà requis plus haut (endpoint /email/send).
+
+// Envoi d'email via SMTP serveur (best-effort, ne lève pas).
+async function sendMail({ to, subject, text, html }) {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = (process.env.SMTP_USERNAME || '').trim();
+  const pass = (process.env.SMTP_PASSWORD || '').trim();
+  const fromEmail = (process.env.SMTP_FROM_EMAIL || user).trim();
+  const fromName = (process.env.SMTP_FROM_NAME || 'Noi OHADA Invoice Pro').trim();
+  if (!user || !pass) {
+    logger.warn('⚠️ sendMail: SMTP non configuré côté serveur');
+    return false;
+  }
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+    await transporter.sendMail({
+      from: `"${fromName.replace(/[\r\n"]/g, '')}" <${fromEmail}>`,
+      to: String(to || '').trim(),
+      subject: String(subject || '').slice(0, 200),
+      text: html ? undefined : text,
+      html: html || undefined,
+    });
+    return true;
+  } catch (e) {
+    logger.warn('⚠️ sendMail échec:', { error: e.message });
+    return false;
+  }
+}
+
+// Écrit une notification Firestore pour un utilisateur (SDK admin →
+// contourne les règles). `userId` = destinataire, `createdBy` = émetteur.
+async function createNotification({
+  userId,
+  type,
+  title,
+  body,
+  createdBy,
+  refId,
+  refType,
+  data,
+}) {
+  try {
+    const ref = db.collection('notifications').doc();
+    await ref.set({
+      id: ref.id,
+      title: String(title || ''),
+      body: String(body || ''),
+      type: String(type || 'system_update'),
+      timestamp: new Date(),
+      createdAt: serverTimestamp(),
+      isRead: false,
+      referenceId: refId || null,
+      referenceType: refType || null,
+      data: data || null,
+      userId,
+      recipients: [userId],
+      createdBy: createdBy || '',
+    });
+  } catch (e) {
+    logger.warn('⚠️ createNotification échec:', { error: e.message });
+  }
+}
+
+// ============================================================
 //  GESTION DES MEMBRES D'ÉQUIPE (via SDK admin)
 //
 //  🔒 Le client ne peut PAS écrire sur `teams` (règles : seul le
 //  propriétaire / admin global), ni résoudre un email → UID (lecture
 //  `users` restreinte), ni révoquer l'accès d'un membre sur les ressources
 //  des autres. Cet endpoint centralise ces opérations (SDK admin) :
-//    add      : ajoute un membre par EMAIL (résout email → UID)
+//    invite          : invite un membre par EMAIL (notif + mail envoyés)
+//    accept / decline: l'invité répond (le propriétaire est prévenu)
+//    get-invitations  : liste les invitations en attente d'un utilisateur
 //    remove   : retire un membre + révoque son accès aux partages
 //    promote / demote : change le rôle (admin), utilisable par un admin
 //    leave    : un membre quitte + perd l'accès aux partages
@@ -829,7 +903,7 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'team' }),
   async (req, res) => {
     try {
-      const { action, teamId, userId, email, role, requestedBy } =
+      const { action, teamId, userId, email, role, requestedBy, invitationId } =
         req.body || {};
       if (!teamId || !requestedBy) {
         return res.status(400).json({ error: 'teamId/requestedBy requis' });
@@ -849,8 +923,10 @@ app.post(
       const isManager =
         team.ownerId === requestedBy || admins.includes(requestedBy);
 
-      // ===== ADD : ajouter un membre par email =====
-      if (action === 'add') {
+      // ===== INVITE : inviter un membre par email =====
+      // Crée une invitation EN ATTENTE, envoie une NOTIFICATION (toast) à
+      // l'invité et un EMAIL. L'invité devra accepter pour rejoindre l'équipe.
+      if (action === 'invite') {
         if (!isManager) {
           return res.status(403).json({ error: 'Non autorisé' });
         }
@@ -873,30 +949,205 @@ app.post(
             .status(404)
             .json({ error: 'Aucun compte NOI OHADA avec cet email' });
         }
-        const memberUid = userSnap.docs[0].id;
+        const inviteeUid = userSnap.docs[0].id;
         const userData = userSnap.docs[0].data() || {};
-        if (members.includes(memberUid) || admins.includes(memberUid)) {
-          return res.json({ ok: true, alreadyMember: true, uid: memberUid });
+        if (members.includes(inviteeUid) || admins.includes(inviteeUid)) {
+          return res.json({ ok: true, alreadyMember: true, uid: inviteeUid });
         }
-        await teamRef.update({
-          memberIds: FieldValue.arrayUnion([memberUid]),
-          adminIds:
-            memberRole === 'admin'
-              ? FieldValue.arrayUnion([memberUid])
-              : FieldValue.arrayRemove([memberUid]),
-          updatedAt: serverTimestamp(),
-        });
-        logger.info('team add-member', {
+        // Invitation déjà en attente pour ce membre / cette équipe ?
+        const pending = await db
+          .collection('team_invitations')
+          .where('teamId', '==', teamId)
+          .where('inviteeUid', '==', inviteeUid)
+          .where('status', '==', 'pending')
+          .limit(1)
+          .get();
+        if (!pending.empty) {
+          return res.json({ ok: true, alreadyInvited: true, uid: inviteeUid });
+        }
+
+        const inviterData =
+          (await db.collection('users').doc(requestedBy).get()).data() || {};
+        const inviterName =
+          inviterData.displayName || inviterData.name || 'Un propriétaire';
+        const teamName = team.name || 'votre équipe';
+
+        const invRef = db.collection('team_invitations').doc();
+        await invRef.set({
+          id: invRef.id,
           teamId,
-          uid: memberUid,
+          teamName,
+          inviterUid: requestedBy,
+          inviterName,
+          inviteeUid,
+          email: emailKey,
+          role: memberRole,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          respondedAt: null,
+        });
+
+        // 📢 Notification (toast) à l'invité.
+        await createNotification({
+          userId: inviteeUid,
+          createdBy: requestedBy,
+          type: 'team_invite',
+          title: '🤝 Invitation à rejoindre une équipe',
+          body: `${inviterName} vous invite à rejoindre « ${teamName} ».`,
+          refId: invRef.id,
+          refType: 'team_invite',
+          data: { teamId, teamName, inviterName, role: memberRole },
+        });
+
+        // ✉️ Email à l'invité.
+        await sendMail({
+          to: emailKey,
+          subject: `Invitation à rejoindre « ${teamName} » sur NOI OHADA Invoice Pro`,
+          text:
+            `Bonjour,\n\n` +
+            `${inviterName} vous invite à rejoindre l'équipe « ${teamName} » ` +
+            `sur NOI OHADA Invoice Pro.\n\n` +
+            `Connectez-vous à votre compte : dans l'onglet Équipes, ouvrez ` +
+            `« Mes invitations » et acceptez l'invitation.\n\n` +
+            `À très bientôt,\nL'équipe NOI OHADA Invoice Pro`,
+        });
+
+        logger.info('team invite-member', {
+          teamId,
+          uid: inviteeUid,
           by: requestedBy,
         });
         return res.json({
           ok: true,
-          uid: memberUid,
+          uid: inviteeUid,
           name: userData.displayName || userData.name || '',
           email: userData.email || emailKey,
         });
+      }
+
+      // ===== ACCEPT / DECLINE : réponse de l'invité =====
+      // L'invité accepte (→ devient membre) ou refuse. Le propriétaire est
+      // prévenu par notification (+ email à l'acceptation).
+      if (action === 'accept' || action === 'decline') {
+        if (!invitationId) {
+          return res.status(400).json({ error: 'invitationId requis' });
+        }
+        const invSnap = await db
+          .collection('team_invitations')
+          .doc(invitationId)
+          .get();
+        if (!invSnap.exists) {
+          return res.status(404).json({ error: 'Invitation introuvable' });
+        }
+        const inv = invSnap.data() || {};
+        // Seul l'invité peut répondre.
+        if (inv.inviteeUid !== requestedBy) {
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        if (inv.status !== 'pending') {
+          return res.status(400).json({ error: 'Invitation déjà traitée' });
+        }
+        await invSnap.ref.update({
+          status: action === 'accept' ? 'accepted' : 'declined',
+          respondedAt: serverTimestamp(),
+        });
+
+        if (action === 'accept') {
+          const teamSnap = await db.collection('teams').doc(inv.teamId).get();
+          if (teamSnap.exists && teamSnap.data() && teamSnap.data().isActive !== false) {
+            await teamSnap.ref.update({
+              memberIds: FieldValue.arrayUnion([requestedBy]),
+              adminIds:
+                inv.role === 'admin'
+                  ? FieldValue.arrayUnion([requestedBy])
+                  : FieldValue.arrayRemove([requestedBy]),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+
+        // 📢 Message (notification) au propriétaire.
+        const inviteeData =
+          (await db.collection('users').doc(requestedBy).get()).data() || {};
+        const inviteeName =
+          inviteeData.displayName || inviteeData.name || 'Un membre';
+        const teamDoc = await db.collection('teams').doc(inv.teamId).get();
+        const teamData = teamDoc.exists ? teamDoc.data() || {} : {};
+        const ownerId = teamData.ownerId || inv.inviterUid;
+        const teamDisplay = inv.teamName || 'votre équipe';
+
+        await createNotification({
+          userId: ownerId,
+          createdBy: requestedBy,
+          type: 'team_invite_accepted',
+          title:
+            action === 'accept'
+              ? '✅ Invitation acceptée'
+              : '❌ Invitation refusée',
+          body:
+            action === 'accept'
+              ? `${inviteeName} a accepté votre invitation à rejoindre « ${teamDisplay} ».`
+              : `${inviteeName} a refusé votre invitation à rejoindre « ${teamDisplay} ».`,
+          refId: String(inv.teamId || ''),
+          refType: 'team',
+          data: {
+            teamId: inv.teamId,
+            memberName: inviteeName,
+            memberUid: requestedBy,
+          },
+        });
+
+        // ✉️ Email au propriétaire (à l'acceptation).
+        if (action === 'accept') {
+          const ownerData =
+            (await db.collection('users').doc(ownerId).get()).data() || {};
+          if (ownerData.email) {
+            await sendMail({
+              to: ownerData.email,
+              subject: `« ${teamDisplay} » : ${inviteeName} a accepté l'invitation`,
+              text:
+                `Bonjour,\n\n${inviteeName} a accepté votre invitation et rejoint ` +
+                `l'équipe « ${teamDisplay} » sur NOI OHADA Invoice Pro.\n\n` +
+                `À très bientôt,\nL'équipe NOI OHADA Invoice Pro`,
+            });
+          }
+        }
+
+        logger.info('team invitation respond', {
+          invitationId,
+          action,
+          by: requestedBy,
+        });
+        return res.json({ ok: true });
+      }
+
+      // ===== GET-INVITATIONS : invitations en attente d'un utilisateur =====
+      if (action === 'get-invitations') {
+        const target = userId || requestedBy;
+        if (!target) {
+          return res.status(400).json({ error: 'userId requis' });
+        }
+        const snap = await db
+          .collection('team_invitations')
+          .where('inviteeUid', '==', target)
+          .where('status', '==', 'pending')
+          .orderBy('createdAt', 'desc')
+          .get();
+        const invitations = snap.docs.map((d) => {
+          const data = d.data() || {};
+          return {
+            id: d.id,
+            teamId: data.teamId,
+            teamName: data.teamName || '',
+            inviterName: data.inviterName || '',
+            inviterUid: data.inviterUid,
+            role: data.role || 'member',
+            createdAt: data.createdAt
+              ? data.createdAt.toDate().toISOString()
+              : null,
+          };
+        });
+        return res.json({ ok: true, invitations });
       }
 
       // ===== REMOVE / LEAVE : retirer un membre + révoquer l'accès =====
@@ -1012,7 +1263,7 @@ app.get('/', (req, res) =>
       'POST /email/send (SMTP côté serveur)',
       'POST /wallet/credit (vérifié ENKAP)',
       'POST /template/purchase (vérifié ENKAP)',
-      'POST /team/manage-member (gestion des membres équipe)',
+      'POST /team/manage-member (invitations + membres équipe)',
       'GET /health',
     ],
   })

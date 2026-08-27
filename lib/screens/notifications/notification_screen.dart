@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/notification.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/notification_service.dart';
+import '../../services/team_service.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -118,22 +120,114 @@ class _NotificationTile extends StatelessWidget {
   final AppNotification notification;
   const _NotificationTile({required this.notification});
 
+  /// Traite une invitation d'équipe (Accepter / Refuser) directement depuis
+  /// la notification, puis rafraîchit la liste.
+  Future<void> _respondInvite(BuildContext context, bool accept) async {
+    final auth = context.read<AppAuthProvider>();
+    final uid = auth.user?.id ?? '';
+    final invitationId = notification.referenceId;
+    if (uid.isEmpty || invitationId == null || invitationId.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (accept) {
+        await TeamService().acceptInvitation(
+          invitationId: invitationId,
+          requestedBy: uid,
+        );
+      } else {
+        await TeamService().declineInvitation(
+          invitationId: invitationId,
+          requestedBy: uid,
+        );
+      }
+      if (!context.mounted) return;
+      final service = context.read<NotificationService>();
+      await service.markAsRead(notification.id);
+      await service.refresh();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Invitation acceptée 🎉 Bienvenue dans l\'équipe !'
+                : 'Invitation refusée',
+          ),
+          backgroundColor: accept ? Colors.green : Colors.grey,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    final isTeamInvite = notification.type == 'team_invite';
+
     return Dismissible(
       key: Key(notification.id),
-      onDismissed: (_) => context.read<NotificationService>().deleteNotification(notification.id),
+      onDismissed: (_) =>
+          context.read<NotificationService>().deleteNotification(notification.id),
       child: Card(
         color: theme.cardColor,
-        child: ListTile(
-          leading: Icon(notification.icon, color: notification.color),
-          title: Text(notification.title, style: TextStyle(fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold)),
-          subtitle: Text(notification.body),
-          onTap: () {
-            context.read<NotificationService>().markAsRead(notification.id);
-            // Redirection ici...
-          },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(notification.icon, color: notification.color),
+              title: Text(
+                notification.title,
+                style: TextStyle(
+                  fontWeight: notification.isRead
+                      ? FontWeight.normal
+                      : FontWeight.bold,
+                ),
+              ),
+              subtitle: Text(notification.body),
+              onTap: () {
+                context.read<NotificationService>().markAsRead(notification.id);
+                // Redirection ici...
+              },
+            ),
+            // 🤝 Invitation d'équipe : boutons Accepter / Refuser.
+            if (isTeamInvite)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _respondInvite(context, false),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Refuser'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: BorderSide(
+                            color: Colors.red.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _respondInvite(context, true),
+                        icon: const Icon(Icons.check, size: 18),
+                        label: const Text('Accepter'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

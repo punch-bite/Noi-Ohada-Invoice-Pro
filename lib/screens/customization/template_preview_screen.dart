@@ -43,6 +43,29 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   // respecte les réassignations faites dans l'espace de travail.
   Map<String, String> _customMapping = {};
 
+  // ─── Aperçu zoomable (page A4 + règles graduées) ─────────────────────
+  // Taille de la page A4 de l'aperçu (420 px ↔ 210 mm) et de ses règles.
+  static const double _pageW = 420.0;
+  static const double _pageH = 594.0; // 420 × 297/210
+  static const double _rulerSize = 26.0;
+  static const double _contentW = _pageW + _rulerSize; // 446
+  static const double _contentH = _pageH + _rulerSize; // 620
+
+  // Le contenu est toujours dessiné à sa taille réelle puis mis à l'échelle
+  // (pinch / boutons) → il ne déborde JAMAIS, quel que soit l'écran.
+  double _zoom = 1.0; // multiplicateur au-delà de l'échelle d'ajustement
+  double _fitScale = 1.0; // échelle qui fait tenir page + règles à l'écran
+  Offset _pan = Offset.zero;
+  Size _viewport = Size.zero;
+  bool _zoomInitialized = false;
+  // État de départ du geste (pinch / glisser).
+  double _gestureStartZoom = 1.0;
+  Offset _gestureStartPan = Offset.zero;
+  Offset _gestureStartFocal = Offset.zero;
+
+  /// Échelle d'affichage réelle = ajustement à l'écran × zoom utilisateur.
+  double get _displayScale => _fitScale * _zoom;
+
   /// Positions effectives à utiliser : les personnalisations locales si
   /// présentes, sinon les positions par défaut du modèle. Si les deux sont
   /// vides → layout fixe historique (non positionné).
@@ -133,120 +156,469 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final pageWidth = min(420.0, constraints.maxWidth - 32);
-                return Center(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: pageWidth),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+          : Column(
+              children: [
+                _buildZoomToolbar(theme),
+                Expanded(
+                  child: _buildZoomablePreview(theme),
+                ),
+                // Boutons d'action sous l'aperçu (prix, panier, personnaliser).
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF141417) : Colors.white,
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark
+                            ? Colors.white10
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: _buildActionButtons(theme),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  // ============================================================
+  //  BARRE DE ZOOM (avant/arrière, % réel, ajuster, 100 %)
+  // ============================================================
+  Widget _buildZoomToolbar(ThemeProvider theme) {
+    final dark = theme.isDarkMode;
+    final boxColor = dark ? const Color(0xFF1E1E22) : Colors.white;
+    final borderColor =
+        dark ? Colors.white12 : Colors.black.withValues(alpha: 0.08);
+    final textColor = dark ? Colors.white70 : Colors.black54;
+    final percent = (_displayScale * 100).round();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: boxColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: dark ? 0.3 : 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _zoomButton(
+                  Icons.remove,
+                  'Zoom arrière',
+                  textColor,
+                  () => _zoomBy(0.8),
+                ),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 62),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$percent %',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                _zoomButton(
+                  Icons.add,
+                  'Zoom avant',
+                  textColor,
+                  () => _zoomBy(1.25),
+                ),
+                Container(width: 1, height: 18, color: borderColor),
+                _zoomButton(
+                  Icons.fit_screen_outlined,
+                  'Ajuster à l\'écran',
+                  textColor,
+                  _zoomToFit,
+                ),
+                _zoomButton(
+                  Icons.aspect_ratio,
+                  'Taille réelle (100 %)',
+                  textColor,
+                  _zoomTo100,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: boxColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Tooltip(
+              message: 'Pincez pour zoomer • Glissez pour déplacer',
+              child: Icon(Icons.touch_app_outlined, size: 18, color: textColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _zoomButton(
+    IconData icon,
+    String tooltip,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 38, minHeight: 36),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 20, color: color),
+      onPressed: onTap,
+    );
+  }
+
+  // ============================================================
+  //  APERÇU ZOOMABLE : toile quadrillée + page A4 + règles graduées.
+  //  Le contenu est dessiné à sa taille réelle puis mis à l'échelle
+  //  (pinch / boutons / double-tap) → il ne déborde jamais de l'écran.
+  // ============================================================
+  Widget _buildZoomablePreview(ThemeProvider theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availW = constraints.maxWidth;
+        final availH = constraints.maxHeight;
+        if (availW > 0 && availH > 0) {
+          // L'échelle d'ajustement suit la taille de la zone (rotation...).
+          _fitScale = min(
+            (availW - 16) / _contentW,
+            (availH - 16) / _contentH,
+          );
+          if (!_zoomInitialized) {
+            _zoomInitialized = true;
+            _zoom = 1.0;
+            _pan = Offset.zero;
+          }
+          _viewport = Size(availW, availH);
+        }
+
+        return ClipRect(
+          child: GestureDetector(
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: _onScaleUpdate,
+            onDoubleTap: _onDoubleTap,
+            child: Stack(
+              children: [
+                // Toile de design : fond quadrillé discret.
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _DotGridPainter(
+                      color: (theme.isDarkMode ? Colors.white : Colors.black)
+                          .withValues(alpha: theme.isDarkMode ? 0.05 : 0.045),
+                    ),
+                  ),
+                ),
+                // Page + règles, centrées, mises à l'échelle et déplaçables.
+                Positioned(
+                  left: (availW - _contentW) / 2 + _pan.dx,
+                  top: (availH - _contentH) / 2 + _pan.dy,
+                  child: Transform.scale(
+                    scale: _displayScale,
+                    child: SizedBox(
+                      width: _contentW,
+                      height: _contentH,
+                      child: Stack(
                         children: [
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                width: 420,
-                                decoration: BoxDecoration(
-                                  color: _settings.backgroundColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: _settings.showBorder
-                                      ? Border.all(
-                                          color: _settings.primaryColor.withValues(alpha: 0.35),
-                                          width: 1.5,
-                                        )
-                                      : Border.all(
-                                          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                                        ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                                      blurRadius: 15,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Stack(
-                                    children: [
-                                      if (_backgroundBytes != null)
-                                        Positioned.fill(
-                                          child: Opacity(
-                                            opacity: 0.35,
-                                            child: Image.memory(
-                                              _backgroundBytes!,
-                                              fit: BoxFit.fill,
-                                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                                            ),
-                                          ),
-                                        ),
-                                      if (_positions.isNotEmpty)
-                                        _buildPositionedLayout()
-                                      else
-                                        Padding(
-                                          padding: const EdgeInsets.all(24),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              _buildHeader(),
-                                              const Divider(height: 24, thickness: 1),
-                                              if (_settings.showClientInfo) ...[
-                                                _buildClientSection(),
-                                                const SizedBox(height: 16),
-                                              ],
-                                              _buildItemsTable(),
-                                              const SizedBox(height: 16),
-                                              _buildTotalsAndQR(),
-                                              const SizedBox(height: 16),
-                                              _buildFooter(),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              if (_settings.showWatermark)
-                                IgnorePointer(
-                                  child: Transform.rotate(
-                                    angle: -0.35,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: _settings.primaryColor.withValues(alpha: 0.12),
-                                          width: 2,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        _settings.watermarkText.toUpperCase(),
-                                        style: TextStyle(
-                                          color: _settings.primaryColor.withValues(alpha: 0.09),
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
+                          // Coin (A4).
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            child: _buildCornerBox(theme),
                           ),
-                          const SizedBox(height: 20),
-                          _buildActionButtons(theme),
+                          // Règle horizontale (au-dessus de la page).
+                          Positioned(
+                            left: _rulerSize,
+                            top: 0,
+                            child: _buildHRuler(theme),
+                          ),
+                          // Règle verticale (à gauche de la page).
+                          Positioned(
+                            left: 0,
+                            top: _rulerSize,
+                            child: _buildVRuler(theme),
+                          ),
+                          // Page A4.
+                          Positioned(
+                            left: _rulerSize,
+                            top: _rulerSize,
+                            child: _buildPageCard(theme),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- Gestion du geste (pinch / glisser / double-tap) ---
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _gestureStartZoom = _zoom;
+    _gestureStartPan = _pan;
+    _gestureStartFocal = d.focalPoint;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    setState(() {
+      _zoom = (_gestureStartZoom * d.scale).clamp(0.4, 5.0);
+      _pan = _gestureStartPan + (d.focalPoint - _gestureStartFocal);
+      _clampPan();
+    });
+  }
+
+  void _onDoubleTap() {
+    setState(() {
+      if (_zoom > 1.05) {
+        _zoom = 1.0;
+        _pan = Offset.zero;
+      } else {
+        _zoom = 2.0;
+        _clampPan();
+      }
+    });
+  }
+
+  /// Borne le déplacement pour que la page reste accessible à l'écran.
+  void _clampPan() {
+    final vp = _viewport;
+    if (vp.isEmpty) return;
+    final scaledW = _contentW * _displayScale;
+    final scaledH = _contentH * _displayScale;
+    final maxDx = max(0.0, (scaledW - vp.width) / 2) + 100;
+    final maxDy = max(0.0, (scaledH - vp.height) / 2) + 100;
+    _pan = Offset(_pan.dx.clamp(-maxDx, maxDx), _pan.dy.clamp(-maxDy, maxDy));
+  }
+
+  // --- Boutons de zoom ---
+
+  void _zoomBy(double factor) {
+    setState(() {
+      _zoom = (_zoom * factor).clamp(0.4, 5.0);
+      _clampPan();
+    });
+  }
+
+  void _zoomToFit() {
+    setState(() {
+      _zoom = 1.0;
+      _pan = Offset.zero;
+    });
+  }
+
+  void _zoomTo100() {
+    setState(() {
+      if (_fitScale > 0) _zoom = (1.0 / _fitScale).clamp(0.4, 5.0);
+      _clampPan();
+    });
+  }
+
+  // ============================================================
+  //  RÈGLES GRADUÉES + COIN (mesures stylisées)
+  // ============================================================
+
+  Widget _buildCornerBox(ThemeProvider theme) {
+    final dark = theme.isDarkMode;
+    return Container(
+      width: _rulerSize,
+      height: _rulerSize,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1E1E22) : Colors.white,
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(10)),
+        border: Border.all(
+          color: dark ? Colors.white12 : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'A4',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+          color: dark ? Colors.white70 : Colors.black54,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHRuler(ThemeProvider theme) {
+    final dark = theme.isDarkMode;
+    return Container(
+      width: _pageW,
+      height: _rulerSize,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1E1E22) : Colors.white,
+        borderRadius: const BorderRadius.only(topRight: Radius.circular(10)),
+        border: Border.all(
+          color: dark ? Colors.white12 : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      child: CustomPaint(
+        painter: _RulerPainter(
+          vertical: false,
+          pxPerMm: 2.0, // 420 px ↔ 210 mm
+          tickColor: dark ? Colors.white38 : Colors.black38,
+          labelColor: dark ? Colors.white70 : Colors.black54,
+          rulerSize: _rulerSize,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVRuler(ThemeProvider theme) {
+    final dark = theme.isDarkMode;
+    return Container(
+      width: _rulerSize,
+      height: _pageH,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1E1E22) : Colors.white,
+        borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(10)),
+        border: Border.all(
+          color: dark ? Colors.white12 : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      child: CustomPaint(
+        painter: _RulerPainter(
+          vertical: true,
+          pxPerMm: 2.0, // même échelle que la largeur
+          tickColor: dark ? Colors.white38 : Colors.black38,
+          labelColor: dark ? Colors.white70 : Colors.black54,
+          rulerSize: _rulerSize,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  //  CARTE DE LA PAGE A4 (fond, filigrane, layout positionné ou fixe)
+  // ============================================================
+  Widget _buildPageCard(ThemeProvider theme) {
+    final isDark = theme.isDarkMode;
+    return Container(
+      width: _pageW,
+      height: _pageH,
+      decoration: BoxDecoration(
+        color: _settings.backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: _settings.showBorder
+            ? Border.all(
+                color: _settings.primaryColor.withValues(alpha: 0.35),
+                width: 1.5,
+              )
+            : Border.all(
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+              ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            if (_backgroundBytes != null)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.35,
+                  child: Image.memory(
+                    _backgroundBytes!,
+                    fit: BoxFit.fill,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            if (_positions.isNotEmpty)
+              _buildPositionedLayout()
+            else
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const Divider(height: 24, thickness: 1),
+                    if (_settings.showClientInfo) ...[
+                      _buildClientSection(),
+                      const SizedBox(height: 16),
+                    ],
+                    _buildItemsTable(),
+                    const SizedBox(height: 16),
+                    _buildTotalsAndQR(),
+                    const SizedBox(height: 16),
+                    _buildFooter(),
+                  ],
+                ),
+              ),
+            if (_settings.showWatermark)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Transform.rotate(
+                      angle: -0.35,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: _settings.primaryColor.withValues(alpha: 0.12),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _settings.watermarkText.toUpperCase(),
+                          style: TextStyle(
+                            color: _settings.primaryColor.withValues(alpha: 0.09),
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -416,8 +788,8 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   //  choisies dans l'espace de travail, comme lors de l'impression PDF.
   // ============================================================
   Widget _buildPositionedLayout() {
-    final pageW = 420.0; // largeur du conteneur d'aperçu
-    final pageH = pageW * 297 / 210; // ratio A4 (~594)
+    final pageW = _pageW; // largeur du conteneur d'aperçu
+    final pageH = _pageH; // ratio A4 (~594)
     final children = <Widget>[
       // Base pleine page : donne une taille au Stack (sinon il collapserait
       // car tous ses enfants sont positionnés).
@@ -442,7 +814,16 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         Positioned(
           left: x * pageW,
           top: y * pageH,
-          child: width == null ? widget : SizedBox(width: width, child: widget),
+          child: ConstrainedBox(
+            // ⚠️ Un Positioned sans `width` donne des contraintes de largeur
+            // ILLIMITÉES → certains éléments (footer, `width: double.infinity`)
+            // lèveraient « BoxConstraints forces an infinite width ».
+            // On borne donc la largeur de chaque élément positionné.
+            constraints: BoxConstraints(maxWidth: pageW - 48),
+            child: width == null
+                ? widget
+                : SizedBox(width: width, child: widget),
+          ),
         ),
       );
     });
@@ -1085,4 +1466,110 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       'total': '20 000 FCFA'
     },
   ];
+}
+
+// ============================================================
+//  Peintres personnalisés : règles graduées + toile quadrillée
+// ============================================================
+
+/// Règle graduée (mm / cm) dessinée le long de la page A4.
+class _RulerPainter extends CustomPainter {
+  _RulerPainter({
+    required this.vertical,
+    required this.pxPerMm,
+    required this.tickColor,
+    required this.labelColor,
+    required this.rulerSize,
+  });
+
+  final bool vertical;
+  final double pxPerMm;
+  final Color tickColor;
+  final Color labelColor;
+  final double rulerSize;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = tickColor
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.square;
+
+    final length = vertical ? size.height : size.width;
+    final textStyle = TextStyle(
+      fontSize: 7.5,
+      fontWeight: FontWeight.w600,
+      color: labelColor,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    for (int mm = 0; mm * pxPerMm <= length + 0.5; mm++) {
+      final pos = mm * pxPerMm;
+      final isCm = mm % 10 == 0;
+      final isHalf = mm % 5 == 0;
+      final tickLen = isCm
+          ? rulerSize - 5
+          : (isHalf ? rulerSize - 9 : rulerSize - 12);
+
+      if (vertical) {
+        // Graduations depuis le bord droit (côté page).
+        canvas.drawLine(
+          Offset(size.width, pos),
+          Offset(size.width - tickLen, pos),
+          paint,
+        );
+        if (isCm) {
+          final tp = TextPainter(
+            text: TextSpan(text: '${mm ~/ 10}', style: textStyle),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(canvas, Offset(2.5, pos - tp.height / 2));
+        }
+      } else {
+        // Graduations depuis le bord bas (côté page).
+        canvas.drawLine(
+          Offset(pos, size.height),
+          Offset(pos, size.height - tickLen),
+          paint,
+        );
+        if (isCm) {
+          final tp = TextPainter(
+            text: TextSpan(text: '${mm ~/ 10}', style: textStyle),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(canvas, Offset(pos - tp.width / 2, 2));
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RulerPainter oldDelegate) =>
+      oldDelegate.vertical != vertical ||
+      oldDelegate.pxPerMm != pxPerMm ||
+      oldDelegate.tickColor != tickColor ||
+      oldDelegate.labelColor != labelColor ||
+      oldDelegate.rulerSize != rulerSize;
+}
+
+/// Fond de toile de design : grille de points discrets.
+class _DotGridPainter extends CustomPainter {
+  _DotGridPainter({required this.color});
+
+  final Color color;
+  static const double _spacing = 22;
+  static const double _radius = 1.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (double x = 0; x < size.width; x += _spacing) {
+      for (double y = 0; y < size.height; y += _spacing) {
+        canvas.drawCircle(Offset(x, y), _radius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotGridPainter oldDelegate) => oldDelegate.color != color;
 }

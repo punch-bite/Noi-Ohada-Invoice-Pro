@@ -212,7 +212,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                     TextButton.icon(
                       onPressed: _addingMember ? null : _showAddMemberDialog,
                       icon: const Icon(Icons.person_add_alt_1, size: 18),
-                      label: const Text('Ajouter'),
+                      label: const Text('Inviter'),
                       style: TextButton.styleFrom(
                         foregroundColor: primaryColor,
                       ),
@@ -792,6 +792,19 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Future<void> _showAddMemberDialog() async {
     final sub = context.read<SubscriptionProvider>();
+    // 🔒 L'équipe est premium : aucun ajout de membre pour les gratuits.
+    if (!sub.hasTeamAccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La gestion d\'équipe est réservée aux abonnés premium',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      context.push('/subscription');
+      return;
+    }
     final current = _team!.memberIds.length;
     final max = sub.maxTeamMembers;
     if (max > 0 && current >= max) {
@@ -820,14 +833,15 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: const Text('Ajouter un membre'),
+            title: const Text('Inviter un membre'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Saisissez l\'email du compte NOI OHADA du membre. '
-                    'Il pourra consulter et partager les données de l\'équipe.',
+                    'Une invitation lui sera envoyée par notification et par mail ; '
+                    'il devra l\'accepter pour rejoindre l\'équipe.',
                     style: TextStyle(fontSize: 12, color: subTextColor),
                   ),
                   const SizedBox(height: 14),
@@ -888,7 +902,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Ajouter'),
+                child: const Text('Inviter'),
               ),
             ],
           );
@@ -912,17 +926,23 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     if (uid.isEmpty) return;
     setState(() => _addingMember = true);
     try {
-      await _teamService.addMemberByEmail(
+      final result = await _teamService.inviteMember(
         teamId: _team!.id,
         email: email,
         role: role,
         requestedBy: uid,
       );
       if (!mounted) return;
+      final already = result['alreadyMember'] == true ||
+          result['alreadyInvited'] == true;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Membre ajouté à l\'équipe'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(
+            already
+                ? 'Ce membre est déjà dans l\'équipe ou a déjà une invitation'
+                : 'Invitation envoyée à $email 🎉',
+          ),
+          backgroundColor: already ? Colors.orange : Colors.green,
         ),
       );
       _loadData();

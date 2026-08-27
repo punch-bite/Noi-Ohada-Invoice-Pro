@@ -32,6 +32,7 @@ import 'providers/theme_provider.dart';
 import 'router/app_router.dart';
 import 'widgets/connectivity_wrapper.dart';
 import 'widgets/app_bootstrap.dart';
+import 'widgets/app_toast.dart';
 import 'widgets/glass_app_background.dart';
 
 /// Services créés lors de l'initialisation (globales pour être partagées)
@@ -246,22 +247,26 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
-          return MaterialApp.router(
-            title: 'NOI OHADA Invoice Pro',
-            debugShowCheckedModeBanner: false,
-            theme: ThemeService.getLightTheme(),
-            darkTheme: ThemeService.getDarkTheme(),
-            themeMode: _getThemeMode(themeProvider.currentTheme),
-            routerConfig: AppRouter.router,
-            builder: (context, child) {
-              // 🖼️ Fond glass global derrière toute la navigation.
-              return GlassAppBackground(
-                child: ConnectivityWrapper(
-                  onRetry: () {},
-                  child: child ?? const SizedBox.shrink(),
-                ),
-              );
-            },
+          return _NotificationSync(
+            notificationService: notificationService,
+            child: MaterialApp.router(
+              title: 'NOI OHADA Invoice Pro',
+              debugShowCheckedModeBanner: false,
+              scaffoldMessengerKey: appScaffoldMessengerKey,
+              theme: ThemeService.getLightTheme(),
+              darkTheme: ThemeService.getDarkTheme(),
+              themeMode: _getThemeMode(themeProvider.currentTheme),
+              routerConfig: AppRouter.router,
+              builder: (context, child) {
+                // 🖼️ Fond glass global derrière toute la navigation.
+                return GlassAppBackground(
+                  child: ConnectivityWrapper(
+                    onRetry: () {},
+                    child: child ?? const SizedBox.shrink(),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),
@@ -278,4 +283,42 @@ class MyApp extends StatelessWidget {
         return ThemeMode.system;
     }
   }
+}
+
+/// Lance/arrête l'écoute temps réel des notifications selon l'authentification.
+/// Au login, `startListening()` s'abonne aux notifications Firestore : les
+/// invitations d'équipe reçues en direct déclenchent un toast global.
+class _NotificationSync extends StatefulWidget {
+  final NotificationService notificationService;
+  final Widget child;
+
+  const _NotificationSync({
+    required this.notificationService,
+    required this.child,
+  });
+
+  @override
+  State<_NotificationSync> createState() => _NotificationSyncState();
+}
+
+class _NotificationSyncState extends State<_NotificationSync> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AppAuthProvider>();
+    if (auth.isAuthenticated) {
+      widget.notificationService.startListening();
+    } else {
+      widget.notificationService.stopListening();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.notificationService.stopListening();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
