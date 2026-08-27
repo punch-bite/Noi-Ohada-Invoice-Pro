@@ -60,7 +60,7 @@ workflows:
       - name: Update Gradle Wrapper
         script: |
           cd android  
-          ./gradlew wrapper --gradle-version 8.14.0 
+          gradle wrapper --gradle-version 8.14.0 
 
       - name: Disabled Android newDsl
         script: |
