@@ -520,7 +520,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     // quand `paymentMethod` sera renseigné sur les factures.
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
