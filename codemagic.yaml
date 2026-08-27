@@ -66,6 +66,10 @@ workflows:
             --obfuscate \
             --split-debug-info=build/symbols/apk
 
+      - name: Disabled Android newDsl
+        script:  |
+          echo "android.newDsl=false" >> android/gradle.properties
+
       - name: Builder l'App Bundle (AAB) (obfusqué)
         script: |
           flutter build appbundle --release \
