@@ -278,7 +278,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         ),
                         const SizedBox(height: 12),
                         Container(
-                          height: 240,
+                          height: 260,
                           padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
                           decoration: BoxDecoration(
                             color: cardColor,
