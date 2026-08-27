@@ -71,7 +71,6 @@ workflows:
           # 🛡️ Obfuscation du code Dart (anti-rétro-ingénierie). Les symboles
           # sont sauvegardés dans build/symbols pour désobfusquer les crashs.
           flutter build apk --release \
-            --android-skip-build-dependency-validation \
             --dart-define="API_BASE_URL=$API_BASE_URL" \
             --obfuscate \
             --split-debug-info=build/symbols/apk
