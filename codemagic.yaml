@@ -62,9 +62,9 @@ workflows:
       #     cd android  
       #     gradle wrapper --gradle-version 8.14.0 
 
-      # - name: Disabled Android newDsl
-      #   script: |
-      #     echo "android.newDsl=false" >> android/gradle.properties
+      - name: Disabled Android newDsl
+        script: |
+          echo "android.newDsl=false" >> android/gradle.properties
 
       - name: Builder l'APK Release (obfusqué)
         script: |
