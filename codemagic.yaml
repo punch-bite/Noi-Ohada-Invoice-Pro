@@ -58,12 +58,12 @@ workflows:
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
       - name: Update Gradle Wrapper
-        script:  |
+        script: |
           cd android  
           ./gradlew wrapper --gradle-version 8.14.0 
 
       - name: Disabled Android newDsl
-        script:  |
+        script: |
           echo "android.newDsl=false" >> android/gradle.properties
 
       - name: Builder l'APK Release (obfusqué)
