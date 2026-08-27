@@ -56,6 +56,10 @@ workflows:
       - name: Analyse statique (gardé 0 erreur / 0 warning)
         script: |
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+      
+      - name: Disabled Android newDsl
+        script:  |
+          echo "android.newDsl=false" >> android/gradle.properties
 
       - name: Builder l'APK Release (obfusqué)
         script: |
@@ -65,10 +69,6 @@ workflows:
             --dart-define="API_BASE_URL=$API_BASE_URL" \
             --obfuscate \
             --split-debug-info=build/symbols/apk
-
-      - name: Disabled Android newDsl
-        script:  |
-          echo "android.newDsl=false" >> android/gradle.properties
 
       - name: Builder l'App Bundle (AAB) (obfusqué)
         script: |
