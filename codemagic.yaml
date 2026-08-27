@@ -56,7 +56,13 @@ workflows:
       - name: Analyse statique (gardé 0 erreur / 0 warning)
         script: |
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
-      
+
+      - name: Update Gradle Wrapper
+        script:  |
+          cd android  
+          ./gradlew wrapper --gradle-version 8.14.0 
+          echo "android.newDsl=false" >> android/gradle.properties
+
       - name: Disabled Android newDsl
         script:  |
           echo "android.newDsl=false" >> android/gradle.properties
