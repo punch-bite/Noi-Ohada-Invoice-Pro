@@ -61,7 +61,6 @@ workflows:
         script:  |
           cd android  
           ./gradlew wrapper --gradle-version 8.14.0 
-          echo "android.newDsl=false" >> android/gradle.properties
 
       - name: Disabled Android newDsl
         script:  |
