@@ -194,7 +194,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 boxShadow: [
                   BoxShadow(
                     color: _getColorForClient(client.id).withValues(alpha: 0.3),
-                    blurRadius: 8,
+                    blurRadius: 4,
                     offset: const Offset(0, 3),
                   ),
                 ],
@@ -221,8 +221,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
                   Text(
                     client.name,
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
                       color: textColor,
                     ),
                   ),
@@ -241,12 +241,6 @@ class _ClientsScreenState extends State<ClientsScreen> {
                           fontSize: 13,
                           color: subTextColor,
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Icon(
-                        Icons.email,
-                        size: 14,
-                        color: subTextColor,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
