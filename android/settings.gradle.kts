@@ -17,7 +17,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.android.application") version "8.7.3" apply false      //  Version stable
+    id("com.android.application") version "9.0.1" apply false      //  Version stable
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false  //  Version stable
     id("com.google.gms.google-services") version "4.4.2" apply false
