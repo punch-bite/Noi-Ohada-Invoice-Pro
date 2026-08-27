@@ -57,10 +57,10 @@ workflows:
         script: |
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
-      - name: Update Gradle Wrapper
-        script: |
-          cd android  
-          gradle wrapper --gradle-version 8.14.0 
+      # - name: Update Gradle Wrapper
+      #   script: |
+      #     cd android  
+      #     gradle wrapper --gradle-version 8.14.0 
 
       - name: Disabled Android newDsl
         script: |
