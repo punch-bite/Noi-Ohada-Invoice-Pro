@@ -135,7 +135,6 @@ class CustomDrawer extends StatelessWidget {
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
-                  premium: !subscriptionProvider.canAccessPremiumTemplates,
                 ),
                 _buildTile(
                   icon: Icons.business_outlined,

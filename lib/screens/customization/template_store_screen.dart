@@ -152,7 +152,8 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
+          icon:
+              Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
@@ -177,8 +178,8 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         color: Colors.redAccent,
                         shape: BoxShape.circle,
                       ),
-                      constraints: const BoxConstraints(
-                          minWidth: 15, minHeight: 15),
+                      constraints:
+                          const BoxConstraints(minWidth: 15, minHeight: 15),
                       child: Text(
                         '${cart.count}',
                         style: const TextStyle(
@@ -204,12 +205,17 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: GlassCard(
                 borderRadius: BorderRadius.circular(16),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: Row(
                   children: [
                     Icon(
-                      canAccessPremium ? Icons.stars_rounded : Icons.storefront_rounded,
-                      color: canAccessPremium ? Colors.green : const Color(0xFFE9B949),
+                      canAccessPremium
+                          ? Icons.stars_rounded
+                          : Icons.storefront_rounded,
+                      color: canAccessPremium
+                          ? Colors.green
+                          : const Color(0xFFE9B949),
                       size: 20,
                     ),
                     const SizedBox(width: 10),
@@ -222,7 +228,9 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                           fontFamily: 'Roboto',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: canAccessPremium ? Colors.green : theme.subTextColor,
+                          color: canAccessPremium
+                              ? Colors.green
+                              : theme.subTextColor,
                         ),
                       ),
                     ),
@@ -331,8 +339,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                     ),
             ),
             // 🛒 Barre de panier (récapitulatif + accès au checkout).
-            if (cart.count > 0)
-              _buildCartBar(cart, theme),
+            if (cart.count > 0) _buildCartBar(cart, theme),
           ],
         ),
       ),
@@ -395,9 +402,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
             : Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: theme.isDarkMode
-              ? Colors.grey[800]!
-              : Colors.grey[300]!,
+          color: theme.isDarkMode ? Colors.grey[800]! : Colors.grey[300]!,
           width: 1,
         ),
       ),
@@ -587,8 +592,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         bottom: 10,
                         right: 10,
                         child: GlassBadge(
-                          label:
-                              '${template.price.toStringAsFixed(0)} XAF',
+                          label: '${template.price.toStringAsFixed(0)} XAF',
                           icon: Icons.sell_rounded,
                           color: const Color(0xFF4338CA),
                         ),
@@ -853,8 +857,8 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                 Container(
                   decoration: BoxDecoration(
                     color: template.backgroundColor,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(19)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(19)),
                   ),
                   // 🖼️ Affiche l'image téléversée (JPEG/PNG) si présente,
                   // sinon la vignette par défaut (icône document).
@@ -890,8 +894,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         ),
                       if (template.price > 0)
                         GlassBadge(
-                          label:
-                              '${template.price.toStringAsFixed(0)} XAF',
+                          label: '${template.price.toStringAsFixed(0)} XAF',
                           icon: Icons.sell_rounded,
                           color: const Color(0xFF16A34A),
                         ),
@@ -916,8 +919,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    Colors.black.withValues(alpha: 0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -967,7 +969,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                 ],
                 const SizedBox(height: 8),
                 // 🎨 Personnaliser — réservé à l'admin ou aux acheteurs.
-                Container(
+                if(isAdmin) Container(
                   width: double.infinity,
                   height: 32,
                   decoration: BoxDecoration(
@@ -986,24 +988,25 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         currentUserId,
                         isAdmin,
                       ),
-                      child: const Row(
+                          
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.tune_rounded,
+                          const Icon(Icons.tune_rounded,
                               color: Colors.white, size: 14),
-                          SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              'Personnaliser',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                          const SizedBox(width: 4),
+                            const Flexible(
+                              child: Text(
+                                'Personnaliser',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -1055,9 +1058,9 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          'La personnalisation est réservée à l\'administrateur ou aux '
-          'acheteurs de ce modèle.'),
+        content:
+            Text('La personnalisation est réservée à l\'administrateur ou aux '
+                'acheteurs de ce modèle.'),
         backgroundColor: Colors.orange,
       ),
     );

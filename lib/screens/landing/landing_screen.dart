@@ -134,11 +134,11 @@ class _LandingScreenState extends State<LandingScreen>
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Noi Ohada',
+                    'NOI INVOICE',
                     style: TextStyle(
                       fontFamily: 'Roboto',
                       fontWeight: FontWeight.w800,
-                      fontSize: 20,
+                      fontSize: 16,
                       letterSpacing: -0.5,
                       color: theme.textColor,
                     ),
@@ -146,12 +146,10 @@ class _LandingScreenState extends State<LandingScreen>
                   const Spacer(),
                   TextButton(
                     onPressed: () => context.push('/auth/login'),
-                    child: Text(
-                      'Connexion',
-                      style: TextStyle(
-                        color: theme.primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Icon(
+                      Icons.login_rounded,
+                      color: theme.textColor,
+                      size: 20,
                     ),
                   ),
                 ],
@@ -238,12 +236,12 @@ class _LandingScreenState extends State<LandingScreen>
         children: [
           // 🎨 Art central : facture + modules en orbite (motion design)
           _buildHeroArt(),
-          const SizedBox(height: 20),
+          const SizedBox(height: 150),
           Text(
-            'La facturation OHADA,\nsimple & puissante.',
+            'La facturation OHADA,\nsimple & puissante.'.toUpperCase(),
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 30,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               height: 1.15,
               letterSpacing: -0.8,
@@ -257,8 +255,9 @@ class _LandingScreenState extends State<LandingScreen>
             'SYSCOHADA, avec des paiements mobiles intégrés dès le départ.',
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 15,
-              height: 1.5,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              height: 1,
               color: theme.subTextColor,
             ),
             textAlign: TextAlign.center,
@@ -494,12 +493,12 @@ class _LandingScreenState extends State<LandingScreen>
             ),
           ).animate().scale(begin: Offset(0.85, 0.85), end: Offset(1, 1))
               .animate().fadeIn(duration: 500.ms),
-          const SizedBox(height: 28),
+          const SizedBox(height: 150),
           Text(
-            'Travaillez en Équipe',
+            'Travaillez en Équipe'.toUpperCase(),
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 26,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
               color: theme.textColor,
@@ -512,8 +511,8 @@ class _LandingScreenState extends State<LandingScreen>
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 15,
-              height: 1.55,
+              fontSize: 14,
+              height: 1,
               color: theme.subTextColor,
             ),
           ).animate().fadeIn(delay: 240.ms),
@@ -580,12 +579,12 @@ class _LandingScreenState extends State<LandingScreen>
             ),
           ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
               .animate().fadeIn(delay: 200.ms),
-          const SizedBox(height: 30),
+          const SizedBox(height: 150),
           Text(
-            'Marketing & Partage de données',
+            'Marketing & Partage de données'.toUpperCase(),
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
               color: theme.textColor,
@@ -598,8 +597,8 @@ class _LandingScreenState extends State<LandingScreen>
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 15,
-              height: 1.55,
+              fontSize: 14,
+              height: 1,
               color: theme.subTextColor,
             ),
           ).animate().fadeIn(delay: 240.ms),
@@ -685,12 +684,12 @@ class _LandingScreenState extends State<LandingScreen>
             child: Icon(feature.icon, size: 60, color: Colors.white),
           ).animate().scale(begin: Offset(0.8, 0.8), end: Offset(1, 1))
               .animate().fadeIn(duration: 500.ms),
-          const SizedBox(height: 36),
+          const SizedBox(height: 150),
           Text(
-            feature.title,
+            feature.title.toUpperCase(),
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 26,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
               color: theme.textColor,
@@ -702,8 +701,8 @@ class _LandingScreenState extends State<LandingScreen>
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 15,
-              height: 1.55,
+              fontSize: 14,
+              height: 1,
               color: theme.subTextColor,
             ),
           ).animate().fadeIn(delay: 240.ms),

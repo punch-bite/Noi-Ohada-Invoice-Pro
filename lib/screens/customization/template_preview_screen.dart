@@ -676,7 +676,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        if (isOwned)
+        if (isAdmin)
           // Déjà possédé → accès à la personnalisation.
           SizedBox(
             width: double.infinity,

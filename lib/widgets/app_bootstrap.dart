@@ -1,6 +1,8 @@
 // lib/widgets/app_bootstrap.dart
 import 'dart:ui';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 
 /// Écran de démarrage (appelé juste après runApp).
 ///
@@ -27,6 +29,8 @@ class AppBootstrap extends StatefulWidget {
 
 class _AppBootstrapState extends State<AppBootstrap> {
   bool _ready = false;
+  // ignore: unused_field
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -47,17 +51,27 @@ class _AppBootstrapState extends State<AppBootstrap> {
         widget.onReady(
           AppBootstrapContext(
             // Splash 100 % statique : on ignore les changements de statut.
-            onStatusChange: (_) {},
+            onStatusChange: (status) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = true;
+                });
+              }
+            },
           ),
         ),
         Future.delayed(const Duration(seconds: 20)),
       ]);
     } catch (e, stack) {
-      debugPrint('❌ Erreur pendant l\'initialisation (appelée pour debug) : $e');
+      debugPrint(
+          '❌ Erreur pendant l\'initialisation (appelée pour debug) : $e');
       debugPrint('📚 $stack');
     } finally {
       if (mounted) {
-        setState(() => _ready = true);
+        setState(() {
+          _isLoading = true;
+          _ready = true;
+        });
       }
     }
   }
@@ -149,6 +163,14 @@ class _AppBootstrapState extends State<AppBootstrap> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 200),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 32.0),
+                        child: _buildCircularProgress(context),
+                      ),
+                    )
                   ],
                 ),
               ),
@@ -217,6 +239,25 @@ class _AppBootstrapState extends State<AppBootstrap> {
       ),
     );
   }
+}
+
+Widget _buildCircularProgress(BuildContext context) {
+  return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            width: 40,
+            height: 40,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          );
+        }
+
+        return const LandingScreen();
+      });
 }
 
 /// Contexte d'initialisation passé au callback.
