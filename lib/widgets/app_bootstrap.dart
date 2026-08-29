@@ -163,14 +163,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 200),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 32.0),
-                        child: _buildCircularProgress(context),
-                      ),
-                    )
+                    const SizedBox(height: 50),
+                    if(_isLoading)
+                    CircularProgressIndicator(),
                   ],
                 ),
               ),
@@ -239,25 +234,6 @@ class _AppBootstrapState extends State<AppBootstrap> {
       ),
     );
   }
-}
-
-Widget _buildCircularProgress(BuildContext context) {
-  return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            width: 40,
-            height: 40,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          );
-        }
-
-        return const LandingScreen();
-      });
 }
 
 /// Contexte d'initialisation passé au callback.

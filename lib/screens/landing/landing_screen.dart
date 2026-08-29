@@ -92,136 +92,144 @@ class _LandingScreenState extends State<LandingScreen>
 
     // 🎬 Fond animé (halos + icônes flottantes) sur tout l'écran.
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B0D17) : const Color(0xFFF6F7FB),
+      backgroundColor:
+          isDark ? const Color(0xFF0B0D17) : const Color(0xFFF6F7FB),
       body: AnimatedBackground(
         child: SafeArea(
           child: Column(
-          children: [
-            // ---- Barre de navigation / logo ----
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  // Logo réel de l'application (extrémité gauche)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.asset(
-                      'assets/images/splash_logo.png',
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) => Container(
+            children: [
+              // ---- Barre de navigation / logo ----
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    // Logo réel de l'application (extrémité gauche)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.asset(
+                        'assets/images/splash_logo.png',
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              theme.primaryColor,
-                              theme.secondaryColor,
-                            ],
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stack) => Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                theme.primaryColor,
+                                theme.secondaryColor,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          Icons.receipt_long_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'NOI INVOICE',
-                    style: TextStyle(
-                      fontFamily: 'Roboto',
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                      letterSpacing: -0.5,
-                      color: theme.textColor,
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => context.push('/auth/login'),
-                    child: Icon(
-                      Icons.login_rounded,
-                      color: theme.textColor,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ).animate().fadeIn(duration: 500.ms).slideY(begin: -0.3, end: 0),
-            ),
-
-            // ---- Contenu scrollable / swipeable ----
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                itemCount: _features.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _buildHero(isDark, theme);
-                  }
-                  final featureIndex = index - 1;
-                  if (featureIndex == 3) {
-                    // Slide 4 : équipe cloud avec avatars en orbite
-                    return _buildTeamSlide(isDark, theme);
-                  }
-                  if (featureIndex == 4) {
-                    // Slide 5 : marketing / partage de données
-                    return _buildMarketingSlide(isDark, theme);
-                  }
-                  return _buildFeaturePage(
-                      _features[featureIndex], isDark, theme);
-                },
-              ),
-            ),
-
-            // ---- Indicateurs ----
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _features.length + 1,
-                (i) => _buildDot(i, theme),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // ---- CTA principal ----
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-              child: Column(
-                children: [
-                  GradientButton(
-                    label: 'Créer mon compte gratuitement',
-                    icon: Icons.rocket_launch_rounded,
-                    onPressed: () => context.push('/auth/register'),
-                  ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.3, end: 0),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.lock_outline_rounded, size: 14),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Données chiffrées & conformes SYSCOHADA',
-                        style: TextStyle(
-                          fontFamily: 'Roboto',
-                          color: theme.subTextColor,
-                          fontSize: 13,
+                          child: Icon(
+                            Icons.receipt_long_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'NOI INVOICE',
+                      style: TextStyle(
+                        fontFamily: 'Roboto',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        letterSpacing: -0.5,
+                        color: theme.textColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => context.push('/auth/login'),
+                      child: Icon(
+                        Icons.login_rounded,
+                        color: theme.textColor,
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                )
+                    .animate()
+                    .fadeIn(duration: 500.ms)
+                    .slideY(begin: -0.3, end: 0),
               ),
-            ),
-          ],
-        ),
+
+              // ---- Contenu scrollable / swipeable ----
+              Expanded(
+                child: PageView.builder(
+                  controller: _pageController,
+                  onPageChanged: (i) => setState(() => _currentPage = i),
+                  itemCount: _features.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return _buildHero(isDark, theme);
+                    }
+                    final featureIndex = index - 1;
+                    if (featureIndex == 3) {
+                      // Slide 4 : équipe cloud avec avatars en orbite
+                      return _buildTeamSlide(isDark, theme);
+                    }
+                    if (featureIndex == 4) {
+                      // Slide 5 : marketing / partage de données
+                      return _buildMarketingSlide(isDark, theme);
+                    }
+                    return _buildFeaturePage(
+                        _features[featureIndex], isDark, theme);
+                  },
+                ),
+              ),
+
+              // ---- Indicateurs ----
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  _features.length + 1,
+                  (i) => _buildDot(i, theme),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // ---- CTA principal ----
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+                child: Column(
+                  children: [
+                    GradientButton(
+                      label: 'Créer mon compte gratuitement',
+                      icon: Icons.rocket_launch_rounded,
+                      onPressed: () => context.push('/auth/register'),
+                    )
+                        .animate()
+                        .fadeIn(delay: 100.ms)
+                        .slideY(begin: 0.3, end: 0),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_outline_rounded, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Données chiffrées & conformes SYSCOHADA',
+                          style: TextStyle(
+                            fontFamily: 'Roboto',
+                            color: theme.subTextColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -234,9 +242,17 @@ class _LandingScreenState extends State<LandingScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          GlassBadge(
+            label: '✨ Essai gratuit • Sans carte bancaire',
+            color: const Color(0xFFE9B949),
+          )
+              .animate()
+              .scale(begin: Offset(0.6, 0.6), end: Offset(1, 1))
+              .animate()
+              .fadeIn(delay: 400.ms),
           // 🎨 Art central : facture + modules en orbite (motion design)
           _buildHeroArt(),
-          const SizedBox(height: 150),
+          const SizedBox(height: 120),
           Text(
             'La facturation OHADA,\nsimple & puissante.'.toUpperCase(),
             style: TextStyle(
@@ -256,19 +272,12 @@ class _LandingScreenState extends State<LandingScreen>
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w400,
               height: 1,
               color: theme.subTextColor,
             ),
             textAlign: TextAlign.center,
           ).animate().fadeIn(delay: 260.ms),
-
-          const SizedBox(height: 20),
-          GlassBadge(
-            label: '✨ Essai gratuit • Sans carte bancaire',
-            color: const Color(0xFFE9B949),
-          ).animate().scale(begin: Offset(0.6, 0.6), end: Offset(1, 1))
-              .animate().fadeIn(delay: 400.ms),
         ],
       ),
     );
@@ -373,7 +382,8 @@ class _LandingScreenState extends State<LandingScreen>
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
@@ -413,8 +423,11 @@ class _LandingScreenState extends State<LandingScreen>
             ),
         ],
       ),
-    ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
-        .animate().fadeIn(duration: 600.ms);
+    )
+        .animate()
+        .scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
+        .animate()
+        .fadeIn(duration: 600.ms);
   }
 
   // ---- Slide 4 : ÉQUIPE — nuage + avatars en orbite rotative ----
@@ -491,8 +504,11 @@ class _LandingScreenState extends State<LandingScreen>
                   ),
               ],
             ),
-          ).animate().scale(begin: Offset(0.85, 0.85), end: Offset(1, 1))
-              .animate().fadeIn(duration: 500.ms),
+          )
+              .animate()
+              .scale(begin: Offset(0.85, 0.85), end: Offset(1, 1))
+              .animate()
+              .fadeIn(duration: 500.ms),
           const SizedBox(height: 150),
           Text(
             'Travaillez en Équipe'.toUpperCase(),
@@ -574,11 +590,15 @@ class _LandingScreenState extends State<LandingScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Icon(Icons.auto_graph_rounded, color: Colors.white, size: 44),
+                const Icon(Icons.auto_graph_rounded,
+                    color: Colors.white, size: 44),
               ],
             ),
-          ).animate().scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
-              .animate().fadeIn(delay: 200.ms),
+          )
+              .animate()
+              .scale(begin: Offset(0.9, 0.9), end: Offset(1, 1))
+              .animate()
+              .fadeIn(delay: 200.ms),
           const SizedBox(height: 150),
           Text(
             'Marketing & Partage de données'.toUpperCase(),
@@ -682,8 +702,11 @@ class _LandingScreenState extends State<LandingScreen>
               ],
             ),
             child: Icon(feature.icon, size: 60, color: Colors.white),
-          ).animate().scale(begin: Offset(0.8, 0.8), end: Offset(1, 1))
-              .animate().fadeIn(duration: 500.ms),
+          )
+              .animate()
+              .scale(begin: Offset(0.8, 0.8), end: Offset(1, 1))
+              .animate()
+              .fadeIn(duration: 500.ms),
           const SizedBox(height: 150),
           Text(
             feature.title.toUpperCase(),
@@ -719,7 +742,8 @@ class _LandingScreenState extends State<LandingScreen>
       height: 8,
       decoration: BoxDecoration(
         gradient: _currentPage == index
-            ? const LinearGradient(colors: [Color(0xFF4338CA), Color(0xFF7C3AED)])
+            ? const LinearGradient(
+                colors: [Color(0xFF4338CA), Color(0xFF7C3AED)])
             : const LinearGradient(
                 colors: [Color(0xFFB0B7C3), Color(0xFFB0B7C3)]),
         borderRadius: BorderRadius.circular(4),
