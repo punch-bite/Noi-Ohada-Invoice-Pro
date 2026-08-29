@@ -250,9 +250,10 @@ class _LandingScreenState extends State<LandingScreen>
               .scale(begin: Offset(0.6, 0.6), end: Offset(1, 1))
               .animate()
               .fadeIn(delay: 400.ms),
+          const SizedBox(height: 50),
           // 🎨 Art central : facture + modules en orbite (motion design)
           _buildHeroArt(),
-          const SizedBox(height: 120),
+          const SizedBox(height: 150),
           Text(
             'La facturation OHADA,\nsimple & puissante.'.toUpperCase(),
             style: TextStyle(

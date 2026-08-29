@@ -5,9 +5,9 @@ void main() {
   final envFile = File('.env');
   
   if (!envFile.existsSync()) {
-    print('📝 Création du fichier .env...');
+    // print('📝 Création du fichier .env...');
     envFile.writeAsStringSync('''
-# OHADA Invoice Pro - Configuration
+# NOI OHADA Invoice Pro - Configuration
 FIREBASE_API_KEY=
 FIREBASE_APP_ID=
 FIREBASE_MESSAGING_SENDER_ID=
@@ -22,13 +22,11 @@ APP_ENVIRONMENT=development
 DEFAULT_CURRENCY=XAF
 DEFAULT_TAX_RATE=18
 SUPPORT_EMAIL=support@ohada-invoice-pro.com
-LEGAL_COMPANY_NAME=OHADA Invoice Pro SAS
+LEGAL_COMPANY_NAME=NOI OHADA Invoice Pro SAS
 LEGAL_TAX_ID=RC123456789
 LEGAL_ADDRESS=Douala, Cameroun
 LEGAL_TEXT=Conforme aux normes OHADA et SYSCOHADA
 ''');
-    print('✅ Fichier .env créé !');
-  } else {
-    print('✅ Fichier .env existe déjà');
+    // print('✅ Fichier .env créé avec succès !');
   }
 }

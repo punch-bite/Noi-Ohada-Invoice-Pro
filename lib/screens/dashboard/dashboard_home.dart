@@ -120,50 +120,6 @@ class _DashboardHomeState extends State<DashboardHome> {
       // 🔥 En-tête personnalisé
       body: Column(
         children: [
-          // ===== EN-TÊTE PERSONNALISÉ =====
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            child: Row(
-              children: [
-                const Text(
-                  'Accueil',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const Spacer(),
-                // Notification avec badge (bouton rond + pastille rouge)
-                NotificationBadge(
-                  onTap: () => context.push('/notifications'),
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[800] : Colors.grey[100],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.notifications_outlined,
-                      color: textColor,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Menu hamburger (ouvre le drawer)
-                IconButton(
-                  icon: Icon(Icons.menu, color: textColor),
-                  onPressed: () {
-                    // Ouverture simple du drawer grâce au Scaffold parent
-                    Scaffold.of(context).openDrawer();
-                  },
-                ),
-              ],
-            ),
-          ),
           // Contenu de la page
           Expanded(
             child: RefreshIndicator(
@@ -176,7 +132,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header
-                                        _buildHeader(
+                    _buildHeader(
                       authProvider: authProvider,
                       subscriptionProvider: subscriptionProvider,
                       isDark: isDark,
@@ -300,10 +256,12 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             child: Center(
               child: Text(
-                (user?.displayName.isNotEmpty == true) ? user!.displayName[0].toUpperCase() : 'U',
+                (user?.displayName.isNotEmpty == true)
+                    ? user!.displayName[0].toUpperCase()
+                    : 'U',
                 style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
               ),
@@ -328,6 +286,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   Flexible(
                     child: Text(
                       user?.displayName ?? 'Utilisateur',
+                      softWrap:false,
                       maxLines: 1,
                       style: TextStyle(
                         fontSize: 18,
@@ -386,6 +345,41 @@ class _DashboardHomeState extends State<DashboardHome> {
                   fontSize: 12,
                   color: subTextColor,
                 ),
+              ),
+            ],
+          ),
+        ),
+        const Spacer(),
+        Expanded(
+          // Notification avec badge (bouton rond + pastille rouge)
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              NotificationBadge(
+                onTap: () => context.push('/notifications'),
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[800] : Colors.grey[100],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    color: textColor,
+                    size: 22,
+                  ),
+                ),
+              ),
+              SizedBox(width: 8),
+              // Menu hamburger (ouvre le drawer)
+              IconButton(
+                icon: Icon(Icons.menu, color: textColor),
+                onPressed: () {
+                  // Ouverture simple du drawer grâce au Scaffold parent
+                  Scaffold.of(context).openDrawer();
+                },
               ),
             ],
           ),
@@ -672,7 +666,8 @@ class _DashboardHomeState extends State<DashboardHome> {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2), width: 1),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1182,7 +1177,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     }
   }
 
-    /// Vrai si l'utilisateur a un abonnement payant actif (cloud).
+  /// Vrai si l'utilisateur a un abonnement payant actif (cloud).
   bool _hasCloudSubscription(SubscriptionProvider subscriptionProvider) {
     final subscription = subscriptionProvider.subscription;
     final plan = subscriptionProvider.currentPlan;
