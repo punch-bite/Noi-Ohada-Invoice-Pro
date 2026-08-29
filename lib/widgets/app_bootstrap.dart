@@ -1,8 +1,6 @@
 // lib/widgets/app_bootstrap.dart
 import 'dart:ui';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 
 /// Écran de démarrage (appelé juste après runApp).
 ///
