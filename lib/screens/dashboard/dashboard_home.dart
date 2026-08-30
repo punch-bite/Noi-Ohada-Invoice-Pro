@@ -132,6 +132,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header
+                    const SizedBox(height: 25),
                     _buildHeader(
                       authProvider: authProvider,
                       subscriptionProvider: subscriptionProvider,
@@ -245,7 +246,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               gradient: LinearGradient(
                 colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
               ),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(36),
               boxShadow: [
                 BoxShadow(
                   color: primaryColor.withValues(alpha: 0.3),
@@ -286,7 +287,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   Flexible(
                     child: Text(
                       user?.displayName ?? 'Utilisateur',
-                      softWrap:false,
+                      softWrap: false,
                       maxLines: 1,
                       style: TextStyle(
                         fontSize: 18,

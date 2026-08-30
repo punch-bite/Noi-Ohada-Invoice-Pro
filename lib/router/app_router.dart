@@ -239,7 +239,18 @@ class AppRouter {
       // Customisation visuelle des factures
       GoRoute(
         path: '/customization',
-        builder: (context, state) => const InvoiceCustomizationEditScreen(),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CustomizationConfig) {
+            return InvoiceCustomizationEditScreen(config: extra);
+          }
+          if (extra is Map<String, dynamic> &&
+              extra['config'] is CustomizationConfig) {
+            return InvoiceCustomizationEditScreen(
+                config: extra['config'] as CustomizationConfig);
+          }
+          return const InvoiceCustomizationEditScreen();
+        },
       ),
       // Sauvegarde Google Drive (Business)
       GoRoute(
@@ -305,10 +316,21 @@ class AppRouter {
         path: '/templates/apropos/preview',
         builder: (context, state) {
           final extra = state.extra;
-          if (extra is Map<String, dynamic> &&
-              extra['config'] is CustomizationConfig) {
+          if (extra is Map<String, dynamic>) {
             return InvoicePreviewScreen(
-                config: extra['config'] as CustomizationConfig);
+              config: extra['config'] is CustomizationConfig
+                  ? extra['config'] as CustomizationConfig
+                  : null,
+              template: extra['template'] is InvoiceTemplate
+                  ? extra['template'] as InvoiceTemplate
+                  : null,
+            );
+          }
+          if (extra is CustomizationConfig) {
+            return InvoicePreviewScreen(config: extra);
+          }
+          if (extra is InvoiceTemplate) {
+            return InvoicePreviewScreen(template: extra);
           }
           return const InvoicePreviewScreen();
         },

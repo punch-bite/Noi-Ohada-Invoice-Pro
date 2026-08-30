@@ -70,15 +70,16 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   // ===== INITIALISATION ROBUSTE =====
   Future<void> _initializeData() async {
     await _supplierService.init();
-    final activeSuppliers = await _supplierService.getActiveSupplier();
+    final allSuppliers = await _supplierService.getSuppliers();
 
     if (!mounted) return;
 
-    // ✅ Conversion sécurisée en List<Supplier>
-    final List<Supplier> supplierList = _safeCastToList(activeSuppliers);
+    // ✅ On ne garde que les fournisseurs actifs pour le dropdown
+    final List<Supplier> activeSuppliers =
+        allSuppliers.where((s) => s.isActive).toList();
 
     setState(() {
-      _suppliers = supplierList;
+      _suppliers = activeSuppliers;
       _isLoadingSuppliers = false;
     });
 
@@ -107,20 +108,6 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       _minStockController.text = '5';
       _selectedSupplier = null;
     }
-  }
-
-  // ===== UTILITAIRE DE CAST SÉCURISÉ =====
-  List<Supplier> _safeCastToList(dynamic data) {
-    if (data == null) return [];
-    if (data is List<Supplier>) return data;
-    if (data is Iterable) {
-      try {
-        return data.map((e) => e as Supplier).toList();
-      } catch (_) {
-        return [];
-      }
-    }
-    return [];
   }
 
   @override
@@ -227,10 +214,10 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   Future<void> _refreshSuppliers() async {
     setState(() => _isLoadingSuppliers = true);
-    final activeSuppliers = await _supplierService.getActiveSupplier();
+    final allSuppliers = await _supplierService.getSuppliers();
     if (!mounted) return;
     setState(() {
-      _suppliers = _safeCastToList(activeSuppliers);
+      _suppliers = allSuppliers.where((s) => s.isActive).toList();
       _isLoadingSuppliers = false;
     });
   }

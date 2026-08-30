@@ -1,10 +1,12 @@
 // lib/screens/dashboard/create_invoice_screen.dart
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/database_service.dart';
 import '../../services/stock_service.dart';
 import '../../services/quota_enforcement_service.dart';
+import '../../services/signature_service.dart';
 import '../../models/invoice.dart';
 import '../../models/line_item.dart';
 import '../../models/client.dart';
@@ -13,6 +15,7 @@ import '../../models/plan.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/signature_pad_dialog.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
   const CreateInvoiceScreen({super.key});
@@ -34,7 +37,15 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   double _taxRate = 18;
   double _discount = 0;
   double _deliveryFee = 0;
-  final String _terms = 'Paiement à 30 jours';
+
+  // Conditions de facturation (éditable)
+  final _termsController = TextEditingController();
+
+  // Signature numérique
+  final SignatureService _signatureService = SignatureService();
+  Uint8List? _signatureBytes;
+  String? _signatureName;
+  String? _signatureTitle;
 
   final _clientController = TextEditingController();
   final _productController = TextEditingController();
@@ -48,12 +59,36 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   @override
   void initState() {
     super.initState();
+    _termsController.text = 'Paiement à 30 jours';
     _loadClients();
     _loadStockProducts();
+    _loadSignature();
     _deliveryFeeController.addListener(() {
       setState(() =>
           _deliveryFee = double.tryParse(_deliveryFeeController.text) ?? 0);
     });
+  }
+
+  Future<void> _loadSignature() async {
+    final bytes = await _signatureService.loadSignatureBytes();
+    final name = await _signatureService.getSignerName();
+    final title = await _signatureService.getSignerTitle();
+    if (!mounted) return;
+    setState(() {
+      _signatureBytes = bytes;
+      _signatureName = name;
+      _signatureTitle = title;
+    });
+  }
+
+  Future<void> _openSignaturePad() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => const SignaturePadDialog(),
+    );
+    if (result == true) {
+      await _loadSignature();
+    }
   }
 
   @override
@@ -64,6 +99,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     _unitPriceController.dispose();
     _notesController.dispose();
     _deliveryFeeController.dispose();
+    _termsController.dispose();
     super.dispose();
   }
 
@@ -393,6 +429,36 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // Conditions de paiement
+              TextFormField(
+                controller: _termsController,
+                maxLines: 2,
+                style: TextStyle(color: text, fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Conditions de paiement',
+                  hintText: 'Ex: Paiement à 30 jours',
+                  labelStyle: TextStyle(color: sub, fontSize: 13),
+                  hintStyle: TextStyle(color: sub.withValues(alpha: 0.5)),
+                  prefixIcon: Icon(Icons.description_outlined, color: sub),
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: primary, width: 2),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Signature numérique
+              _buildSignatureSection(isDark, text, sub, primary),
               const SizedBox(height: 12),
 
               // Total Summary Container
@@ -767,9 +833,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         taxAmount: _taxAmount,
         discount: _discount,
         totalAmount: _total,
-        terms: _terms,
+        terms: _termsController.text.trim().isEmpty
+            ? 'Paiement à 30 jours'
+            : _termsController.text.trim(),
         isDevis: _isDevis,
-        notes: _notesController.text.trim(), isSynced: false,
+        notes: _notesController.text.trim(),
+        isSynced: false,
       );
 
       await _db.addInvoice(invoice);
@@ -806,5 +875,122 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  // ===== SECTION SIGNATURE NUMÉRIQUE =====
+  Widget _buildSignatureSection(
+      bool isDark, Color text, Color sub, Color primary) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.draw_outlined, color: primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Signature numérique',
+                style: TextStyle(
+                  color: text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _openSignaturePad,
+                icon: Icon(
+                  _signatureBytes != null ? Icons.edit : Icons.add,
+                  size: 16,
+                  color: primary,
+                ),
+                label: Text(
+                  _signatureBytes != null ? 'Modifier' : 'Configurer',
+                  style: TextStyle(color: primary, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_signatureBytes != null) ...[
+            // Aperçu de la signature
+            Container(
+              width: double.infinity,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Image.memory(
+                _signatureBytes!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Center(
+                  child: Text(
+                    'Signature configurée',
+                    style: TextStyle(color: sub, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+            if (_signatureName != null && _signatureName!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                _signatureName!,
+                style: TextStyle(
+                  color: text,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+            if (_signatureTitle != null && _signatureTitle!.isNotEmpty) ...[
+              Text(
+                _signatureTitle!,
+                style: TextStyle(color: sub, fontSize: 12),
+              ),
+            ],
+          ] else ...[
+            // Aucune signature configurée
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.edit_note, size: 28, color: sub.withValues(alpha: 0.5)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Aucune signature configurée',
+                    style: TextStyle(color: sub, fontSize: 12),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'La facture sera générée sans signature',
+                    style: TextStyle(
+                        color: sub.withValues(alpha: 0.7), fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

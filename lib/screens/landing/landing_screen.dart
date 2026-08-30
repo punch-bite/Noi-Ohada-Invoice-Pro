@@ -253,12 +253,12 @@ class _LandingScreenState extends State<LandingScreen>
           const SizedBox(height: 50),
           // 🎨 Art central : facture + modules en orbite (motion design)
           _buildHeroArt(),
-          const SizedBox(height: 150),
+          const SizedBox(height: 100),
           Text(
             'La facturation OHADA,\nsimple & puissante.'.toUpperCase(),
             style: TextStyle(
               fontFamily: 'Roboto',
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
               height: 1.15,
               letterSpacing: -0.8,

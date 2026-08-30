@@ -1,1385 +1,1101 @@
 // lib/screens/customization/template_workspace_screen.dart
-// ============================================================
-//  🎨 ESPACE DE TRAVAIL DRAG & DROP — personnalisation visuelle d'un modèle.
 //
-//  Fonctionnalités :
-//   - Palette d'éléments (en-tête, client, lignes, totaux, pied, QR, signature)
-//   - Glisser-déposer des éléments sur la page (coordonnées relatives 0..1)
-//   - Déplacement libre au doigt/souris + redimensionnement (scale)
-//   - Mapping des variables de facture vers chaque élément
-//   - Sauvegarde locale des positions + mapping (TemplateCustomService)
-// ============================================================
-import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:ui' as ui;
+// 🧩 ESPACE DE PERSONNALISATION DRAG & DROP — « Personnaliser — {modèle} ».
+//
+// Refonte conforme au design system glass indigo → violet :
+//   • Canvas A4 avec grille de repères 4×4 subtile
+//   • Éléments déplaçables au doigt (Draggable/DragTarget — échange de slot),
+//     sélection au tap (anneau primaire + étiquette)
+//   • Barre inférieure : bouton « Éléments » + zoom, ou propriétés de
+//     l'élément sélectionné (visibilité, colonne, ordre)
+//   • Bottom sheet « Éléments » : chips par bloc + réglages de page
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:noi_ohada_invoice_pro/services/invoice_layout_engine.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/invoice_template.dart';
-import '../../providers/theme_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../services/template_service.dart';
+import '../../models/invoice_layout.dart';
+import '../../models/company.dart';
+import '../../services/database_service.dart';
 import '../../services/template_custom_service.dart';
-
-/// Identifiants des éléments d'une facture.
-class TemplateElement {
-  final String id;
-  final String label;
-  final IconData icon;
-  const TemplateElement(this.id, this.label, this.icon);
-}
-
-/// 🧩 CHAQUE VARIABLE de facture est un élément à part entière : déplaçable,
-/// redimensionnable et masquable individuellement (drag & drop).
-const List<TemplateElement> kTemplateElements = [
-  // En-tête société
-  TemplateElement('logo', 'Logo', Icons.image_outlined),
-  TemplateElement('company_name', 'Nom société', Icons.business_rounded),
-  TemplateElement('company_address', 'Adresse société', Icons.location_on_outlined),
-  TemplateElement('company_phone', 'Tél société', Icons.phone_outlined),
-  TemplateElement('company_email', 'Email société', Icons.email_outlined),
-  TemplateElement('invoice_title', 'Titre FACTURE', Icons.title),
-  // Client
-  TemplateElement('client_name', 'Nom client', Icons.person_rounded),
-  TemplateElement('client_address', 'Adresse client', Icons.location_city_outlined),
-  TemplateElement('client_phone', 'Tél client', Icons.phone_iphone_outlined),
-  TemplateElement('client_email', 'Email client', Icons.alternate_email),
-  // Corps
-  TemplateElement('items', 'Lignes', Icons.receipt_long_rounded),
-  TemplateElement('subtotal', 'Sous-total', Icons.calculate_outlined),
-  TemplateElement('tax_amount', 'TVA', Icons.percent),
-  TemplateElement('discount', 'Remise', Icons.local_offer_outlined),
-  TemplateElement('total_amount', 'Total', Icons.summarize_outlined),
-  // Pied de page
-  TemplateElement('footer', 'Pied de page', Icons.text_snippet_rounded),
-  TemplateElement('qr', 'QR Paiement', Icons.qr_code_rounded),
-  TemplateElement('signature', 'Signature', Icons.draw_rounded),
-];
-
-/// Sections de la facture : chaque VARIABLE est déplaçable et éditable.
-const Map<String, List<String>> kTemplateSections = {
-  'En-tête': [
-    'logo',
-    'company_name',
-    'company_address',
-    'company_phone',
-    'company_email',
-    'invoice_title',
-  ],
-  'Client': [
-    'client_name',
-    'client_address',
-    'client_phone',
-    'client_email',
-  ],
-  'Corps': ['items', 'subtotal', 'tax_amount', 'discount', 'total_amount'],
-  'Pied de page': ['footer', 'qr', 'signature'],
-};
-
-/// Position par défaut de chaque variable (x,y relatifs 0..1, scale).
-const Map<String, dynamic> kDefaultPositions = {
-  'logo': {'x': 0.04, 'y': 0.02, 'scale': 1.0, 'visible': true},
-  'company_name': {'x': 0.22, 'y': 0.04, 'scale': 1.0, 'visible': true},
-  'company_address': {'x': 0.22, 'y': 0.065, 'scale': 1.0, 'visible': true},
-  'company_phone': {'x': 0.22, 'y': 0.09, 'scale': 1.0, 'visible': true},
-  'company_email': {'x': 0.22, 'y': 0.115, 'scale': 1.0, 'visible': true},
-  'invoice_title': {'x': 0.58, 'y': 0.04, 'scale': 1.0, 'visible': true},
-  'client_name': {'x': 0.04, 'y': 0.16, 'scale': 1.0, 'visible': true},
-  'client_address': {'x': 0.04, 'y': 0.185, 'scale': 1.0, 'visible': true},
-  'client_phone': {'x': 0.04, 'y': 0.21, 'scale': 1.0, 'visible': true},
-  'client_email': {'x': 0.04, 'y': 0.235, 'scale': 1.0, 'visible': true},
-  'items': {'x': 0.04, 'y': 0.30, 'scale': 1.0, 'visible': true},
-  'subtotal': {'x': 0.5, 'y': 0.60, 'scale': 1.0, 'visible': true},
-  'tax_amount': {'x': 0.5, 'y': 0.63, 'scale': 1.0, 'visible': true},
-  'discount': {'x': 0.5, 'y': 0.66, 'scale': 1.0, 'visible': true},
-  'total_amount': {'x': 0.5, 'y': 0.69, 'scale': 1.0, 'visible': true},
-  'footer': {'x': 0.04, 'y': 0.85, 'scale': 1.0, 'visible': true},
-  'qr': {'x': 0.04, 'y': 0.64, 'scale': 1.0, 'visible': true},
-  'signature': {'x': 0.55, 'y': 0.86, 'scale': 1.0, 'visible': true},
-};
+import '../../providers/theme_provider.dart';
+import '../../widgets/glass_widgets.dart';
+import '../../widgets/invoice_renderer.dart';
 
 class TemplateWorkspaceScreen extends StatefulWidget {
   final InvoiceTemplate template;
+
   const TemplateWorkspaceScreen({super.key, required this.template});
 
   @override
-  State<TemplateWorkspaceScreen> createState() => _TemplateWorkspaceScreenState();
+  State<TemplateWorkspaceScreen> createState() =>
+      _TemplateWorkspaceScreenState();
 }
 
 class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
-  late Map<String, dynamic> _positions;
-  Map<String, String> _mapping = {};
-  String? _selectedElement;
-  bool _saving = false;
-
-  // 🖼️ Arrière-plan personnalisé (upload + opacité + flou + fit).
-  // `_bg` = réglages appliqués à l'aperçu ; `_bgDraft` = brouillon en cours
-  // d'édition dans le tiroir « Arrière-plan » (Annuler/Appliquer).
-  TemplateBackgroundSettings _bg = const TemplateBackgroundSettings();
-
-  // Valeurs d'exemple pour l'aperçu
-  final String _companyName = 'OHADA Invoice Pro';
-  final String _companyAddress = 'Douala, Cameroun';
-  final String _clientName = 'Client SARL';
-  final List<Map<String, String>> _sampleItems = const [
-    {'name': 'Service de conseil', 'qty': '2', 'price': '50 000', 'total': '100 000'},
-    {'name': 'Formation', 'qty': '1', 'price': '75 000', 'total': '75 000'},
-  ];
+  final DatabaseService _db = DatabaseService();
+  Company? _company;
+  late InvoiceLayoutConfig _layoutConfig;
+  bool _isLoading = true;
+  double _zoom = 1.0;
+  LayoutElement? _selected;
 
   @override
   void initState() {
     super.initState();
-    _positions = _mergeWithDefaults(widget.template.positions);
-    _mapping = Map<String, String>.from(widget.template.mapping);
-    _loadCustom();
+    _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+    _loadData();
   }
 
-  Map<String, dynamic> _mergeWithDefaults(Map<String, dynamic> stored) {
-    final result = <String, dynamic>{
-      for (final e in kDefaultPositions.entries) e.key: Map<String, dynamic>.from(e.value as Map),
-    };
-    stored.forEach((id, value) {
-      if (value is Map) {
-        result[id] = {...(result[id] as Map? ?? {}), ...Map<String, dynamic>.from(value)};
-      }
-    });
-    return result;
-  }
-
-  Future<void> _loadCustom() async {
+  Future<void> _loadData() async {
+    final company = await _db.getCompany();
     final custom = await TemplateCustomService.loadCustom(widget.template.id);
     if (!mounted) return;
     setState(() {
-      _positions = _mergeWithDefaults(custom.positions);
-      _mapping = {..._mapping, ...custom.mapping};
-      _bg = custom.background;
-    });
-  }
-
-  Map<String, dynamic> _posOf(String id) =>
-      (_positions[id] as Map?)?.cast<String, dynamic>() ?? {};
-
-  bool _visible(String id) => (_posOf(id)['visible'] as bool?) ?? true;
-  double _scale(String id) => ((_posOf(id)['scale'] as num?) ?? 1.0).toDouble();
-  double _x(String id) => ((_posOf(id)['x'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
-  double _y(String id) => ((_posOf(id)['y'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
-
-  void _updatePos(String id, Map<String, dynamic> patch) {
-    setState(() {
-      final cur = _posOf(id);
-      _positions[id] = {...cur, ...patch};
-    });
-  }
-
-  // ===== ENREGISTREMENT =====
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      // 1) Sauvegarde locale (positions + mapping + arrière-plan) — persiste
-      //    pour l'utilisateur et alimente l'aperçu + le PDF généré.
-      await TemplateCustomService.saveCustom(
-        widget.template.id,
-        positions: _positions,
-        mapping: _mapping,
-        background: _bg,
-      );
-
-      // 2) Si l'utilisateur est admin, on persiste aussi le template source.
-      final auth = context.read<AppAuthProvider>();
-      final isAdmin = auth.user?.isAdmin == true;
-      if (isAdmin && (widget.template.createdBy?.isNotEmpty ?? false)) {
-        final updated = widget.template.copyWith(
-          positions: _positions,
-          mapping: _mapping,
-        );
-        await TemplateService().updateTemplate(updated);
+      _company = company;
+      if (custom.positions.isNotEmpty) {
+        _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
       }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Personnalisation enregistrée'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      context.pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur d\'enregistrement : $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+      _isLoading = false;
+    });
   }
 
-  // ===== UI =====
+  Future<void> _saveConfig() async {
+    await TemplateCustomService.saveCustom(
+      widget.template.id,
+      positions: _layoutConfig.toMap(),
+      mapping: const {},
+    );
+  }
+
+  void _notifySaved() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Personnalisation enregistrée'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  /// Réinitialise le layout par défaut (action AppBar).
+  Future<void> _resetConfig() async {
+    await TemplateCustomService.clearCustom(widget.template.id);
+    if (!mounted) return;
+    setState(() {
+      _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+      _selected = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Layout réinitialisé'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  /// Drag & drop : échange l'élément déposé avec l'occupant du slot cible
+  /// (block / colonne / ordre) — le modèle reste aligné avec l'impression.
+  void _onElementMoved(
+    LayoutElement dragged,
+    LayoutBlock targetBlock,
+    int targetColumn,
+    int targetOrder,
+  ) {
+    final draggedPos = _layoutConfig.positions[dragged];
+    if (draggedPos == null) return;
+    LayoutElement? occupant;
+    for (final entry in _layoutConfig.positions.entries) {
+      final p = entry.value;
+      if (entry.key != dragged &&
+          p.blockIndex == targetBlock.index &&
+          p.column == targetColumn &&
+          p.order == targetOrder) {
+        occupant = entry.key;
+        break;
+      }
+    }
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      if (occupant != null) {
+        // Swap : l'occupant prend la place d'origine du dragged.
+        positions[occupant] = draggedPos;
+        positions[dragged] = ElementPosition(
+          blockIndex: targetBlock.index,
+          column: targetColumn,
+          colSpan: draggedPos.colSpan,
+          order: targetOrder,
+          visible: draggedPos.visible,
+        );
+      } else {
+        // Slot vide : on déplace simplement l'élément.
+        positions[dragged] = draggedPos.copyWith(
+          blockIndex: targetBlock.index,
+          column: targetColumn,
+          order: targetOrder,
+        );
+      }
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+      _selected = dragged;
+    });
+    _saveConfig();
+  }
+
+  /// Déplace un élément dans son bloc (±1 dans l'ordre des rangées).
+  void _moveOrder(LayoutElement element, int delta) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    LayoutElement? found;
+    for (final entry in _layoutConfig.positions.entries) {
+      final p = entry.value;
+      if (entry.key != element &&
+          p.blockIndex == pos.blockIndex &&
+          p.order == pos.order + delta) {
+        found = entry.key;
+        break;
+      }
+    }
+    // Copie finale : `other` est réassigné dans la boucle, la promotion de
+    // type ne s'applique donc pas dans la closure `setState` sans passer
+    // par cette variable finale (idiome Dart pour la null-safety).
+    final other = found;
+    if (other == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[other] = positions[other]!.copyWith(order: pos.order);
+      positions[element] = pos.copyWith(order: pos.order + delta);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
+  }
+
+  /// Change la colonne / la largeur d'un élément.
+  void _setColumn(LayoutElement element, {required int column, int? colSpan}) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[element] = pos.copyWith(column: column, colSpan: colSpan);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
+  }
+
+  /// Bascule la visibilité d'un élément.
+  void _toggleVisible(LayoutElement element) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[element] = pos.copyWith(visible: !pos.visible);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
+  }
+
+  void _setPageSpacing({double? pagePadding, double? blockSpacing}) {
+    setState(() {
+      _layoutConfig = _layoutConfig.copyWith(
+        pagePadding: pagePadding,
+        blockSpacing: blockSpacing,
+      );
+    });
+    _saveConfig();
+  }
+
+  // ── Build principal ────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    return Scaffold(
-      backgroundColor: theme.backgroundColor,
+    final isDark = theme.isDarkMode;
+    final text = theme.textColor;
+
+    return GlassScaffold(
       appBar: AppBar(
-        title: Text(
-          'Personnaliser — ${widget.template.name}',
-          style: TextStyle(
-            color: theme.textColor,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, size: 20, color: text),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Arrière-plan',
-            icon: Icon(Icons.wallpaper_rounded, color: theme.subTextColor),
-            onPressed: _openBackgroundEditor,
-          ),
-          IconButton(
-            tooltip: 'Réinitialiser',
-            icon: Icon(Icons.restart_alt_rounded, color: theme.subTextColor),
-            onPressed: () {
-              setState(() => _positions = _mergeWithDefaults({}));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Positions réinitialisées'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: _saving
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: _save,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.save_rounded, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
-                          Text(
-                            'Enregistrer',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ),
-        ],
-      ),
-      body: _buildPage(theme),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openToolbar,
-        backgroundColor: widget.template.primaryColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.tune_rounded),
-        label: const Text('Éléments'),
-      ),
-    );
-  }
-
-  /// Ouvre la barre d'outils de personnalisation en tiroir (drawer) par le bas.
-  void _openToolbar() {
-    final theme = context.read<ThemeProvider>();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) =>
-            _buildToolbarSheet(theme, setSheetState),
-      ),
-    );
-  }
-
-  // ===== BARRE D'OUTILS (tiroir depuis le bas) =====
-  Widget _buildToolbarSheet(ThemeProvider theme, StateSetter setSheetState) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.62,
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.isDarkMode ? Colors.grey[700] : Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.dashboard_customize_rounded,
-                  color: widget.template.primaryColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Éléments',
-                style: TextStyle(
-                  color: theme.textColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Fermer',
-                icon: Icon(Icons.close, color: theme.subTextColor, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Sections En-tête / Corps / Pied de page — chaque élément est
-          // déplaçable et éditable individuellement.
-          for (final entry in kTemplateSections.entries) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                entry.key,
-                style: TextStyle(
-                  color: theme.subTextColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final id in entry.value)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: LongPressDraggable<String>(
-                        data: id,
-                        feedback: Material(
-                          color: Colors.transparent,
-                          child: Opacity(
-                            opacity: 0.92,
-                            child: _buildToolbarChip(
-                              _elementById(id),
-                              theme,
-                              setSheetState,
-                              isFeedback: true,
-                            ),
-                          ),
-                        ),
-                        childWhenDragging: Opacity(
-                          opacity: 0.4,
-                          child: _buildToolbarChip(
-                            _elementById(id),
-                            theme,
-                            setSheetState,
-                          ),
-                        ),
-                        child: _buildToolbarChip(
-                          _elementById(id),
-                          theme,
-                          setSheetState,
-                        ),
-                        onDragStarted: () {
-                          setState(() => _selectedElement = id);
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          Divider(height: 1, color: theme.dividerColor),
-          const SizedBox(height: 8),
-          // Propriétés de l'élément sélectionné.
-          Expanded(
-            child: _selectedElement == null
-                ? Center(
-                    child: Text(
-                      'Touchez un élément pour le modifier',
-                      style: TextStyle(color: theme.subTextColor, fontSize: 12),
-                    ),
-                  )
-                : _buildProperties(theme),
-          ),
-        ],
-      ),
-    );
-  }
-
-  TemplateElement _elementById(String id) => kTemplateElements.firstWhere(
-        (e) => e.id == id,
-        orElse: () => kTemplateElements.first,
-      );
-
-    Widget _buildToolbarChip(
-      TemplateElement e, ThemeProvider theme, StateSetter setSheetState,
-      {bool isFeedback = false}) {
-    final isSelected = _selectedElement == e.id;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedElement = e.id);
-        setSheetState(() {});
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? widget.template.primaryColor.withValues(alpha: 0.12)
-              : theme.backgroundColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected
-                ? widget.template.primaryColor
-                : theme.dividerColor,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(e.icon, size: 16, color: widget.template.primaryColor),
-            const SizedBox(width: 6),
-            Text(
-              e.label,
-              style: TextStyle(
-                color: theme.textColor,
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ===== PAGE (aperçu A4 avec éléments positionnés) =====
-  Widget _buildPage(ThemeProvider theme) {
-    final pageBg = widget.template.backgroundColor;
-    final bgBytes = _templateBgBytes();
-    return Container(
-      color: theme.isDarkMode ? const Color(0xFF111114) : const Color(0xFFEEEEF2),
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: AspectRatio(
-            aspectRatio: 210 / 297,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                final h = constraints.maxHeight;
-                return DragTarget<String>(
-                  onAcceptWithDetails: (details) {
-                    final id = details.data;
-                    if (_positions.containsKey(id)) {
-                      // Le drop repositionne simplement l'élément (centré).
-                      _selectedElement = id;
-                    } else {
-                      _positions[id] = {...kDefaultPositions[id] as Map};
-                    }
-                    setState(() {});
-                  },
-                  builder: (context, candidates, rejected) {
-                    return Stack(
-                      clipBehavior: Clip.hardEdge,
-                      children: [
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: pageBg,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: widget.template.primaryColor.withValues(alpha: 0.35),
-                                width: widget.template.showBorder ? 1.5 : 0,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.18),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // 🖼️ Arrière-plan (image du modèle ou upload
-                        // utilisateur) avec opacité / flou / ajustement
-                        // personnalisés — prévisualisation en direct.
-                        if (bgBytes != null)
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: _buildBackgroundImage(bgBytes),
-                            ),
-                          ),
-                        for (final e in kTemplateElements)
-                          if (_visible(e.id))
-                            _buildPositionedElement(e, w, h, theme),
-                        // Grille de repère (léger)
-                        ..._buildGuideGrid(w, h, theme),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Décode l'image d'arrière-plan : priorité à l'upload personnalisé de
-  /// l'utilisateur (via l'éditeur « Arrière-plan »), sinon celle du modèle.
-  Uint8List? _templateBgBytes() {
-    if (_bg.hasCustomImage) {
-      try {
-        return base64Decode(_bg.fileData);
-      } catch (_) {
-        return null;
-      }
-    }
-    if (widget.template.fileData.isEmpty ||
-        widget.template.fileType == 'pdf') {
-      return null;
-    }
-    try {
-      return base64Decode(widget.template.fileData);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// 🖼️ Applique les réglages personnalisés (opacité, flou, ajustement) à
-  /// l'image d'arrière-plan — identique à l'aperçu plein écran et au PDF.
-  Widget _buildBackgroundImage(Uint8List bytes) {
-    final fit = _bg.fit == 'contain' ? BoxFit.contain : BoxFit.fill;
-    Widget image = Image.memory(
-      bytes,
-      fit: fit,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-    );
-    if (_bg.blur > 0) {
-      image = ImageFiltered(
-        imageFilter: ui.ImageFilter.blur(
-          sigmaX: _bg.blur,
-          sigmaY: _bg.blur,
-          tileMode: ui.TileMode.decal,
-        ),
-        child: image,
-      );
-    }
-    return Opacity(opacity: _bg.opacity, child: image);
-  }
-
-  // ===== ÉDITEUR D'ARRIÈRE-PLAN =====
-  /// Ouvre l'éditeur d'arrière-plan : upload d'image, opacité, flou, ajustement.
-  /// Les réglages s'appliquent EN DIRECT à l'aperçu (`_bg`) et sont persistés
-  /// immédiatement via [TemplateCustomService.saveCustom].
-  Future<void> _openBackgroundEditor() async {
-    final theme = context.read<ThemeProvider>();
-    TemplateBackgroundSettings draft = _bg;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: theme.cardColor,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.wallpaper_rounded,
-                      size: 20, color: widget.template.primaryColor),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Arrière-plan de la facture',
-                      style: TextStyle(
-                        color: theme.textColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close_rounded,
-                        size: 20, color: theme.subTextColor),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // --- Upload / changer / supprimer l'image ---
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.upload_rounded, size: 18),
-                      label: Text(
-                        draft.hasCustomImage
-                            ? 'Changer l\'image'
-                            : 'Uploader une image',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onPressed: () async {
-                        final picked = await _pickBackgroundImage(draft);
-                        if (picked != null) {
-                          setSheetState(() => draft = picked);
-                          // 👁️ Applique en direct à l'aperçu derrière la sheet.
-                          if (mounted) setState(() => _bg = picked);
-                        }
-                      },
-                    ),
-                  ),
-                  if (draft.hasCustomImage) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Supprimer l\'arrière-plan',
-                      icon: Icon(Icons.delete_outline_rounded,
-                          color: Colors.redAccent.shade200, size: 20),
-                      onPressed: () {
-                        const removed = TemplateBackgroundSettings();
-                        setSheetState(() => draft = removed);
-                        if (mounted) setState(() => _bg = removed);
-                      },
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              // --- Opacité ---
-              Text(
-                'Opacité : ${(draft.opacity * 100).round()}%',
-                style: TextStyle(color: theme.subTextColor, fontSize: 11),
-              ),
-              Slider(
-                value: draft.opacity,
-                min: 0,
-                max: 1,
-                divisions: 20,
-                onChanged: (v) {
-                  setSheetState(() => draft = draft.copyWith(opacity: v));
-                  if (mounted) setState(() => _bg = draft);
-                },
-              ),
-              // --- Flou ---
-              Text(
-                'Flou : ${draft.blur.toStringAsFixed(1)} px',
-                style: TextStyle(color: theme.subTextColor, fontSize: 11),
-              ),
-              Slider(
-                value: draft.blur,
-                min: 0,
-                max: 10,
-                divisions: 20,
-                onChanged: (v) {
-                  setSheetState(() => draft = draft.copyWith(blur: v));
-                  if (mounted) setState(() => _bg = draft);
-                },
-              ),
-              // --- Ajustement ---
-              Text(
-                'Ajustement',
-                style: TextStyle(color: theme.subTextColor, fontSize: 11),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'fill',
-                      label: Text('Remplir'),
-                      icon: Icon(Icons.crop_free_rounded, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 'contain',
-                      label: Text('Ajuster'),
-                      icon: Icon(Icons.fit_screen_rounded, size: 16),
-                    ),
-                  ],
-                  selected: {draft.fit},
-                  onSelectionChanged: (s) {
-                    setSheetState(() => draft = draft.copyWith(fit: s.first));
-                    if (mounted) setState(() => _bg = draft);
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: widget.template.primaryColor,
-                  ),
-                  icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Appliquer'),
-                  onPressed: () async {
-                    if (mounted) setState(() => _bg = draft);
-                    // 💾 Persistance immédiate de la personnalisation complète
-                    // (positions + mapping + arrière-plan) pour ce modèle.
-                    await TemplateCustomService.saveCustom(
-                      widget.template.id,
-                      positions: _positions,
-                      mapping: _mapping,
-                      background: draft,
-                    );
-                    if (!ctx.mounted) return;
-                    Navigator.of(ctx).pop();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Arrière-plan appliqué et enregistré'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Sélectionne une image (galerie) et la convertit en base64 pour stockage
-  /// local. Compatible web (readAsBytes via XFile) et mobile.
-  Future<TemplateBackgroundSettings?> _pickBackgroundImage(
-      TemplateBackgroundSettings current) async {
-    try {
-      final picker = ImagePicker();
-      final file = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1600,
-        imageQuality: 80,
-      );
-      if (file == null) return null;
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) return null;
-      final ext = file.name.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
-      return current.copyWith(
-        fileData: base64Encode(bytes),
-        fileType: ext,
-      );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Impossible de charger l\'image'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return null;
-    }
-  }
-
-  List<Widget> _buildGuideGrid(double w, double h, ThemeProvider theme) {
-    const n = 4;
-    return [
-      for (int i = 1; i < n; i++)
-        Positioned(
-          left: w * i / n,
-          top: 0,
-          width: 1,
-          height: h,
-          child: Container(color: theme.isDarkMode ? Colors.white10 : Colors.black.withValues(alpha: 0.04)),
-        ),
-      for (int j = 1; j < n; j++)
-        Positioned(
-          left: 0,
-          top: h * j / n,
-          width: w,
-          height: 1,
-          child: Container(color: theme.isDarkMode ? Colors.white10 : Colors.black.withValues(alpha: 0.04)),
-        ),
-    ];
-  }
-
-  Widget _buildPositionedElement(
-      TemplateElement e, double w, double h, ThemeProvider theme) {
-    final x = _x(e.id);
-    final y = _y(e.id);
-    final scale = _scale(e.id);
-    final isSelected = _selectedElement == e.id;
-
-    // Taille relative de l'élément (largeur ~ 55% de la page, hauteur variable).
-    final elemWidth = w * 0.55 * scale;
-    final content = _buildElementContent(e, elemWidth, theme);
-
-    // Mesure la hauteur approximative pour éviter les débordements.
-    return Positioned(
-      left: x * w,
-      top: y * h,
-      width: elemWidth,
-      child: GestureDetector(
-        // 🔧 Clic = sélection uniquement (pas de popup) : le panneau
-        // « Éléments » s'ouvre via le bouton FAB.
-        onTap: () {
-          setState(() => _selectedElement = e.id);
-        },
-        onPanUpdate: (details) {
-          if (!isSelected) setState(() => _selectedElement = e.id);
-          final newX = (_x(e.id) + details.delta.dx / w).clamp(0.0, 0.98);
-          final newY = (_y(e.id) + details.delta.dy / h).clamp(0.0, 0.98);
-          _updatePos(e.id, {'x': newX, 'y': newY});
-        },
-        child: Stack(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? widget.template.primaryColor.withValues(alpha: 0.08)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-                border: isSelected
-                    ? Border.all(
-                        color: widget.template.primaryColor,
-                        width: 1.4,
-                      )
-                    : Border.all(color: Colors.transparent),
-              ),
-              child: content,
-            ),
-            // Étiquette de l'élément (petit badge)
-            Positioned(
-              top: -4,
-              left: -4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: widget.template.primaryColor,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(e.icon, size: 9, color: Colors.white),
-                    const SizedBox(width: 3),
-                    Text(
-                      e.label,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 8, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Poignée de redimensionnement (bas-droite)
-            if (isSelected)
-              Positioned(
-                right: -8,
-                bottom: -8,
-                child: GestureDetector(
-                  onPanUpdate: (d) {
-                    final newScale =
-                        (_scale(e.id) + d.delta.dx / 200).clamp(0.5, 2.5);
-                    _updatePos(e.id, {'scale': newScale});
-                  },
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: widget.template.primaryColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: const Icon(Icons.open_with_rounded, size: 10, color: Colors.white),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ===== CONTENU DE CHAQUE ÉLÉMENT =====
-  Widget _buildElementContent(TemplateElement e, double width, ThemeProvider theme) {
-    final primary = widget.template.primaryColor;
-    final text = widget.template.textColor;
-    final mappedVar = _mapping[e.id];
-    final varBadge = mappedVar == null
-        ? null
-        : '{{$mappedVar}}';
-
-    Widget inner;
-    switch (e.id) {
-      case 'logo':
-        inner = Container(
-          width: width * 0.14,
-          height: width * 0.14,
-          decoration: BoxDecoration(
-            color: primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: primary.withValues(alpha: 0.3)),
-          ),
-          child: Icon(Icons.business_rounded, color: primary, size: 20),
-        );
-      case 'company_name':
-        inner = Text(
-          _companyName,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: primary,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'company_address':
-        inner = Text(
-          _companyAddress,
-          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'company_phone':
-        inner = Text(
-          'Tél : +237 6 90 00 00 00',
-          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'company_email':
-        inner = Text(
-          'contact@ohada-invoice-pro.com',
-          style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.7)),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'invoice_title':
-        inner = Text(
-          'FACTURE',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: primary,
-            letterSpacing: 2,
-          ),
-          textAlign: TextAlign.right,
-        );
-      case 'client_name':
-        inner = Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Facturé à :',
+              'Personnaliser',
               style: TextStyle(
-                color: primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
+                color: text,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
               ),
             ),
             Text(
-              _clientName,
+              widget.template.name,
               style: TextStyle(
-                color: text,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
+                color: theme.subTextColor,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
-        );
-      case 'client_address':
-        inner = Text(
-          'Douala, Cameroun',
-          style: TextStyle(
-            color: text.withValues(alpha: 0.6),
-            fontSize: 9,
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.restart_alt_rounded, size: 20, color: text),
+            tooltip: 'Réinitialiser',
+            onPressed: _resetConfig,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'client_phone':
-        inner = Text(
-          'Tél : +237 6 90 00 00 00',
-          style: TextStyle(
-            color: text.withValues(alpha: 0.6),
-            fontSize: 9,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'client_email':
-        inner = Text(
-          'client@email.com',
-          style: TextStyle(
-            color: text.withValues(alpha: 0.6),
-            fontSize: 9,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        );
-      case 'items':
-        inner = Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-              decoration: BoxDecoration(
-                color: primary,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-              ),
-              child: Row(
+          _saveButton(theme),
+          const SizedBox(width: 10),
+        ],
+      ),
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(color: theme.primaryColor))
+          : SafeArea(
+              top: false,
+              child: Column(
                 children: [
-                  Expanded(flex: 3, child: _tableHead('Désignation')),
-                  Expanded(child: _tableHead('Qté', center: true)),
-                  Expanded(child: _tableHead('Prix', right: true)),
-                  Expanded(child: _tableHead('Total', right: true)),
+                  Expanded(child: _canvas(theme, isDark)),
+                  _bottomBar(theme, isDark),
                 ],
               ),
             ),
-            for (final item in _sampleItems)
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: primary.withValues(alpha: 0.12)),
+    );
+  }
+
+  /// Bouton « Enregistrer » — pill en dégradé indigo → violet.
+  Widget _saveButton(ThemeProvider theme) {
+    return GestureDetector(
+      onTap: () async {
+        await _saveConfig();
+        _notifySaved();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [theme.primaryColor, theme.gradientEndColor],
+          ),
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: [
+            BoxShadow(
+              color: theme.primaryColor.withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.save_outlined, size: 14, color: Colors.white),
+            SizedBox(width: 6),
+            Text(
+              'Enregistrer',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Canvas A4 + grille de repères ──────────────────────────────────────
+  Widget _canvas(ThemeProvider theme, bool isDark) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: isDark ? const Color(0xFF0B0D17) : const Color(0xFFECECF3),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.fitWidth,
+            child: Transform.scale(
+              scale: _zoom,
+              child: _a4Card(theme, isDark),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _a4Card(ThemeProvider theme, bool isDark) {
+    final renderer = InvoiceRenderer(
+      config: _layoutConfig,
+      mode: RenderMode.edit,
+      onElementMoved: _onElementMoved,
+      dragAccentColor: theme.primaryColor,
+      elementBuilder: (ctx, element, pos) =>
+          _selectableElement(element, pos, theme),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.06),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            // Grille de repères 4×4 (aide au placement)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _GridPainter(
+                    color: theme.primaryColor.withValues(alpha: 0.10),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(item['name']!,
-                          style: TextStyle(fontSize: 9, color: text),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            SizedBox(
+              width: A4Dimensions.width,
+              height: A4Dimensions.height,
+              child: renderer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Sélection d'élément (anneau + étiquette) ───────────────────────────
+  Widget _selectableElement(
+      LayoutElement element, ElementPosition pos, ThemeProvider theme) {
+    final selected = _selected == element;
+    return GestureDetector(
+      onTap: () => setState(() => _selected = element),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          color: selected
+              ? theme.primaryColor.withValues(alpha: 0.06)
+              : Colors.transparent,
+          border: Border.all(
+            color: selected ? theme.primaryColor : Colors.transparent,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _buildElementContent(element, pos),
+            if (selected)
+              Positioned(
+                top: -9,
+                left: 0,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: theme.primaryColor,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    element.label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
                     ),
-                    Expanded(
-                      child: Text(item['qty']!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 9, color: text)),
-                    ),
-                    Expanded(
-                      child: Text(item['price']!,
-                          textAlign: TextAlign.right,
-                          style: TextStyle(fontSize: 9, color: text)),
-                    ),
-                    Expanded(
-                      child: Text(item['total']!,
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              fontSize: 9, color: text, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
+                  ),
                 ),
               ),
           ],
-        );
-      case 'subtotal':
-        inner = _totalRow('Sous-total', '175 000 XAF');
-      case 'tax_amount':
-        inner = _totalRow('TVA (18%)', '31 500 XAF');
-      case 'discount':
-        inner = _totalRow('Remise', '-5 000 XAF');
-      case 'total_amount':
-        inner = Container(
-          padding: const EdgeInsets.only(top: 4),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: primary.withValues(alpha: 0.4)),
-            ),
-          ),
-          child: _totalRow('TOTAL', '206 500 XAF', bold: true, primary: primary),
-        );
-      case 'footer':
-        inner = Text(
-          'Merci de votre confiance. Paiement à 30 jours.',
-          style: TextStyle(
-            fontSize: 9,
-            color: text.withValues(alpha: 0.65),
-            fontStyle: FontStyle.italic,
-          ),
-        );
-      case 'qr':
-        inner = Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            border: Border.all(color: primary.withValues(alpha: 0.3)),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(Icons.qr_code_rounded, size: 34, color: text.withValues(alpha: 0.8)),
-        );
-      case 'signature':
-        inner = Container(
-          width: width * 0.5,
-          padding: const EdgeInsets.only(top: 4),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: Colors.black45)),
-          ),
-          child: Text(
-            'Signature',
-            style: TextStyle(fontSize: 9, color: text.withValues(alpha: 0.6)),
-          ),
-        );
-      default:
-        inner = const SizedBox.shrink();
-    }
+        ),
+      ),
+    );
+  }
 
-    // Badge variable assignée (si mapping)
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // ── Contenu des éléments de la facture ─────────────────────────────────
+  Widget _buildElementContent(LayoutElement element, ElementPosition pos) {
+    final t = widget.template;
+    final c = _company;
+    final primary = t.primaryColor;
+    final text = t.textColor;
+    final sub = text.withValues(alpha: 0.7);
+    switch (element) {
+      case LayoutElement.logo:
+        return Container(width: 40, height: 40, decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: Icon(Icons.business, color: primary, size: 24));
+      case LayoutElement.companyName:
+        return Text(c?.name ?? 'Mon entreprise', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: text));
+      case LayoutElement.companyAddress:
+        return Text(c?.address ?? 'Adresse', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.companyPhone:
+        return Text(c?.phone ?? '+225 00 00 00 00', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.companyEmail:
+        return Text(c?.email ?? 'contact@entreprise.com', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.invoiceTitle:
+        return Text('FACTURE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: primary, letterSpacing: 1.5));
+      case LayoutElement.clientName:
+        return Text('Nom Client', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: text));
+      case LayoutElement.clientAddress:
+        return Text('Adresse', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.clientPhone:
+        return Text('Téléphone', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.clientEmail:
+        return Text('email@client.com', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.itemsTable:
+        return Column(children: [
+          Container(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8), decoration: BoxDecoration(color: primary, borderRadius: const BorderRadius.vertical(top: Radius.circular(4))), child: Row(children: [Expanded(flex: 3, child: Text('Désignation', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600))), Expanded(child: Text('Qté', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600))), Expanded(child: Text('Prix', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600))), Expanded(child: Text('Total', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)))])),
+          Container(padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8), decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!)), child: Row(children: [Expanded(flex: 3, child: Text('Produit', style: TextStyle(fontSize: 9, color: text))), Expanded(child: Text('2', style: TextStyle(fontSize: 9, color: text))), Expanded(child: Text('50 000', style: TextStyle(fontSize: 9, color: text))), Expanded(child: Text('100 000', style: TextStyle(fontSize: 9, color: text)))])),
+        ]);
+      case LayoutElement.subtotal:
+        return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Sous-total', style: TextStyle(fontSize: 11, color: text)), Text('100 000', style: TextStyle(fontSize: 11, color: text))]);
+      case LayoutElement.taxAmount:
+        return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('TVA (18%)', style: TextStyle(fontSize: 11, color: text)), Text('18 000', style: TextStyle(fontSize: 11, color: text))]);
+      case LayoutElement.discount:
+        return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Remise', style: TextStyle(fontSize: 11, color: const Color(0xFFBA1A1A))), Text('-0', style: TextStyle(fontSize: 11, color: const Color(0xFFBA1A1A)))]);
+      case LayoutElement.totalAmount:
+        return Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('TOTAL', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)), Text('118 000 FCFA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary))]));
+      case LayoutElement.footerText:
+        return Text('Conforme aux normes OHADA', style: TextStyle(fontSize: 9, color: sub, fontStyle: FontStyle.italic));
+      case LayoutElement.qrCode:
+        return t.showPaymentQR ? Container(width: 70, height: 70, decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(4)), child: Icon(Icons.qr_code_2, size: 50, color: primary)) : const SizedBox.shrink();
+      case LayoutElement.signature:
+        return Column(children: [Container(width: 120, height: 1, color: Colors.grey), const SizedBox(height: 4), Text('Signature', style: TextStyle(fontSize: 10, color: sub))]);
+    }
+  }
+
+  // ── Barre inférieure : propriétés OU bouton « Éléments » + zoom ────────
+  Widget _bottomBar(ThemeProvider theme, bool isDark) {
+    final selected = _selected;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF151722).withValues(alpha: 0.96)
+            : Colors.white.withValues(alpha: 0.94),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor,
+            blurRadius: 16,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: selected == null
+          ? _idleBar(theme, isDark)
+          : _propertiesBar(selected, theme, isDark),
+    );
+  }
+
+  Widget _idleBar(ThemeProvider theme, bool isDark) {
+    return Row(
       children: [
-        if (varBadge != null)
-          Container(
-            margin: const EdgeInsets.only(bottom: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.deepPurple.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.4)),
-            ),
-            child: Text(
-              varBadge,
-              style: const TextStyle(
-                color: Colors.deepPurple,
-                fontSize: 8,
-                fontFamily: 'monospace',
+        Expanded(
+          child: GestureDetector(
+            onTap: _openElementsSheet,
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [theme.primaryColor, theme.gradientEndColor],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.primaryColor.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.widgets_outlined, size: 18, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    'Éléments',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        inner,
+        ),
+        const SizedBox(width: 12),
+        _zoomPill(theme, isDark),
       ],
     );
   }
 
-  Widget _tableHead(String t, {bool center = false, bool right = false}) {
-    return Text(
-      t,
-      textAlign: right
-          ? TextAlign.right
-          : center
-              ? TextAlign.center
-              : TextAlign.left,
-      style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.bold,
-        fontSize: 9,
+  Widget _zoomPill(ThemeProvider theme, bool isDark) {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: theme.primaryColor.withValues(alpha: isDark ? 0.16 : 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.primaryColor.withValues(alpha: 0.2),
+        ),
       ),
-    );
-  }
-
-  Widget _totalRow(String label, String value,
-      {bool bold = false, Color? primary}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-                color: bold ? (primary ?? Colors.black) : null,
-              ),
-            ),
-          ),
+          _zoomBtn(Icons.remove, () => setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 2.0)), theme),
           Text(
-            value,
+            '${(_zoom * 100).round()}%',
             style: TextStyle(
-              fontSize: 10,
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: theme.primaryColor,
             ),
           ),
+          _zoomBtn(Icons.add, () => setState(() => _zoom = (_zoom + 0.1).clamp(0.5, 2.0)), theme),
         ],
       ),
     );
   }
 
-  // ===== PANNEAU DE PROPRIÉTÉS =====
-  Widget _buildProperties(ThemeProvider theme) {
-    final id = _selectedElement;
-    if (id == null) {
-      return Center(
-        child: Text(
-          'Sélectionnez un élément\npour le personnaliser',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: theme.subTextColor, fontSize: 12, height: 1.5),
-        ),
-      );
-    }
-    final el = kTemplateElements.firstWhere((e) => e.id == id,
-        orElse: () => kTemplateElements.first);
-    final visible = _visible(id);
-    final scale = _scale(id);
+  Widget _zoomBtn(IconData icon, VoidCallback onTap, ThemeProvider theme) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Icon(icon, size: 18, color: theme.primaryColor),
+      ),
+    );
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(el.icon, size: 18, color: widget.template.primaryColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  el.label,
-                  style: TextStyle(
-                    color: theme.textColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Supprimer de la page',
-                icon: Icon(Icons.delete_outline_rounded,
-                    color: theme.subTextColor, size: 20),
-                onPressed: () => _updatePos(id, {'visible': false}),
-              ),
-            ],
-          ),
-          const Divider(height: 16),
-          // Visible
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: Text(
-              'Visible',
-              style: TextStyle(fontSize: 12),
-            ),
-            value: visible,
-            onChanged: (v) => _updatePos(id, {'visible': v}),
-          ),
-          // Échelle
-          Text('Taille', style: TextStyle(color: theme.subTextColor, fontSize: 11)),
-          Row(
-            children: [
-              const Icon(Icons.zoom_out, size: 16),
-              Expanded(
-                child: Slider(
-                  value: scale,
-                  min: 0.5,
-                  max: 2.5,
-                  onChanged: (v) => _updatePos(id, {'scale': v}),
-                ),
-              ),
-              const Icon(Icons.zoom_in, size: 16),
-            ],
-          ),
-          // Variable de facture à afficher (mapping)
-          if (InvoiceTemplate.availableVariables.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Variable de facture',
-              style: TextStyle(color: theme.subTextColor, fontSize: 11),
-            ),
-            const SizedBox(height: 6),
+  // ── Barre propriétés de l'élément sélectionné ──────────────────────────
+  Widget _propertiesBar(
+      LayoutElement element, ThemeProvider theme, bool isDark) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.dividerColor),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: _mapping.containsKey(id) ? _mapping[id] : null,
-                  hint: Text(
-                    'Aucune (texte fixe)',
-                    style: TextStyle(color: theme.subTextColor, fontSize: 12),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Aucune (texte fixe)',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                    for (final v in InvoiceTemplate.availableVariables)
-                      DropdownMenuItem<String>(
-                        value: v,
-                        child: Text(v, style: const TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() {
-                    if (v == null) {
-                      _mapping.remove(id);
-                    } else {
-                      _mapping[id] = v;
-                    }
-                  }),
+                color: theme.primaryColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.primaryColor.withValues(alpha: 0.3),
                 ),
               ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_elementIcon(element),
+                      size: 14, color: theme.primaryColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    element.label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            _propBtn(
+              pos.visible ? Icons.visibility : Icons.visibility_off,
+              () => _toggleVisible(element),
+              theme,
+              tooltip: 'Visibilité',
+            ),
+            _propBtn(
+              Icons.arrow_upward,
+              () => _moveOrder(element, -1),
+              theme,
+              tooltip: 'Monter',
+            ),
+            _propBtn(
+              Icons.arrow_downward,
+              () => _moveOrder(element, 1),
+              theme,
+              tooltip: 'Descendre',
+            ),
+            _propBtn(
+              Icons.close,
+              () => setState(() => _selected = null),
+              theme,
+              tooltip: 'Fermer',
             ),
           ],
-          const SizedBox(height: 8),
+        ),
+        const SizedBox(height: 10),
+        _columnSelector(element, theme, isDark),
+      ],
+    );
+  }
+
+  // ── Sélecteur de position (Gauche / Droite / Pleine largeur) ───────────
+  Widget _columnSelector(
+      LayoutElement element, ThemeProvider theme, bool isDark) {
+    return SizedBox(
+      height: 36,
+      child: Row(
+        children: [
           Text(
-            'Astuce : glissez l\'élément sur la page pour le déplacer, '
-            'utilisez la poignée pour l\'agrandir.',
-            style: TextStyle(color: theme.subTextColor, fontSize: 10, height: 1.4),
+            'Position',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.subTextColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: theme.primaryColor
+                    .withValues(alpha: isDark ? 0.14 : 0.07),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  _columnOption('Gauche', 0, 1, element, theme),
+                  _columnOption('Droite', 1, 1, element, theme),
+                  _columnOption('Pleine largeur', 0, 2, element, theme),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ===== AJUSTEMENT MATHÉMATIQUE (scale pour garder l'élément dans la page) =====
-  // (utilisé par la poignée — la logique clamp est dans _buildPositionedElement)
+  Widget _columnOption(
+      String label, int column, int colSpan, LayoutElement element,
+      ThemeProvider theme) {
+    final pos = _layoutConfig.positions[element]!;
+    final active =
+        pos.colSpan == colSpan && (colSpan == 2 || pos.column == column);
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _setColumn(element, column: column, colSpan: colSpan),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          decoration: BoxDecoration(
+            color: active ? theme.primaryColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : theme.subTextColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _propBtn(IconData icon, VoidCallback onTap, ThemeProvider theme,
+      {String? tooltip}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(left: 6),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: theme.primaryColor.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: theme.primaryColor),
+        ),
+      ),
+    );
+  }
+
+  IconData _elementIcon(LayoutElement e) {
+    switch (e) {
+      case LayoutElement.logo:
+        return Icons.image_outlined;
+      case LayoutElement.companyName:
+        return Icons.business_outlined;
+      case LayoutElement.companyAddress:
+        return Icons.location_on_outlined;
+      case LayoutElement.companyPhone:
+        return Icons.phone_outlined;
+      case LayoutElement.companyEmail:
+        return Icons.mail_outline;
+      case LayoutElement.invoiceTitle:
+        return Icons.title;
+      case LayoutElement.clientName:
+        return Icons.person_outline;
+      case LayoutElement.clientAddress:
+        return Icons.location_on_outlined;
+      case LayoutElement.clientPhone:
+        return Icons.phone_outlined;
+      case LayoutElement.clientEmail:
+        return Icons.mail_outline;
+      case LayoutElement.itemsTable:
+        return Icons.table_rows;
+      case LayoutElement.subtotal:
+        return Icons.calculate_outlined;
+      case LayoutElement.taxAmount:
+        return Icons.percent;
+      case LayoutElement.discount:
+        return Icons.sell_outlined;
+      case LayoutElement.totalAmount:
+        return Icons.payments_outlined;
+      case LayoutElement.footerText:
+        return Icons.notes;
+      case LayoutElement.qrCode:
+        return Icons.qr_code_2;
+      case LayoutElement.signature:
+        return Icons.draw;
+    }
+  }
+
+  // ── Bottom sheet « Éléments » (chips par bloc + réglages page) ─────────
+  void _openElementsSheet() {
+    final theme = context.read<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    LayoutBlock? filter;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) {
+          final elements = _filteredElements(filter);
+          return Container(
+            height: MediaQuery.of(sheetCtx).size.height * 0.68,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF151722) : Colors.white,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : Colors.black.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Éléments de la facture',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: theme.textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _resetConfig,
+                        child: Text(
+                          'RÉINITIALISER',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                            color: theme.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    children: [
+                      _blockChip(null, theme, isDark, filter,
+                          (b) => setSheet(() => filter = b)),
+                      for (final block in LayoutBlock.values)
+                        _blockChip(block, theme, isDark, filter,
+                            (b) => setSheet(() => filter = b)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: elements.length,
+                    itemBuilder: (ctx, i) =>
+                        _elementTile(elements[i], theme, sheetCtx, setSheet),
+                  ),
+                ),
+                const Divider(height: 8),
+                _pageSettings(theme),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<LayoutElement> _filteredElements(LayoutBlock? filter) {
+    final elements = _layoutConfig.positions.keys
+        .where((e) =>
+            filter == null ||
+            _layoutConfig.positions[e]!.blockIndex == filter.index)
+        .toList()
+      ..sort((a, b) {
+        final pa = _layoutConfig.positions[a]!;
+        final pb = _layoutConfig.positions[b]!;
+        final byBlock = pa.blockIndex.compareTo(pb.blockIndex);
+        if (byBlock != 0) return byBlock;
+        final byOrder = pa.order.compareTo(pb.order);
+        if (byOrder != 0) return byOrder;
+        return pa.column.compareTo(pb.column);
+      });
+    return elements;
+  }
+
+  Widget _blockChip(LayoutBlock? block, ThemeProvider theme, bool isDark,
+      LayoutBlock? current, ValueChanged<LayoutBlock?> onTap) {
+    final active = block == current;
+    final label = block == null ? 'Tous' : block.label;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: () => onTap(block),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: active
+                ? theme.primaryColor
+                : theme.primaryColor.withValues(alpha: isDark ? 0.12 : 0.06),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: theme.primaryColor.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+              color: active ? Colors.white : theme.primaryColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _elementTile(LayoutElement element, ThemeProvider theme,
+      BuildContext sheetCtx, StateSetter setSheet) {
+    final pos = _layoutConfig.positions[element]!;
+    final block = LayoutBlock.values[pos.blockIndex];
+    return ListTile(
+      dense: true,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: theme.primaryColor.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(_elementIcon(element), size: 18, color: theme.primaryColor),
+      ),
+      title: Text(
+        element.label,
+        style: TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          color: pos.visible ? theme.textColor : theme.subTextColor,
+        ),
+      ),
+      subtitle: Text(
+        '${block.label} • ${pos.colSpan == 2 ? 'pleine largeur' : (pos.column == 0 ? 'gauche' : 'droite')}',
+        style: TextStyle(fontSize: 10.5, color: theme.subTextColor),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              pos.visible ? Icons.visibility : Icons.visibility_off,
+              size: 18,
+              color: pos.visible ? theme.primaryColor : theme.subTextColor,
+            ),
+            onPressed: () {
+              _toggleVisible(element);
+              setSheet(() {});
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.arrow_upward, size: 18, color: theme.subTextColor),
+            onPressed: () {
+              _moveOrder(element, -1);
+              setSheet(() {});
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.arrow_downward,
+                size: 18, color: theme.subTextColor),
+            onPressed: () {
+              _moveOrder(element, 1);
+              setSheet(() {});
+            },
+          ),
+        ],
+      ),
+      selected: _selected == element,
+      onTap: () {
+        setState(() => _selected = element);
+        Navigator.of(sheetCtx).pop();
+      },
+    );
+  }
+
+  Widget _pageSettings(ThemeProvider theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      child: Column(
+        children: [
+          _pageSlider(
+            'Marge de page',
+            _layoutConfig.pagePadding,
+            0,
+            40,
+            theme,
+            (v) => _setPageSpacing(pagePadding: v),
+          ),
+          _pageSlider(
+            'Espacement des blocs',
+            _layoutConfig.blockSpacing,
+            0,
+            20,
+            theme,
+            (v) => _setPageSpacing(blockSpacing: v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pageSlider(String label, double value, double min, double max,
+      ThemeProvider theme, ValueChanged<double> onChanged) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: theme.textColor),
+            ),
+            Text(
+              value.toStringAsFixed(1),
+              style: TextStyle(fontSize: 11.5, color: theme.subTextColor),
+            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 3,
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          ),
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            activeColor: theme.primaryColor,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Grille de repères 4×4 dessinée derrière les éléments du canvas A4.
+class _GridPainter extends CustomPainter {
+  final Color color;
+  _GridPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var i = 1; i < 4; i++) {
+      final dx = size.width * i / 4;
+      final dy = size.height * i / 4;
+      canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), paint);
+      canvas.drawLine(Offset(0, dy), Offset(size.width, dy), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
