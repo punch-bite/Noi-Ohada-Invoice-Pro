@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  NOI OHADA Invoice Pro — Serveur de callbacks (ENKAP)
 //
 //  Reçoit les callbacks de confirmation ENKAP (Orange Money / MTN / Carte)
@@ -611,6 +611,10 @@ app.post(
         port,
         secure: port === 465,
         auth: { user, pass },
+        // 🔧 Timeouts pour ne pas bloquer la fonction Vercel (>10s = 504).
+        connectionTimeout: SMTP_CONNECT_TIMEOUT,
+        socketTimeout: SMTP_SOCKET_TIMEOUT,
+        greetingTimeout: SMTP_CONNECT_TIMEOUT,
       });
 
       await transporter.sendMail({
@@ -818,6 +822,11 @@ app.post(
 // NB : `nodemailer` est déjà requis plus haut (endpoint /email/send).
 
 // Envoi d'email via SMTP serveur (best-effort, ne lève pas).
+// Timeout par défaut (ms) pour éviter de bloquer la fonction Vercel si le
+// serveur SMTP est injoignable ou lent.
+const SMTP_CONNECT_TIMEOUT = Number(process.env.SMTP_CONNECT_TIMEOUT || 5000);
+const SMTP_SOCKET_TIMEOUT = Number(process.env.SMTP_SOCKET_TIMEOUT || 5000);
+
 async function sendMail({ to, subject, text, html }) {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT || 587);
@@ -835,6 +844,10 @@ async function sendMail({ to, subject, text, html }) {
       port,
       secure: port === 465,
       auth: { user, pass },
+      // 🔧 Timeouts pour ne pas bloquer la fonction Vercel (>10s = 504).
+      connectionTimeout: SMTP_CONNECT_TIMEOUT,
+      socketTimeout: SMTP_SOCKET_TIMEOUT,
+      greetingTimeout: SMTP_CONNECT_TIMEOUT,
     });
     await transporter.sendMail({
       from: `"${fromName.replace(/[\r\n"]/g, '')}" <${fromEmail}>`,
@@ -848,6 +861,18 @@ async function sendMail({ to, subject, text, html }) {
     logger.warn('⚠️ sendMail échec:', { error: e.message });
     return false;
   }
+}
+
+// Version avec timeout global : enveloppe sendMail dans une course contre
+// une promesse de timeout. Garantit que l'appel ne bloque jamais plus de
+// `maxMs` millisecondes (utile pour les endpoints critiques comme l'invite).
+function sendMailWithTimeout(mailOptions, maxMs = 8000) {
+  return Promise.race([
+    sendMail(mailOptions),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('sendMail timeout')), maxMs),
+    ),
+  ]);
 }
 
 // Écrit une notification Firestore pour un utilisateur (SDK admin →
@@ -1016,8 +1041,9 @@ app.post(
           data: { teamId, teamName, inviterName, role: memberRole },
         });
 
-        // ✉️ Email à l'invité.
-        await sendMail({
+        // ✉️ Email à l'invité (non-bloquant avec timeout — l'invitation est
+        // déjà créée et la notification envoyée, l'email est secondaire).
+        sendMailWithTimeout({
           to: emailKey,
           subject: `Invitation à rejoindre « ${teamName} » sur NOI OHADA Invoice Pro`,
           text:
@@ -1027,7 +1053,9 @@ app.post(
             `Connectez-vous à votre compte : dans l'onglet Équipes, ouvrez ` +
             `« Mes invitations » et acceptez l'invitation.\n\n` +
             `À très bientôt,\nL'équipe NOI OHADA Invoice Pro`,
-        });
+        }).catch((e) =>
+          logger.warn('⚠️ sendMail invite échec/timeout:', { error: e.message }),
+        );
 
         logger.info('team invite-member', {
           teamId,
@@ -1119,14 +1147,16 @@ app.post(
           const ownerData =
             (await db.collection('users').doc(ownerId).get()).data() || {};
           if (ownerData.email) {
-            await sendMail({
+            sendMailWithTimeout({
               to: ownerData.email,
               subject: `« ${teamDisplay} » : ${inviteeName} a accepté l'invitation`,
               text:
                 `Bonjour,\n\n${inviteeName} a accepté votre invitation et rejoint ` +
                 `l'équipe « ${teamDisplay} » sur NOI OHADA Invoice Pro.\n\n` +
                 `À très bientôt,\nL'équipe NOI OHADA Invoice Pro`,
-            });
+            }).catch((e) =>
+              logger.warn('⚠️ sendMail accept échec/timeout:', { error: e.message }),
+            );
           }
         }
 
