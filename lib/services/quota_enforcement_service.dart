@@ -34,6 +34,12 @@ class QuotaEnforcementService {
     return plan.maxInvoices - current.length;
   }
 
+  Future<int> remainingSuppliers(Plan plan) async {
+    if (plan.isUnlimitedSuppliers()) return -1;
+    final current = await _db.getSuppliers();
+    return plan.maxSuppliers - current.length;
+  }
+
   /// Vérifie si l'utilisateur peut ajouter un nouveau client.
   Future<QuotaResult> canAddClient(Plan plan) async {
     if (plan.isUnlimitedClients()) return QuotaResult.allowed();
@@ -64,6 +70,17 @@ class QuotaEnforcementService {
     return QuotaResult.denied(
       'Limite de factures atteinte (${plan.maxInvoices}). '
       'Passez au plan Pro ou Business pour des factures illimitées.',
+    );
+  }
+
+  /// Vérifie si l'utilisateur peut ajouter un nouveau fournisseur.
+  Future<QuotaResult> canAddSupplier(Plan plan) async {
+    if (plan.isUnlimitedSuppliers()) return QuotaResult.allowed();
+    final remaining = await remainingSuppliers(plan);
+    if (remaining > 0) return QuotaResult.allowed(remaining);
+    return QuotaResult.denied(
+      'Limite de fournisseurs atteinte (${plan.maxSuppliers}). '
+      'Passez au plan Pro (25 fournisseurs) ou Business (illimité).',
     );
   }
 }

@@ -1,0 +1,152 @@
+name: Flutter CI/CD (Web + iOS)
+
+# ==============================================================
+# CI/CD pour Noi Ohada Invoice Pro
+#  - CI     : analyse statique + tests sur chaque push/PR
+#  - Web    : build release + déploiement Firebase Hosting (main)
+#  - iOS    : build release (--no-codesign, artefact téléchargeable)
+#
+# Secrets requis (déploiement web uniquement) :
+#   FIREBASE_SERVICE_ACCOUNT — clé JSON du compte de service Firebase
+#   (Console Firebase → Paramètres du projet → Comptes de service)
+#   + la variable de dépôt DEPLOY_WEB=true (Settings → Variables → Actions)
+#     pour activer le déploiement.
+# ==============================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FLUTTER_CHANNEL: stable
+
+jobs:
+  # ---------- 1. Analyse & tests ----------
+  analyze:
+    name: Analyse & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ runner.tool_cache }}/flutter
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test
+
+  # ---------- 2. Build Web + déploiement Firebase Hosting ----------
+  build-web:
+    name: Build Web
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: pub get
+        run: flutter pub get
+
+      - name: Build web (release)
+        run: flutter build web --release
+
+      - name: Upload artefact web
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: build/web
+          retention-days: 14
+
+  deploy-web:
+    name: Deploy Web (Firebase Hosting)
+    needs: build-web
+    # Déploiement uniquement sur push main + quand DEPLOY_WEB=true
+    # est défini dans les variables du dépôt (et le secret configuré).
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      vars.DEPLOY_WEB == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artefact web
+        uses: actions/download-artifact@v4
+        with:
+          name: web-release
+          path: build/web
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: facture-ohada
+          channelId: live
+
+  # ---------- 3. Build iOS ( artefact non signé ) ----------
+  build-ios:
+    name: Build iOS
+    needs: analyze
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: pub get
+        run: flutter pub get
+
+      # Build sans signature : vérifie que le projet compile (Xcode,
+      # Pods, plugins). Pour un build signé, ajouter les secrets de
+      # certificat (P12 + provisioning) et `flutter build ipa`.
+      - name: Build iOS (release, --no-codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload artefact iOS (Runner.app)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: build/ios/iphoneos/Runner.app
+          retention-days: 14

@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
 import '../../../services/stock_service.dart';
+import '../../../services/supplier_service.dart';
 import '../../../models/product.dart';
+import '../../../models/supplier.dart';
 import '../../../models/delivery.dart';
 import 'create_product_screen.dart';
 import 'create_delivery_screen.dart';
@@ -22,7 +24,9 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final StockService _stockService = StockService();
+  final SupplierService _supplierService = SupplierService();
   Product? _product;
+  Supplier? _supplier;
   List<Delivery> _deliveries = [];
   bool _isLoading = true;
 
@@ -37,6 +41,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _product = await _stockService.getProduct(widget.productId);
     if (_product != null) {
       _deliveries = await _stockService.getDeliveriesByProduct(_product!.id);
+      // ✅ Résout le fournisseur assigné au produit (nom réel affiché).
+      final sid = _product!.supplierId;
+      if (sid != null && sid.isNotEmpty) {
+        await _supplierService.init();
+        _supplier = await _supplierService.getSupplier(sid);
+      } else {
+        _supplier = null;
+      }
     }
     setState(() => _isLoading = false);
   }
@@ -604,7 +616,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String get _supplierName {
     final sid = _product?.supplierId;
     if (sid == null || sid.isEmpty) return 'Non assigné';
-    // StockService ne charge pas les fournisseurs ; on affiche l'ID tronqué.
+    // ✅ Nom réel résolu via SupplierService (chargé dans _loadData).
+    final name = _supplier?.name;
+    if (name != null && name.isNotEmpty) return name;
     return sid.length > 14 ? 'Fournisseur #${sid.substring(0, 8)}' : sid;
   }
 

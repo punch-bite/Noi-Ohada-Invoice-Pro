@@ -50,15 +50,18 @@ import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
 
-import '../screens/customization/invoice_customization_screen.dart';
 import '../screens/customization/template_store_screen.dart';
 import '../screens/customization/template_checkout_screen.dart';
 import '../screens/customization/my_templates_screen.dart';
+import '../screens/customization/templates_screen.dart';
 import '../screens/customization/template_workspace_screen.dart';
 import '../screens/customization/template_preview_screen.dart';
+import '../screens/customization/invoice_preview_screen.dart';
+import '../screens/customization/invoice_customization_edit_screen.dart';
 import '../screens/dev/enkap_test_screen.dart';
 import '../models/invoice_settings.dart';
 import '../models/invoice_template.dart';
+import '../models/customization_config.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
 import '../screens/notifications/notification_screen.dart';
@@ -236,7 +239,7 @@ class AppRouter {
       // Customisation visuelle des factures
       GoRoute(
         path: '/customization',
-        builder: (context, state) => const InvoiceCustomizationScreen(),
+        builder: (context, state) => const InvoiceCustomizationEditScreen(),
       ),
       // Sauvegarde Google Drive (Business)
       GoRoute(
@@ -257,6 +260,12 @@ class AppRouter {
       GoRoute(
         path: '/templates/mine',
         builder: (context, state) => const MyTemplatesScreen(),
+      ),
+      // 🧩 Sélecteur plein écran des modèles (bandeau « Cliquez pour changer »
+      // de l'écran de détail facture). Sélection persistée localement.
+      GoRoute(
+        path: '/templates/select',
+        builder: (context, state) => const TemplatesScreen(),
       ),
       // Espace de travail drag & drop (personnalisation visuelle)
       GoRoute(
@@ -284,12 +293,40 @@ class AppRouter {
           }
           if (extra is Map<String, dynamic> &&
               extra['template'] is InvoiceTemplate) {
-            return TemplatePreviewScreen(
+                        return TemplatePreviewScreen(
               template: extra['template'] as InvoiceTemplate,
-              settings: extra['settings'] as InvoiceSettings?,
-            );
+              settings: extra['settings'] as InvoiceSettings?);
           }
           return const SizedBox.shrink();
+        },
+      ),
+      // 🧾 Aperçu maquette (flow Personnaliser) — preview plein écran.
+      GoRoute(
+        path: '/templates/apropos/preview',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is Map<String, dynamic> &&
+              extra['config'] is CustomizationConfig) {
+            return InvoicePreviewScreen(
+                config: extra['config'] as CustomizationConfig);
+          }
+          return const InvoicePreviewScreen();
+        },
+      ),
+      // 🛠️ Espace de personnalisation (onglets maquette).
+      GoRoute(
+        path: '/templates/customization/edit',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CustomizationConfig) {
+            return InvoiceCustomizationEditScreen(config: extra);
+          }
+          if (extra is Map<String, dynamic> &&
+              extra['config'] is CustomizationConfig) {
+            return InvoiceCustomizationEditScreen(
+                config: extra['config'] as CustomizationConfig);
+          }
+          return const InvoiceCustomizationEditScreen();
         },
       ),
 

@@ -3,8 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
+import '../../../providers/subscription_provider.dart';
 import '../../../services/supplier_service.dart';
+import '../../../services/quota_enforcement_service.dart';
 import '../../../models/supplier.dart';
+import '../../../models/plan.dart';
 import '../../../widgets/glass_widgets.dart';
 
 class CreateSupplierScreen extends StatefulWidget {
@@ -72,6 +75,22 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
 
     try {
       if (widget.supplier == null) {
+        // Blocage quota : uniquement pour un NOUVEAU fournisseur (pas en édition).
+        final sub = context.read<SubscriptionProvider>();
+        final plan = sub.currentPlan ?? Plan.getFreePlan();
+        final result =
+            await QuotaEnforcementService().canAddSupplier(plan);
+        if (!result.isAllowed) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  result.message ?? 'Limite de fournisseurs atteinte. Passez au plan supérieur.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
         // Création
         final supplier = Supplier(
           name: _nameController.text.trim(),

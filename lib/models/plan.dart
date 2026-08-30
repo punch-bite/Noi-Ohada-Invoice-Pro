@@ -59,6 +59,12 @@ class Plan {
   @HiveField(17)
   final bool hasClientRelance;
 
+  /// Limite de fournisseurs (-1 = illimité). Ajouté avec @HiveField(18) :
+  /// les données Hive existantes sans ce champ tombent sur la valeur par
+  /// défaut via le cast null-safe de PlanAdapter.
+  @HiveField(18)
+  final int maxSuppliers;
+
   Plan({
     required this.id,
     required this.name,
@@ -75,6 +81,7 @@ class Plan {
     this.maxTeamMembers = 0,
     this.hasGoogleDriveSync = false,
     this.hasClientRelance = false,
+    this.maxSuppliers = -1,
     this.features = const [],
     this.isPopular = false,
     this.isActive = true,
@@ -97,6 +104,7 @@ class Plan {
       'maxTeamMembers': maxTeamMembers,
       'hasGoogleDriveSync': hasGoogleDriveSync,
       'hasClientRelance': hasClientRelance,
+      'maxSuppliers': maxSuppliers,
       'features': features,
       'isPopular': isPopular,
       'isActive': isActive,
@@ -120,6 +128,7 @@ class Plan {
       maxTeamMembers: (map['maxTeamMembers'] as num?)?.toInt() ?? 0,
       hasGoogleDriveSync: map['hasGoogleDriveSync'] ?? false,
       hasClientRelance: map['hasClientRelance'] ?? false,
+      maxSuppliers: (map['maxSuppliers'] as num?)?.toInt() ?? -1,
       features: List<String>.from(map['features'] ?? []),
       isPopular: map['isPopular'] ?? false,
       isActive: map['isActive'] ?? true,
@@ -140,6 +149,7 @@ class Plan {
     bool? hasCloudSync,
     bool? hasTeamAccess,
     int? maxTeamMembers,
+    int? maxSuppliers,
     bool? hasGoogleDriveSync,
     bool? hasClientRelance,
     List<String>? features,
@@ -160,6 +170,7 @@ class Plan {
       hasCloudSync: hasCloudSync ?? this.hasCloudSync,
       hasTeamAccess: hasTeamAccess ?? this.hasTeamAccess,
       maxTeamMembers: maxTeamMembers ?? this.maxTeamMembers,
+      maxSuppliers: maxSuppliers ?? this.maxSuppliers,
       hasGoogleDriveSync: hasGoogleDriveSync ?? this.hasGoogleDriveSync,
       hasClientRelance: hasClientRelance ?? this.hasClientRelance,
       features: features ?? this.features,
@@ -178,10 +189,12 @@ class Plan {
   bool get hasInvoiceLimit => maxInvoices > 0;
   bool get hasClientLimit => maxClients > 0;
   bool get hasProductLimit => maxProducts > 0;
+  bool get hasSupplierLimit => maxSuppliers > 0;
 
   bool isUnlimitedInvoices() => maxInvoices <= 0;
   bool isUnlimitedClients() => maxClients <= 0;
   bool isUnlimitedProducts() => maxProducts <= 0;
+  bool isUnlimitedSuppliers() => maxSuppliers <= 0;
 
   static Plan getFreePlan() {
     return Plan(
@@ -194,6 +207,7 @@ class Plan {
       maxInvoices: 5,
       maxClients: 5,
       maxProducts: 3,
+      maxSuppliers: 2,
       hasPdfExport: true,
       hasCloudSync: false,
       hasTeamAccess: false,
@@ -203,6 +217,7 @@ class Plan {
         '5 factures',
         '5 clients',
         '3 produits',
+        '2 fournisseurs',
         'Export PDF',
         'Stockage Firestore',
       ],
@@ -222,6 +237,7 @@ class Plan {
       maxInvoices: -1,
       maxClients: 200,
       maxProducts: 25,
+      maxSuppliers: 25,
       hasPdfExport: true,
       hasCloudSync: true,
       hasTeamAccess: false,
@@ -232,6 +248,7 @@ class Plan {
         'Factures illimitées',
         '200 clients',
         '25 produits',
+        '25 fournisseurs',
         'Export PDF illimité',
         'Synchronisation cloud',
         'Relance clients (email / WhatsApp / SMS)',
@@ -252,6 +269,7 @@ class Plan {
       maxInvoices: -1,
       maxClients: -1,
       maxProducts: -1,
+      maxSuppliers: -1,
       hasPdfExport: true,
       hasCloudSync: true,
       hasTeamAccess: true,
@@ -260,7 +278,7 @@ class Plan {
       hasClientRelance: true,
       features: [
         'Tout le plan Pro',
-        'Clients / produits / factures illimités',
+        'Clients / produits / fournisseurs / factures illimités',
         'Module équipe (20 utilisateurs)',
         'Invitation par lien e-mail',
         'Synchronisation Google Drive',

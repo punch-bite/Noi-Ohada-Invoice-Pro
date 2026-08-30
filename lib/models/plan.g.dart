@@ -32,6 +32,8 @@ class PlanAdapter extends TypeAdapter<Plan> {
       maxTeamMembers: fields[15] as int,
       hasGoogleDriveSync: fields[16] as bool,
       hasClientRelance: fields[17] as bool,
+      // Champ 18 ajouté après coup : null-safe pour les données Hive existantes.
+      maxSuppliers: (fields[18] as int?) ?? -1,
       features: (fields[12] as List).cast<String>(),
       isPopular: fields[13] as bool,
       isActive: fields[14] as bool,
@@ -41,7 +43,7 @@ class PlanAdapter extends TypeAdapter<Plan> {
   @override
   void write(BinaryWriter writer, Plan obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -77,7 +79,9 @@ class PlanAdapter extends TypeAdapter<Plan> {
       ..writeByte(16)
       ..write(obj.hasGoogleDriveSync)
       ..writeByte(17)
-      ..write(obj.hasClientRelance);
+      ..write(obj.hasClientRelance)
+      ..writeByte(18)
+      ..write(obj.maxSuppliers);
   }
 
   @override

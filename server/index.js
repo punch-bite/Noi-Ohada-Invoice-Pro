@@ -905,23 +905,40 @@ app.post(
     try {
       const { action, teamId, userId, email, role, requestedBy, invitationId } =
         req.body || {};
-      if (!teamId || !requestedBy) {
-        return res.status(400).json({ error: 'teamId/requestedBy requis' });
+      if (!action || !requestedBy) {
+        return res.status(400).json({ error: 'action/requestedBy requis' });
       }
 
-      const teamRef = db.collection('teams').doc(teamId);
-      const teamSnap = await teamRef.get();
-      if (!teamSnap.exists) {
-        return res.status(404).json({ error: 'Équipe non trouvée' });
+      // Les actions centrées sur l'INVITATION n'exigent pas de teamId :
+      // l'invité liste et répond sans connaître l'équipe (l'invitation porte
+      // son propre teamId). Les autres actions (invite/remove/leave/promote/
+      // demote) opèrent sur une équipe et l'exigent.
+      const invitationActions = ['accept', 'decline', 'get-invitations'];
+      if (!invitationActions.includes(action) && !teamId) {
+        return res.status(400).json({ error: 'teamId requis' });
       }
-      const team = teamSnap.data() || {};
-      if (team.isActive === false) {
-        return res.status(400).json({ error: 'Équipe désactivée' });
+
+      // Contexte équipe (résolu uniquement pour les actions liées à une équipe).
+      let team = {};
+      let teamRef = null;
+      let admins = [];
+      let members = [];
+      let isManager = false;
+      if (teamId) {
+        teamRef = db.collection('teams').doc(teamId);
+        const teamSnap = await teamRef.get();
+        if (!teamSnap.exists) {
+          return res.status(404).json({ error: 'Équipe non trouvée' });
+        }
+        team = teamSnap.data() || {};
+        if (team.isActive === false) {
+          return res.status(400).json({ error: 'Équipe désactivée' });
+        }
+        admins = Array.isArray(team.adminIds) ? team.adminIds : [];
+        members = Array.isArray(team.memberIds) ? team.memberIds : [];
+        isManager =
+          team.ownerId === requestedBy || admins.includes(requestedBy);
       }
-      const admins = Array.isArray(team.adminIds) ? team.adminIds : [];
-      const members = Array.isArray(team.memberIds) ? team.memberIds : [];
-      const isManager =
-        team.ownerId === requestedBy || admins.includes(requestedBy);
 
       // ===== INVITE : inviter un membre par email =====
       // Crée une invitation EN ATTENTE, envoie une NOTIFICATION (toast) à

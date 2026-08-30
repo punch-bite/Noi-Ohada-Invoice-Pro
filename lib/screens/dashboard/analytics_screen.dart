@@ -37,6 +37,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Map<String, double> _monthlyRevenue = {};
   Map<String, double> _monthlyOrders = {};
 
+  /// 📅 Filtre période (bouton calendrier) : 1/3/6/12 derniers mois,
+  /// null = tout l'historique.
+  int? _periodMonths;
+
   @override
   void initState() {
     super.initState();
@@ -62,8 +66,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   void _processData() {
-    // Filtrer uniquement les factures payées pour les métriques de revenus
-    final paidInvoices = _invoices.where((inv) => inv.status == 'paid').toList();
+    // Filtre par période (bouton calendrier) puis factures payées uniquement.
+    final now = DateTime.now();
+    var paidInvoices = _invoices.where((inv) => inv.status == 'paid').toList();
+    if (_periodMonths != null) {
+      final cutoff = DateTime(now.year, now.month - (_periodMonths! - 1), 1);
+      paidInvoices =
+          paidInvoices.where((inv) => !inv.issueDate.isBefore(cutoff)).toList();
+    }
     _totalRevenue = paidInvoices.fold(0, (sum, inv) => sum + inv.totalAmount);
     _totalOrders = paidInvoices.length.toDouble();
 
@@ -79,7 +89,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     // Recherche du meilleur mois
     if (monthlyData.isNotEmpty) {
-      final best = monthlyData.entries.reduce((a, b) => a.value > b.value ? a : b);
+      final best =
+          monthlyData.entries.reduce((a, b) => a.value > b.value ? a : b);
       _bestMonth = best.key;
       _bestRevenue = best.value;
     } else {
@@ -118,7 +129,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (orderMonths.length >= 2) {
       final firstOrders = orderData[orderMonths.first] ?? 0;
       final lastOrders = orderData[orderMonths.last] ?? 0;
-      _ordersGrowth = firstOrders > 0 ? ((lastOrders - firstOrders) / firstOrders * 100) : 0;
+      _ordersGrowth = firstOrders > 0
+          ? ((lastOrders - firstOrders) / firstOrders * 100)
+          : 0;
     } else {
       _ordersGrowth = 0;
     }
@@ -157,7 +170,140 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // Liste ordonnée des valeurs financières mensuelles
-  List<double> get _revenueByMonth => _sortedMonths.map((m) => _monthlyRevenue[m] ?? 0).toList();
+  List<double> get _revenueByMonth =>
+      _sortedMonths.map((m) => _monthlyRevenue[m] ?? 0).toList();
+
+  // ============================================================
+  //  HELPERS (formatage + libellés période)
+  // ============================================================
+
+  /// Formate les montants KPI en FCFA (12 500 → 12 500, 1 250 000 → 1,3 M).
+  String _kpiFormat(double value) {
+    final abs = value.abs();
+    if (abs >= 1000000000) {
+      return '${(value / 1000000000).toStringAsFixed(1).replaceAll('.', ',')} Md';
+    }
+    if (abs >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1).replaceAll('.', ',')} M';
+    }
+    return NumberFormat('#,##0').format(value);
+  }
+
+  /// Libellé de la période sélectionnée (bouton calendrier).
+  String get _periodLabel {
+    switch (_periodMonths) {
+      case 1:
+        return 'Ce mois';
+      case 3:
+        return '3 derniers mois';
+      case 6:
+        return '6 derniers mois';
+      case 12:
+        return '12 derniers mois';
+      default:
+        return 'Tout l\'historique';
+    }
+  }
+
+  /// Feuille de sélection de la période d'analyse.
+  void _showPeriodSheet() {
+    final themeProvider = context.read<ThemeProvider>();
+    final isDark = themeProvider.isDarkMode;
+    final primaryColor = themeProvider.primaryColor;
+    final textColor = themeProvider.textColor;
+    final subTextColor = themeProvider.subTextColor;
+    final cardColor = themeProvider.cardColor;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      builder: (sheetCtx) {
+        final options = <({String label, int? value})>[
+          (label: 'Ce mois', value: 1),
+          (label: '3 derniers mois', value: 3),
+          (label: '6 derniers mois', value: 6),
+          (label: '12 derniers mois', value: 12),
+          (label: 'Tout l\'historique', value: null),
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Période d\'analyse',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Filtre les factures payées sur la période choisie.',
+                  style: TextStyle(fontSize: 12, color: subTextColor),
+                ),
+                const SizedBox(height: 16),
+                ...options.map((opt) {
+                  final selected = _periodMonths == opt.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Material(
+                      color: selected
+                          ? primaryColor.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.pop(sheetCtx);
+                          setState(() => _periodMonths = opt.value);
+                          _loadData();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected
+                                    ? Icons.radio_button_checked_rounded
+                                    : Icons.radio_button_off_rounded,
+                                size: 20,
+                                color: selected ? primaryColor : subTextColor,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                opt.label,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: selected ? primaryColor : textColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +316,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final bgColor = themeProvider.backgroundColor;
 
     // Métriques de calcul pour les axes fl_chart
-    final maxRevenue = _revenueByMonth.isEmpty ? 0.0 : _revenueByMonth.reduce((a, b) => a > b ? a : b);
+    final maxRevenue = _revenueByMonth.isEmpty
+        ? 0.0
+        : _revenueByMonth.reduce((a, b) => a > b ? a : b);
     final chartMaxY = maxRevenue > 0 ? maxRevenue * 1.2 : 10.0;
     final chartInterval = maxRevenue > 0 ? maxRevenue / 4 : 2.5;
 
@@ -178,7 +326,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       backgroundColor: bgColor,
       appBar: AppBar(
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: textColor, size: 20),
           onPressed: () => context.go('/dashboard'),
         ),
         title: Text(
@@ -194,6 +343,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(Icons.calendar_month_rounded,
+                color: subTextColor, size: 21),
+            tooltip: 'Période d\'analyse',
+            onPressed: _isLoading ? null : _showPeriodSheet,
+          ),
           IconButton(
             icon: Icon(Icons.refresh_rounded, color: subTextColor, size: 22),
             onPressed: _isLoading ? null : _loadData,
@@ -218,37 +373,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 1.35,
+                        childAspectRatio: 1.22,
                         children: [
                           _buildSummaryCard(
                             context,
                             title: 'Chiffre d\'Affaires',
-                            value: NumberFormat('#,##0').format(_totalRevenue),
+                            value: _kpiFormat(_totalRevenue),
                             unit: 'FCFA',
                             icon: Icons.trending_up_rounded,
                             color: primaryColor,
                             trend: _growth,
-                            trendLabel: '${_growth >= 0 ? '+' : ''}${_growth.toStringAsFixed(0)}%',
+                            trendLabel:
+                                '${_growth >= 0 ? '+' : ''}${_growth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
                             title: 'Commandes',
                             value: _totalOrders.toStringAsFixed(0),
-                            unit: 'PAYÉES',
+                            unit: 'TOTAL CE MOIS',
                             icon: Icons.shopping_bag_rounded,
                             color: Colors.orange,
                             trend: _ordersGrowth,
-                            trendLabel: '${_ordersGrowth >= 0 ? '+' : ''}${_ordersGrowth.toStringAsFixed(0)}%',
+                            trendLabel:
+                                '${_ordersGrowth >= 0 ? '+' : ''}${_ordersGrowth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
                             title: 'Panier Moyen',
-                            value: NumberFormat('#,##0').format(_avgOrderValue),
+                            value: _kpiFormat(_avgOrderValue),
                             unit: 'FCFA/CMD',
                             icon: Icons.receipt_long_rounded,
                             color: Colors.green,
                             trend: _avgGrowth,
-                            trendLabel: '${_avgGrowth >= 0 ? '+' : ''}${_avgGrowth.toStringAsFixed(0)}%',
+                            trendLabel:
+                                '${_avgGrowth >= 0 ? '+' : ''}${_avgGrowth.toStringAsFixed(0)}%',
                           ),
                           _buildSummaryCard(
                             context,
@@ -268,230 +426,322 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
                       // ===== GRAPHIQUE BARRES : VENTES MENSUELLES =====
                       if (_monthlyRevenue.isNotEmpty) ...[
-                        Text(
-                          'Évolution des ventes',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
                         Container(
-                          height: 260,
-                          padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+                          padding: const EdgeInsets.fromLTRB(18, 16, 14, 10),
                           decoration: BoxDecoration(
                             color: cardColor,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
+                              color: isDark
+                                  ? Colors.grey[800]!
+                                  : Colors.grey[100]!,
                               width: 1,
                             ),
                           ),
-                          child: BarChart(
-                            BarChartData(
-                              alignment: BarChartAlignment.spaceAround,
-                              maxY: chartMaxY,
-                              barTouchData: BarTouchData(
-                                enabled: true,
-                                touchTooltipData: BarTouchTooltipData(
-                                  getTooltipColor: (_) => isDark ? Colors.grey[800]! : Colors.grey[100]!,
-                                  // tool: BorderRadius.circular(8),
-                                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                    return BarTooltipItem(
-                                      '${_sortedMonths[group.x]}\n',
-                                      TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 11),
-                                      children: <TextSpan>[
-                                        TextSpan(
-                                          text: '${NumberFormat('#,##0').format(rod.toY)} FCFA',
-                                          style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 11),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
-                              titlesData: FlTitlesData(
-                                show: true,
-                                bottomTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: 32,
-                                    getTitlesWidget: (value, meta) {
-                                      final index = value.toInt();
-                                      if (index >= 0 && index < _sortedMonths.length) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(top: 8),
-                                          child: Text(
-                                            _sortedMonths[index],
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w600,
-                                              color: subTextColor,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                      return const SizedBox.shrink();
-                                    },
-                                  ),
-                                ),
-                                leftTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: 52,
-                                    getTitlesWidget: (value, meta) {
-                                      return Padding(
-                                        padding: const EdgeInsets.only(right: 4),
-                                        child: Text(
-                                          NumberFormat('compact').format(value),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Évolution des ventes',
                                           style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w500,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _periodLabel,
+                                          style: TextStyle(
+                                            fontSize: 10.5,
                                             color: subTextColor,
                                           ),
-                                          textAlign: TextAlign.end,
                                         ),
-                                      );
-                                    },
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          primaryColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: BoxDecoration(
+                                            color: primaryColor,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          'REVENUS (FCFA)',
+                                          style: TextStyle(
+                                            fontSize: 8.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.4,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              borderData: FlBorderData(show: false),
-                              gridData: FlGridData(
-                                show: true,
-                                horizontalInterval: chartInterval,
-                                drawVerticalLine: false,
-                                getDrawingHorizontalLine: (value) {
-                                  return FlLine(
-                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                                    strokeWidth: 1,
-                                    dashArray: [4, 4],
-                                  );
-                                },
-                              ),
-                              barGroups: _revenueByMonth.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final value = entry.value;
-                                return BarChartGroupData(
-                                  x: index,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: value,
-                                      color: primaryColor,
-                                      width: 12,
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                                      gradient: LinearGradient(
-                                        begin: Alignment.bottomCenter,
-                                        end: Alignment.topCenter,
-                                        colors: [
-                                          primaryColor.withValues(alpha: 0.4),
-                                          primaryColor,
-                                        ],
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                height: 230,
+                                child: BarChart(
+                                  BarChartData(
+                                    alignment: BarChartAlignment.spaceAround,
+                                    maxY: chartMaxY,
+                                    barTouchData: BarTouchData(
+                                      enabled: true,
+                                      touchTooltipData: BarTouchTooltipData(
+                                        getTooltipColor: (_) => isDark
+                                            ? Colors.grey[800]!
+                                            : Colors.grey[100]!,
+                                        // tool: BorderRadius.circular(8),
+                                        getTooltipItem:
+                                            (group, groupIndex, rod, rodIndex) {
+                                          return BarTooltipItem(
+                                            '${_sortedMonths[group.x]}\n',
+                                            TextStyle(
+                                                color: textColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11),
+                                            children: <TextSpan>[
+                                              TextSpan(
+                                                text:
+                                                    '${NumberFormat('#,##0').format(rod.toY)} FCFA',
+                                                style: TextStyle(
+                                                    color: primaryColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 11),
+                                              ),
+                                            ],
+                                          );
+                                        },
                                       ),
                                     ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-
-                      // ===== CANAUX DE PAIEMENT (DONUT) =====
-                      Text(
-                        'Canaux de Paiement',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPaymentChannelsCard(isDark, textColor, subTextColor, cardColor),
-                      const SizedBox(height: 24),
-
-                      // ===== TABLEAU RÉCAPITULATIF MENSUEL =====
-                      if (_monthlyRevenue.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Détail mensuel',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => _exportMonthly(),
-                              icon: const Icon(Icons.file_download_outlined, size: 16),
-                              label: const Text('EXPORTER'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: primaryColor,
-                                textStyle: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.4,
+                                    titlesData: FlTitlesData(
+                                      show: true,
+                                      bottomTitles: AxisTitles(
+                                        sideTitles: SideTitles(
+                                          showTitles: true,
+                                          reservedSize: 32,
+                                          getTitlesWidget: (value, meta) {
+                                            final index = value.toInt();
+                                            if (index >= 0 &&
+                                                index < _sortedMonths.length) {
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 8),
+                                                child: Text(
+                                                  _sortedMonths[index],
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: subTextColor,
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                            return const SizedBox.shrink();
+                                          },
+                                        ),
+                                      ),
+                                      leftTitles: AxisTitles(
+                                        sideTitles: SideTitles(
+                                          showTitles: true,
+                                          reservedSize: 52,
+                                          getTitlesWidget: (value, meta) {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  right: 4),
+                                              child: Text(
+                                                NumberFormat('compact')
+                                                    .format(value),
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: subTextColor,
+                                                ),
+                                                textAlign: TextAlign.end,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      topTitles: const AxisTitles(
+                                          sideTitles:
+                                              SideTitles(showTitles: false)),
+                                      rightTitles: const AxisTitles(
+                                          sideTitles:
+                                              SideTitles(showTitles: false)),
+                                    ),
+                                    borderData: FlBorderData(show: false),
+                                    gridData: FlGridData(
+                                      show: true,
+                                      horizontalInterval: chartInterval,
+                                      drawVerticalLine: false,
+                                      getDrawingHorizontalLine: (value) {
+                                        return FlLine(
+                                          color: isDark
+                                              ? Colors.grey[800]!
+                                              : Colors.grey[200]!,
+                                          strokeWidth: 1,
+                                          dashArray: [4, 4],
+                                        );
+                                      },
+                                    ),
+                                    barGroups: _revenueByMonth
+                                        .asMap()
+                                        .entries
+                                        .map((entry) {
+                                      final index = entry.key;
+                                      final value = entry.value;
+                                      return BarChartGroupData(
+                                        x: index,
+                                        barRods: [
+                                          BarChartRodData(
+                                            toY: value,
+                                            color: primaryColor,
+                                            width: 12,
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                    top: Radius.circular(4)),
+                                            gradient: LinearGradient(
+                                              begin: Alignment.bottomCenter,
+                                              end: Alignment.topCenter,
+                                              colors: [
+                                                primaryColor.withValues(
+                                                    alpha: 0.4),
+                                                primaryColor,
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isDark ? Colors.grey[800]! : Colors.grey[100]!,
-                              width: 1,
-                            ),
-                          ),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
-                            child: DataTable(
-                              headingTextStyle: TextStyle(
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              dataTextStyle: TextStyle(
-                                color: textColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              columnSpacing: 24,
-                              horizontalMargin: 16,
-                              columns: const [
-                                DataColumn(label: Text('Mois')),
-                                DataColumn(label: Text('CA (FCFA)'), numeric: true),
-                                DataColumn(label: Text('Commandes'), numeric: true),
-                                DataColumn(label: Text('Panier moyen'), numeric: true),
-                              ],
-                              rows: _sortedMonths.map((month) {
-                                final revenue = _monthlyRevenue[month] ?? 0;
-                                final orders = _monthlyOrders[month] ?? 0;
-                                final avg = orders > 0 ? revenue / orders : 0;
-                                return DataRow(
-                                  cells: [
-                                    DataCell(Text(month, style: const TextStyle(fontWeight: FontWeight.bold))),
-                                    DataCell(Text(NumberFormat('#,##0').format(revenue))),
-                                    DataCell(Text(orders.toStringAsFixed(0))),
-                                    DataCell(Text(NumberFormat('#,##0').format(avg))),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
+                              const SizedBox(height: 24),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 24),
+
+                        // ===== CANAUX DE PAIEMENT (DONUT) =====
+                        _buildPaymentChannelsCard(
+                            isDark, textColor, subTextColor, cardColor),
+                        const SizedBox(height: 20),
+
+                        // ===== TABLEAU RÉCAPITULATIF MENSUEL =====
+                        if (_monthlyRevenue.isNotEmpty) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Détail mensuel',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _exportMonthly(),
+                                icon: const Icon(Icons.file_download_outlined,
+                                    size: 16),
+                                label: const Text('EXPORTER'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: primaryColor,
+                                  textStyle: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.grey[800]!
+                                    : Colors.grey[100]!,
+                                width: 1,
+                              ),
+                            ),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: DataTable(
+                                headingTextStyle: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                                dataTextStyle: TextStyle(
+                                  color: textColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                columnSpacing: 24,
+                                horizontalMargin: 16,
+                                columns: const [
+                                  DataColumn(label: Text('Mois')),
+                                  DataColumn(
+                                      label: Text('CA (FCFA)'), numeric: true),
+                                  DataColumn(
+                                      label: Text('Commandes'), numeric: true),
+                                  DataColumn(
+                                      label: Text('Panier moyen'),
+                                      numeric: true),
+                                ],
+                                rows: _sortedMonths.map((month) {
+                                  final revenue = _monthlyRevenue[month] ?? 0;
+                                  final orders = _monthlyOrders[month] ?? 0;
+                                  final avg = orders > 0 ? revenue / orders : 0;
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(month,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold))),
+                                      DataCell(Text(NumberFormat('#,##0')
+                                          .format(revenue))),
+                                      DataCell(Text(orders.toStringAsFixed(0))),
+                                      DataCell(Text(
+                                          NumberFormat('#,##0').format(avg))),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
                       ],
                     ],
                   ),
@@ -617,7 +867,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Données mensuelles copiées (${_sortedMonths.length} mois)'),
+        content:
+            Text('Données mensuelles copiées (${_sortedMonths.length} mois)'),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
@@ -625,7 +876,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  Widget _buildEmptyState(bool isDark, Color textColor, Color subTextColor, Color primaryColor) {
+  Widget _buildEmptyState(
+      bool isDark, Color textColor, Color subTextColor, Color primaryColor) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -639,12 +891,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 color: primaryColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.analytics_rounded, size: 32, color: primaryColor),
+              child:
+                  Icon(Icons.analytics_rounded, size: 32, color: primaryColor),
             ),
             const SizedBox(height: 16),
             Text(
               'Aucune donnée disponible',
-              style: TextStyle(fontSize: 18, color: textColor, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  fontSize: 18, color: textColor, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
@@ -660,8 +914,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
             ),
@@ -689,7 +945,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     // Couleur du badge de tendance : vert si ↑, rouge si ↓
     final trendUp = trend == null || trend >= 0;
-    final trendColor = trend == null ? color : (trendUp ? const Color(0xFF34D399) : const Color(0xFFF87171));
+    final trendColor = trend == null
+        ? color
+        : (trendUp ? const Color(0xFF34D399) : const Color(0xFFF87171));
 
     return Container(
       padding: const EdgeInsets.all(12),

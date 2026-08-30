@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +37,9 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   bool _isLoading = true;
   // 🖼️ Image téléversée du modèle : arrière-plan de l'aperçu.
   Uint8List? _backgroundBytes;
+  // 🖼️ Réglages d'arrière-plan personnalisés (espace de travail) :
+  // opacité, flou, ajustement + image custom prioritaire sur celle du modèle.
+  TemplateBackgroundSettings _bgSettings = const TemplateBackgroundSettings();
   // 🧩 Positions personnalisées (drag & drop) → l'aperçu reflète
   // les modifications faites dans l'espace de travail.
   Map<String, dynamic> _customPositions = {};
@@ -93,6 +97,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     if (mounted) {
       setState(() {
         _company = company;
+        _bgSettings = custom.background;
         _backgroundBytes = _decodeBackground();
         _customPositions = custom.positions;
         _customMapping = custom.mapping;
@@ -102,8 +107,16 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     }
   }
 
-  /// Décode l'image téléversée du modèle (base64) pour l'utiliser en arrière-plan.
+  /// Décode l'image d'arrière-plan (base64) : priorité à l'image personnalisée
+  /// uploadée dans l'espace de travail, sinon celle du modèle admin.
   Uint8List? _decodeBackground() {
+    // 1) Image personnalisée (workspace) → reflète les derniers réglages.
+    if (_bgSettings.hasCustomImage) {
+      try {
+        return base64Decode(_bgSettings.fileData);
+      } catch (_) {}
+    }
+    // 2) Image du modèle (admin).
     if (widget.template.fileData.isEmpty ||
         widget.template.fileType == 'pdf') {
       return null;
@@ -552,12 +565,22 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
           children: [
             if (_backgroundBytes != null)
               Positioned.fill(
+                // 🖼️ Arrière-plan personnalisé : opacité + flou + ajustement
+                // réglés dans l'espace de travail (sauvegardés localement).
                 child: Opacity(
-                  opacity: 0.35,
-                  child: Image.memory(
-                    _backgroundBytes!,
-                    fit: BoxFit.fill,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  opacity: _bgSettings.opacity,
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: _bgSettings.blur,
+                      sigmaY: _bgSettings.blur,
+                    ),
+                    child: Image.memory(
+                      _backgroundBytes!,
+                      fit: _bgSettings.fit == 'contain'
+                          ? BoxFit.contain
+                          : BoxFit.fill,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               ),

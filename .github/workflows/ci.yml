@@ -1,0 +1,159 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. Analyse statique
+  # ─────────────────────────────────────────────────────────────
+  analyze:
+    name: 🔍 Analyse statique (flutter analyze)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ☕ Configuration Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🔍 Analyse
+        run: flutter analyze --fatal-infos
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. Tests unitaires / widgets
+  # ─────────────────────────────────────────────────────────────
+  test:
+    name: 🧪 Tests (flutter test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ☕ Configuration Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🧪 Exécution des tests
+        run: flutter test --coverage
+
+      - name: 📊 Rapport de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          if-no-files-found: ignore
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. Build Web
+  # ─────────────────────────────────────────────────────────────
+  build_web:
+    name: 🌐 Build Web
+    runs-on: ubuntu-latest
+    needs: [analyze, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ☕ Configuration Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🌐 Compilation web (release)
+        run: flutter build web --release
+
+      - name: 📤 Artifact web
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: build/web
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────
+  # 4. Build iOS (sans signature — prêt pour TestFlight/Ad Hoc)
+  #    NB : le Podfile n'est pas versionné → régénéré par flutter create.
+  # ─────────────────────────────────────────────────────────────
+  build_ios:
+    name: 🍎 Build iOS (no codesign)
+    runs-on: macos-14
+    needs: [analyze, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ☕ Configuration Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 🔧 Régénération des fichiers de plateforme iOS manquants
+        run: flutter create --platforms=ios --project-name noi_ohada_invoice_pro .
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🍎 Compilation iOS (release, sans signature)
+        run: flutter build ios --release --no-codesign
+
+      - name: 📦 Préparation du .app pour l'installation sideload
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -R Runner.app Payload/
+          zip -qry ios-release.zip Payload
+
+      - name: 📤 Artifact iOS
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-no-codesign
+          path: build/ios/iphoneos/ios-release.zip
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────
+  # 5. Déploiement Web → Firebase Hosting (branche main uniquement)
+  #    Secret requis : FIREBASE_SERVICE_ACCOUNT (JSON du compte de
+  #    service avec le rôle "Firebase Hosting Admin").
+  # ─────────────────────────────────────────────────────────────
+  deploy_web:
+    name: 🚀 Déploiement Firebase Hosting
+    runs-on: ubuntu-latest
+    needs: [build_web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ⬇️ Récupération de l'artifact web
+        uses: actions/download-artifact@v4
+        with:
+          name: web-release
+          path: build/web
+
+      - name: 🚀 Déploiement sur Firebase Hosting (canal live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: facture-ohada
+          channelId: live

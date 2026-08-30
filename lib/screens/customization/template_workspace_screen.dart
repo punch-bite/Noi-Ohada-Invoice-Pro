@@ -11,8 +11,10 @@
 // ============================================================
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/invoice_template.dart';
@@ -112,6 +114,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   String? _selectedElement;
   bool _saving = false;
 
+  // 🖼️ Arrière-plan personnalisé (upload + opacité + flou + fit).
+  // `_bg` = réglages appliqués à l'aperçu ; `_bgDraft` = brouillon en cours
+  // d'édition dans le tiroir « Arrière-plan » (Annuler/Appliquer).
+  TemplateBackgroundSettings _bg = const TemplateBackgroundSettings();
+
   // Valeurs d'exemple pour l'aperçu
   final String _companyName = 'OHADA Invoice Pro';
   final String _companyAddress = 'Douala, Cameroun';
@@ -147,6 +154,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     setState(() {
       _positions = _mergeWithDefaults(custom.positions);
       _mapping = {..._mapping, ...custom.mapping};
+      _bg = custom.background;
     });
   }
 
@@ -169,11 +177,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      // 1) Sauvegarde locale (positions + mapping) — persiste pour l'utilisateur.
+      // 1) Sauvegarde locale (positions + mapping + arrière-plan) — persiste
+      //    pour l'utilisateur et alimente l'aperçu + le PDF généré.
       await TemplateCustomService.saveCustom(
         widget.template.id,
         positions: _positions,
         mapping: _mapping,
+        background: _bg,
       );
 
       // 2) Si l'utilisateur est admin, on persiste aussi le template source.
@@ -229,6 +239,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Arrière-plan',
+            icon: Icon(Icons.wallpaper_rounded, color: theme.subTextColor),
+            onPressed: _openBackgroundEditor,
+          ),
           IconButton(
             tooltip: 'Réinitialiser',
             icon: Icon(Icons.restart_alt_rounded, color: theme.subTextColor),
@@ -534,20 +549,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                             ),
                           ),
                         ),
-                        // 🖼️ Image téléversée du modèle en arrière-plan.
+                        // 🖼️ Arrière-plan (image du modèle ou upload
+                        // utilisateur) avec opacité / flou / ajustement
+                        // personnalisés — prévisualisation en direct.
                         if (bgBytes != null)
                           Positioned.fill(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(6),
-                              child: Opacity(
-                                opacity: 0.3,
-                                child: Image.memory(
-                                  bgBytes,
-                                  fit: BoxFit.fill,
-                                  errorBuilder: (_, __, ___) =>
-                                      const SizedBox.shrink(),
-                                ),
-                              ),
+                              child: _buildBackgroundImage(bgBytes),
                             ),
                           ),
                         for (final e in kTemplateElements)
@@ -567,8 +576,16 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  /// Décode l'image téléversée du modèle (base64) pour l'arrière-plan.
+  /// Décode l'image d'arrière-plan : priorité à l'upload personnalisé de
+  /// l'utilisateur (via l'éditeur « Arrière-plan »), sinon celle du modèle.
   Uint8List? _templateBgBytes() {
+    if (_bg.hasCustomImage) {
+      try {
+        return base64Decode(_bg.fileData);
+      } catch (_) {
+        return null;
+      }
+    }
     if (widget.template.fileData.isEmpty ||
         widget.template.fileType == 'pdf') {
       return null;
@@ -576,6 +593,244 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     try {
       return base64Decode(widget.template.fileData);
     } catch (_) {
+      return null;
+    }
+  }
+
+  /// 🖼️ Applique les réglages personnalisés (opacité, flou, ajustement) à
+  /// l'image d'arrière-plan — identique à l'aperçu plein écran et au PDF.
+  Widget _buildBackgroundImage(Uint8List bytes) {
+    final fit = _bg.fit == 'contain' ? BoxFit.contain : BoxFit.fill;
+    Widget image = Image.memory(
+      bytes,
+      fit: fit,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+    if (_bg.blur > 0) {
+      image = ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(
+          sigmaX: _bg.blur,
+          sigmaY: _bg.blur,
+          tileMode: ui.TileMode.decal,
+        ),
+        child: image,
+      );
+    }
+    return Opacity(opacity: _bg.opacity, child: image);
+  }
+
+  // ===== ÉDITEUR D'ARRIÈRE-PLAN =====
+  /// Ouvre l'éditeur d'arrière-plan : upload d'image, opacité, flou, ajustement.
+  /// Les réglages s'appliquent EN DIRECT à l'aperçu (`_bg`) et sont persistés
+  /// immédiatement via [TemplateCustomService.saveCustom].
+  Future<void> _openBackgroundEditor() async {
+    final theme = context.read<ThemeProvider>();
+    TemplateBackgroundSettings draft = _bg;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: theme.cardColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.wallpaper_rounded,
+                      size: 20, color: widget.template.primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Arrière-plan de la facture',
+                      style: TextStyle(
+                        color: theme.textColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded,
+                        size: 20, color: theme.subTextColor),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // --- Upload / changer / supprimer l'image ---
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.upload_rounded, size: 18),
+                      label: Text(
+                        draft.hasCustomImage
+                            ? 'Changer l\'image'
+                            : 'Uploader une image',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onPressed: () async {
+                        final picked = await _pickBackgroundImage(draft);
+                        if (picked != null) {
+                          setSheetState(() => draft = picked);
+                          // 👁️ Applique en direct à l'aperçu derrière la sheet.
+                          if (mounted) setState(() => _bg = picked);
+                        }
+                      },
+                    ),
+                  ),
+                  if (draft.hasCustomImage) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Supprimer l\'arrière-plan',
+                      icon: Icon(Icons.delete_outline_rounded,
+                          color: Colors.redAccent.shade200, size: 20),
+                      onPressed: () {
+                        const removed = TemplateBackgroundSettings();
+                        setSheetState(() => draft = removed);
+                        if (mounted) setState(() => _bg = removed);
+                      },
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              // --- Opacité ---
+              Text(
+                'Opacité : ${(draft.opacity * 100).round()}%',
+                style: TextStyle(color: theme.subTextColor, fontSize: 11),
+              ),
+              Slider(
+                value: draft.opacity,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                onChanged: (v) {
+                  setSheetState(() => draft = draft.copyWith(opacity: v));
+                  if (mounted) setState(() => _bg = draft);
+                },
+              ),
+              // --- Flou ---
+              Text(
+                'Flou : ${draft.blur.toStringAsFixed(1)} px',
+                style: TextStyle(color: theme.subTextColor, fontSize: 11),
+              ),
+              Slider(
+                value: draft.blur,
+                min: 0,
+                max: 10,
+                divisions: 20,
+                onChanged: (v) {
+                  setSheetState(() => draft = draft.copyWith(blur: v));
+                  if (mounted) setState(() => _bg = draft);
+                },
+              ),
+              // --- Ajustement ---
+              Text(
+                'Ajustement',
+                style: TextStyle(color: theme.subTextColor, fontSize: 11),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'fill',
+                      label: Text('Remplir'),
+                      icon: Icon(Icons.crop_free_rounded, size: 16),
+                    ),
+                    ButtonSegment(
+                      value: 'contain',
+                      label: Text('Ajuster'),
+                      icon: Icon(Icons.fit_screen_rounded, size: 16),
+                    ),
+                  ],
+                  selected: {draft.fit},
+                  onSelectionChanged: (s) {
+                    setSheetState(() => draft = draft.copyWith(fit: s.first));
+                    if (mounted) setState(() => _bg = draft);
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: widget.template.primaryColor,
+                  ),
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Appliquer'),
+                  onPressed: () async {
+                    if (mounted) setState(() => _bg = draft);
+                    // 💾 Persistance immédiate de la personnalisation complète
+                    // (positions + mapping + arrière-plan) pour ce modèle.
+                    await TemplateCustomService.saveCustom(
+                      widget.template.id,
+                      positions: _positions,
+                      mapping: _mapping,
+                      background: draft,
+                    );
+                    if (!ctx.mounted) return;
+                    Navigator.of(ctx).pop();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Arrière-plan appliqué et enregistré'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Sélectionne une image (galerie) et la convertit en base64 pour stockage
+  /// local. Compatible web (readAsBytes via XFile) et mobile.
+  Future<TemplateBackgroundSettings?> _pickBackgroundImage(
+      TemplateBackgroundSettings current) async {
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        imageQuality: 80,
+      );
+      if (file == null) return null;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return null;
+      final ext = file.name.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+      return current.copyWith(
+        fileData: base64Encode(bytes),
+        fileType: ext,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impossible de charger l\'image'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return null;
     }
   }

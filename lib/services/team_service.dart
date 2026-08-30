@@ -548,10 +548,33 @@ class TeamService {
 
   Future<void> revokeSharedInvoice(String sharedId) async {
     try {
-      await _db.collection('shared_invoices').doc(sharedId).update({
+      final ref = _db.collection('shared_invoices').doc(sharedId);
+      final snap = await ref.get();
+      final data = snap.data() ?? {};
+      await ref.update({
         'isActive': false,
         'expiresAt': FieldValue.serverTimestamp(),
       });
+
+      // 🔒 Révocation complète : retire aussi les destinataires de la
+      // ressource (sharedWithUsers), sans quoi ils conserveraient l'accès
+      // lecture Firestore même après désactivation du partage.
+      final resourceType = data['resourceType']?.toString() ?? 'invoice';
+      final resourceId = data['invoiceId']?.toString() ?? '';
+      final users = (data['sharedWith'] as List?)
+            ?.whereType<String>()
+            .toList() ??
+        const <String>[];
+      final collection = _collectionFor(resourceType);
+      if (resourceId.isNotEmpty && users.isNotEmpty) {
+        try {
+          await _db.collection(collection).doc(resourceId).update({
+            'sharedWithUsers': FieldValue.arrayRemove(users),
+          });
+        } catch (_) {
+          // Doc introuvable / déjà nettoyé : le partage est déjà désactivé.
+        }
+      }
 
       await LoggerService.info(
         'revoke_shared_invoice',

@@ -1,44 +1,99 @@
 // lib/screens/customization/templates_screen.dart
+//
+// 🧩 Sélecteur de modèles de facture : modèles intégrés + modèles créés par
+// l'admin (boutique). Le modèle choisi devient le modèle « actif », mémorisé
+// localement via TemplateSelectionService (persistance hors-ligne) puis
+// appliqué aux aperçus PDF / impressions.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../services/template_selection_service.dart';
+import '../../services/template_service.dart';
 
-class TemplatesScreen extends StatelessWidget {
+class TemplatesScreen extends StatefulWidget {
   const TemplatesScreen({super.key});
+
+  @override
+  State<TemplatesScreen> createState() => _TemplatesScreenState();
+}
+
+class _TemplatesScreenState extends State<TemplatesScreen> {
+  final TemplateService _templateService = TemplateService();
+  List<InvoiceTemplate> _templates = [];
+  String? _activeId;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    // Fusion : modèles par défaut + ceux créés par l'admin (boutique),
+    // sans doublons — même logique que l'écran de détail facture.
+    final defaults = InvoiceTemplate.getDefaultTemplates();
+    List<InvoiceTemplate> adminTemplates = [];
+    try {
+      adminTemplates = await _templateService.getAllTemplates();
+    } catch (_) {}
+    final adminIds = adminTemplates.map((e) => e.id).toSet();
+    final templates = [
+      ...defaults.where((d) => !adminIds.contains(d.id)),
+      ...adminTemplates,
+    ];
+
+    // ✅ Modèle actif choisi précédemment (sélection persistante).
+    final activeId = await TemplateSelectionService.getActiveTemplateId();
+    if (!mounted) return;
+    setState(() {
+      _templates = templates;
+      _activeId = activeId;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final subProvider = context.watch<SubscriptionProvider>();
     final canAccessPremium = subProvider.canAccessPremiumTemplates;
-    final templates = InvoiceTemplate.getDefaultTemplates();
 
     return Scaffold(
       backgroundColor: theme.backgroundColor,
       appBar: _buildAppBar(context, theme, canAccessPremium),
-      body: GridView.builder(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.75,
-        ),
-        itemCount: templates.length,
-        itemBuilder: (context, index) {
-          final template = templates[index];
-          final isLocked = template.isPremium && !canAccessPremium;
-          return TemplateCard(
-            template: template,
-            isLocked: isLocked,
-            onTap: () => _handleTemplateTap(context, template, isLocked, theme),
-          );
-        },
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.75,
+                ),
+                itemCount: _templates.length,
+                itemBuilder: (context, index) {
+                  final template = _templates[index];
+                  final isLocked = template.isPremium && !canAccessPremium;
+                  return TemplateCard(
+                    template: template,
+                    isLocked: isLocked,
+                    isActive: _activeId == template.id,
+                    onTap: () =>
+                        _handleTemplateTap(context, template, isLocked, theme),
+                  );
+                },
+              ),
+            ),
     );
   }
 
@@ -81,17 +136,24 @@ class TemplatesScreen extends StatelessWidget {
     );
   }
 
-  void _handleTemplateTap(BuildContext context, InvoiceTemplate template, bool isLocked, ThemeProvider theme) {
+  Future<void> _handleTemplateTap(BuildContext context, InvoiceTemplate template,
+      bool isLocked, ThemeProvider theme) async {
     if (isLocked) {
       _showUpgradeDialog(context, theme);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${template.name} sélectionné comme modèle actif'), 
-          backgroundColor: Colors.green,
-        ),
-      );
+      return;
     }
+    // ✅ Persiste réellement la sélection : le modèle devient le modèle
+    // actif, retrouvé au prochain rendu PDF / à la prochaine ouverture.
+    await TemplateSelectionService.setActiveTemplateId(template.id);
+    if (!mounted) return;
+    setState(() => _activeId = template.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${template.name} défini comme modèle actif'),
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 1200),
+      ),
+    );
   }
 
   void _showUpgradeDialog(BuildContext context, ThemeProvider theme) {
@@ -138,12 +200,14 @@ class TemplatesScreen extends StatelessWidget {
 class TemplateCard extends StatelessWidget {
   final InvoiceTemplate template;
   final bool isLocked;
+  final bool isActive;
   final VoidCallback onTap;
 
   const TemplateCard({
     super.key, 
     required this.template, 
     required this.isLocked, 
+    required this.isActive, 
     required this.onTap,
   });
 
@@ -159,8 +223,10 @@ class TemplateCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-          width: 1,
+          color: isActive
+              ? theme.primaryColor
+              : (isDark ? Colors.grey[800]! : Colors.grey[200]!),
+          width: isActive ? 2 : 1,
         ),
       ),
       child: InkWell(
@@ -207,6 +273,23 @@ class TemplateCard extends StatelessWidget {
                               color: Colors.white, 
                               size: 20,
                             ),
+                          ),
+                        ),
+                      ),
+                    if (isActive)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 12,
+                            color: Colors.white,
                           ),
                         ),
                       ),

@@ -64,23 +64,9 @@ class PrintingService {
     final pdf = pw.Document();
     final baseFont = font ?? await _getFont();
 
-    // 🖼️ Image téléversée du modèle : utilisée comme ARRIÈRE-PLAN imprimé.
-    final bgBytes = _templateBackgroundBytes(template);
-    final pw.Widget? background = bgBytes == null
-        ? null
-        : pw.Positioned.fill(
-            child: pw.Opacity(
-              opacity: 0.35,
-              child: pw.Image(
-                pw.MemoryImage(bgBytes),
-                fit: pw.BoxFit.fill,
-              ),
-            ),
-          );
-
-    // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping
-    // enregistrés dans l'espace de travail drag & drop). Sans positions,
-    // on garde le layout fixe historique.
+    // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping +
+    // arrière-plan enregistrés dans l'espace de travail drag & drop). Sans
+    // positions, on garde le layout fixe historique.
     final custom = await TemplateCustomService.loadCustom(template.id);
     final positions = custom.positions.isNotEmpty
         ? custom.positions
@@ -88,6 +74,34 @@ class PrintingService {
     final mapping = custom.mapping.isNotEmpty
         ? custom.mapping
         : Map<String, String>.from(template.mapping);
+
+    // 🖼️ ARRIÈRE-PLAN imprimé : priorité à l'image personnalisée uploadée
+    // dans l'espace de travail, sinon celle téléversée du modèle (admin).
+    // L'opacité et l'ajustement personnalisés sont appliqués.
+    Uint8List? bgBytes;
+    if (custom.background.hasCustomImage) {
+      try {
+        bgBytes = base64Decode(custom.background.fileData);
+      } catch (_) {
+        bgBytes = null;
+      }
+    }
+    bgBytes ??= _templateBackgroundBytes(template);
+    final bgOpacity = custom.background.opacity.clamp(0.0, 1.0);
+    final bgFit = custom.background.fit == 'contain'
+        ? pw.BoxFit.contain
+        : pw.BoxFit.fill;
+    final pw.Widget? background = bgBytes == null
+        ? null
+        : pw.Positioned.fill(
+            child: pw.Opacity(
+              opacity: bgOpacity,
+              child: pw.Image(
+                pw.MemoryImage(bgBytes),
+                fit: bgFit,
+              ),
+            ),
+          );
 
     pdf.addPage(
       pw.MultiPage(
