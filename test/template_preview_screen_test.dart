@@ -66,18 +66,10 @@ void main() {
         },
       );
 
-  /// Lit le pourcentage de zoom affiché dans la barre de zoom ("NN %").
-  int zoomPercent(WidgetTester tester) {
-    final label = tester
-        .widgetList<Text>(find.byType(Text))
-        .map((t) => t.data ?? '')
-        .firstWhere(
-          (d) => RegExp(r'^\d+ %$').hasMatch(d),
-          orElse: () => '',
-        );
-    expect(label, isNotEmpty, reason: 'Le % de zoom devrait être affiché');
-    return int.parse(label.replaceAll(' %', '').trim());
-  }
+  /// Icône du bouton de zoom cyclique : `zoom_in` à l'échelle 1.0,
+  /// `zoom_out` aux échelles supérieures (1.5 / 2.0).
+  bool isZoomedIn(WidgetTester tester) =>
+      find.byIcon(Icons.zoom_out).evaluate().isNotEmpty;
 
   testWidgets('L’aperçu A4 se construit sans débordement', (tester) async {
     // Grand écran (style tablette) pour laisser l'aperçu zoomable respirer.
@@ -89,26 +81,24 @@ void main() {
     // Laisse _loadData (company + personnalisations) se terminer.
     await tester.pumpAndSettle();
 
-    // Titre + page rendue.
-    expect(find.text('Aperçu - Classique Pro'), findsOneWidget);
+    // Titre de l'en-tête (interface actuelle : « Détails Facture »).
+    expect(find.text('Détails Facture'), findsOneWidget);
 
-    // Barre de zoom présente (moins, %, plus, ajuster, 100 %).
-    expect(find.byIcon(Icons.remove), findsOneWidget);
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.byIcon(Icons.fit_screen_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.aspect_ratio), findsOneWidget);
+    // Bouton de zoom cyclique présent (icône zoom_in à l'échelle 1.0).
+    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
 
-    // Règle/coin stylisé (mesures) : le coin "A4".
-    expect(find.text('A4'), findsOneWidget);
+    // Filigrane « PAYÉ » rendu sur le papier.
+    expect(find.text('PAYÉ'), findsOneWidget);
 
-    // Un pourcentage de zoom est affiché.
-    expect(zoomPercent(tester), greaterThan(0));
+    // Barre d'actions inférieure : Éditer + Personnaliser.
+    expect(find.text('Éditer'), findsOneWidget);
+    expect(find.text('Personnaliser'), findsOneWidget);
 
     // Aucune exception de layout (débordement) pendant le rendu.
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Les boutons de zoom changent le pourcentage affiché',
+  testWidgets('Le bouton de zoom bascule l’icône (zoom cyclique)',
       (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -117,24 +107,25 @@ void main() {
     await tester.pumpWidget(buildApp(sampleTemplate()));
     await tester.pumpAndSettle();
 
-    final initialPercent = zoomPercent(tester);
+    // Échelle 1.0 au départ → icône « zoom_in ».
+    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+    expect(isZoomedIn(tester), isFalse);
 
-    // Zoom avant ×1,25 → le % augmente.
-    await tester.tap(find.byIcon(Icons.add));
+    // 1er tap → échelle 1.5 → icône « zoom_out ».
+    await tester.tap(find.byIcon(Icons.zoom_in));
     await tester.pumpAndSettle();
-    final zoomInPercent = zoomPercent(tester);
-    expect(zoomInPercent, greaterThan(initialPercent));
+    expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+    expect(isZoomedIn(tester), isTrue);
 
-    // Zoom arrière ×0,8 → revient sous la valeur précédente.
-    await tester.tap(find.byIcon(Icons.remove));
+    // 2e tap → échelle 2.0 (toujours « zoom_out »).
+    await tester.tap(find.byIcon(Icons.zoom_out));
     await tester.pumpAndSettle();
-    final zoomOutPercent = zoomPercent(tester);
-    expect(zoomOutPercent, lessThan(zoomInPercent));
+    expect(find.byIcon(Icons.zoom_out), findsOneWidget);
 
-    // "Ajuster" → revient à l'échelle de départ.
-    await tester.tap(find.byIcon(Icons.fit_screen_outlined));
+    // 3e tap → retour à l'échelle 1.0 → « zoom_in ».
+    await tester.tap(find.byIcon(Icons.zoom_out));
     await tester.pumpAndSettle();
-    expect(zoomPercent(tester), initialPercent);
+    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

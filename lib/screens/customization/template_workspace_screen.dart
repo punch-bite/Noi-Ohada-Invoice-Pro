@@ -1,25 +1,25 @@
 // lib/screens/customization/template_workspace_screen.dart
 //
-// 🧩 ESPACE DE PERSONNALISATION — refonte fidèle à la maquette Stitch
-// « design/stitch_refined_billing_interface/personnalisation_avec_drag_drop/
-// code.html » (version mobile), adaptée au thème de l'application
-// (système / sombre / claire) via `RoyalScheme`.
-//
-// Structure : header « Détails Facture » · action « SAUVER » (primaire) ·
-// feuille facture flottante (en-tête pointillé, table, totaux, tampon
-// « PAYÉ », liseré décoratif) · panneau bas (onglets catégories, carrousel
-// de miniatures, barre d'outils Couleur/Logo/…/Tampon Payé).
+// ESPACE DE PERSONNALISATION DRAG & DROP — Personnaliser un modèle.
+// Écran autonome (les anciens fichiers part/ ont été supprimés).
+//   • Header : retour + titre + « Réinitialiser » / « Sauver »
+//   • Canvas A4 central avec grille de repères + zoom
+//   • Éléments déplaçables (InvoiceRenderer en mode édition)
+//   • Barre inférieure : « Éléments » + zoom, ou panneau de propriétés
+// Persistance locale via TemplateCustomService (positions + mapping + fond).
 
-import "package:flutter/material.dart";
-import "package:go_router/go_router.dart";
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import "../../models/company.dart";
-import "../../models/invoice_layout.dart";
-import "../../models/invoice_template.dart";
-import "../../services/database_service.dart";
-import "../../services/template_custom_service.dart";
-import "../../theme/royal_ledger.dart";
-import "../../widgets/template_background_palette.dart";
+import 'package:noi_ohada_invoice_pro/services/invoice_layout_engine.dart';
+import 'package:noi_ohada_invoice_pro/widgets/invoice_renderer.dart';
+
+import '../../models/company.dart';
+import '../../models/invoice_layout.dart';
+import '../../models/invoice_template.dart';
+import '../../services/database_service.dart';
+import '../../services/template_custom_service.dart';
+import '../../theme/royal_ledger.dart';
 
 class TemplateWorkspaceScreen extends StatefulWidget {
   final InvoiceTemplate template;
@@ -35,61 +35,25 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   final DatabaseService _db = DatabaseService();
 
   Company? _company;
-  late InvoiceTemplate _current;
-  InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
-  TemplateBackgroundSettings _background = const TemplateBackgroundSettings();
-  List<InvoiceTemplate> _templates = [];
+  late InvoiceLayoutConfig _layoutConfig;
   bool _isLoading = true;
-
-  bool _showStamp = true;
-  int _selectedCategoryIndex = 0;
-  final List<String> _categories = const [
-    "Recommandé",
-    "Simple",
-    "Classique",
-    "Professionnel",
-  ];
-
-  /// Filtre niveaux de gris pour les miniatures « PRO » non sélectionnées.
-  static const ColorFilter _greyScale = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0, 0, 0, 1, 0,
-  ]);
+  double _zoom = 1.0;
+  LayoutElement? _selected;
+  TemplateBackgroundSettings _background = const TemplateBackgroundSettings();
 
   @override
   void initState() {
     super.initState();
-    _current = widget.template;
+    _layoutConfig = InvoiceLayoutConfig.defaultLayout();
     _loadData();
   }
 
   Future<void> _loadData() async {
     final company = await _db.getCompany();
-    final templates = await _db.getTemplates();
-    final custom = await TemplateCustomService.loadCustom(_current.id);
+    final custom = await TemplateCustomService.loadCustom(widget.template.id);
     if (!mounted) return;
     setState(() {
       _company = company;
-      _templates = templates;
-      if (custom.positions.isNotEmpty) {
-        _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
-      }
-      _background = custom.background;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _selectTemplate(InvoiceTemplate t) async {
-    if (t.id == _current.id) return;
-    setState(() {
-      _current = t;
-      _isLoading = true;
-    });
-    final custom = await TemplateCustomService.loadCustom(t.id);
-    if (!mounted) return;
-    setState(() {
       if (custom.positions.isNotEmpty) {
         _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
       }
@@ -100,108 +64,244 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
 
   Future<void> _saveConfig() async {
     await TemplateCustomService.saveCustom(
-      _current.id,
+      widget.template.id,
       positions: _layoutConfig.toMap(),
       mapping: const {},
       background: _background,
     );
+  }
+
+  void _notifySaved() {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Modèle sauvegardé avec succès")),
+      SnackBar(
+        content: const Text('Personnalisation enregistrée'),
+        backgroundColor: RoyalColors.tertiary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
-  void _openColorPalette() {
-    showBackgroundSettingsSheet(
-      context,
-      current: _background,
-      onChanged: (s) => setState(() => _background = s),
-    );
-  }
-
-  void _soon(String label) {
+  Future<void> _resetConfig() async {
+    await TemplateCustomService.clearCustom(widget.template.id);
+    if (!mounted) return;
+    setState(() {
+      _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+      _background = const TemplateBackgroundSettings();
+      _selected = null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("« $label » — bientôt disponible")),
+      SnackBar(
+        content: const Text('Layout réinitialisé'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
-  // ------------------------------------------------------ Données société
+  // ---- Logique drag & drop / manipulation du layout ----
 
-  String get _companyName {
-    final n = _company?.name ?? "";
-    return n.isEmpty ? "Noi Concept digital" : n;
+  void _onElementMoved(LayoutElement dragged, LayoutBlock targetBlock,
+      int targetColumn, int targetOrder) {
+    final draggedPos = _layoutConfig.positions[dragged];
+    if (draggedPos == null) return;
+    LayoutElement? found;
+    for (final entry in _layoutConfig.positions.entries) {
+      final p = entry.value;
+      if (entry.key != dragged &&
+          p.blockIndex == targetBlock.index &&
+          p.column == targetColumn &&
+          p.order == targetOrder) {
+        found = entry.key;
+        break;
+      }
+    }
+    final occupant = found;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      if (occupant != null) {
+        positions[occupant] = draggedPos;
+        positions[dragged] = ElementPosition(
+          blockIndex: targetBlock.index,
+          column: targetColumn,
+          colSpan: draggedPos.colSpan,
+          order: targetOrder,
+          visible: draggedPos.visible,
+        );
+      } else {
+        positions[dragged] = draggedPos.copyWith(
+          blockIndex: targetBlock.index,
+          column: targetColumn,
+          order: targetOrder,
+        );
+      }
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+      _selected = dragged;
+    });
+    _saveConfig();
   }
 
-  String get _companyAddress {
-    final a = _company?.address ?? "";
-    return a.isEmpty ? "Doww Essos Yaoundé Cameroun" : a;
+  void _moveOrder(LayoutElement element, int delta) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    LayoutElement? found;
+    for (final entry in _layoutConfig.positions.entries) {
+      final p = entry.value;
+      if (entry.key != element &&
+          p.blockIndex == pos.blockIndex &&
+          p.order == pos.order + delta) {
+        found = entry.key;
+        break;
+      }
+    }
+    final other = found;
+    if (other == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[other] = positions[other]!.copyWith(order: pos.order);
+      positions[element] = pos.copyWith(order: pos.order + delta);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
   }
 
-  String get _companyPhone {
-    final p = _company?.phone ?? "";
-    return p.isEmpty ? "+237620409383" : p;
+  void _setColumn(LayoutElement element, {required int column, int? colSpan}) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[element] = pos.copyWith(column: column, colSpan: colSpan);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
   }
 
-  String get _companyEmail {
-    final e = _company?.email ?? "";
-    return e.isEmpty ? "contact@noiconcept.com" : e;
+  void _toggleVisible(LayoutElement element) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return;
+    setState(() {
+      final positions =
+          Map<LayoutElement, ElementPosition>.of(_layoutConfig.positions);
+      positions[element] = pos.copyWith(visible: !pos.visible);
+      _layoutConfig = _layoutConfig.copyWith(positions: positions);
+    });
+    _saveConfig();
   }
 
-  // ----------------------------------------------------------------- Build
+  // ---- Build principal ----
 
   @override
   Widget build(BuildContext context) {
-    final c = RoyalScheme.of(context);
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: RoyalColors.surface,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
-            _buildHeader(c),
-            _buildSaveRow(c),
+            _buildHeader(),
             Expanded(
               child: _isLoading
-                  ? Center(child: CircularProgressIndicator(color: c.primary))
-                  : _buildCanvas(c),
+                  ? const Center(child: CircularProgressIndicator())
+                  : _canvas(),
             ),
+            _bottomBar(),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomPanel(c),
     );
   }
 
-  // ---------------------------------------------------------------- Header
-
-  Widget _buildHeader(RoyalScheme c) {
+  Widget _buildHeader() {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: c.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => context.pop(),
-            icon: Icon(Icons.arrow_back, color: c.onSurface),
-            tooltip: "Retour",
+          GestureDetector(
+            onTap: () => context.pop(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: RoyalColors.surfaceContainer,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Icon(Icons.arrow_back,
+                  size: 20, color: RoyalColors.onSurface),
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              "Détails Facture",
-              style: RoyalText.headlineMd(c.onSurface),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Personnaliser',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: RoyalColors.onSurface),
+                ),
+                Text(
+                  widget.template.name,
+                  style: const TextStyle(
+                      fontSize: 11, color: RoyalColors.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _resetConfig,
+            child: const Text(
+              'RÉINITIALISER',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: RoyalColors.onSurfaceVariant,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          GestureDetector(
+            onTap: () async {
+              await _saveConfig();
+              _notifySaved();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: RoyalGradients.royal,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: RoyalColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.save_outlined, size: 14, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text(
+                    'Sauver',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -209,874 +309,703 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  /// Rangée « SAUVER » (maquette : texte primaire, MAJUSCULES, à droite).
-  Widget _buildSaveRow(RoyalScheme c) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        RoyalSpacing.containerPadding,
-        RoyalSpacing.unit,
-        RoyalSpacing.containerPadding,
-        0,
-      ),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: GestureDetector(
-          onTap: _saveConfig,
-          child: Text(
-            "SAUVER",
-            style: RoyalText.labelBold(c.primary)
-                .copyWith(letterSpacing: 1.2, fontWeight: FontWeight.w700),
+  Widget _canvas() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: RoyalColors.surfaceContainerLow,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.fitWidth,
+            child: Transform.scale(
+              scale: _zoom,
+              child: _a4Card(),
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ---------------------------------------------------------------- Canvas
-
-  Widget _buildCanvas(RoyalScheme c) {
+  Widget _a4Card() {
     return Container(
-      color: c.surfaceContainerLow,
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          RoyalSpacing.containerPadding,
-          RoyalSpacing.md,
-          RoyalSpacing.containerPadding,
-          RoyalSpacing.lg,
-        ),
-        child: Center(child: _buildSheet(c)),
-      ),
-    );
-  }
-
-  // ------------------------------------------------- Feuille facture (A4)
-
-  Widget _buildSheet(RoyalScheme c) {
-    final hasBg = _background.hasCustomImage || _background.hasPreset;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 340),
       decoration: BoxDecoration(
-        color: hasBg ? null : c.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(RoyalRadius.xl),
-        border: Border.all(color: c.surfaceVariant),
+        color: RoyalColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: RoyalColors.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(RoyalRadius.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
           children: [
-            _sheetHeader(c),
-            _sheetBody(c, hasBg),
-            _sheetEdgeDecor(c),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _GridPainter(
+                      color: RoyalColors.primary.withValues(alpha: 0.08)),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: A4Dimensions.width,
+              height: A4Dimensions.height,
+              child: InvoiceRenderer(
+                config: _layoutConfig,
+                mode: RenderMode.edit,
+                onElementMoved: _onElementMoved,
+                dragAccentColor: RoyalColors.primary,
+                elementBuilder: (ctx, element, pos) =>
+                    _selectableElement(element, pos),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _sheetHeader(RoyalScheme c) {
-    return Container(
-      color: c.secondary,
-      padding: const EdgeInsets.all(RoyalSpacing.md),
-      child: Stack(
-        children: [
-          // Motif pointillé (maquette : radial-gradient 12px, opacité 10%).
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _DotsPatternPainter(
-                color: c.onSecondary.withValues(alpha: 0.12),
-                step: 12,
-                radius: 1.2,
-              ),
-            ),
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: c.onSecondary.withValues(alpha: 0.18),
-                  border: Border.all(
-                    color: c.onSecondary.withValues(alpha: 0.35),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  "NOI",
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: c.onSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: RoyalSpacing.gutter),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "DE",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                        color: c.onSecondary.withValues(alpha: 0.8),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _companyName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: c.onSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      "$_companyAddress\n$_companyPhone\n$_companyEmail",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 9,
-                        height: 1.25,
-                        color: c.onSecondary.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: RoyalSpacing.unit),
-              Text(
-                "FACTURE",
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.5,
-                  color: c.onSecondary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ------------------------------------------------------ Corps de facture
-
-  Widget _sheetBody(RoyalScheme c, bool hasBg) {
-    return Stack(
-      children: [
-        // Fond personnalisé (image galerie ou préréglage de la palette).
-        if (hasBg)
-          TemplateBackgroundLayer(
-            presetId: _background.presetId,
-            imageBytes: decodeBackgroundImage(_background.fileData),
-            opacity: _background.opacity,
-            blur: _background.blur,
-            fit: _background.fit,
-          ),
-        Padding(
-          padding: const EdgeInsets.all(RoyalSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _clientAndMetaRow(c),
-              const SizedBox(height: RoyalSpacing.md),
-              _miniTable(c),
-              const SizedBox(height: RoyalSpacing.md),
-              _totalsRow(c),
-              const SizedBox(height: RoyalSpacing.md),
-              _termsBlock(c),
-            ],
+  Widget _selectableElement(LayoutElement element, ElementPosition pos) {
+    final selected = _selected == element;
+    return GestureDetector(
+      onTap: () => setState(() => _selected = element),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          color: selected
+              ? RoyalColors.primary.withValues(alpha: 0.06)
+              : Colors.transparent,
+          border: Border.all(
+            color: selected ? RoyalColors.primary : Colors.transparent,
+            width: selected ? 1.6 : 1,
           ),
         ),
-        // Filigrane « PAYÉ » (pivoté — cf. maquette).
-        if (_showStamp)
-          Positioned.fill(
-            child: Center(
-              child: Transform.rotate(
-                angle: -0.2,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _buildElementContent(element, pos),
+            if (selected)
+              Positioned(
+                top: -9,
+                left: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: RoyalSpacing.md,
-                    vertical: RoyalSpacing.sm,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: c.tertiaryContainer.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(RoyalRadius.def),
-                    border: Border.all(color: c.tertiaryContainer, width: 3),
+                    color: RoyalColors.primary,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    "PAYÉ",
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 24,
+                    element.label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8.5,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 6,
-                      color: c.tertiaryContainer,
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _clientAndMetaRow(RoyalScheme c) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "FACTURÉ À",
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                  color: c.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: RoyalSpacing.unit),
-              Text(
-                "-",
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 11,
-                  color: c.onSurface,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: RoyalSpacing.md),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _metaRow(c, "Facture N°", "INV000342"),
-            _metaRow(c, "Date", "26/03/2025"),
-            _metaRow(c, "Échéance", "02/04/2025"),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _metaRow(RoyalScheme c, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: RoyalSpacing.unit),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontFamily: 'WorkSans',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-              color: c.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: RoyalSpacing.sm),
-          SizedBox(
-            width: 72,
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontFamily: 'WorkSans',
-                fontSize: 10,
-                color: c.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ------------------------------------------------- Table, totaux, terms
-
-  Widget _miniTable(RoyalScheme c) {
-    final headerStyle = TextStyle(
-      fontFamily: 'WorkSans',
-      fontSize: 9,
-      fontWeight: FontWeight.w600,
-      color: c.secondary,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: RoyalSpacing.gutter,
-            vertical: RoyalSpacing.unit,
-          ),
-          decoration: BoxDecoration(
-            color: c.secondary.withValues(alpha: 0.10),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(RoyalRadius.sm),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text("Description", style: headerStyle)),
-              SizedBox(
-                width: 40,
-                child: Text("QTÉ",
-                    textAlign: TextAlign.center, style: headerStyle),
-              ),
-              SizedBox(
-                width: 64,
-                child: Text("Prix",
-                    textAlign: TextAlign.right, style: headerStyle),
-              ),
-              SizedBox(
-                width: 64,
-                child: Text("Montant",
-                    textAlign: TextAlign.right, style: headerStyle),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(
-            horizontal: RoyalSpacing.gutter,
-            vertical: RoyalSpacing.md,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: c.surfaceVariant.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          child: Row(
-            children: const [
-              Expanded(child: SizedBox()),
-              SizedBox(width: 40),
-              SizedBox(width: 64),
-              SizedBox(width: 64),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _totalsRow(RoyalScheme c) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        SizedBox(
-          width: 128,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: RoyalSpacing.unit,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Sous-Total",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: c.onSurfaceVariant,
-                      ),
-                    ),
-                    Text(
-                      "Fr0",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 10,
-                        color: c.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: RoyalSpacing.unit),
-              Container(
-                padding: const EdgeInsets.all(RoyalSpacing.unit),
-                decoration: BoxDecoration(
-                  color: c.secondary,
-                  borderRadius: BorderRadius.circular(RoyalRadius.sm),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "MONTANT TOTAL",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: c.onSecondary,
-                      ),
-                    ),
-                    Text(
-                      "Fr0",
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: c.onSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _termsBlock(RoyalScheme c) {
-    return Container(
-      padding: const EdgeInsets.only(top: RoyalSpacing.sm),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: c.surfaceVariant.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Termes et conditions",
-            style: TextStyle(
-              fontFamily: 'WorkSans',
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: c.onSurface,
-            ),
-          ),
-          const SizedBox(height: RoyalSpacing.unit),
-          Text(
-            "Merci pour votre confiance.",
-            style: TextStyle(
-              fontFamily: 'WorkSans',
-              fontSize: 8,
-              color: c.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Liseré décoratif bas (maquette : h-2 secondaire + bandes inclinées).
-  Widget _sheetEdgeDecor(RoyalScheme c) {
-    return SizedBox(
-      height: 8,
-      child: Stack(
-        children: [
-          Positioned.fill(child: ColoredBox(color: c.secondary)),
-          Positioned(
-            left: 16,
-            top: 0,
-            bottom: 0,
-            child: Container(
-              width: 32,
-              color: c.onSecondary.withValues(alpha: 0.2),
-              transform: Matrix4.skewX(-0.3),
-            ),
-          ),
-          Positioned(
-            left: 52,
-            top: 0,
-            bottom: 0,
-            child: Container(
-              width: 16,
-              color: c.onSecondary.withValues(alpha: 0.2),
-              transform: Matrix4.skewX(-0.3),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------ Panneau bas
-
-  Widget _buildBottomPanel(RoyalScheme c) {
-    return Container(
-      decoration: BoxDecoration(
-        color: c.surfaceContainerLow,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        border: Border(
-          top: BorderSide(color: c.surfaceVariant.withValues(alpha: 0.5)),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, -10),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _categoryTabs(c),
-            _thumbCarousel(c),
-            _toolBar(c),
           ],
         ),
       ),
     );
   }
 
-  /// Onglets catégories (maquette : actif = primaire + soulignement 2px).
-  Widget _categoryTabs(RoyalScheme c) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: c.surfaceVariant.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-          horizontal: RoyalSpacing.containerPadding,
-          vertical: 10,
-        ),
-        itemCount: _categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: RoyalSpacing.lg),
-        itemBuilder: (context, i) {
-          final active = i == _selectedCategoryIndex;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedCategoryIndex = i),
-            child: Container(
-              padding: const EdgeInsets.only(bottom: 4),
+  Widget _buildElementContent(LayoutElement element, ElementPosition pos) {
+    final t = widget.template;
+    final c = _company;
+    final primary = t.primaryColor;
+    final text = t.textColor;
+    final sub = text.withValues(alpha: 0.7);
+    switch (element) {
+      case LayoutElement.logo:
+        return Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4)),
+            child: Icon(Icons.business, color: primary, size: 24));
+      case LayoutElement.companyName:
+        return Text(c?.name ?? 'Mon entreprise',
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700, color: text));
+      case LayoutElement.companyAddress:
+        return Text(c?.address ?? 'Adresse',
+            style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.companyPhone:
+        return Text(c?.phone ?? '+225 00 00 00 00',
+            style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.companyEmail:
+        return Text(c?.email ?? 'contact@entreprise.com',
+            style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.invoiceTitle:
+        return Text('FACTURE',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: primary,
+                letterSpacing: 1.5));
+      case LayoutElement.clientName:
+        return Text('Nom Client',
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600, color: text));
+      case LayoutElement.clientAddress:
+        return Text('Adresse', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.clientPhone:
+        return Text('Téléphone', style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.clientEmail:
+        return Text('email@client.com',
+            style: TextStyle(fontSize: 10, color: sub));
+      case LayoutElement.itemsTable:
+        return Column(children: [
+          Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
               decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    width: 2,
-                    color: active ? c.primary : Colors.transparent,
-                  ),
-                ),
-              ),
-              child: Text(
-                _categories[i],
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: active ? c.primary : c.onSurfaceVariant,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  /// Filtre les miniatures selon l'onglet actif.
-  List<InvoiceTemplate> get _thumbTemplates {
-    switch (_categories[_selectedCategoryIndex]) {
-      case "Simple":
-        return _templates.where((t) => t.price <= 0).toList();
-      case "Classique":
-        return _templates
-            .where((t) => t.category.toLowerCase() == "classique")
-            .toList();
-      case "Professionnel":
-        return _templates
-            .where((t) => const ["corporate", "premium", "moderne"]
-                .contains(t.category.toLowerCase()))
-            .toList();
-      default:
-        return _templates;
+                  color: primary,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(4))),
+              child: Row(children: [
+                Expanded(
+                    flex: 3,
+                    child: Text('Désignation',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600))),
+                Expanded(
+                    child: Text('Qté',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600))),
+                Expanded(
+                    child: Text('Prix',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600))),
+                Expanded(
+                    child: Text('Total',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600)))
+              ])),
+          Container(
+              padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+              decoration:
+                  BoxDecoration(border: Border.all(color: Colors.grey[300]!)),
+              child: Row(children: [
+                Expanded(
+                    flex: 3,
+                    child: Text('Produit',
+                        style: TextStyle(fontSize: 9, color: text))),
+                Expanded(
+                    child:
+                        Text('2', style: TextStyle(fontSize: 9, color: text))),
+                Expanded(
+                    child: Text('50 000',
+                        style: TextStyle(fontSize: 9, color: text))),
+                Expanded(
+                    child: Text('100 000',
+                        style: TextStyle(fontSize: 9, color: text)))
+              ])),
+        ]);
+      case LayoutElement.subtotal:
+        return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Sous-total', style: TextStyle(fontSize: 11, color: text)),
+              Text('100 000', style: TextStyle(fontSize: 11, color: text))
+            ]);
+      case LayoutElement.taxAmount:
+        return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('TVA (18%)', style: TextStyle(fontSize: 11, color: text)),
+              Text('18 000', style: TextStyle(fontSize: 11, color: text))
+            ]);
+      case LayoutElement.discount:
+        return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Remise',
+                  style:
+                      TextStyle(fontSize: 11, color: const Color(0xFFBA1A1A))),
+              Text('-0',
+                  style:
+                      TextStyle(fontSize: 11, color: const Color(0xFFBA1A1A)))
+            ]);
+      case LayoutElement.totalAmount:
+        return Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4)),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('TOTAL',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: primary)),
+                  Text('118 000 FCFA',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: primary))
+                ]));
+      case LayoutElement.footerText:
+        return Text('Conforme aux normes OHADA',
+            style: TextStyle(
+                fontSize: 9, color: sub, fontStyle: FontStyle.italic));
+      case LayoutElement.qrCode:
+        return t.showPaymentQR
+            ? Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(4)),
+                child: Icon(Icons.qr_code_2, size: 50, color: primary))
+            : const SizedBox.shrink();
+      case LayoutElement.signature:
+        return Column(children: [
+          Container(width: 120, height: 1, color: Colors.grey),
+          const SizedBox(height: 4),
+          Text('Signature', style: TextStyle(fontSize: 10, color: sub))
+        ]);
+      case LayoutElement.legalMention:
+        return Text(c?.legalText ?? 'Mention légale',
+            style: TextStyle(
+                fontSize: 8, color: sub, fontStyle: FontStyle.italic));
     }
   }
 
-  /// Carrousel de miniatures (80×112, bordure primaire si active).
-  Widget _thumbCarousel(RoyalScheme c) {
-    final thumbs = _thumbTemplates;
-    return SizedBox(
-      height: 136,
-      child: thumbs.isEmpty
-          ? Center(
-              child: Text(
-                "Aucun modèle dans cette catégorie",
-                style: RoyalText.labelSm(c.onSurfaceVariant),
-              ),
-            )
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: RoyalSpacing.containerPadding,
-                vertical: 12,
-              ),
-              itemCount: thumbs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final t = thumbs[i];
-                final selected = t.id == _current.id;
-                final pro = t.price > 0 || t.isPremium;
-
-                Widget thumb = Container(
-                  width: 80,
-                  height: 112,
-                  decoration: BoxDecoration(
-                    color: c.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: selected ? c.primary : c.outlineVariant,
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(5),
-                    child: _thumbPreview(t),
-                  ),
-                );
-                // Miniatures « PRO » non sélectionnées : grisées + voilées.
-                if (pro && !selected) {
-                  thumb = Opacity(
-                    opacity: 0.7,
-                    child: ColorFiltered(
-                      colorFilter: _greyScale,
-                      child: thumb,
-                    ),
-                  );
-                }
-                return GestureDetector(
-                  onTap: () => _selectTemplate(t),
-                  child: SizedBox(
-                    width: 80,
-                    child: Stack(
-                      children: [
-                        thumb,
-                        if (pro)
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: c.tertiaryContainer,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                "PRO",
-                                style: TextStyle(
-                                  fontFamily: 'WorkSans',
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w600,
-                                  color: c.onTertiaryContainer,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+  Widget _bottomBar() {
+    final selected = _selected;
+    return Container(
+      decoration: BoxDecoration(
+        color: RoyalColors.surfaceContainerLowest,
+        border: const Border(top: BorderSide(color: RoyalColors.outlineVariant)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: selected == null ? _idleBar() : _propertiesBar(selected),
     );
   }
 
-  /// Aperçu miniature dessiné aux couleurs du modèle (pas d'asset image).
-  Widget _thumbPreview(InvoiceTemplate t) {
-    final Color bandFg = t.primaryColor.computeLuminance() > 0.5
-        ? const Color(0xFF1E1A1F)
-        : Colors.white;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _idleBar() {
+    return Row(
       children: [
         Expanded(
-          flex: 30,
-          child: ColoredBox(
-            color: t.primaryColor,
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: bandFg.withValues(alpha: 0.35),
-                    ),
+          child: GestureDetector(
+            onTap: _openElementsSheet,
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: RoyalGradients.royal,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: RoyalColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
-                  const Spacer(),
-                  Container(
-                    width: 28,
-                    height: 2,
-                    color: bandFg.withValues(alpha: 0.5),
+                ],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.widgets_outlined, size: 18, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    'Éléments',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
         ),
-        Expanded(
-          flex: 70,
-          child: ColoredBox(
-            color: t.backgroundColor,
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 2,
-                    width: double.infinity,
-                    color: t.textColor.withValues(alpha: 0.15),
-                  ),
-                  const SizedBox(height: 2),
-                  FractionallySizedBox(
-                    widthFactor: 0.6,
-                    child: Container(
-                      height: 2,
-                      color: t.textColor.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    height: 4,
-                    width: double.infinity,
-                    color: t.primaryColor.withValues(alpha: 0.2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        const SizedBox(width: 12),
+        _zoomPill(),
       ],
     );
   }
 
-  // ---------------------------------------------------------- Barre d'outils
+  Widget _zoomPill() {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: RoyalColors.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: RoyalColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          _zoomBtn(Icons.remove,
+              () => setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 2.0))),
+          Text(
+            '${(_zoom * 100).round()}%',
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: RoyalColors.primary,
+            ),
+          ),
+          _zoomBtn(Icons.add,
+              () => setState(() => _zoom = (_zoom + 0.1).clamp(0.5, 2.0))),
+        ],
+      ),
+    );
+  }
 
-  Widget _toolBar(RoyalScheme c) {
-    final tools = <(String, VoidCallback, bool, IconData)>[
-      ("Couleur", _openColorPalette, false, Icons.palette_outlined),
-      ("Logo", () => _soon("Logo"), false, Icons.image_outlined),
-      (
-        "Taille de police",
-        () => _soon("Taille de police"),
-        false,
-        Icons.format_size,
+  Widget _zoomBtn(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Icon(icon, size: 18, color: RoyalColors.primary),
       ),
-      ("Ombres", () => _soon("Ombres"), false, Icons.texture),
-      ("Signature", () => _soon("Signature"), false, Icons.draw_outlined),
-      (
-        "Tampon Payé",
-        () => setState(() => _showStamp = !_showStamp),
-        _showStamp,
-        Icons.verified_outlined,
-      ),
-    ];
-    return SizedBox(
-      height: 76,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-          horizontal: RoyalSpacing.containerPadding,
-          vertical: 10,
-        ),
-        itemCount: tools.length,
-        separatorBuilder: (_, __) => const SizedBox(width: RoyalSpacing.lg),
-        itemBuilder: (context, i) {
-          final (label, onTap, active, icon) = tools[i];
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: SizedBox(
-              width: 64,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+    );
+  }
+
+  Widget _propertiesBar(LayoutElement element) {
+    final pos = _layoutConfig.positions[element];
+    if (pos == null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: RoyalColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: RoyalColors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 26,
-                        color: active ? c.primary : c.onSurfaceVariant,
-                      ),
-                      if (active)
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: c.error,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: c.surfaceContainerLow,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
+                  Icon(_elementIcon(element),
+                      size: 14, color: RoyalColors.primary),
+                  const SizedBox(width: 6),
                   Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 10,
-                      fontWeight:
-                          active ? FontWeight.w600 : FontWeight.w400,
-                      color: active ? c.primary : c.onSurfaceVariant,
+                    element.label,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: RoyalColors.primary,
                     ),
                   ),
                 ],
               ),
+            ),
+            const Spacer(),
+            _propBtn(
+                pos.visible ? Icons.visibility : Icons.visibility_off,
+                () => _toggleVisible(element),
+                'Visibilité'),
+            _propBtn(Icons.arrow_upward, () => _moveOrder(element, -1),
+                'Monter'),
+            _propBtn(Icons.arrow_downward, () => _moveOrder(element, 1),
+                'Descendre'),
+            _propBtn(
+                Icons.close, () => setState(() => _selected = null), 'Fermer'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _columnSelector(element),
+      ],
+    );
+  }
+
+  Widget _columnSelector(LayoutElement element) {
+    return SizedBox(
+      height: 36,
+      child: Row(
+        children: [
+          const Text(
+            'Position',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: RoyalColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: RoyalColors.primary.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  _columnOption('Gauche', 0, 1, element),
+                  _columnOption('Droite', 1, 1, element),
+                  _columnOption('Pleine largeur', 0, 2, element),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _columnOption(
+      String label, int column, int colSpan, LayoutElement element) {
+    final pos = _layoutConfig.positions[element]!;
+    final active =
+        pos.colSpan == colSpan && (colSpan == 2 || pos.column == column);
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _setColumn(element, column: column, colSpan: colSpan),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          decoration: BoxDecoration(
+            color: active ? RoyalColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : RoyalColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _propBtn(IconData icon, VoidCallback onTap, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(left: 6),
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: RoyalColors.primary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: RoyalColors.primary),
+        ),
+      ),
+    );
+  }
+
+  IconData _elementIcon(LayoutElement e) {
+    switch (e) {
+      case LayoutElement.logo:
+        return Icons.image_outlined;
+      case LayoutElement.companyName:
+        return Icons.business_outlined;
+      case LayoutElement.companyAddress:
+        return Icons.location_on_outlined;
+      case LayoutElement.companyPhone:
+        return Icons.phone_outlined;
+      case LayoutElement.companyEmail:
+        return Icons.mail_outline;
+      case LayoutElement.invoiceTitle:
+        return Icons.title;
+      case LayoutElement.clientName:
+        return Icons.person_outline;
+      case LayoutElement.clientAddress:
+        return Icons.location_on_outlined;
+      case LayoutElement.clientPhone:
+        return Icons.phone_outlined;
+      case LayoutElement.clientEmail:
+        return Icons.mail_outline;
+      case LayoutElement.itemsTable:
+        return Icons.table_rows;
+      case LayoutElement.subtotal:
+        return Icons.calculate_outlined;
+      case LayoutElement.taxAmount:
+        return Icons.percent;
+      case LayoutElement.discount:
+        return Icons.sell_outlined;
+      case LayoutElement.totalAmount:
+        return Icons.payments_outlined;
+      case LayoutElement.footerText:
+        return Icons.notes;
+      case LayoutElement.qrCode:
+        return Icons.qr_code_2;
+      case LayoutElement.signature:
+        return Icons.draw;
+      case LayoutElement.legalMention:
+        return Icons.gavel_outlined;
+    }
+  }
+
+  void _openElementsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) {
+          return Container(
+            height: MediaQuery.of(sheetCtx).size.height * 0.68,
+            decoration: const BoxDecoration(
+              color: RoyalColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color:
+                        RoyalColors.onSurfaceVariant.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Éléments de la facture',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: RoyalColors.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _resetConfig,
+                        child: const Text(
+                          'RÉINITIALISER',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                            color: RoyalColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: _layoutConfig.positions.length,
+                    itemBuilder: (ctx, i) {
+                      final element =
+                          _layoutConfig.positions.keys.elementAt(i);
+                      final pos = _layoutConfig.positions[element]!;
+                      return ListTile(
+                        dense: true,
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color:
+                                RoyalColors.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(_elementIcon(element),
+                              size: 18, color: RoyalColors.primary),
+                        ),
+                        title: Text(
+                          element.label,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: pos.visible
+                                ? RoyalColors.onSurface
+                                : RoyalColors.onSurfaceVariant,
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                pos.visible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                size: 18,
+                                color: pos.visible
+                                    ? RoyalColors.primary
+                                    : RoyalColors.onSurfaceVariant,
+                              ),
+                              onPressed: () {
+                                _toggleVisible(element);
+                                setSheet(() {});
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_upward,
+                                  size: 18,
+                                  color: RoyalColors.onSurfaceVariant),
+                              onPressed: () {
+                                _moveOrder(element, -1);
+                                setSheet(() {});
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_downward,
+                                  size: 18,
+                                  color: RoyalColors.onSurfaceVariant),
+                              onPressed: () {
+                                _moveOrder(element, 1);
+                                setSheet(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                        selected: _selected == element,
+                        onTap: () {
+                          setState(() => _selected = element);
+                          Navigator.of(sheetCtx).pop();
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -1085,31 +1014,25 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 }
 
-/// Motif pointillé décoratif (en-tête de la feuille — cf. maquette).
-class _DotsPatternPainter extends CustomPainter {
+/// Peintre de la grille de repères 4×4 du canvas A4.
+class _GridPainter extends CustomPainter {
   final Color color;
-  final double step;
-  final double radius;
-
-  _DotsPatternPainter({
-    required this.color,
-    this.step = 8,
-    this.radius = 1.1,
-  });
+  const _GridPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    for (double y = step / 2; y < size.height; y += step) {
-      for (double x = step / 2; x < size.width; x += step) {
-        canvas.drawCircle(Offset(x, y), radius, paint);
-      }
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var i = 1; i < 4; i++) {
+      final dx = size.width * i / 4;
+      final dy = size.height * i / 4;
+      canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), paint);
+      canvas.drawLine(Offset(0, dy), Offset(size.width, dy), paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DotsPatternPainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.step != step ||
-      oldDelegate.radius != radius;
+  bool shouldRepaint(covariant _GridPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

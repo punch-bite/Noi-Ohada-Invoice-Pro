@@ -527,10 +527,15 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "Sous-Total",
-                    style: RoyalText.labelBold(c.onSurfaceVariant),
+                  Expanded(
+                    child: Text(
+                      "Sous-Total",
+                      style: RoyalText.labelBold(c.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     "Fr0",
                     style: RoyalText.bodyMd(c.onSurface)
@@ -554,10 +559,15 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "MONTANT TOTAL",
-                  style: RoyalText.labelBold(c.onSecondary),
+                Expanded(
+                  child: Text(
+                    "MONTANT TOTAL",
+                    style: RoyalText.labelBold(c.onSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   "Fr0",
                   style: RoyalText.bodyMd(c.onSecondary)

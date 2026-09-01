@@ -1,10 +1,15 @@
-// lib/models/invoice_layout.dart
+﻿// lib/models/invoice_layout.dart
 //
 // 📐 Layout par blocs avec grille de colonnes pour facture A4.
 //
 // Chaque élément est positionné dans un BLOC (header, client, items, totals, footer)
 // et occupe 1 ou 2 colonnes sur une grille de 2 colonnes.
 // Le snap automatique garantit l'alignement et évite les surprises en preview/impression.
+//
+// 🎨 NOUVEAU : chaque élément possède un style personnalisable (taille, poids,
+// couleur, alignement, visibilité) pour un drag & drop WYSIWYG complet.
+
+import 'package:flutter/material.dart';
 
 /// Blocs de la facture (ordre vertical fixe).
 enum LayoutBlock {
@@ -125,21 +130,80 @@ enum LayoutElement {
   }
 }
 
-/// Position d'un élément sur la grille.
+/// 🎨 Style personnalisable d'un élément (WYSIWYG).
+class ElementStyle {
+  final double fontSize;
+  final FontWeight fontWeight;
+  final Color? color;
+  final TextAlign alignment;
+  final bool visible;
+
+  const ElementStyle({
+    this.fontSize = 11.0,
+    this.fontWeight = FontWeight.w400,
+    this.color,
+    this.alignment = TextAlign.left,
+    this.visible = true,
+  });
+
+  ElementStyle copyWith({
+    double? fontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    TextAlign? alignment,
+    bool? visible,
+  }) {
+    return ElementStyle(
+      fontSize: fontSize ?? this.fontSize,
+      fontWeight: fontWeight ?? this.fontWeight,
+      color: color ?? this.color,
+      alignment: alignment ?? this.alignment,
+      visible: visible ?? this.visible,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'fontSize': fontSize,
+        'fontWeight': fontWeight.value,
+        'color': color?.toARGB32(),
+        'alignment': alignment.index,
+        'visible': visible,
+      };
+
+  factory ElementStyle.fromMap(Map<String, dynamic> map) {
+    return ElementStyle(
+      fontSize: ((map['fontSize'] as num?) ?? 11.0).toDouble(),
+      fontWeight: _fontWeightFromInt((map['fontWeight'] as num?)?.toInt()),
+      color: map['color'] != null ? Color(map['color'] as int) : null,
+      alignment: TextAlign.values[(map['alignment'] as int?) ?? 0],
+      visible: map['visible'] as bool? ?? true,
+    );
+  }
+
+  /// Convertit une valeur sérialisée en [FontWeight].
+  ///
+  /// [toMap] stocke la **valeur** du poids (100–900) et non un index :
+  /// les deux formats sont acceptés ici pour rester compatible avec
+  /// d'éventuelles anciennes données indexées (0–8).
+  static FontWeight _fontWeightFromInt(int? raw) {
+    if (raw == null) return FontWeight.w400;
+    if (raw >= 100) {
+      return FontWeight.values.firstWhere(
+        (w) => w.value == raw,
+        orElse: () => FontWeight.w400,
+      );
+    }
+    final index = raw.clamp(0, FontWeight.values.length - 1);
+    return FontWeight.values[index];
+  }
+}
+
+/// Position d'un élément dans son bloc.
 class ElementPosition {
-  /// Index du bloc (0=header, 1=client, 2=items, 3=totals, 4=footer).
   final int blockIndex;
-
-  /// Colonne de départ (0 ou 1).
   final int column;
-
-  /// Nombre de colonnes occupées (1 ou 2).
   final int colSpan;
-
-  /// Ordre dans le bloc (0 = premier).
   final int order;
-
-  /// Visibilité de l'élément.
   final bool visible;
 
   const ElementPosition({
@@ -187,22 +251,34 @@ class ElementPosition {
 
 /// Configuration complète du layout d'une facture.
 class InvoiceLayoutConfig {
-  /// Positions des éléments.
   final Map<LayoutElement, ElementPosition> positions;
-
-  /// Espacement vertical entre blocs (pixels).
+  final Map<LayoutElement, ElementStyle> styles;
   final double blockSpacing;
-
-  /// Marge intérieure de la page (pixels).
   final double pagePadding;
 
   const InvoiceLayoutConfig({
     required this.positions,
+    this.styles = const {},
     this.blockSpacing = 12.0,
     this.pagePadding = 24.0,
   });
 
-  /// Layout par défaut équilibré.
+  ElementStyle styleOf(LayoutElement element) {
+    return styles[element] ?? const ElementStyle();
+  }
+
+  InvoiceLayoutConfig withStyle(LayoutElement element, ElementStyle style) {
+    final newStyles = Map<LayoutElement, ElementStyle>.of(styles);
+    newStyles[element] = style;
+    return copyWith(styles: newStyles);
+  }
+
+  InvoiceLayoutConfig withPosition(LayoutElement element, ElementPosition position) {
+    final newPositions = Map<LayoutElement, ElementPosition>.of(positions);
+    newPositions[element] = position;
+    return copyWith(positions: newPositions);
+  }
+
   factory InvoiceLayoutConfig.defaultLayout() {
     return InvoiceLayoutConfig(
       positions: {
@@ -226,16 +302,37 @@ class InvoiceLayoutConfig {
         LayoutElement.qrCode: ElementPosition(blockIndex: 4, column: 0, order: 1),
         LayoutElement.signature: ElementPosition(blockIndex: 4, column: 1, order: 1),
       },
+      styles: {
+        LayoutElement.companyName: const ElementStyle(
+          fontSize: 14.0,
+          fontWeight: FontWeight.w700,
+        ),
+        LayoutElement.invoiceTitle: const ElementStyle(
+          fontSize: 18.0,
+          fontWeight: FontWeight.w800,
+          alignment: TextAlign.center,
+        ),
+        LayoutElement.clientName: const ElementStyle(
+          fontSize: 12.0,
+          fontWeight: FontWeight.w600,
+        ),
+        LayoutElement.totalAmount: const ElementStyle(
+          fontSize: 14.0,
+          fontWeight: FontWeight.w700,
+        ),
+      },
     );
   }
 
   InvoiceLayoutConfig copyWith({
     Map<LayoutElement, ElementPosition>? positions,
+    Map<LayoutElement, ElementStyle>? styles,
     double? blockSpacing,
     double? pagePadding,
   }) {
     return InvoiceLayoutConfig(
       positions: positions ?? Map.of(this.positions),
+      styles: styles ?? Map.of(this.styles),
       blockSpacing: blockSpacing ?? this.blockSpacing,
       pagePadding: pagePadding ?? this.pagePadding,
     );
@@ -244,6 +341,9 @@ class InvoiceLayoutConfig {
   Map<String, dynamic> toMap() => {
         'positions': {
           for (final e in positions.entries) e.key.name: e.value.toMap(),
+        },
+        'styles': {
+          for (final e in styles.entries) e.key.name: e.value.toMap(),
         },
         'blockSpacing': blockSpacing,
         'pagePadding': pagePadding,
@@ -262,15 +362,25 @@ class InvoiceLayoutConfig {
       );
     }
 
-    // 🔁 Compatibilité ascendante : les éléments absents d'une ancienne
-    // personnalisation (ex : « Mention légale », ajoutée après coup) sont
-    // réinjectés depuis le layout par défaut, à leur place d'origine.
+    final styleMap = map['styles'] as Map<String, dynamic>? ?? {};
+    final styles = <LayoutElement, ElementStyle>{};
+    for (final entry in styleMap.entries) {
+      final element = LayoutElement.values.firstWhere(
+        (e) => e.name == entry.key,
+        orElse: () => LayoutElement.logo,
+      );
+      styles[element] = ElementStyle.fromMap(
+        Map<String, dynamic>.from(entry.value as Map),
+      );
+    }
+
     InvoiceLayoutConfig.defaultLayout().positions.forEach(
           (element, position) => positions.putIfAbsent(element, () => position),
         );
 
     return InvoiceLayoutConfig(
       positions: positions,
+      styles: styles,
       blockSpacing: (map['blockSpacing'] as num?)?.toDouble() ?? 12.0,
       pagePadding: (map['pagePadding'] as num?)?.toDouble() ?? 24.0,
     );
