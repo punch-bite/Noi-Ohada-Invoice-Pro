@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
+import '../models/company.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -40,6 +41,15 @@ class AuthService {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
       if (doc.exists && doc.data() != null) {
+        // 🔥 Même quand le profil existe déjà, on s'assure que le document
+        // ENTREPRISE de l'utilisateur existe aussi (utilisateurs créés avant
+        // ce correctif : la « company » n'était jamais créée à l'inscription).
+        unawaited(_ensureUserCompany(
+          userId,
+          name: doc.data()!['displayName'] as String?,
+          email: doc.data()!['email'] as String?,
+          phone: doc.data()!['phone'] as String?,
+        ));
         return AppUser.fromMap(doc.data()!);
       }
 
@@ -55,10 +65,14 @@ class AuthService {
       );
 
       await _firestore.collection('users').doc(userId).set(defaultUser.toMap());
+      await _ensureUserCompany(
+        userId,
+        name: defaultUser.displayName,
+        email: defaultUser.email,
+      );
       return defaultUser;
     } catch (e) {
       debugPrint('❌ Erreur _ensureUserDocument: $e');
-      // En cas d'erreur, on retourne un utilisateur minimal
       return AppUser(
         id: userId,
         email: '',
@@ -67,6 +81,60 @@ class AuthService {
         isActive: true,
         roles: ['user'],
       );
+    }
+  }
+
+  /// ✅ Garantit l'existence du document ENTREPRISE (« company ») de
+  /// l'utilisateur. Ce document est indispensable à la création de factures
+  /// (getCompany → companies/{userId}) et n'était PAS créé à l'inscription.
+  ///
+  /// Idempotent : vérifie d'abord si une société existe déjà pour cet
+  /// utilisateur (requête `where userId == uid`, limite 1) avant d'en créer
+  /// une nouvelle. L'id déterministe `company_$userId` évite les doublons.
+  Future<void> _ensureUserCompany(
+    String userId, {
+    String? name,
+    String? email,
+    String? phone,
+  }) async {
+    if (userId.isEmpty) return;
+    try {
+      final existing = await _firestore
+          .collection('companies')
+          .where('userId', isEqualTo: userId)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) return; // ✅ Déjà créée
+
+      final companyName = (name == null || name.trim().isEmpty)
+          ? 'Mon entreprise'
+          : name.trim();
+      final company = Company(
+        id: 'company_$userId',
+        userId: userId,
+        name: companyName,
+        address: '',
+        taxId: '',
+        phone: phone ?? '',
+        email: email ?? '',
+        logoPath: '',
+        currency: 'XAF',
+        defaultTaxRate: 18,
+        legalText: 'Conforme aux normes OHADA et SYSCOHADA',
+        website: '',
+        rccm: '',
+      );
+
+      // 🔥 Création (règles Firestore : un utilisateur authentifié peut
+      // créer son propre document company avec `userId == auth.uid`).
+      await _firestore
+          .collection('companies')
+          .doc('company_$userId')
+          .set(company.toMap());
+      debugPrint('✅ Document entreprise créé pour $userId');
+    } catch (e) {
+      debugPrint('❌ Erreur _ensureUserCompany: $e');
     }
   }
 
@@ -107,6 +175,14 @@ class AuthService {
       );
 
       await _firestore.collection('users').doc(user.uid).set(appUser.toMap());
+      // ✅ Créer immédiatement le document ENTREPRISE de l'utilisateur
+      // (indispensable aux factures) — idempotent.
+      await _ensureUserCompany(
+        user.uid,
+        name: companyName ?? displayName,
+        email: email.trim(),
+        phone: phone,
+      );
       _cachedUser = appUser;
       return appUser;
     } on FirebaseAuthException catch (e) {

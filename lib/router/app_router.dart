@@ -5,6 +5,7 @@ import 'package:noi_ohada_invoice_pro/screens/landing/landing_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_detail_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_invitations_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/teams/team_chat_screen.dart';
 import 'package:provider/provider.dart';
 
 // Modèles
@@ -56,12 +57,8 @@ import '../screens/customization/my_templates_screen.dart';
 import '../screens/customization/templates_screen.dart';
 import '../screens/customization/template_workspace_screen.dart';
 import '../screens/customization/template_preview_screen.dart';
-import '../screens/customization/invoice_preview_screen.dart';
-import '../screens/customization/invoice_customization_edit_screen.dart';
 import '../screens/dev/enkap_test_screen.dart';
-import '../models/invoice_settings.dart';
 import '../models/invoice_template.dart';
-import '../models/customization_config.dart';
 import '../screens/subscription/subscription_screen.dart';
 import '../screens/subscription/payment_screen.dart';
 import '../screens/notifications/notification_screen.dart';
@@ -186,6 +183,20 @@ class AppRouter {
         path: '/teams/invitations',
         builder: (context, state) => const TeamInvitationsScreen(),
       ),
+      // 💬 Messagerie d'équipe (temps réel + historique local Hive)
+      GoRoute(
+        path: '/teams/chat',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            return TeamChatScreen(
+              teamId: extra['teamId']?.toString() ?? '',
+              teamName: extra['teamName']?.toString() ?? 'Équipe',
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
       GoRoute(
         path: '/teams/:id',
         builder: (context, state) {
@@ -236,22 +247,6 @@ class AppRouter {
         builder: (context, state) => const SessionsScreen(),
       ),
 
-      // Customisation visuelle des factures
-      GoRoute(
-        path: '/customization',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is CustomizationConfig) {
-            return InvoiceCustomizationEditScreen(config: extra);
-          }
-          if (extra is Map<String, dynamic> &&
-              extra['config'] is CustomizationConfig) {
-            return InvoiceCustomizationEditScreen(
-                config: extra['config'] as CustomizationConfig);
-          }
-          return const InvoiceCustomizationEditScreen();
-        },
-      ),
       // Sauvegarde Google Drive (Business)
       GoRoute(
         path: '/settings/drive-sync',
@@ -304,54 +299,13 @@ class AppRouter {
           }
           if (extra is Map<String, dynamic> &&
               extra['template'] is InvoiceTemplate) {
-                        return TemplatePreviewScreen(
+            return TemplatePreviewScreen(
               template: extra['template'] as InvoiceTemplate,
-              settings: extra['settings'] as InvoiceSettings?);
+            );
           }
           return const SizedBox.shrink();
         },
       ),
-      // 🧾 Aperçu maquette (flow Personnaliser) — preview plein écran.
-      GoRoute(
-        path: '/templates/apropos/preview',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is Map<String, dynamic>) {
-            return InvoicePreviewScreen(
-              config: extra['config'] is CustomizationConfig
-                  ? extra['config'] as CustomizationConfig
-                  : null,
-              template: extra['template'] is InvoiceTemplate
-                  ? extra['template'] as InvoiceTemplate
-                  : null,
-            );
-          }
-          if (extra is CustomizationConfig) {
-            return InvoicePreviewScreen(config: extra);
-          }
-          if (extra is InvoiceTemplate) {
-            return InvoicePreviewScreen(template: extra);
-          }
-          return const InvoicePreviewScreen();
-        },
-      ),
-      // 🛠️ Espace de personnalisation (onglets maquette).
-      GoRoute(
-        path: '/templates/customization/edit',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is CustomizationConfig) {
-            return InvoiceCustomizationEditScreen(config: extra);
-          }
-          if (extra is Map<String, dynamic> &&
-              extra['config'] is CustomizationConfig) {
-            return InvoiceCustomizationEditScreen(
-                config: extra['config'] as CustomizationConfig);
-          }
-          return const InvoiceCustomizationEditScreen();
-        },
-      ),
-
       // 🧪 Test de paiement E-nkap (développeur) — RÉSERVÉ À L'ADMIN.
       GoRoute(
         path: '/dev/enkap-test',

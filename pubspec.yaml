@@ -92,3 +92,10 @@ flutter:
           weight: 500
         - asset: assets/fonts/Roboto-Light.ttf
           weight: 300
+    # 👑 Design system « Royal Ledger » (maquette Stitch)
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
+    - family: WorkSans
+      fonts:
+        - asset: assets/fonts/WorkSans.ttf

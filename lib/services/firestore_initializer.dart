@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../models/invoice_template.dart';
 import '../models/plan.dart';
 
 class FirestoreInitializer {
@@ -109,30 +110,55 @@ class FirestoreInitializer {
   }
 
   // ===== TEMPLATES =====
+  /// 📄 Stocke TOUS les modèles prédéfinis « Royal Ledger » dans Firestore
+  /// pour qu'ils soient lisibles par l'app ET modifiables par l'admin
+  /// (`/admin/templates`).
+  ///
+  /// Stratégie d'upsert (elle ne fige pas les modifications de l'admin) :
+  ///   • collection vide → création de TOUS les modèles par défaut ;
+  ///   • modèle `default_*` absent → création ;
+  ///   • modèle présent avec `designVersion < kRoyalDesignVersion`
+  ///     → MISE À JOUR vers le nouveau design (v2) ;
+  ///   • modèle présent avec `designVersion >= 2` → on n'y touche pas
+  ///     (l'admin l'a peut-être personnalisé depuis la boutique).
   static Future<void> _ensureTemplates() async {
     try {
-      final snapshot = await _firestore.collection('templates').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        debugPrint('📄 Création du modèle par défaut...');
-        await _firestore.collection('templates').doc('default_1').set({
-          'id': 'default_1',
-          'name': 'Classique',
-          'description': 'Modèle épuré et professionnel',
-          'primaryColor': 0xFF1A237E,
-          'textColor': 0xFF000000,
-          'backgroundColor': 0xFFFFFFFF,
-          'showLogo': true,
-          'showTaxDetails': true,
-          'showPaymentTerms': true,
-          'showPaymentQR': false,
-          'isPremium': false,
-          'isDefault': true,
-          'fontFamily': 'Roboto',
-          'fontSize': 12.0,
-          'showBorder': true,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-        debugPrint('✅ Modèle par défaut créé');
+      final defaults = InvoiceTemplate.getDefaultTemplates();
+      if (defaults.isEmpty) return;
+
+      final snapshot = await _firestore.collection('templates').get();
+      final existing = <String, Map<String, dynamic>>{
+        for (final doc in snapshot.docs) doc.id: doc.data(),
+      };
+
+      final batch = _firestore.batch();
+      var pending = 0;
+
+      for (final template in defaults) {
+        final ref = _firestore.collection('templates').doc(template.id);
+        final current = existing[template.id];
+
+        // Création (absent) OU mise à jour vers le nouveau design.
+        final int currentVersion =
+            (current?['designVersion'] as num?)?.toInt() ?? 1;
+        final needsUpdate = current == null ||
+            currentVersion < InvoiceTemplate.kRoyalDesignVersion;
+
+        if (needsUpdate) {
+          final map = template.toMap()
+            ..['createdAt'] = current?['createdAt'] ??
+                FieldValue.serverTimestamp()
+            ..['updatedAt'] = FieldValue.serverTimestamp();
+          batch.set(ref, map, SetOptions(merge: true));
+          pending++;
+        }
+      }
+
+      if (pending > 0) {
+        await batch.commit();
+        debugPrint('✅ $pending modèle(s) par défaut stocké(s) en base (design v2)');
+      } else {
+        debugPrint('✅ Les ${defaults.length} modèles par défaut sont à jour');
       }
     } catch (e) {
       debugPrint('⚠️ Erreur templates (ignorée): $e');

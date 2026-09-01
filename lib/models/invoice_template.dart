@@ -82,21 +82,54 @@ class InvoiceTemplate {
   // Les coordonnées sont RELATIVES (0..1) pour rester proportionnelles à la page.
   final Map<String, dynamic> positions;
 
-  // Liste des variables disponibles pour les factures (à exposer dans l'UI).
+  /// 🎨 Version du design prédéfini « Royal Ledger ».
+  ///
+  /// Utilisée par l'initialiseur Firestore pour mettre à jour les modèles
+  /// par défaut vers le nouveau design (v2) SANS écraser les personnalisations
+  /// ultérieures de l'admin (un modèle déjà en base avec `designVersion >= 2`
+  /// n'est plus écrasé).
+  final int designVersion;
+
+  /// Dernière version du design système des modèles prédéfinis.
+  static const int kRoyalDesignVersion = 2;
+
+    // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
   static const List<String> availableVariables = [
     'invoice_number',
     'issue_date',
     'due_date',
     'client_name',
+    'client_address',
     'client_email',
     'client_phone',
     'company_name',
     'company_address',
+    'company_phone',
+    'company_email',
     'company_tax_id',
+    'company_rccm',
+    'company_legal_text',
+    'payment_terms',
+    'notes',
     'subtotal',
     'tax_amount',
+    'discount',
     'total_amount',
     'status',
+    'currency',
+  ];
+
+  // 🏷️ Catégories disponibles dans la boutique.
+  static const List<String> categories = [
+    'Tous',
+    'Classique',
+    'Moderne',
+    'Élégant',
+    'Premium',
+    'Corporate',
+    'Menthe',
+    'Marbre',
+    'Charbon',
   ];
 
   // Getters pour les couleurs
@@ -131,6 +164,7 @@ class InvoiceTemplate {
     this.mapping = const {},
     this.category = 'classique',
     this.positions = const {},
+    this.designVersion = 1,
   })  : primaryColorValue = primaryColor?.toARGB32() ?? 0xFF1976D2,
         textColorValue = textColor?.toARGB32() ?? 0xFF000000,
         backgroundColorValue = backgroundColor?.toARGB32() ?? 0xFFFFFFFF;
@@ -165,6 +199,7 @@ class InvoiceTemplate {
       mapping: Map<String, String>.from(data['mapping'] ?? const {}),
       category: data['category'] ?? 'classique',
       positions: Map<String, dynamic>.from(data['positions'] ?? const {}),
+      designVersion: (data['designVersion'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -197,6 +232,7 @@ class InvoiceTemplate {
       mapping: Map<String, String>.from(map['mapping'] ?? const {}),
       category: map['category'] ?? 'classique',
       positions: Map<String, dynamic>.from(map['positions'] ?? const {}),
+      designVersion: (map['designVersion'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -228,48 +264,159 @@ class InvoiceTemplate {
       'mapping': mapping,
       'category': category,
       'positions': positions,
+      'designVersion': designVersion,
     };
   }
 
+    /// 💎 Modèles prédéfinis « Royal Ledger » — édition raffinée (design v2).
+  /// 8 designs signature, cohérents avec les maquettes améthyste/or :
+  ///   • papiers à fonds sobres et élégants (perle, champagne, encre bleutée)
+  ///   • accents profonds (améthyste, violet royal, saphir, émeraude, or)
+  ///   • éditions premium « Nuit Royale » & « Obsidienne » sur fond sombre.
+  /// Chaque modèle est STOCKÉ en base (Firestore, par l'initialiseur) pour
+  /// être modifiable par l'ADMIN, et reste personnalisable drag & drop.
   static List<InvoiceTemplate> getDefaultTemplates() {
     return [
       InvoiceTemplate(
         id: 'default_1',
-        name: 'Classique',
-        description: 'Modèle épuré et professionnel',
-        primaryColor: const Color(0xFF1A237E),
-        textColor: const Color(0xFF000000),
-        backgroundColor: Colors.white,
+        name: 'Améthyste',
+        description: 'Classique raffiné aux tons améthyste — conforme SYSCOHADA',
+        primaryColor: const Color(0xFF300546),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFF7FC),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
         isDefault: true,
-        category: 'classique',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        category: 'Classique',
+        price: 0,
+        designVersion: 2,
       ),
       InvoiceTemplate(
         id: 'default_2',
-        name: 'Moderne',
-        description: 'Design contemporain avec touches de couleur',
-        primaryColor: const Color(0xFFE91E63),
-        textColor: const Color(0xFF000000),
-        backgroundColor: const Color(0xFFF5F5F5),
-        category: 'moderne',
+        name: 'Moderne Violet',
+        description: 'Design contemporain, accents vifs et tableaux épurés',
+        primaryColor: const Color(0xFF6C3AED),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFF5F3FF),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: true,
+        category: 'Moderne',
+        price: 0,
+        designVersion: 2,
       ),
       InvoiceTemplate(
         id: 'default_3',
-        name: 'Élégant',
-        description: 'Style sophistiqué pour les grandes entreprises',
-        primaryColor: const Color(0xFF004D40),
-        textColor: const Color(0xFF000000),
-        backgroundColor: const Color(0xFFF9FBE7),
-        category: 'elegant',
+        name: 'Élégance Or',
+        description: 'Style sophistiqué champagne & or — idéal grands comptes',
+        primaryColor: const Color(0xFF6A5E28),
+        textColor: const Color(0xFF211B00),
+        backgroundColor: const Color(0xFFFDF8EC),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        category: 'Élégant',
+        price: 0,
+        designVersion: 2,
       ),
       InvoiceTemplate(
         id: 'default_4',
-        name: 'Premium Or',
-        description: 'Design luxueux pour les clients VIP',
-        primaryColor: const Color(0xFFFFD700),
-        textColor: Colors.white,
-        backgroundColor: const Color(0xFF1A1A2E),
+        name: 'Nuit Royale',
+        description: 'Encre bleutée & améthyste claire — édition premium',
+        primaryColor: const Color(0xFFE6B4FD),
+        textColor: const Color(0xFFF7EEF5),
+        backgroundColor: const Color(0xFF171216),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
         isPremium: true,
-        category: 'premium',
+        category: 'Premium',
+        price: 4900,
+        designVersion: 2,
+      ),
+      InvoiceTemplate(
+        id: 'default_5',
+        name: 'Saphir Corporate',
+        description: 'Autorité et confiance — design institutionnel bleu saphir',
+        primaryColor: const Color(0xFF1E3A8A),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFEFF6FF),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: true,
+        category: 'Corporate',
+        price: 0,
+        designVersion: 2,
+      ),
+      InvoiceTemplate(
+        id: 'default_6',
+        name: 'Menthe Royale',
+        description: 'Fraîcheur émeraude — apaisant, naturel et élégant',
+        primaryColor: const Color(0xFF059669),
+        textColor: const Color(0xFF0F2E1D),
+        backgroundColor: const Color(0xFFF0FDF4),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showPaymentQR: true,
+        showBorder: false,
+        category: 'Menthe',
+        price: 0,
+        designVersion: 2,
+      ),
+      InvoiceTemplate(
+        id: 'default_7',
+        name: 'Marbre Perle',
+        description: 'Subtilité marbre — papier perle et fins reliefs',
+        primaryColor: const Color(0xFF334155),
+        textColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFFF8FAFC),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showPaymentQR: true,
+        showBorder: false,
+        category: 'Marbre',
+        price: 2900,
+        designVersion: 2,
+      ),
+      InvoiceTemplate(
+        id: 'default_8',
+        name: 'Obsidienne',
+        description: 'Contraste nocturne profond, accents ambre & or',
+        primaryColor: const Color(0xFFF3E29F),
+        textColor: const Color(0xFFF7EEF5),
+        backgroundColor: const Color(0xFF0B0E14),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        isPremium: true,
+        category: 'Charbon',
+        price: 4900,
+        designVersion: 2,
       ),
     ];
   }
@@ -298,6 +445,7 @@ class InvoiceTemplate {
     Map<String, String>? mapping,
     String? category,
     Map<String, dynamic>? positions,
+    int? designVersion,
   }) {
     return InvoiceTemplate(
       id: id,
@@ -326,6 +474,7 @@ class InvoiceTemplate {
       mapping: mapping ?? this.mapping,
       category: category ?? this.category,
       positions: positions ?? this.positions,
+      designVersion: designVersion ?? this.designVersion,
     );
   }
 

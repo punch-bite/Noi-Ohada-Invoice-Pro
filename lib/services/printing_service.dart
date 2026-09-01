@@ -7,10 +7,13 @@ import 'package:noi_ohada_invoice_pro/models/company.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../../models/client.dart';
-import '../../../models/invoice.dart';
-import '../../../models/invoice_template.dart';
-import '../../../models/line_item.dart';
+import '../models/client.dart';
+import '../models/invoice.dart';
+import '../models/invoice_layout.dart';
+import '../models/invoice_template.dart';
+import '../models/line_item.dart';
+import '../widgets/template_background_palette.dart';
+import 'invoice_layout_engine.dart' show A4Dimensions;
 import 'template_custom_service.dart';
 
 class PrintingService {
@@ -75,8 +78,8 @@ class PrintingService {
         ? custom.mapping
         : Map<String, String>.from(template.mapping);
 
-    // 🖼️ ARRIÈRE-PLAN imprimé : priorité à l'image personnalisée uploadée
-    // dans l'espace de travail, sinon celle téléversée du modèle (admin).
+    // 🖼️ ARRIÈRE-PLAN imprimé — priorité : image personnalisée (workspace)
+    // > préréglage de la palette > image téléversée du modèle (admin).
     // L'opacité et l'ajustement personnalisés sont appliqués.
     Uint8List? bgBytes;
     if (custom.background.hasCustomImage) {
@@ -86,64 +89,109 @@ class PrintingService {
         bgBytes = null;
       }
     }
-    bgBytes ??= _templateBackgroundBytes(template);
+    final preset = bgBytes == null
+        ? BackgroundPreset.byId(custom.background.presetId)
+        : null;
+    if (preset == null) bgBytes ??= _templateBackgroundBytes(template);
     final bgOpacity = custom.background.opacity.clamp(0.0, 1.0);
     final bgFit = custom.background.fit == 'contain'
         ? pw.BoxFit.contain
         : pw.BoxFit.fill;
-    final pw.Widget? background = bgBytes == null
-        ? null
-        : pw.Positioned.fill(
-            child: pw.Opacity(
-              opacity: bgOpacity,
-              child: pw.Image(
-                pw.MemoryImage(bgBytes),
-                fit: bgFit,
+    final pw.Widget? background;
+    if (bgBytes != null) {
+      background = pw.Positioned.fill(
+        child: pw.Opacity(
+          opacity: bgOpacity,
+          child: pw.Image(
+            pw.MemoryImage(bgBytes),
+            fit: bgFit,
+          ),
+        ),
+      );
+    } else if (preset != null) {
+      // 🎨 Fond préréglé : approximation PDF par dégradé vertical.
+      background = pw.Positioned.fill(
+        child: pw.Opacity(
+          opacity: bgOpacity,
+          child: pw.Container(
+            decoration: pw.BoxDecoration(
+              gradient: pw.LinearGradient(
+                begin: pw.Alignment.topCenter,
+                end: pw.Alignment.bottomCenter,
+                colors: preset.colors.map(_getPdfColor).toList(),
               ),
             ),
-          );
+          ),
+        ),
+      );
+    } else {
+      background = null;
+    }
+
+    // 🧩 Détection du format de personnalisation :
+    //   • NOUVEAU format drag & drop (blocs / colonnes / ordre) : la clé
+    //     'positions' est présente → rendu WYSIWYG aligné sur le workspace ;
+    //   • ANCIEN format x/y/scale (modèles admin) : clés variables à la racine ;
+    //   • aucune personnalisation : layout fixe historique.
+    final blockConfig = _blockLayoutFromCustom(custom.positions);
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: pw.ThemeData.withFont(base: baseFont),
-        margin: positions.isEmpty
+        margin: (positions.isEmpty && blockConfig == null)
             ? const pw.EdgeInsets.all(32)
             : pw.EdgeInsets.zero,
-        build: (pw.Context context) => positions.isEmpty
-            ? [
-                pw.Stack(
+        build: (pw.Context context) {
+          if (blockConfig != null) {
+            return [
+              _buildBlockLayoutPdf(
+                blockConfig,
+                invoice,
+                client,
+                company,
+                template,
+                mapping: mapping,
+                background: background,
+              ),
+            ];
+          }
+          if (positions.isNotEmpty) {
+            return [
+              _buildPositionedLayout(
+                context,
+                positions,
+                invoice,
+                client,
+                company,
+                template,
+                mapping: mapping,
+                background: background,
+              ),
+            ];
+          }
+          return [
+            pw.Stack(
+              children: [
+                if (background != null) background,
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    if (background != null) background,
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(invoice, company, template),
-                        pw.SizedBox(height: 16),
-                        _buildClientInfo(client, template),
-                        pw.SizedBox(height: 16),
-                        _buildItemsTable(invoice, template),
-                        pw.SizedBox(height: 16),
-                        _buildTotals(invoice, template),
-                        pw.SizedBox(height: 16),
-                        _buildFooter(company, template),
-                      ],
-                    ),
+                    _buildHeader(invoice, company, template),
+                    pw.SizedBox(height: 16),
+                    _buildClientInfo(client, template),
+                    pw.SizedBox(height: 16),
+                    _buildItemsTable(invoice, template),
+                    pw.SizedBox(height: 16),
+                    _buildTotals(invoice, template),
+                    pw.SizedBox(height: 16),
+                    _buildFooter(company, template),
                   ],
                 ),
-              ]
-            : [
-                _buildPositionedLayout(
-                  context,
-                  positions,
-                  invoice,
-                  client,
-                  company,
-                  template,
-                  mapping: mapping,
-                  background: background,
-                ),
               ],
+            ),
+          ];
+        },
       ),
     );
 
@@ -201,6 +249,318 @@ class PrintingService {
     });
 
     return pw.Stack(children: children);
+  }
+
+  // ============================================================
+  //  🧩 RENDU PAR BLOCS (drag & drop — nouveau format)
+  //  Miroir du InvoiceRenderer : blocs → rangées (ordre) → colonnes,
+  //  en respectant colSpan, visibilité, marges et espacements — garantit
+  //  la cohérence workspace / aperçu / impression.
+  // ============================================================
+
+  /// Extrait la config drag & drop d'une personnalisation au nouveau format
+  /// (clé 'positions'), ou null si la personnalisation est d'un autre format.
+  static InvoiceLayoutConfig? _blockLayoutFromCustom(
+    Map<String, dynamic> custom,
+  ) {
+    if (custom['positions'] is! Map) return null;
+    try {
+      return InvoiceLayoutConfig.fromMap(custom);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static pw.Widget _buildBlockLayoutPdf(
+    InvoiceLayoutConfig config,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    Map<String, String> mapping = const {},
+    pw.Widget? background,
+  }) {
+    final pageW = PdfPageFormat.a4.width;
+    final pageH = PdfPageFormat.a4.height;
+    // Les constantes A4 sont en px (96 DPI), la page PDF en pt → ratio.
+    final scaleRatio = pageW / A4Dimensions.width;
+    final padding = config.pagePadding.clamp(8.0, 80.0).toDouble() * scaleRatio;
+    final gutter = A4Dimensions.gutter * scaleRatio;
+    final colW = (pageW - padding * 2 - gutter) / 2;
+
+    final children = <pw.Widget>[
+      // Base pleine page : donne une taille au Stack.
+      pw.SizedBox(width: pageW, height: pageH),
+      // `background` est déjà un Positioned.fill → enfant direct du Stack.
+      if (background != null) background,
+      pw.Padding(
+        padding: pw.EdgeInsets.all(padding),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            for (final block in LayoutBlock.values) ...[
+              _buildPdfBlock(
+                block,
+                config,
+                invoice,
+                client,
+                company,
+                template,
+                colW: colW,
+                gutter: gutter,
+                mapping: mapping,
+              ),
+              if (block.index < LayoutBlock.values.length - 1)
+                pw.SizedBox(
+                  height:
+                      config.blockSpacing.clamp(0.0, 60.0).toDouble() *
+                          scaleRatio,
+                ),
+            ],
+          ],
+        ),
+      ),
+    ];
+
+    return pw.Stack(children: children);
+  }
+
+  static pw.Widget _buildPdfBlock(
+    LayoutBlock block,
+    InvoiceLayoutConfig config,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    required double colW,
+    required double gutter,
+    Map<String, String> mapping = const {},
+  }) {
+    final entries = config.positions.entries
+        .where((e) => e.value.blockIndex == block.index && e.value.visible)
+        .toList()
+      ..sort((a, b) {
+        final byOrder = a.value.order.compareTo(b.value.order);
+        if (byOrder != 0) return byOrder;
+        return a.value.column.compareTo(b.value.column);
+      });
+    if (entries.isEmpty) return pw.SizedBox();
+
+    final rows = <int, List<MapEntry<LayoutElement, ElementPosition>>>{};
+    for (final entry in entries) {
+      rows.putIfAbsent(entry.value.order, () => []).add(entry);
+    }
+    final sortedOrders = rows.keys.toList()..sort();
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        for (final order in sortedOrders) ...[
+          _buildPdfRow(
+            rows[order]!,
+            invoice,
+            client,
+            company,
+            template,
+            colW: colW,
+            gutter: gutter,
+            mapping: mapping,
+          ),
+          pw.SizedBox(height: 6),
+        ],
+      ],
+    );
+  }
+
+  static pw.Widget _buildPdfRow(
+    List<MapEntry<LayoutElement, ElementPosition>> row,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    required double colW,
+    required double gutter,
+    Map<String, String> mapping = const {},
+  }) {
+    row.sort((a, b) => a.value.column.compareTo(b.value.column));
+
+    pw.Widget build(MapEntry<LayoutElement, ElementPosition> entry,
+            double width) =>
+        pw.SizedBox(
+          width: width,
+          child: _pdfElement(
+            entry.key,
+            invoice,
+            client,
+            company,
+            template,
+            mapping: mapping,
+          ),
+        );
+
+    // Cas spécial : un seul élément pleine largeur (colSpan 2).
+    if (row.length == 1 && row.first.value.colSpan == 2) {
+      return build(row.first, colW * 2 + gutter);
+    }
+
+    final left = row.where((e) => e.value.column == 0).toList();
+    final right = row.where((e) => e.value.column == 1).toList();
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(
+          width: colW,
+          child: left.isEmpty ? pw.SizedBox() : build(left.first, colW),
+        ),
+        pw.SizedBox(width: gutter),
+        pw.SizedBox(
+          width: colW,
+          child: right.isEmpty ? pw.SizedBox() : build(right.first, colW),
+        ),
+      ],
+    );
+  }
+
+  /// Correspondance LayoutElement → widget PDF (données réelles de la facture,
+  /// mapping utilisateur inclus).
+  static pw.Widget _pdfElement(
+    LayoutElement element,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    Map<String, String> mapping = const {},
+  }) {
+    // Réutilisation des rendus par variable existants (mapping inclus).
+    const byVariable = <LayoutElement, String>{
+      LayoutElement.logo: 'logo',
+      LayoutElement.companyName: 'company_name',
+      LayoutElement.companyAddress: 'company_address',
+      LayoutElement.companyPhone: 'company_phone',
+      LayoutElement.companyEmail: 'company_email',
+      LayoutElement.invoiceTitle: 'invoice_title',
+      LayoutElement.clientName: 'client_name',
+      LayoutElement.clientAddress: 'client_address',
+      LayoutElement.clientPhone: 'client_phone',
+      LayoutElement.clientEmail: 'client_email',
+      LayoutElement.itemsTable: 'items',
+      LayoutElement.subtotal: 'subtotal',
+      LayoutElement.taxAmount: 'tax_amount',
+      LayoutElement.discount: 'discount',
+      LayoutElement.totalAmount: 'total_amount',
+    };
+    final variable = byVariable[element];
+    if (variable != null) {
+      final widget = _variableWidget(
+        variable,
+        1.0,
+        invoice,
+        client,
+        company,
+        template,
+        mapping: mapping,
+      );
+      return widget ?? pw.SizedBox();
+    }
+
+    final text = _getPdfColor(template.textColor);
+    final primary = _getPdfColor(template.primaryColor);
+    final sub = _withOpacity(text, 0.6);
+    final fs = template.fontSize.clamp(6.0, 40.0).toDouble();
+
+    switch (element) {
+      case LayoutElement.footerText:
+        return pw.Text(
+          company.legalText,
+          style: pw.TextStyle(
+            fontSize: fs - 1,
+            color: sub,
+            fontStyle: pw.FontStyle.italic,
+          ),
+        );
+      case LayoutElement.legalMention:
+        return pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: _withOpacity(primary, 0.04),
+            border: pw.Border(left: pw.BorderSide(color: primary, width: 2)),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'MENTION LÉGALE',
+                style: pw.TextStyle(
+                  fontSize: fs - 2,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'RCCM : ${company.rccm.isEmpty ? '—' : company.rccm}',
+                style: pw.TextStyle(fontSize: fs - 2, color: sub),
+              ),
+              pw.Text(
+                'N° Contribuable : ${company.taxId.isEmpty ? '—' : company.taxId}',
+                style: pw.TextStyle(fontSize: fs - 2, color: sub),
+              ),
+              if (company.legalText.isNotEmpty)
+                pw.Text(
+                  company.legalText,
+                  style: pw.TextStyle(
+                    fontSize: fs - 2,
+                    color: sub,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+            ],
+          ),
+        );
+      case LayoutElement.qrCode:
+        if (!template.showPaymentQR) return pw.SizedBox();
+        return pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _withOpacity(text, 0.3)),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'Paiement Mobile Money accepté',
+                style: pw.TextStyle(
+                  fontSize: fs - 2,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Scannez le QR de paiement',
+                style: pw.TextStyle(fontSize: fs - 2, color: sub),
+              ),
+            ],
+          ),
+        );
+      case LayoutElement.signature:
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Container(
+                width: 120, height: 1, color: _withOpacity(text, 0.4)),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Signature',
+              style: pw.TextStyle(fontSize: fs - 2, color: sub),
+            ),
+          ],
+        );
+      default:
+        return pw.SizedBox();
+    }
   }
 
   /// Valeur PDF d'une variable de facture (pour le mapping).

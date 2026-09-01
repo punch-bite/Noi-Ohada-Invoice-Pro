@@ -114,13 +114,13 @@ class Company {
     return DateTime.now();
   }
 
-  Company copyWith({String? name, String? address, String? phone, String? email, String? logoPath, String? currency, double? defaultTaxRate, String? legalText, String? website, String? rccm, bool? isActive, bool? isSynced}) {
+  Company copyWith({String? name, String? address, String? phone, String? email, String? logoPath, String? currency, double? defaultTaxRate, String? legalText, String? website, String? rccm, String? taxId, bool? isActive, bool? isSynced}) {
     return Company(
       id: id,
       userId: userId,
       name: name ?? this.name,
       address: address ?? this.address,
-      taxId: taxId,
+      taxId: taxId ?? this.taxId,
       phone: phone ?? this.phone,
       email: email ?? this.email,
       logoPath: logoPath ?? this.logoPath,

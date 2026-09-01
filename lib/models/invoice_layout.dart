@@ -48,6 +48,7 @@ enum LayoutElement {
   discount,
   totalAmount,
   footerText,
+  legalMention,
   qrCode,
   signature;
 
@@ -85,6 +86,8 @@ enum LayoutElement {
         return 'Total';
       case LayoutElement.footerText:
         return 'Texte pied';
+      case LayoutElement.legalMention:
+        return 'Mention légale';
       case LayoutElement.qrCode:
         return 'QR Code';
       case LayoutElement.signature:
@@ -114,6 +117,7 @@ enum LayoutElement {
       case LayoutElement.totalAmount:
         return LayoutBlock.totals;
       case LayoutElement.footerText:
+      case LayoutElement.legalMention:
       case LayoutElement.qrCode:
       case LayoutElement.signature:
         return LayoutBlock.footer;
@@ -218,6 +222,7 @@ class InvoiceLayoutConfig {
         LayoutElement.discount: ElementPosition(blockIndex: 3, column: 1, order: 2),
         LayoutElement.totalAmount: ElementPosition(blockIndex: 3, column: 1, order: 3),
         LayoutElement.footerText: ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 0),
+        LayoutElement.legalMention: ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 2),
         LayoutElement.qrCode: ElementPosition(blockIndex: 4, column: 0, order: 1),
         LayoutElement.signature: ElementPosition(blockIndex: 4, column: 1, order: 1),
       },
@@ -256,6 +261,14 @@ class InvoiceLayoutConfig {
         Map<String, dynamic>.from(entry.value as Map),
       );
     }
+
+    // 🔁 Compatibilité ascendante : les éléments absents d'une ancienne
+    // personnalisation (ex : « Mention légale », ajoutée après coup) sont
+    // réinjectés depuis le layout par défaut, à leur place d'origine.
+    InvoiceLayoutConfig.defaultLayout().positions.forEach(
+          (element, position) => positions.putIfAbsent(element, () => position),
+        );
+
     return InvoiceLayoutConfig(
       positions: positions,
       blockSpacing: (map['blockSpacing'] as num?)?.toDouble() ?? 12.0,

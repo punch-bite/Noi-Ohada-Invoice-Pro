@@ -83,6 +83,17 @@ npm install
 |-----------------------------|-----------------------------------------------------|
 | `NOCHPAY_WEBHOOK_SECRET`    | Le secret NotchPay (`hsk_test...`)                   |
 | `FIREBASE_SERVICE_ACCOUNT`  | La clé `serviceAccountKey.json` **en base64**        |
+| `SMTP_HOST`                 | Serveur SMTP (défaut `smtp.gmail.com`)              |
+| `SMTP_PORT`                 | Port SMTP (587/TLS, ou 465/SSL)                     |
+| `SMTP_USERNAME`             | Adresse SMTP (ex. un Gmail Application Password)     |
+| `SMTP_PASSWORD`             | Mot de passe / Application Password SMTP            |
+| `SMTP_FROM_EMAIL`           | Expéditeur des mails                                |
+| `SMTP_FROM_NAME`            | Nom de l'expéditeur (défaut : Noi OHADA Invoice Pro) |
+
+> ⚠️ Sans `SMTP_USERNAME`/`SMTP_PASSWORD`, les **invitations d'équipe** et
+> l'envoi de mails (`/email/send`, `POST /team/manage-member` action
+> `invite`) répondent en **HTTP 500**. C'est l'erreur « invitation » que
+> voyaient les utilisateurs.
 
 > ⚠️ Sur Vercel, le fichier `serviceAccountKey.json` n'est pas embarqué :
 > il faut obligatoirement fournir `FIREBASE_SERVICE_ACCOUNT` (base64 du JSON).

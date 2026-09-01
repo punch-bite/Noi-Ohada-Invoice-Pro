@@ -32,15 +32,24 @@ class TemplateBackgroundSettings {
   /// Mode d'ajustement : 'fill' (remplir) | 'contain' (ajuster).
   final String fit;
 
+  /// 🎨 Identifiant du fond préréglé sélectionné dans la palette
+  /// (`template_background_palette.dart`). Vide = aucun préréglage.
+  /// Une image personnalisée reste toujours prioritaire sur le préréglage.
+  final String presetId;
+
   const TemplateBackgroundSettings({
     this.fileData = '',
     this.fileType = 'jpeg',
     this.opacity = 0.3,
     this.blur = 0,
     this.fit = 'fill',
+    this.presetId = '',
   });
 
   bool get hasCustomImage => fileData.isNotEmpty;
+
+  /// Un fond préréglé de la palette est sélectionné.
+  bool get hasPreset => presetId.isNotEmpty;
 
   /// Crée une copie avec les champs modifiés.
   TemplateBackgroundSettings copyWith({
@@ -49,6 +58,7 @@ class TemplateBackgroundSettings {
     double? opacity,
     double? blur,
     String? fit,
+    String? presetId,
   }) {
     return TemplateBackgroundSettings(
       fileData: fileData ?? this.fileData,
@@ -56,6 +66,7 @@ class TemplateBackgroundSettings {
       opacity: opacity ?? this.opacity,
       blur: blur ?? this.blur,
       fit: fit ?? this.fit,
+      presetId: presetId ?? this.presetId,
     );
   }
 
@@ -65,6 +76,7 @@ class TemplateBackgroundSettings {
         'opacity': opacity,
         'blur': blur,
         'fit': fit,
+        'presetId': presetId,
       };
 
   factory TemplateBackgroundSettings.fromMap(Map<String, dynamic> map) {
@@ -74,6 +86,7 @@ class TemplateBackgroundSettings {
       opacity: ((map['opacity'] as num?) ?? 0.3).toDouble().clamp(0.0, 1.0),
       blur: ((map['blur'] as num?) ?? 0).toDouble().clamp(0.0, 20.0),
       fit: map['fit'] == 'contain' ? 'contain' : 'fill',
+      presetId: map['presetId'] as String? ?? '',
     );
   }
 }

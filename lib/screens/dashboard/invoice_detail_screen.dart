@@ -10,7 +10,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -32,8 +31,10 @@ import '../../models/invoice_template.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/team_service.dart';
-import '../../widgets/glass_widgets.dart';
+import '../../theme/royal_ledger.dart';
 import '../../widgets/logo_image.dart';
+import '../../models/invoice_layout.dart';
+import '../../widgets/template_background_palette.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
   final String invoiceId;
@@ -58,6 +59,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   double _bgOpacity = 1.0;
   double _bgBlur = 0;
   String _bgFit = 'fill';
+
+  // 🧩 Layout drag & drop du modèle actif (blocs / colonnes / ordre) —
+  // partagé avec le workspace et l'impression PDF (WYSIWYG).
+  InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+
+  // 🎨 Réglages de fond du modèle actif (préréglage palette / image /…).
+  TemplateBackgroundSettings _backgroundSettings =
+      const TemplateBackgroundSettings();
 
   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
   bool get isDark => themeProvider.isDarkMode;
@@ -114,7 +123,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Applique les personnalisations locales (positions / mapping /
+  /// Applique les personnalisations locales (positions drag & drop / mapping /
   /// arrière-plan) d'un modèle et met à jour l'aperçu.
   Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
     final custom = await TemplateCustomService.loadCustom(template.id);
@@ -122,6 +131,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       positions: custom.positions,
       mapping: {...template.mapping, ...custom.mapping},
     );
+
+    // 🧩 Layout drag & drop : `fromMap` réinjecte les éléments manquants
+    // depuis le layout par défaut (compat ascendante).
+    _layoutConfig = custom.positions.isNotEmpty
+        ? InvoiceLayoutConfig.fromMap(custom.positions)
+        : InvoiceLayoutConfig.defaultLayout();
+    _backgroundSettings = custom.background;
 
     Uint8List? bytes;
     double opacity = 1.0;
@@ -137,7 +153,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       } catch (_) {
         bytes = null;
       }
-    } else if (template.fileData.isNotEmpty && template.fileType != 'pdf') {
+    } else if (!custom.background.hasPreset &&
+        template.fileData.isNotEmpty &&
+        template.fileType != 'pdf') {
       // Repli : image téléversée directement sur le modèle (admin).
       try {
         bytes = base64Decode(template.fileData);
@@ -567,35 +585,47 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Widget build(BuildContext context) {
     final subscriptionProvider = context.watch<SubscriptionProvider>();
     final canAccessPremium = subscriptionProvider.canAccessPremiumTemplates;
-    final bgColor = themeProvider.backgroundColor;
+    final c = RoyalScheme.of(context);
 
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: bgColor,
-        body: const Center(child: CircularProgressIndicator()),
+        backgroundColor: c.surface,
+        body: Center(child: CircularProgressIndicator(color: c.primary)),
       );
     }
 
     if (_invoice == null) {
       return Scaffold(
-        backgroundColor: bgColor,
+        backgroundColor: c.surface,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: isDark ? Colors.grey[400] : Colors.red,
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: c.surfaceContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  size: 32,
+                  color: c.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Facture non trouvée',
-                style: TextStyle(color: textColor),
+                style: RoyalText.headlineMd(c.onSurface),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => context.pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.primary,
+                  foregroundColor: c.onPrimary,
+                ),
                 child: const Text('Retour'),
               ),
             ],
@@ -604,16 +634,19 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
     }
 
-    return GlassScaffold(
+    return Scaffold(
+      backgroundColor: c.surface,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(),
-              const SizedBox(height: 22),
+              const SizedBox(height: 14),
+              _buildToolbar(),
+              const SizedBox(height: 18),
               _buildModelsSection(canAccessPremium),
               const SizedBox(height: 18),
               _buildInvoicePreviewCard(),
@@ -626,37 +659,58 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// En-tête maquette : retour · n° + date · personnaliser · partager · ⋯
+  /// En-tête moderne : retour · n° + date + statut · personnaliser · partager · ⋯
   Widget _buildHeader() {
+    final c = RoyalScheme.of(context);
     return Row(
       children: [
-        _circleButton(Icons.arrow_back, () {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/invoices');
-          }
-        }, tooltip: 'Retour'),
+        GestureDetector(
+          onTap: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/invoices');
+            }
+          },
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: c.surfaceContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.arrow_back, size: 20, color: c.onSurface),
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _invoice!.invoiceNumber,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                  letterSpacing: -0.3,
-                ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      _invoice!.invoiceNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: RoyalText.headlineMd(c.onSurface).copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _statusBadge(c),
+                ],
               ),
               const SizedBox(height: 2),
               Text(
-                'Créée le ${DateFormat('dd MMM yyyy').format(_invoice!.issueDate)}',
-                style: TextStyle(fontSize: 11.5, color: subTextColor),
+                'Créée le ${DateFormat('dd MMM yyyy').format(_invoice!.issueDate)}'
+                ' · Échéance ${DateFormat('dd MMM yyyy').format(_invoice!.dueDate)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: RoyalText.labelSm(c.onSurfaceVariant),
               ),
             ],
           ),
@@ -674,19 +728,48 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           tooltip: 'Partager la facture (PDF)',
         ),
         const SizedBox(width: 8),
-        _buildOverflowMenu(),
+        _buildOverflowMenu(c),
       ],
     );
   }
 
-  /// Bouton circulaire translucide (style maquette).
+  /// Petit badge de statut coloré (Payée / En attente / En retard / etc.).
+  Widget _statusBadge(RoyalScheme c) {
+    final status = _invoice!.status;
+    final color = _getStatusColor(status);
+    final label = _getStatusLabel(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(RoyalRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_statusIcon(status), size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bouton circulaire moderne (style maquette Royal Ledger).
   Widget _circleButton(IconData icon, VoidCallback onTap,
       {String? tooltip}) {
-    final bg = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.white.withValues(alpha: 0.8);
+    final c = RoyalScheme.of(context);
     final btn = Material(
-      color: bg,
+      color: c.surfaceContainer,
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -695,7 +778,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         child: SizedBox(
           width: 42,
           height: 42,
-          child: Icon(icon, size: 20, color: textColor),
+          child: Icon(icon, size: 20, color: c.onSurface),
         ),
       ),
     );
@@ -704,7 +787,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   /// Menu « ⋯ » : email, partage équipe, boutique de modèles.
-  Widget _buildOverflowMenu() {
+  Widget _buildOverflowMenu(RoyalScheme c) {
     return PopupMenuButton<String>(
       tooltip: 'Plus d\'actions',
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -751,32 +834,40 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         width: 42,
         height: 42,
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.8),
+          color: c.surfaceContainer,
           shape: BoxShape.circle,
         ),
-        child: Icon(Icons.more_horiz, size: 20, color: textColor),
+        child: Icon(Icons.more_horiz, size: 20, color: c.onSurface),
       ),
     );
   }
 
   /// Section « MODÈLES » : libellé + puce « Cliquez pour changer » +
   /// carrousel horizontal de vignettes (maquette d_tail_facture).
+  /// Section « Modèles applicables » : carrousel horizontal de vignettes
+  /// dessinées aux couleurs de chaque modèle (clic = appliquer).
   Widget _buildModelsSection(bool canAccessPremium) {
+    final c = RoyalScheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
+            Container(
+              width: 8,
+              height: 26,
+              decoration: BoxDecoration(
+                gradient: RoyalGradients.royal,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'MODÈLES',
-                style: TextStyle(
-                  fontSize: 11,
+                'Modèles applicables',
+                style: RoyalText.headlineMd(c.onSurface).copyWith(
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: subTextColor,
                 ),
               ),
             ),
@@ -784,169 +875,242 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               onTap: _openTemplatePicker,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(999),
+                  color: c.secondaryContainer,
+                  borderRadius: BorderRadius.circular(RoyalRadius.full),
                 ),
-                child: Text(
-                  'Cliquez pour changer',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: primaryColor,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.dashboard_customize_outlined,
+                      size: 14,
+                      color: c.onSecondaryContainer,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Changer',
+                      style: RoyalText.labelBold(c.onSecondaryContainer)
+                          .copyWith(fontSize: 10),
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         SizedBox(
-          height: 122,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-            itemCount: _templates.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final template = _templates[index];
-              return _buildTemplateThumb(template, canAccessPremium);
-            },
-          ),
+          height: 152,
+          child: _templates.isEmpty
+              ? Center(
+                  child: Text(
+                    'Aucun modèle disponible',
+                    style: RoyalText.labelSm(c.onSurfaceVariant),
+                  ),
+                )
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  itemCount: _templates.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(width: RoyalSpacing.gutter),
+                  itemBuilder: (context, index) {
+                    final template = _templates[index];
+                    return _buildTemplateThumb(template, canAccessPremium);
+                  },
+                ),
         ),
       ],
     );
   }
 
-  /// Vignette d'un modèle : mini aperçu de page + badges
-  /// (✓ sélectionné · ⭐ premium · 🔒 verrouillé).
+  /// Vignette d'un modèle : mini page dessinée + badges (✓ ⭐ 🔒).
   Widget _buildTemplateThumb(
     InvoiceTemplate template,
     bool canAccessPremium,
   ) {
+    final c = RoyalScheme.of(context);
     final isSelected = _selectedTemplate?.id == template.id;
     final isLocked = template.isPremium && !canAccessPremium;
+    final bool darkTmpl = template.backgroundColor.computeLuminance() < 0.45;
+    final Color fg = darkTmpl ? Colors.white : template.textColor;
 
     Widget thumb = Container(
-      width: 78,
-      height: 102,
-      padding: const EdgeInsets.all(8),
+      width: 90,
+      height: 128,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: template.backgroundColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelected
-              ? primaryColor
-              : isDark
-                  ? Colors.white.withValues(alpha: 0.14)
-                  : Colors.grey.withValues(alpha: 0.35),
+          color: isSelected ? c.primary : c.outlineVariant,
           width: isSelected ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isSelected ? 0.22 : 0.10),
+            blurRadius: isSelected ? 16 : 8,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 22,
-            decoration: BoxDecoration(
-              color: template.primaryColor.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(5),
+            height: 34,
+            color: template.primaryColor,
+            padding: const EdgeInsets.all(7),
+            child: Row(children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'FACTURE',
+                style: TextStyle(
+                  fontSize: 5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: fg,
+                ),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _thumbLine(fg.withValues(alpha: 0.35), 1.0),
+                  const SizedBox(height: 3),
+                  _thumbLine(fg.withValues(alpha: 0.22), 0.65),
+                  const SizedBox(height: 5),
+                  Container(
+                    height: 2,
+                    width: double.infinity,
+                    color: template.primaryColor.withValues(alpha: 0.15),
+                  ),
+                  const Spacer(),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: template.primaryColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        'TOTAL',
+                        style: TextStyle(
+                          fontSize: 4.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: fg,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          _thumbLine(Colors.grey.withValues(alpha: 0.4), 1.0),
-          const SizedBox(height: 4),
-          _thumbLine(Colors.grey.withValues(alpha: 0.3), 0.7),
-          const Spacer(),
-          _thumbLine(template.primaryColor.withValues(alpha: 0.8), 0.55),
         ],
       ),
     );
 
     if (isLocked) {
-      thumb = Stack(
-        children: [
-          Positioned.fill(child: thumb),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.lock_rounded, size: 20, color: Colors.white),
-              ),
+      thumb = Stack(children: [
+        Positioned.fill(child: thumb),
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.48),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Icon(Icons.lock_rounded, size: 18, color: Colors.white),
             ),
           ),
-        ],
-      );
+        ),
+      ]);
     }
 
     return GestureDetector(
       onTap: () => _selectTemplate(template, canAccessPremium),
       child: SizedBox(
-        width: 78,
-        child: Column(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                thumb,
-                if (template.isPremium && !isLocked)
-                  Positioned(
-                    top: -5,
-                    right: -5,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF59E0B),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.star_rounded,
-                          size: 13, color: Colors.white),
+        width: 90,
+        child: Column(children: [
+          Stack(clipBehavior: Clip.none, children: [
+            thumb,
+            if (template.isPremium && !isLocked)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: c.tertiary,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: c.surfaceContainerLowest,
+                      width: 1.5,
                     ),
                   ),
-                if (isSelected)
-                  Positioned(
-                    bottom: -5,
-                    right: -5,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF22C55E),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(Icons.check_rounded,
-                          size: 13, color: Colors.white),
-                    ),
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 11,
+                    color: c.onTertiary,
                   ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              isLocked ? 'Premium 🔒' : template.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? primaryColor : subTextColor,
+                ),
               ),
+            if (isSelected)
+              Positioned(
+                bottom: -4,
+                right: -4,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: c.surfaceContainerLowest,
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    size: 12,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            isLocked ? 'Premium 🔒' : template.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? c.primary : c.onSurfaceVariant,
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
@@ -961,59 +1125,56 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   /// Carte d'aperçu de la facture — fidèle à la maquette, teintée par les
   /// couleurs du modèle actif et l'arrière-plan personnalisé (workspace).
+  /// Carte « papier » de la facture — raffinée : bandeau supérieur, filigrane
+  /// « PAYÉ » pivoté si la facture est payée, corps piloté par le layout
+  /// drag & drop du modèle actif + arrière-plan personnalisé.
   Widget _buildInvoicePreviewCard() {
-    final tmplBg = _selectedTemplate?.backgroundColor ?? Colors.white;
-    final cardBg = isDark ? Colors.white.withValues(alpha: 0.07) : tmplBg;
+    final c = RoyalScheme.of(context);
+    final tmplBg =
+        _selectedTemplate?.backgroundColor ?? c.surfaceContainerLowest;
+    final cardBg = isDark ? c.surfaceContainerLow : tmplBg;
     final bool darkCard = cardBg.computeLuminance() < 0.45;
-    final cText = isDark ? Colors.white : (darkCard ? Colors.white : textColor);
+    final cText =
+        isDark ? Colors.white : (darkCard ? Colors.white : textColor);
     final cSub = isDark
         ? (Colors.grey[300] ?? Colors.grey)
         : (darkCard ? Colors.white70 : subTextColor);
-    final accent = _selectedTemplate?.primaryColor ?? primaryColor;
-
-    Widget? backgroundLayer;
-    if (_previewBackground != null) {
-      Widget image = Image.memory(
-        _previewBackground!,
-        fit: _bgFit == 'contain' ? BoxFit.contain : BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        alignment: Alignment.center,
-      );
-      if (_bgBlur > 0) {
-        image = ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: _bgBlur, sigmaY: _bgBlur),
-          child: image,
-        );
-      }
-      backgroundLayer = Positioned.fill(
-        child: Opacity(opacity: _bgOpacity.clamp(0.0, 1.0), child: image),
-      );
-    }
+    final accent = _selectedTemplate?.primaryColor ?? c.primary;
+    final isPaid = _invoice?.status == 'paid';
+    final radius = BorderRadius.circular(20);
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: radius,
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.05),
+              : Colors.black.withValues(alpha: 0.06),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: accent.withValues(alpha: 0.18),
+            blurRadius: 30,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: radius,
         child: Stack(
           children: [
-            if (backgroundLayer != null) backgroundLayer,
-            if (_previewBackground != null)
+            // 🎨 Fond : image personnalisée ou préréglage de la palette.
+            TemplateBackgroundLayer(
+              presetId: _backgroundSettings.hasCustomImage
+                  ? ''
+                  : _backgroundSettings.presetId,
+              imageBytes: _previewBackground,
+              opacity: _bgOpacity,
+              blur: _bgBlur,
+              fit: _bgFit,
+            ),
+            if (_previewBackground != null || _backgroundSettings.hasPreset)
               Positioned.fill(
                 child: ColoredBox(
                   color: isDark
@@ -1021,24 +1182,89 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       : Colors.white.withValues(alpha: 0.45),
                 ),
               ),
+            // Filigrane « PAYÉ » (pivoté) si la facture est payée.
+            if (isPaid)
+              Positioned.fill(
+                child: Center(
+                  child: Transform.rotate(
+                    angle: -0.2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: c.tertiaryFixedDim.withValues(alpha: 0.75),
+                          width: 3,
+                        ),
+                      ),
+                      child: Text(
+                        'PAYÉ',
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 5,
+                          color: c.tertiaryFixedDim.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Contenu du document.
             Padding(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildCompanyBlock(cText, cSub, accent),
-                  _cardDivider(cSub),
-                  _buildClientDatesBlock(cText, cSub),
-                  _cardDivider(cSub),
-                  _buildItemsBlock(cText, cSub, accent),
-                  const SizedBox(height: 14),
-                  _buildTotalsBlock(cText, cSub, accent),
+                  _paperTopBar(accent, cText),
+                  const SizedBox(height: 12),
+                  _buildLayoutDrivenBody(cText, cSub, accent),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Bandeau supérieur du papier : badge FACTURE/DEVIS + numéro.
+  Widget _paperTopBar(Color accent, Color cText) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            _invoice!.isDevis ? 'DEVIS' : 'FACTURE',
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: accent,
+            ),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          _invoice!.invoiceNumber,
+          style: TextStyle(
+            fontFamily: 'WorkSans',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: cText,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1050,92 +1276,167 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bloc société : logo + coordonnées | badge statut + numéro (maquette).
-  Widget _buildCompanyBlock(Color cText, Color cSub, Color accent) {
-    final statusColor = _getStatusColor(_invoice!.status);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _companyLogoBox(accent),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  // ============================================================
+  //  🧰 BARRE D'OUTILS SCROLLABLE — outils de personnalisation
+  // ============================================================
+
+  /// Barre d'outils horizontale : modèles, personnalisation drag & drop,
+  /// image de fond, mention légale & conditions de la société.
+  Widget _buildToolbar() {
+    final c = RoyalScheme.of(context);
+    return SizedBox(
+      height: 42,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        clipBehavior: Clip.none,
+        child: Row(
+          children: [
+            _toolbarChip(c, Icons.dashboard_customize_outlined, 'Modèles',
+                _openTemplatePicker),
+            _toolbarChip(
+                c, Icons.widgets_outlined, 'Personnaliser', _openWorkspace),
+            _toolbarChip(c, Icons.wallpaper_outlined, 'Image de fond',
+                _openBackgroundSheet),
+            _toolbarChip(c, Icons.gavel_outlined, 'Mention légale',
+                () => _showLegalEditor()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Puce de la barre d'outils (pill moderne sur fond surfaceContainer).
+  Widget _toolbarChip(
+    RoyalScheme c,
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: c.surfaceContainer,
+            borderRadius: BorderRadius.circular(RoyalRadius.full),
+            border: Border.all(
+              color: c.outlineVariant.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (_company != null) ...[
-                Text(
-                  _company!.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: cText),
+              Icon(icon, size: 16, color: c.secondary),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: RoyalText.labelBold(c.onSurface).copyWith(
+                  fontSize: 12,
                 ),
-                if (_company!.address.isNotEmpty)
-                  Text(
-                    _company!.address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10.5, color: cSub),
-                  ),
-                if (_company!.phone.isNotEmpty)
-                  Text(
-                    _company!.phone,
-                    style: TextStyle(fontSize: 10.5, color: cSub),
-                  ),
-              ] else
-                Text(
-                  'Mon entreprise',
-                  style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w800,
-                      color: cText),
-                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_statusIcon(_invoice!.status),
-                      size: 11, color: statusColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    _getStatusLabel(_invoice!.status).toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: statusColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: Text(
-                _invoice!.invoiceNumber,
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w800, color: cText),
-              ),
-            ),
-          ],
+      ),
+    );
+  }
+
+  // ============================================================
+  //  🧩 RENDU PILOTÉ PAR LE LAYOUT DRAG & DROP
+  //  L'aperçu de la facture respecte blocs → rangées (ordre) → colonnes
+  //  du modèle actif — même moteur que le workspace et l'impression PDF.
+  // ============================================================
+
+  /// Corps de l'aperçu : parcourt les éléments visibles du layout actif,
+  /// groupés par bloc puis rangée (ordre) puis colonne.
+  Widget _buildLayoutDrivenBody(Color cText, Color cSub, Color accent) {
+    final visible = _layoutConfig.positions.entries
+        .where((e) => e.value.visible)
+        .toList()
+      ..sort((a, b) {
+        final byBlock = a.value.blockIndex.compareTo(b.value.blockIndex);
+        if (byBlock != 0) return byBlock;
+        final byOrder = a.value.order.compareTo(b.value.order);
+        if (byOrder != 0) return byOrder;
+        return a.value.column.compareTo(b.value.column);
+      });
+    if (visible.isEmpty) {
+      return Text(
+        'Aucun élément visible — ouvrez « Personnaliser ».',
+        style: TextStyle(fontSize: 12, color: cSub),
+      );
+    }
+
+    final blocks = <int, List<MapEntry<LayoutElement, ElementPosition>>>{};
+    for (final entry in visible) {
+      blocks.putIfAbsent(entry.value.blockIndex, () => []).add(entry);
+    }
+    final sortedBlocks = blocks.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < sortedBlocks.length; i++) ...[
+          _buildLayoutBlock(blocks[sortedBlocks[i]]!, cText, cSub, accent),
+          if (i < sortedBlocks.length - 1) _cardDivider(cSub),
+        ],
+      ],
+    );
+  }
+
+  /// Regroupe les éléments d'un bloc par rangée (même valeur d'ordre).
+  Widget _buildLayoutBlock(
+    List<MapEntry<LayoutElement, ElementPosition>> entries,
+    Color cText,
+    Color cSub,
+    Color accent,
+  ) {
+    final rows = <int, List<MapEntry<LayoutElement, ElementPosition>>>{};
+    for (final entry in entries) {
+      rows.putIfAbsent(entry.value.order, () => []).add(entry);
+    }
+    final sortedOrders = rows.keys.toList()..sort();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final order in sortedOrders) ...[
+          _buildLayoutRow(rows[order]!, cText, cSub, accent),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+
+  /// Rangée : un élément colSpan 2 → pleine largeur, sinon gauche/droite.
+  Widget _buildLayoutRow(
+    List<MapEntry<LayoutElement, ElementPosition>> row,
+    Color cText,
+    Color cSub,
+    Color accent,
+  ) {
+    row.sort((a, b) => a.value.column.compareTo(b.value.column));
+    if (row.length == 1 && row.first.value.colSpan == 2) {
+      return _layoutElement(row.first.key, cText, cSub, accent);
+    }
+    final left = row.where((e) => e.value.column == 0).toList();
+    final right = row.where((e) => e.value.column == 1).toList();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: left.isEmpty
+              ? const SizedBox()
+              : _layoutElement(left.first.key, cText, cSub, accent),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: right.isEmpty
+              ? const SizedBox()
+              : _layoutElement(right.first.key, cText, cSub, accent),
         ),
       ],
     );
@@ -1157,69 +1458,257 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bloc « FACTURE À » + dates d'émission / d'échéance (2 colonnes).
-  Widget _buildClientDatesBlock(Color cText, Color cSub) {
+  /// Widget d'aperçu d'un élément du layout (données réelles de la facture).
+  Widget _layoutElement(
+      LayoutElement element, Color cText, Color cSub, Color accent) {
+    final invoice = _invoice!;
     final client = _client;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 5,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _miniLabel('FACTURE À', cSub),
-              const SizedBox(height: 5),
-              Text(
-                client?.name ?? 'Client inconnu',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12.5, fontWeight: FontWeight.w800, color: cText),
-              ),
-              if (client != null && client.address.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Text(
-                  client.address,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10.5, color: cSub),
+    final company = _company;
+    switch (element) {
+      case LayoutElement.logo:
+        return _companyLogoBox(accent);
+      case LayoutElement.companyName:
+        return Text(
+          company?.name ?? 'Mon entreprise',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+              fontSize: 14.5, fontWeight: FontWeight.w800, color: cText),
+        );
+      case LayoutElement.companyAddress:
+        return Text(
+          company?.address ?? 'Adresse',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.companyPhone:
+        return Text(
+          company?.phone ?? '',
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.companyEmail:
+        return Text(
+          company?.email ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.invoiceTitle:
+        final statusColor = _getStatusColor(invoice.status);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_statusIcon(invoice.status),
+                          size: 11, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        _getStatusLabel(invoice.status).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-              if (client != null && client.phone.isNotEmpty)
-                Text(
-                  client.phone,
-                  style: TextStyle(fontSize: 10.5, color: cSub),
-                ),
-            ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              invoice.isDevis ? 'DEVIS' : 'FACTURE',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: accent,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              invoice.invoiceNumber,
+              style: TextStyle(
+                  fontSize: 11.5, fontWeight: FontWeight.w700, color: cText),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Émise le ${DateFormat('dd MMM yyyy').format(invoice.issueDate)}'
+              ' · Échéance le ${DateFormat('dd MMM yyyy').format(invoice.dueDate)}',
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 9.5, color: cSub),
+            ),
+          ],
+        );
+      case LayoutElement.clientName:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _miniLabel('FACTURE À', cSub),
+            const SizedBox(height: 5),
+            Text(
+              client?.name ?? 'Client inconnu',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12.5, fontWeight: FontWeight.w800, color: cText),
+            ),
+          ],
+        );
+      case LayoutElement.clientAddress:
+        return Text(
+          client?.address ?? '',
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.clientPhone:
+        return Text(
+          client?.phone ?? '',
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.clientEmail:
+        return Text(
+          client?.email ?? '',
+          style: TextStyle(fontSize: 10.5, color: cSub),
+        );
+      case LayoutElement.itemsTable:
+        return _buildItemsBlock(cText, cSub, accent);
+      case LayoutElement.subtotal:
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: _totalLine('Sous-total HT', _money(invoice.subtotal), 215, 11,
+              FontWeight.w500, cSub),
+        );
+      case LayoutElement.discount:
+        if (invoice.discount <= 0) return const SizedBox.shrink();
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: _totalLine('Remise', '-${_money(invoice.discount)}', 215, 11,
+              FontWeight.w500, Colors.red),
+        );
+      case LayoutElement.taxAmount:
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: _totalLine(
+            'TVA (${invoice.taxRate.toStringAsFixed(0)}%)',
+            _money(invoice.taxAmount),
+            215,
+            11,
+            FontWeight.w500,
+            cSub,
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 4,
+        );
+      case LayoutElement.totalAmount:
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: 215,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'TOTAL TTC',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: accent),
+                ),
+                Text(
+                  _money(invoice.totalAmount),
+                  style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                      color: accent),
+                ),
+              ],
+            ),
+          ),
+        );
+      case LayoutElement.footerText:
+        return Text(
+          company?.legalText ?? 'Conforme aux normes OHADA',
+          style: TextStyle(
+              fontSize: 9.5, color: cSub, fontStyle: FontStyle.italic),
+        );
+      case LayoutElement.legalMention:
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.05),
+            border: Border(left: BorderSide(color: accent, width: 2)),
+            borderRadius: BorderRadius.circular(4),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _miniLabel('DATE D\'ÉMISSION', cSub),
-              const SizedBox(height: 3),
+              _miniLabel('MENTION LÉGALE', accent),
+              const SizedBox(height: 4),
               Text(
-                DateFormat('dd MMM yyyy').format(_invoice!.issueDate),
-                style: TextStyle(
-                    fontSize: 11.5, fontWeight: FontWeight.w600, color: cText),
+                'RCCM : ${(company?.rccm.isNotEmpty ?? false) ? company!.rccm : '—'}'
+                '  ·  N° Contribuable : ${(company?.taxId.isNotEmpty ?? false) ? company!.taxId : '—'}',
+                style: TextStyle(fontSize: 9.5, color: cSub),
               ),
-              const SizedBox(height: 8),
-              _miniLabel('DATE D\'ÉCHÉANCE', cSub),
-              const SizedBox(height: 3),
+              if (company != null && company.legalText.isNotEmpty)
+                Text(
+                  company.legalText,
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      color: cSub,
+                      fontStyle: FontStyle.italic),
+                ),
+            ],
+          ),
+        );
+      case LayoutElement.qrCode:
+        if (_selectedTemplate?.showPaymentQR != true) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            border: Border.all(color: cSub.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.qr_code_2, size: 40, color: accent),
+              const SizedBox(height: 4),
               Text(
-                DateFormat('dd MMM yyyy').format(_invoice!.dueDate),
-                style: TextStyle(
-                    fontSize: 11.5, fontWeight: FontWeight.w600, color: cText),
+                'Paiement Mobile Money',
+                style: TextStyle(fontSize: 9, color: cSub),
               ),
             ],
           ),
-        ),
-      ],
-    );
+        );
+      case LayoutElement.signature:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+                width: 120, height: 1, color: cSub.withValues(alpha: 0.4)),
+            const SizedBox(height: 4),
+            Text('Signature', style: TextStyle(fontSize: 10, color: cSub)),
+          ],
+        );
+    }
   }
 
   /// Liste des lignes : DÉSIGNATION / QTÉ (1ʳᵉ ligne surlignée, maquette).
@@ -1308,63 +1797,170 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Totaux alignés à droite (Sous-total HT / TVA / TOTAL TTC accentué).
-  Widget _buildTotalsBlock(Color cText, Color cSub, Color accent) {
-    final discount = _invoice!.discount;
-    const width = 215.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        _totalLine('Sous-total HT', _money(_invoice!.subtotal), width, 11,
-            FontWeight.w500, cSub),
-        if (discount > 0) ...[
-          const SizedBox(height: 4),
-          _totalLine('Remise', '-${_money(discount)}', width, 11,
-              FontWeight.w500, cSub),
-        ],
-        const SizedBox(height: 4),
-        _totalLine(
-          'TVA (${_invoice!.taxRate.toStringAsFixed(0)}%)',
-          _money(_invoice!.taxAmount),
-          width,
-          11,
-          FontWeight.w500,
-          cSub,
+  // ============================================================
+  //  🎨 IMAGE DE FOND & 📜 MENTION LÉGALE — outils du détail facture
+  // ============================================================
+
+  /// Ouvre la palette d'image de fond (bottom sheet partagée avec le
+  /// workspace) pour le modèle actif. Persiste à chaque changement.
+  Future<void> _openBackgroundSheet() async {
+    final template = _selectedTemplate;
+    if (template == null || !mounted) return;
+    await showBackgroundSettingsSheet(
+      context,
+      current: _backgroundSettings,
+      onChanged: _persistBackground,
+    );
+  }
+
+  /// Persiste le fond choisi (préréglage palette ou image galerie) pour le
+  /// modèle actif — sans toucher aux positions / mapping existants.
+  Future<void> _persistBackground(TemplateBackgroundSettings next) async {
+    final template = _selectedTemplate;
+    if (template == null) return;
+    final custom = await TemplateCustomService.loadCustom(template.id);
+    await TemplateCustomService.saveCustom(
+      template.id,
+      positions: custom.positions,
+      mapping: custom.mapping,
+      background: next,
+    );
+    if (!mounted) return;
+    setState(() {
+      _backgroundSettings = next;
+      _previewBackground =
+          next.hasCustomImage ? decodeBackgroundImage(next.fileData) : null;
+      _bgOpacity = next.opacity;
+      _bgBlur = next.blur;
+      _bgFit = next.fit;
+    });
+  }
+
+  /// 📜 Éditeur « Mention légale & conditions » de la société : texte légal
+  /// (pied de facture), RCCM et N° contribuable — enregistrés dans Company.
+  Future<void> _showLegalEditor() async {
+    final company = _company;
+    if (company == null || !mounted) return;
+    final legalCtrl = TextEditingController(text: company.legalText);
+    final rccmCtrl = TextEditingController(text: company.rccm);
+    final taxCtrl = TextEditingController(text: company.taxId);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
         ),
-        Container(
-          height: 1,
-          width: width,
-          margin: const EdgeInsets.symmetric(vertical: 7),
-          color: cSub.withValues(alpha: 0.25),
-        ),
-        SizedBox(
-          width: width,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF151722) : Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'TOTAL TTC',
+                'Mention légale & conditions',
                 style: TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w800, color: accent),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
               ),
+              const SizedBox(height: 4),
               Text(
-                _money(_invoice!.totalAmount),
-                style: TextStyle(
-                    fontSize: 15.5, fontWeight: FontWeight.w800, color: accent),
+                'Ces informations apparaissent sur toutes vos factures.',
+                style: TextStyle(fontSize: 11.5, color: subTextColor),
+              ),
+              const SizedBox(height: 12),
+              _legalField('Texte légal (mentions, conditions de paiement…)',
+                  legalCtrl, 3),
+              _legalField('RCCM', rccmCtrl, 1),
+              _legalField('N° Contribuable', taxCtrl, 1),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final navigator = Navigator.of(sheetCtx);
+                    final updated = company.copyWith(
+                      legalText: legalCtrl.text.trim(),
+                      rccm: rccmCtrl.text.trim(),
+                      taxId: taxCtrl.text.trim(),
+                    );
+                    await _db.saveCompany(updated);
+                    if (!mounted) return;
+                    setState(() => _company = updated);
+                    navigator.pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Informations légales enregistrées'),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: const Text('Enregistrer'),
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Montant exprimé en FCFA',
-          style: TextStyle(
-            fontSize: 9.5,
-            fontStyle: FontStyle.italic,
-            color: cSub,
+      ),
+    );
+    legalCtrl.dispose();
+    rccmCtrl.dispose();
+    taxCtrl.dispose();
+  }
+
+  /// Champ texte compact du formulaire légal.
+  Widget _legalField(
+      String label, TextEditingController controller, int maxLines) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: subTextColor,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            maxLines: maxLines,
+            style: TextStyle(fontSize: 13, color: textColor),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.grey.withValues(alpha: 0.08),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1386,32 +1982,31 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Boutons d'action empilés : « Aperçu PDF » (dégradé) / « Imprimer ».
+  /// Boutons d'action : « Aperçu PDF » (dégradé royal) + Imprimer / Partager.
   Widget _buildActionButtons() {
+    final c = RoyalScheme.of(context);
     return Column(
       children: [
         Material(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           color: Colors.transparent,
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
-              ),
+              borderRadius: BorderRadius.circular(16),
+              gradient: RoyalGradients.royal,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4338CA).withValues(alpha: 0.25),
-                  blurRadius: 16,
+                  color: c.primary.withValues(alpha: 0.28),
+                  blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               onTap: _previewAndPrint,
               child: Container(
-                height: 54,
+                height: 56,
                 alignment: Alignment.center,
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1423,7 +2018,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       'Aperçu PDF',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1434,35 +2029,47 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: OutlinedButton.icon(
-            onPressed: _previewAndPrint,
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(
-                color: (isDark ? Colors.white : Colors.black)
-                    .withValues(alpha: 0.25),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              backgroundColor: isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.white.withValues(alpha: 0.5),
+        Row(
+          children: [
+            Expanded(
+              child: _secondaryAction(
+                  c, Icons.print_rounded, 'Imprimer', _previewAndPrint),
             ),
-            icon: Icon(Icons.print_rounded, size: 20, color: primaryColor),
-            label: Text(
-              'Imprimer',
-              style: TextStyle(
-                color: primaryColor,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _secondaryAction(
+                  c, Icons.ios_share, 'Partager', _shareInvoice),
             ),
-          ),
+          ],
         ),
       ],
+    );
+  }
+
+  /// Bouton d'action secondaire (outline moderne).
+  Widget _secondaryAction(
+    RoyalScheme c,
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: c.outlineVariant.withValues(alpha: 0.6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: c.surfaceContainerLow,
+        minimumSize: const Size.fromHeight(50),
+      ),
+      icon: Icon(icon, size: 19, color: c.secondary),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: c.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 

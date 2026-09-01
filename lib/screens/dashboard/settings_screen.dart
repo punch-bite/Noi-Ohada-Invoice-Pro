@@ -123,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.receipt_long,
                   title: 'Modèles de factures',
                   subtitle: 'Personnaliser vos factures',
-                  onTap: () => context.push('/customization'),
+                  onTap: () => context.push('/templates/mine'),
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,

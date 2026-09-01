@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -96,6 +97,20 @@ class TeamService {
   // passe donc par le serveur (POST /team/manage-member) qui utilise le
   // SDK admin (contourne les règles) et gère la révocation d'accès.
 
+  /// Traduit une erreur réseau/serveur en message UTILISATEUR lisible —
+  /// au lieu d'un « Exception: … » brut qui ne dit rien.
+  static String prettyError(Object error) {
+    var message = error.toString();
+    if (message.startsWith('Exception: ')) message = message.substring(11);
+    return message;
+  }
+
+  /// Extrait un extrait de corps de réponse (pour le diagnostic).
+  static String _excerpt(String body) {
+    final cleaned = body.trim().replaceAll('\n', ' ');
+    return cleaned.length > 120 ? '${cleaned.substring(0, 120)}…' : cleaned;
+  }
+
   Future<Map<String, dynamic>> _manageMember({
     required String action,
     required String teamId,
@@ -107,33 +122,84 @@ class TeamService {
   }) async {
     final apiBase = ConfigService.apiBaseUrl.trim();
     if (apiBase.isEmpty) {
-      throw Exception('Serveur non configuré');
+      throw Exception('Serveur non configuré (API_BASE_URL manquante).');
     }
-    final resp = await http
-        .post(
-          Uri.parse('$apiBase/team/manage-member'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'action': action,
-            'teamId': teamId,
-            'userId': userId,
-            'email': email,
-            'role': role,
-            'invitationId': invitationId,
-            'requestedBy': requestedBy,
-          }),
-        )
-        .timeout(const Duration(seconds: 25));
-    final Map<String, dynamic> body;
+    final http.Response resp;
+    try {
+      resp = await http
+          .post(
+            Uri.parse('$apiBase/team/manage-member'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'action': action,
+              'teamId': teamId,
+              'userId': userId,
+              'email': email,
+              'role': role,
+              'invitationId': invitationId,
+              'requestedBy': requestedBy,
+            }),
+          )
+          .timeout(const Duration(seconds: 25));
+    } on TimeoutException {
+      throw Exception(
+          'Le serveur met trop de temps à répondre — réessayez dans un instant.');
+    } catch (e) {
+      // SocketException / ClientException / DNS… → réseau indisponible.
+      throw Exception(
+          'Serveur injoignable — vérifiez votre connexion internet et réessayez.');
+    }
+    Map<String, dynamic> body;
     try {
       body = jsonDecode(resp.body) as Map<String, dynamic>? ?? {};
     } catch (_) {
-      throw Exception('Réponse serveur invalide');
+      // Réponse non-JSON (page d'erreur HTML du serveur, proxy…) : on la
+      // remonte tronquée pour permettre un vrai diagnostic.
+      throw Exception(
+          'Réponse serveur invalide (HTTP ${resp.statusCode}) : ${_excerpt(resp.body)}');
     }
     if (resp.statusCode != 200) {
-      throw Exception(body['error'] ?? 'Erreur serveur (${resp.statusCode})');
+      throw Exception(_serverErrorText(action, resp.statusCode, body));
     }
     return body;
+  }
+
+  /// Traduit une erreur HTTP du serveur en message UTILISATEUR actionnable.
+  /// Les messages serveur déjà explicites (404 « Aucun compte… », 403…) sont
+  /// renvoyés tels quels ; les 500 génériques (« Erreur interne du serveur »)
+  /// reçoivent un contexte selon l'action + la cause la plus probable —
+  /// notamment le SMTP d'invitation non configuré côté Vercel, qui fait
+  /// echo en `500 Erreur interne du serveur` sur `/team/manage-member`.
+  static String _serverErrorText(
+      String action, int statusCode, Map<String, dynamic> body) {
+    final serverMsg = (body['error']?.toString() ?? '').trim();
+    final isGeneric500 = statusCode >= 500 &&
+        (serverMsg.isEmpty ||
+            serverMsg.contains('Erreur interne du serveur') ||
+            serverMsg.contains('Internal Server Error'));
+    if (!isGeneric500) {
+      return serverMsg.isEmpty ? 'Erreur serveur (HTTP $statusCode)' : serverMsg;
+    }
+    switch (action) {
+      case 'invite':
+        return 'Le serveur n\'a pas pu créer l\'invitation (envoi d\'email en '
+            'erreur côté serveur). Vérifiez que SMTP_USERNAME / SMTP_PASSWORD '
+            'sont renseignés dans les variables d\'environnement Vercel, '
+            'redéployez le serveur, puis réessayez.';
+      case 'accept':
+        return 'L\'acceptation de l\'invitation a échoué côté serveur. '
+            'Vérifiez votre connexion puis réessayez.';
+      case 'decline':
+        return 'Le refus de l\'invitation a échoué côté serveur. Réessayez.';
+      case 'get-invitations':
+        return 'Impossible de récupérer vos invitations : le serveur rencontre '
+            'un problème. Réessayez dans quelques instants.';
+      case 'remove':
+        return 'Impossible de retirer ce membre (erreur serveur). Réessayez.';
+      default:
+        return 'L\'action « $action » a échoué côté serveur. Réessayez dans un '
+            'instant.';
+    }
   }
 
   /// Invite un membre par EMAIL. Le serveur crée une invitation EN ATTENTE,
@@ -145,10 +211,16 @@ class TeamService {
     required String role,
     required String requestedBy,
   }) {
+    // Validation précoce : évite un aller-retour serveur inutile (et une
+    // invitation HS) quand l'adresse est mal formée.
+    final normalized = email.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
+      throw Exception('Adresse email invalide : "$email"');
+    }
     return _manageMember(
       action: 'invite',
       teamId: teamId,
-      email: email,
+      email: normalized,
       role: role,
       requestedBy: requestedBy,
     );

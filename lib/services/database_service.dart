@@ -7,6 +7,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:noi_ohada_invoice_pro/models/invoice_template.dart';
 import '../models/user.dart';
 import '../models/invoice.dart';
 import '../models/client.dart';
@@ -274,6 +275,24 @@ class DatabaseService {
     await _db.collection(productCol).doc(id).delete();
   }
 
+
+  // ============ TEMPLATES ============
+  Future<List<InvoiceTemplate>> getTemplates() async {
+    final snapshot = await _db.collection('templates').get();
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      data['id'] = doc.id;
+      return InvoiceTemplate.fromMap(data);
+    }).toList();
+  }
+
+  Future<InvoiceTemplate?> getTemplate(String id) async {
+    final doc = await _db.collection('templates').doc(id).get();
+    if (!doc.exists) return null;
+    final data = doc.data()!;
+    data['id'] = doc.id;
+    return InvoiceTemplate.fromMap(data);
+  }
   // ============ PLANS ============
   Future<List<Plan>> getPlans() async {
     final snapshot = await _db.collection(planCol).get();

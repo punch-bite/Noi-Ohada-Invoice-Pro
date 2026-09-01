@@ -123,6 +123,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.chat_bubble_rounded, color: textColor),
+            tooltip: 'Messagerie de l\'équipe',
+            onPressed: () => context.push(
+              '/teams/chat',
+              extra: {'teamId': _team!.id, 'teamName': _team!.name},
+            ),
+          ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: textColor),
             onSelected: (value) {
@@ -949,7 +957,11 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(TeamService.prettyError(e)),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) setState(() => _addingMember = false);

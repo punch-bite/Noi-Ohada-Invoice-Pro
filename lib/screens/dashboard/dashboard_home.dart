@@ -231,7 +231,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         ? 'Pro'
         : subscription?.planId == 'business'
             ? 'Business'
-            : 'Gratuit';
+            : subscription?.planId == 'illimite' ? 'illimite' : 'Gratuit';
     final isActive = subscription?.isActive ?? false;
 
     return Row(

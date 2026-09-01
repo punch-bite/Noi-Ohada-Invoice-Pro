@@ -1177,23 +1177,35 @@ app.post(
         const snap = await db
           .collection('team_invitations')
           .where('inviteeUid', '==', target)
-          .where('status', '==', 'pending')
-          .orderBy('createdAt', 'desc')
           .get();
-        const invitations = snap.docs.map((d) => {
-          const data = d.data() || {};
-          return {
-            id: d.id,
-            teamId: data.teamId,
-            teamName: data.teamName || '',
-            inviterName: data.inviterName || '',
-            inviterUid: data.inviterUid,
-            role: data.role || 'member',
-            createdAt: data.createdAt
-              ? data.createdAt.toDate().toISOString()
-              : null,
-          };
-        });
+        // NB : on évite un index composite Firestore (inutile et souvent non
+        // créé en production) en filtrant sur `status` et en triant ici.
+        const invitations = snap.docs
+          .map((d) => {
+            const raw = d.data() || {};
+            return { id: d.id, raw };
+          })
+          .filter((e) => (e.raw.status || 'pending') === 'pending')
+          .sort((a, b) => {
+            const ta = a.raw.createdAt;
+            const tb = b.raw.createdAt;
+            return (tb ? tb.toDate().getTime() : 0) -
+                (ta ? ta.toDate().getTime() : 0);
+          })
+          .map((e) => {
+            const data = e.raw;
+            return {
+              id: e.id,
+              teamId: data.teamId,
+              teamName: data.teamName || '',
+              inviterName: data.inviterName || '',
+              inviterUid: data.inviterUid,
+              role: data.role || 'member',
+              createdAt: data.createdAt
+                  ? data.createdAt.toDate().toISOString()
+                  : null,
+            };
+          });
         return res.json({ ok: true, invitations });
       }
 

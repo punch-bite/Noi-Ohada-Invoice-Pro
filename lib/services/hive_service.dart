@@ -150,6 +150,7 @@ class HiveService {
     'user_cache',
     'activity_logs',
     'subscription_notifications_cache',
+    'team_messages',
   ];
 
   /// Boxes qui restent sur l'appareil même après déconnexion
