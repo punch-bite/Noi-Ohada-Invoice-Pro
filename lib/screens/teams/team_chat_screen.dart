@@ -61,6 +61,7 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
 
   @override
   void dispose() {
+    _streamSub?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     _inputFocus.dispose();
@@ -182,6 +183,11 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
     });
   }
 
+  String _membersLabel() {
+    final count = _memberIds.length;
+    return count <= 1 ? 'Vous êtes seul' : '$count membres';
+  }
+
   // ===== UI =====
 
   @override
@@ -197,26 +203,58 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        titleSpacing: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, size: 20, color: textColor),
           onPressed: () => context.pop(),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              widget.teamName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 16.5,
-                fontWeight: FontWeight.w800,
+            _teamAvatar(theme),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _streamError
+                              ? Colors.orange
+                              : const Color(0xFF22C55E),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _streamError
+                              ? 'Hors ligne · historique local'
+                              : _membersLabel(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: subTextColor, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            Text(
-              'Messagerie de l\'équipe',
-              style: TextStyle(color: subTextColor, fontSize: 11),
             ),
           ],
         ),
@@ -309,8 +347,8 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
             previous.createdAt.year != message.createdAt.year;
         return Column(
           children: [
-            _bubble(message, theme, isDark),
             if (showDayDivider) _dayDivider(message.createdAt, theme),
+            _bubble(message, theme, isDark),
           ],
         );
       },
@@ -428,6 +466,31 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
     final h = date.hour.toString().padLeft(2, '0');
     final m = date.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  Widget _teamAvatar(ThemeProvider theme) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [theme.primaryColor, theme.gradientEndColor],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          widget.teamName.isNotEmpty ? widget.teamName[0].toUpperCase() : 'E',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Barre de saisie ─────────────────────────────────────────────────────

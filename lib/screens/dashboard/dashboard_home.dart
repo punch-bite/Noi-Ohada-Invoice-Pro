@@ -231,7 +231,9 @@ class _DashboardHomeState extends State<DashboardHome> {
         ? 'Pro'
         : subscription?.planId == 'business'
             ? 'Business'
-            : subscription?.planId == 'illimite' ? 'illimite' : 'Gratuit';
+            : subscription?.planId == 'illimite'
+                ? 'illimite'
+                : 'Gratuit';
     final isActive = subscription?.isActive ?? false;
 
     return Row(
@@ -339,13 +341,6 @@ class _DashboardHomeState extends State<DashboardHome> {
                     ),
                   ),
                 ],
-              ),
-              Text(
-                user?.email ?? 'user@email.com',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: subTextColor,
-                ),
               ),
             ],
           ),

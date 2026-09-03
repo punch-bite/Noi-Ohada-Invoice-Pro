@@ -68,7 +68,7 @@ class InvoiceLayoutEngine {
   List<LayoutElement> elementsInBlock(LayoutBlock block) {
     final index = block.index;
     final elements = config.positions.entries
-        .where((e) => e.value.blockIndex == index && e.value.visible)
+        .where((e) => e.value.blockIndex == index && config.styleOf(e.key).visible)
         .map((e) => e.key)
         .toList();
     elements.sort(

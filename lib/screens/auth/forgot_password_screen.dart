@@ -278,6 +278,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 13, color: sub, height: 1.45, fontWeight: FontWeight.w500),
         ),
+        const SizedBox(height: 8),
+        Text(
+          '💡 Le lien expire après 24h. Si vous ne trouvez pas l\'e-mail, vérifiez vos spams ou renvoyez la demande.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            color: sub.withValues(alpha: 0.7),
+            fontStyle: FontStyle.italic,
+          ),
+        ),
         const SizedBox(height: 28),
 
                 GradientButton(

@@ -36,32 +36,71 @@ class AuthService {
     });
   }
 
-  /// ✅ Garantit que le document utilisateur existe dans Firestore
+  /// ✅ Garantit que le document utilisateur existe dans Firestore.
+  /// - Document absent → création complète.
+  /// - Document existant mais INCOMPLET (ex: créé jadis avec le seul champ
+  ///   `lastLoginAt`) → complétion des champs manquants via un `set` en merge.
+  /// - Document complet → retour tel quel.
   Future<AppUser> _ensureUserDocument(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
+      final firebaseUser = _auth.currentUser;
+
       if (doc.exists && doc.data() != null) {
+        final data = Map<String, dynamic>.from(doc.data()!);
+        final email = data['email'];
+        final isIncomplete = email == null || (email as String).trim().isEmpty;
+
+        if (isIncomplete) {
+          // 🔥 Document partiel → on le complète avec les infos Firebase Auth
+          // sans écraser les champs déjà présents (lastLoginAt, etc.).
+          final completion = AppUser(
+            id: userId,
+            email: firebaseUser?.email ?? '',
+            displayName: (data['displayName'] is String &&
+                    (data['displayName'] as String).isNotEmpty)
+                ? data['displayName'] as String
+                : (firebaseUser?.displayName ?? 'Utilisateur'),
+            phone: data['phone'] as String?,
+            createdAt: DateTime.now(),
+            isActive: true,
+            roles: const ['user'],
+          ).toMap();
+
+          await _firestore
+              .collection('users')
+              .doc(userId)
+              .set(completion, SetOptions(merge: true));
+
+          unawaited(_ensureUserCompany(
+            userId,
+            name: completion['displayName'] as String?,
+            email: completion['email'] as String?,
+            phone: completion['phone'] as String?,
+          ));
+          return AppUser.fromMap({...completion, ...data});
+        }
+
         // 🔥 Même quand le profil existe déjà, on s'assure que le document
         // ENTREPRISE de l'utilisateur existe aussi (utilisateurs créés avant
         // ce correctif : la « company » n'était jamais créée à l'inscription).
         unawaited(_ensureUserCompany(
           userId,
-          name: doc.data()!['displayName'] as String?,
-          email: doc.data()!['email'] as String?,
-          phone: doc.data()!['phone'] as String?,
+          name: data['displayName'] as String?,
+          email: data['email'] as String?,
+          phone: data['phone'] as String?,
         ));
-        return AppUser.fromMap(doc.data()!);
+        return AppUser.fromMap(data);
       }
 
       // 🔥 Document inexistant → création avec les infos Firebase Auth
-      final firebaseUser = _auth.currentUser;
       final defaultUser = AppUser(
         id: userId,
         email: firebaseUser?.email ?? '',
         displayName: firebaseUser?.displayName ?? 'Utilisateur',
         createdAt: DateTime.now(),
         isActive: true,
-        roles: ['user'],
+        roles: const ['user'],
       );
 
       await _firestore.collection('users').doc(userId).set(defaultUser.toMap());
@@ -79,7 +118,7 @@ class AuthService {
         displayName: 'Utilisateur',
         createdAt: DateTime.now(),
         isActive: true,
-        roles: ['user'],
+        roles: const ['user'],
       );
     }
   }
@@ -156,17 +195,18 @@ class AuthService {
     String? companyName,
     String? phone,
   }) async {
+    User? createdAuthUser;
     try {
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
 
-      final user = userCredential.user!;
-      await user.updateDisplayName(displayName);
+      createdAuthUser = userCredential.user!;
+      await createdAuthUser.updateDisplayName(displayName);
 
       final appUser = AppUser(
-        id: user.uid,
+        id: createdAuthUser.uid,
         email: email.trim(),
         displayName: displayName,
         phone: phone,
@@ -174,11 +214,11 @@ class AuthService {
         createdAt: DateTime.now(),
       );
 
-      await _firestore.collection('users').doc(user.uid).set(appUser.toMap());
+      await _firestore.collection('users').doc(createdAuthUser.uid).set(appUser.toMap());
       // ✅ Créer immédiatement le document ENTREPRISE de l'utilisateur
       // (indispensable aux factures) — idempotent.
       await _ensureUserCompany(
-        user.uid,
+        createdAuthUser.uid,
         name: companyName ?? displayName,
         email: email.trim(),
         phone: phone,
@@ -194,6 +234,16 @@ class AuthService {
       }
       throw Exception(e.message ?? 'Erreur lors de l\'inscription.');
     } catch (e) {
+      // ⚠️ Si la création du document Firestore échoue alors que l'utilisateur Auth a été créé,
+      // on tente de nettoyer le compte Auth orphelin pour éviter un compte Auth sans document Firestore.
+      if (createdAuthUser != null) {
+        try {
+          await createdAuthUser.delete();
+          debugPrint('🧹 Compte Auth orphelin nettoyé après échec de création Firestore');
+        } catch (cleanupErr) {
+          debugPrint('⚠️ Impossible de nettoyer le compte Auth: $cleanupErr');
+        }
+      }
       throw Exception('Erreur d\'inscription: $e');
     }
   }
@@ -223,13 +273,17 @@ class AuthService {
       _loginAttempts = 0;
       _lockoutUntil = null;
 
-      // ✅ Utiliser set avec merge pour mettre à jour lastLoginAt
+      // 🔥 Garantit d'abord l'existence du document profil COMPLET dans
+      // Firestore (création si absent, complétion si partiel). On le fait
+      // AVANT la mise à jour de `lastLoginAt` pour éviter qu'un `set` avec
+      // merge ne crée un document ne contenant QUE `lastLoginAt`.
+      final profile = await _ensureUserDocument(user.uid);
+
+      // ✅ Met à jour ensuite lastLoginAt (merge sur le document complet).
       await _firestore.collection('users').doc(user.uid).set({
         'lastLoginAt': Timestamp.now(),
       }, SetOptions(merge: true));
 
-      // 🔥 Récupérer le profil (il sera créé s'il n'existe pas)
-      final profile = await _ensureUserDocument(user.uid);
       _cachedUser = profile;
       return profile;
     } on FirebaseAuthException catch (e) {
@@ -321,7 +375,28 @@ class AuthService {
 
   Future<void> resetPassword(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email.trim());
+      // 🔗 ActionCodeSettings : configure le lien de réinitialisation pour qu'il
+      // redirige vers l'application (deep link) après la réinitialisation.
+      // - handleCodeInApp : true → le lien ouvre l'app si installée
+      // - url : deep link de l'app (schéma personnalisé) pour la redirection
+      final actionCodeSettings = ActionCodeSettings(
+        // URL de continuation : deep link vers l'application
+        // Format : https://<domain}/__/auth/callback ou schéma personnalisé
+        url: 'https://noi-ohada-invoice-pro.firebaseapp.com/__/auth/callback',
+        handleCodeInApp: true,
+        // Bundle ID iOS / Package Name Android (pour les liens universels)
+        iOSBundleId: 'com.noi.ohada.invoicePro',
+        androidPackageName: 'com.noi.ohada.invoice_pro',
+        // Installer l'app Android si elle n'est pas installée
+        androidInstallApp: true,
+        // Version minimale de l'app Android
+        androidMinimumVersion: '1.0.0',
+      );
+
+      await _auth.sendPasswordResetEmail(
+        email: email.trim(),
+        actionCodeSettings: actionCodeSettings,
+      );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
         throw Exception('Aucun utilisateur ne correspond à cet e-mail.');

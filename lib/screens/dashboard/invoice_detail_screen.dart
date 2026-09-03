@@ -1355,7 +1355,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   /// groupés par bloc puis rangée (ordre) puis colonne.
   Widget _buildLayoutDrivenBody(Color cText, Color cSub, Color accent) {
     final visible = _layoutConfig.positions.entries
-        .where((e) => e.value.visible)
+        .where((e) => _layoutConfig.styleOf(e.key).visible)
         .toList()
       ..sort((a, b) {
         final byBlock = a.value.blockIndex.compareTo(b.value.blockIndex);

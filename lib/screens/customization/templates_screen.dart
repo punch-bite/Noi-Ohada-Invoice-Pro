@@ -1,319 +1,411 @@
 // lib/screens/customization/templates_screen.dart
-//
-// 🧩 Sélecteur de modèles de facture : modèles intégrés + modèles créés par
-// l'admin (boutique). Le modèle choisi devient le modèle « actif », mémorisé
-// localement via TemplateSelectionService (persistance hors-ligne) puis
-// appliqué aux aperçus PDF / impressions.
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
 import '../../models/invoice_template.dart';
-import '../../providers/theme_provider.dart';
-import '../../providers/subscription_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
+import '../../theme/royal_ledger.dart';
+import '../../widgets/glass_widgets.dart';
 
+/// 🎨 Sélecteur rapide de modèle de facture (Plein écran & BottomSheet modal).
 class TemplatesScreen extends StatefulWidget {
-  const TemplatesScreen({super.key});
+  final bool isModal;
+  final String? currentTemplateId;
+  final ValueChanged<InvoiceTemplate>? onSelect;
+
+  const TemplatesScreen({
+    super.key,
+    this.isModal = false,
+    this.currentTemplateId,
+    this.onSelect,
+  });
 
   @override
   State<TemplatesScreen> createState() => _TemplatesScreenState();
 }
 
 class _TemplatesScreenState extends State<TemplatesScreen> {
+  static const Color goldAccent = Color(0xFFC9A227);
+  static const Color bgSurface = Color(0xFF1E1A24);
+  static const Color bgBackground = Color(0xFF120F17);
+
   final TemplateService _templateService = TemplateService();
+
   List<InvoiceTemplate> _templates = [];
-  String? _activeId;
-  bool _loading = true;
+  String? _selectedId;
+  bool _isLoading = true;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _selectedId = widget.currentTemplateId;
+    _loadTemplates();
   }
 
-  Future<void> _load() async {
-    // Fusion : modèles par défaut + ceux créés par l'admin (boutique),
-    // sans doublons — même logique que l'écran de détail facture.
-    final defaults = InvoiceTemplate.getDefaultTemplates();
-    List<InvoiceTemplate> adminTemplates = [];
-    try {
-      adminTemplates = await _templateService.getAllTemplates();
-    } catch (_) {}
-    final adminIds = adminTemplates.map((e) => e.id).toSet();
-    final templates = [
-      ...defaults.where((d) => !adminIds.contains(d.id)),
-      ...adminTemplates,
-    ];
+  Future<void> _loadTemplates() async {
+    final auth = Provider.of<AppAuthProvider>(context, listen: false);
+    final userId = auth.user?.id ?? '';
 
-    // ✅ Modèle actif choisi précédemment (sélection persistante).
-    final activeId = await TemplateSelectionService.getActiveTemplateId();
+    _selectedId ??= await TemplateSelectionService.getActiveTemplateId();
+
+    var list = await _templateService.getMyTemplates(userId);
+    if (list.isEmpty) {
+      list = InvoiceTemplate.getDefaultTemplates();
+    }
+
     if (!mounted) return;
     setState(() {
-      _templates = templates;
-      _activeId = activeId;
-      _loading = false;
+      _templates = list;
+      _isLoading = false;
     });
   }
 
+  Future<void> _selectTemplate(InvoiceTemplate template) async {
+    setState(() => _selectedId = template.id);
+    await TemplateSelectionService.setActiveTemplateId(template.id);
+
+    if (!mounted) return;
+    if (widget.onSelect != null) {
+      widget.onSelect!(template);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Modèle "${template.name}" activé pour vos factures'),
+          backgroundColor: RoyalColors.tertiary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+
+    if (widget.isModal) {
+      Navigator.of(context).pop(template);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
-    final subProvider = context.watch<SubscriptionProvider>();
-    final canAccessPremium = subProvider.canAccessPremiumTemplates;
+    final filtered = _templates.where((t) {
+      if (_searchQuery.isEmpty) return true;
+      return t.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          t.description.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
 
     return Scaffold(
-      backgroundColor: theme.backgroundColor,
-      appBar: _buildAppBar(context, theme, canAccessPremium),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: GridView.builder(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.75,
-                ),
-                itemCount: _templates.length,
-                itemBuilder: (context, index) {
-                  final template = _templates[index];
-                  final isLocked = template.isPremium && !canAccessPremium;
-                  return TemplateCard(
-                    template: template,
-                    isLocked: isLocked,
-                    isActive: _activeId == template.id,
-                    onTap: () =>
-                        _handleTemplateTap(context, template, isLocked, theme),
-                  );
-                },
-              ),
-            ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context, ThemeProvider theme, bool canAccess) {
-    return AppBar(
-      title: Text(
-        'Modèles de Facture', 
-        style: TextStyle(color: theme.textColor, fontWeight: FontWeight.bold, fontSize: 18),
-      ),
-      backgroundColor: theme.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-      elevation: 0,
-      leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new, color: theme.textColor, size: 20),
-        onPressed: () => context.pop(),
-      ),
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(40),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            children: [
-              Icon(
-                canAccess ? Icons.stars_rounded : Icons.lock_outline_rounded, 
-                size: 18, 
-                color: canAccess ? Colors.green : Colors.orange,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                canAccess ? 'Accès Premium activé' : 'Modèles Premium verrouillés',
-                style: TextStyle(
-                  fontSize: 12, 
-                  fontWeight: FontWeight.w600,
-                  color: canAccess ? Colors.green : Colors.orange,
-                ),
-              ),
-            ],
+      backgroundColor: bgBackground,
+      appBar: AppBar(
+        backgroundColor: bgSurface,
+        elevation: 0,
+        title: const Text(
+          'Choisir un Modèle',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'Manrope',
           ),
         ),
-      ),
-    );
-  }
-
-  Future<void> _handleTemplateTap(BuildContext context, InvoiceTemplate template,
-      bool isLocked, ThemeProvider theme) async {
-    if (isLocked) {
-      _showUpgradeDialog(context, theme);
-      return;
-    }
-    // ✅ Persiste réellement la sélection : le modèle devient le modèle
-    // actif, retrouvé au prochain rendu PDF / à la prochaine ouverture.
-    await TemplateSelectionService.setActiveTemplateId(template.id);
-    if (!mounted) return;
-    setState(() => _activeId = template.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${template.name} défini comme modèle actif'),
-        backgroundColor: Colors.green,
-        duration: const Duration(milliseconds: 1200),
-      ),
-    );
-  }
-
-  void _showUpgradeDialog(BuildContext context, ThemeProvider theme) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          '⭐ Accès Premium requis',
-          style: TextStyle(color: theme.textColor, fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Passez à la formule supérieure pour débloquer l\'intégralité des designs exclusifs.',
-          style: TextStyle(color: theme.subTextColor, fontSize: 14, height: 1.4),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          onPressed: () => context.pop(),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Annuler',
-              style: TextStyle(color: theme.subTextColor, fontWeight: FontWeight.w600),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.push('/subscription');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.primaryColor,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Voir les offres', style: TextStyle(fontWeight: FontWeight.bold)),
+          IconButton(
+            tooltip: 'Boutique de Modèles',
+            icon: const Icon(Icons.storefront, color: goldAccent),
+            onPressed: () => context.push('/templates'),
           ),
         ],
       ),
-    );
-  }
-}
-
-class TemplateCard extends StatelessWidget {
-  final InvoiceTemplate template;
-  final bool isLocked;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const TemplateCard({
-    super.key, 
-    required this.template, 
-    required this.isLocked, 
-    required this.isActive, 
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-
-    return Card(
-      color: theme.cardColor,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isActive
-              ? theme.primaryColor
-              : (isDark ? Colors.grey[800]! : Colors.grey[200]!),
-          width: isActive ? 2 : 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Container(
-                      color: template.backgroundColor,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: template.primaryColor.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.description_outlined, 
-                            color: template.primaryColor, 
-                            size: 32,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (isLocked)
-                      Container(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: Colors.amber,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.lock_rounded, 
-                              color: Colors.white, 
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (isActive)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            size: 12,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              child: Text(
-                template.name, 
-                style: TextStyle(
-                  fontWeight: FontWeight.w600, 
-                  color: theme.textColor,
-                  fontSize: 13,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: goldAccent),
             )
-          ],
-        ),
-      ),
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      TextField(
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Rechercher un modèle...',
+                          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                          prefixIcon: const Icon(Icons.search, color: goldAccent),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: goldAccent),
+                          ),
+                        ),
+                        onChanged: (val) => setState(() => _searchQuery = val),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push('/templates/mine'),
+                              icon: const Icon(Icons.collections_bookmark, size: 18),
+                              label: const Text('Mes Modèles'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => context.push('/templates'),
+                              icon: const Icon(Icons.shopping_bag, size: 18),
+                              label: const Text('Boutique Pro'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: RoyalColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Aucun modèle trouvé',
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                          ),
+                        )
+                      : GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.72,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
+                          ),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final template = filtered[index];
+                            final isSelected = template.id == _selectedId;
+
+                            return GestureDetector(
+                              onTap: () => _selectTemplate(template),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? goldAccent
+                                        : Colors.white.withValues(alpha: 0.1),
+                                    width: isSelected ? 2.5 : 1,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: goldAccent.withValues(alpha: 0.3),
+                                            blurRadius: 12,
+                                            spreadRadius: 2,
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                child: GlassCard(
+                                  padding: EdgeInsets.zero,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: template.backgroundColor,
+                                            borderRadius: const BorderRadius.vertical(
+                                              top: Radius.circular(16),
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.all(10),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Container(
+                                                    width: 24,
+                                                    height: 10,
+                                                    decoration: BoxDecoration(
+                                                      color: template.primaryColor,
+                                                      borderRadius: BorderRadius.circular(3),
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                        horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: template.primaryColor
+                                                          .withValues(alpha: 0.2),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      'FACTURE',
+                                                      style: TextStyle(
+                                                        color: template.primaryColor,
+                                                        fontSize: 7,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const Spacer(),
+                                              Container(
+                                                height: 4,
+                                                color: template.textColor.withValues(alpha: 0.2),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Container(
+                                                height: 4,
+                                                width: 60,
+                                                color: template.textColor.withValues(alpha: 0.15),
+                                              ),
+                                              const Spacer(),
+                                              Align(
+                                                alignment: Alignment.bottomRight,
+                                                child: Container(
+                                                  width: 32,
+                                                  height: 8,
+                                                  decoration: BoxDecoration(
+                                                    color: template.primaryColor,
+                                                    borderRadius: BorderRadius.circular(2),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(10.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    template.name,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (isSelected)
+                                                  const Icon(
+                                                    Icons.check_circle,
+                                                    color: goldAccent,
+                                                    size: 18,
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              template.description,
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.6),
+                                                fontSize: 11,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                InkWell(
+                                                  onTap: () {
+                                                    context.push('/templates/workspace',
+                                                        extra: template);
+                                                  },
+                                                  child: const Row(
+                                                    children: [
+                                                      Icon(Icons.tune,
+                                                          size: 14,
+                                                          color: goldAccent),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        'Éditer',
+                                                        style: TextStyle(
+                                                          color: goldAccent,
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                InkWell(
+                                                  onTap: () {
+                                                    context.push('/templates/preview',
+                                                        extra: template);
+                                                  },
+                                                  child: Icon(
+                                                    Icons.visibility,
+                                                    size: 16,
+                                                    color: Colors.white.withValues(alpha: 0.6),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ).animate().fade().scale(
+                                  duration: Duration(milliseconds: 200 + (index * 40)),
+                                );
+                          },
+                        ),
+                ),
+              ],
+            ),
     );
   }
 }

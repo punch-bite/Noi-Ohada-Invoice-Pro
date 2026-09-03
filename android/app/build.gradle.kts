@@ -61,7 +61,6 @@ val hasReleaseKeystore =
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
     compileSdk = 36
-    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"

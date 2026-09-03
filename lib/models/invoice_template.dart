@@ -82,6 +82,9 @@ class InvoiceTemplate {
   // Les coordonnées sont RELATIVES (0..1) pour rester proportionnelles à la page.
   final Map<String, dynamic> positions;
 
+  /// ⭐ Note du template (étoiles, 0..5) — affichage boutique.
+  final double rating;
+
   /// 🎨 Version du design prédéfini « Royal Ledger ».
   ///
   /// Utilisée par l'initialiseur Firestore pour mettre à jour les modèles
@@ -164,6 +167,7 @@ class InvoiceTemplate {
     this.mapping = const {},
     this.category = 'classique',
     this.positions = const {},
+    this.rating = 0,
     this.designVersion = 1,
   })  : primaryColorValue = primaryColor?.toARGB32() ?? 0xFF1976D2,
         textColorValue = textColor?.toARGB32() ?? 0xFF000000,
@@ -200,6 +204,7 @@ class InvoiceTemplate {
       category: data['category'] ?? 'classique',
       positions: Map<String, dynamic>.from(data['positions'] ?? const {}),
       designVersion: (data['designVersion'] as num?)?.toInt() ?? 1,
+      rating: (data['rating'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -233,6 +238,7 @@ class InvoiceTemplate {
       category: map['category'] ?? 'classique',
       positions: Map<String, dynamic>.from(map['positions'] ?? const {}),
       designVersion: (map['designVersion'] as num?)?.toInt() ?? 1,
+      rating: (map['rating'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -265,6 +271,7 @@ class InvoiceTemplate {
       'category': category,
       'positions': positions,
       'designVersion': designVersion,
+      'rating': rating,
     };
   }
 
@@ -293,6 +300,7 @@ class InvoiceTemplate {
         showBorder: false,
         category: 'Classique',
         price: 0,
+        rating: 4.5,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -310,6 +318,7 @@ class InvoiceTemplate {
         showBorder: true,
         category: 'Moderne',
         price: 0,
+        rating: 4.0,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -327,6 +336,7 @@ class InvoiceTemplate {
         showBorder: false,
         category: 'Élégant',
         price: 0,
+        rating: 4.8,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -345,6 +355,7 @@ class InvoiceTemplate {
         isPremium: true,
         category: 'Premium',
         price: 4900,
+        rating: 5.0,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -362,6 +373,7 @@ class InvoiceTemplate {
         showBorder: true,
         category: 'Corporate',
         price: 0,
+        rating: 4.3,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -380,6 +392,7 @@ class InvoiceTemplate {
         showBorder: false,
         category: 'Menthe',
         price: 0,
+        rating: 4.6,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -398,6 +411,7 @@ class InvoiceTemplate {
         showBorder: false,
         category: 'Marbre',
         price: 2900,
+        rating: 4.7,
         designVersion: 2,
       ),
       InvoiceTemplate(
@@ -416,6 +430,7 @@ class InvoiceTemplate {
         isPremium: true,
         category: 'Charbon',
         price: 4900,
+        rating: 4.9,
         designVersion: 2,
       ),
     ];
@@ -446,6 +461,7 @@ class InvoiceTemplate {
     String? category,
     Map<String, dynamic>? positions,
     int? designVersion,
+    double? rating,
   }) {
     return InvoiceTemplate(
       id: id,
@@ -475,6 +491,7 @@ class InvoiceTemplate {
       category: category ?? this.category,
       positions: positions ?? this.positions,
       designVersion: designVersion ?? this.designVersion,
+      rating: rating ?? this.rating,
     );
   }
 

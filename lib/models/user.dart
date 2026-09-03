@@ -64,6 +64,7 @@ class AppUser {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': id, // ✅ Requis par les règles Firestore (isNewOwner)
       'email': email,
       'displayName': displayName,
       'phone': phone,

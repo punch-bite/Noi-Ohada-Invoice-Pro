@@ -22,8 +22,10 @@ service cloud.firestore {
     }
 
     // Vrai si le document (nouveau ou existant) accorde des privilèges admin.
+    // ✅ Défensif : on vérifie l'existence des champs avant d'y accéder pour
+    // éviter qu'un champ manquant ne fasse échouer la règle (erreur = déni).
     function hasAdminPrivileges(data) {
-      return data.isAdmin == true
+      return ('isAdmin' in data && data.isAdmin == true)
         || ('roles' in data && data.roles.hasAny(['admin', 'super-admin']));
     }
 
@@ -64,6 +66,12 @@ service cloud.firestore {
     // ===========================================
     // RESSOURCES "PAR UTILISATEUR"
     // ===========================================
+    match /companies/{companyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (canWriteOwnResource() || isAdmin());
+      allow update, delete: if isAdmin() || isOwner()
+        || (companyId == 'default_company' && isAdmin());
+    }
     match /clients/{clientId} {
       allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
@@ -93,15 +101,6 @@ service cloud.firestore {
       allow read: if isSignedIn() && canReadResource();
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
-    }
-    match /companies/{companyId} {
-      // L'entreprise "par défaut" (sans userId) est gérée par l'initialiseur.
-      allow read: if isSignedIn();
-      allow create: if isAdmin() || isSignedIn();
-      // 🔒 La société par défaut ne peut être modifiée QUE par l'admin
-      // (avant : n'importe quel utilisateur pouvait la falsifier).
-      allow update, delete: if isAdmin() || isOwner()
-        || (companyId == 'default_company' && isAdmin());
     }
     match /dashboard_stats/{id} {
       allow read, write: if isSignedIn() && canUpdateOwnResource();
@@ -139,11 +138,16 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
       allow create: if isSignedIn() && request.auth.uid == userId
         && !hasAdminPrivileges(request.resource.data);
+      // ✅ Mise à jour : admin, ou le propriétaire lui-même.
+      // Le propriétaire ne peut NI s'auto-attribuer des privilèges admin,
+      // NI modifier `isActive` SI ce champ existait déjà (réservé à l'admin).
+      // En revanche, si `isActive` était absent (document partiel créé lors
+      // d'une première connexion), il peut être renseigné pour compléter le profil.
       allow update: if isAdmin()
         || (isSignedIn() && request.auth.uid == userId
             && !hasAdminPrivileges(request.resource.data)
-            && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['isActive']));
+            && (!('isActive' in resource.data)
+                || resource.data.isActive == request.resource.data.isActive));
     }
 
     // ===========================================

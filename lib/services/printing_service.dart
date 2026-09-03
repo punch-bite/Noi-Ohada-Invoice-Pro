@@ -337,7 +337,7 @@ class PrintingService {
     Map<String, String> mapping = const {},
   }) {
     final entries = config.positions.entries
-        .where((e) => e.value.blockIndex == block.index && e.value.visible)
+        .where((e) => e.value.blockIndex == block.index && config.styleOf(e.key).visible)
         .toList()
       ..sort((a, b) {
         final byOrder = a.value.order.compareTo(b.value.order);
