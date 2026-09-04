@@ -1,8 +1,12 @@
 // test/template_preview_screen_test.dart
 //
-// 🧪 Test de régression de l'aperçu de modèle (`TemplatePreviewScreen`).
-// Vérifie que l'aperçu A4 zoomable (page + règles graduées + barre de zoom)
-// se construit SANS débordement et que les contrôles de zoom réagissent.
+// 🧪 Test de régression de l'aperçu de modèle (`TemplatePreviewScreen`) —
+// refonte maquette Stitch « Aperçu de la facture » :
+//   • AppBar : nom du modèle + sous-titre A4 (SYSCOHADA)
+//   • Papier A4 fidèle à la maquette (`StitchA4InvoicePreview`) avec
+//     tampon « PAYÉ » (données d'exemple payées)
+//   • Contrôle de zoom +/− avec pourcentage
+//   • Barre basse sombre : Éditer + Utiliser
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noi_ohada_invoice_pro/models/invoice_template.dart';
@@ -44,8 +48,6 @@ void main() {
     );
   }
 
-  /// Modèle avec positions drag & drop → chemin `_buildPositionedLayout`
-  /// (page A4 + règles + zoom), le plus complexe.
   InvoiceTemplate sampleTemplate() => InvoiceTemplate(
         id: 'test-1',
         name: 'Classique Pro',
@@ -56,49 +58,43 @@ void main() {
         fontSize: 12,
         showLogo: false,
         showPaymentQR: true,
-        positions: {
-          'company_name': {'x': 0.05, 'y': 0.05, 'scale': 1.0, 'visible': true},
-          'invoice_title': {'x': 0.62, 'y': 0.05, 'scale': 1.0, 'visible': true},
-          'client_name': {'x': 0.05, 'y': 0.28, 'scale': 1.0, 'visible': true},
-          'items': {'x': 0.05, 'y': 0.42, 'scale': 1.0, 'visible': true},
-          'total_amount': {'x': 0.5, 'y': 0.82, 'scale': 1.0, 'visible': true},
-          'footer': {'x': 0.05, 'y': 0.92, 'scale': 1.0, 'visible': true},
-        },
       );
 
-  /// Icône du bouton de zoom cyclique : `zoom_in` à l'échelle 1.0,
-  /// `zoom_out` aux échelles supérieures (1.5 / 2.0).
-  bool isZoomedIn(WidgetTester tester) =>
-      find.byIcon(Icons.zoom_out).evaluate().isNotEmpty;
-
   testWidgets('L’aperçu A4 se construit sans débordement', (tester) async {
-    // Grand écran (style tablette) pour laisser l'aperçu zoomable respirer.
+    // Grand écran (style tablette) pour laisser l'aperçu respirer.
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(buildApp(sampleTemplate()));
-    // Laisse _loadData (company + personnalisations) se terminer.
+    // Laisse _loadData (personnalisations sauvegardées) se terminer.
     await tester.pumpAndSettle();
 
-    // Titre de l'en-tête (interface actuelle : « Détails Facture »).
-    expect(find.text('Détails Facture'), findsOneWidget);
+    // Titre de l'en-tête = nom du modèle + sous-titre A4.
+    expect(find.text('Classique Pro'), findsOneWidget);
+    expect(find.text('Aperçu Format A4 (SYSCOHADA)'), findsOneWidget);
 
-    // Bouton de zoom cyclique présent (icône zoom_in à l'échelle 1.0).
-    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+    // Contrôle de zoom présent (100 % au départ).
+    expect(find.text('100%'), findsOneWidget);
 
-    // Filigrane « PAYÉ » rendu sur le papier.
+    // Tampon « PAYÉ » rendu sur le papier (données d'exemple payées).
     expect(find.text('PAYÉ'), findsOneWidget);
 
-    // Barre d'actions inférieure : Éditer + Personnaliser.
+    // Barre d'actions inférieure : Éditer + Utiliser.
     expect(find.text('Éditer'), findsOneWidget);
-    expect(find.text('Personnaliser'), findsOneWidget);
+    expect(find.text('Utiliser'), findsOneWidget);
+
+    // Structure du papier (maquette Stitch).
+    expect(find.text('FACTURE'), findsOneWidget);
+    expect(find.text('FACTURÉ À'), findsOneWidget);
+    expect(find.text('MONTANT TOTAL'), findsOneWidget);
+    expect(find.text('Termes et conditions'), findsOneWidget);
 
     // Aucune exception de layout (débordement) pendant le rendu.
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Le bouton de zoom bascule l’icône (zoom cyclique)',
+  testWidgets('Le contrôle de zoom +/− ajuste le pourcentage',
       (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -107,25 +103,25 @@ void main() {
     await tester.pumpWidget(buildApp(sampleTemplate()));
     await tester.pumpAndSettle();
 
-    // Échelle 1.0 au départ → icône « zoom_in ».
-    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
-    expect(isZoomedIn(tester), isFalse);
+    // Échelle 1.0 au départ → « 100% ».
+    expect(find.text('100%'), findsOneWidget);
 
-    // 1er tap → échelle 1.5 → icône « zoom_out ».
-    await tester.tap(find.byIcon(Icons.zoom_in));
+    // 1er tap sur « + » → 110 %.
+    await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.zoom_out), findsOneWidget);
-    expect(isZoomedIn(tester), isTrue);
+    expect(find.text('110%'), findsOneWidget);
 
-    // 2e tap → échelle 2.0 (toujours « zoom_out »).
-    await tester.tap(find.byIcon(Icons.zoom_out));
+    // 2e tap → 120 %.
+    await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+    expect(find.text('120%'), findsOneWidget);
 
-    // 3e tap → retour à l'échelle 1.0 → « zoom_in ».
-    await tester.tap(find.byIcon(Icons.zoom_out));
+    // Deux taps sur « − » → retour à 100 %.
+    await tester.tap(find.byIcon(Icons.remove));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.remove));
+    await tester.pumpAndSettle();
+    expect(find.text('100%'), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

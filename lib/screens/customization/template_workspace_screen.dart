@@ -62,9 +62,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   // Signature & Stamp state
   bool _showPaidStamp = true;
   String _stampText = 'PAYÉ';
-  Color _stampColor = const Color(0xFFBAAB6D);
+  final Color _stampColor = const Color(0xFFBAAB6D);
   bool _showSignatureLine = true;
-  String _signatoryTitle = 'Direction Générale';
+  final String _signatoryTitle = 'Direction Générale';
 
   // Legal & QR state
   String _customLegalText = 'Paiement sous 30 jours net. Pénalités de retard applicables selon normes SYSCOHADA.';
