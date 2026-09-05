@@ -14,13 +14,38 @@ extension PriceFormatter on double {
 }
 
 class PdfService {
-  static pw.Font? _cachedFont;
-
-  static Future<pw.Font> _loadFont() async {
-    _cachedFont ??= await rootBundle
-        .load("assets/fonts/Roboto-Regular.ttf")
-        .then((data) => pw.Font.ttf(data));
-    return _cachedFont!;
+  static Future<({
+    pw.Font base,
+    pw.Font bold,
+    pw.Font medium,
+    pw.Font? condensed,
+  })> _loadFontFamily() async {
+    try {
+      final regular = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+      final bold = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
+      final medium = await rootBundle.load("assets/fonts/Roboto-Medium.ttf");
+      pw.Font? condensed;
+      try {
+        condensed =
+            pw.Font.ttf(await rootBundle.load("assets/fonts/Roboto-Condensed.ttf"));
+      } catch (_) {
+        condensed = null;
+      }
+      return (
+        base: pw.Font.ttf(regular),
+        bold: pw.Font.ttf(bold),
+        medium: pw.Font.ttf(medium),
+        condensed: condensed,
+      );
+    } catch (_) {
+      final regular = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+      return (
+        base: pw.Font.ttf(regular),
+        bold: pw.Font.ttf(regular),
+        medium: pw.Font.ttf(regular),
+        condensed: null,
+      );
+    }
   }
 
   static Future<Uint8List> generateInvoicePdf({
@@ -29,14 +54,19 @@ class PdfService {
     required Company company,
     Uint8List? logoBytes,
   }) async {
-    final font = await _loadFont();
+    final fonts = await _loadFontFamily();
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        theme: pw.ThemeData.withFont(base: font),
+        theme: pw.ThemeData.withFont(
+          base: fonts.base,
+          bold: fonts.bold,
+          italic: fonts.medium,
+          boldItalic: fonts.bold,
+        ),
         build: (pw.Context context) => [
           _buildHeader(invoice, company, logoBytes),
           _buildClientInfo(client),

@@ -17,14 +17,47 @@ import 'invoice_layout_engine.dart' show A4Dimensions;
 import 'template_custom_service.dart';
 
 class PrintingService {
-  // Chargement de la police pour supporter les caractères spéciaux et accents
-  static Future<pw.Font> _getFont() async {
+  // Chargement de la police pour supporter les caractères spéciaux et accents.
+  //
+  // ⚠️ Le package `pdf` ne sait PAS synthétiser le gras d'un TTF : quand on
+  // ne lui fournit que la variante regular, un `pw.FontWeight.bold` retombe
+  // sur sa police intégrée `Helvetica-Bold` qui n'a PAS les glyphes
+  // accentués (é, à, É…) → erreur « Helvetica-Bold has no Unicode support ».
+  // On charge donc TOUTES les variantes Roboto et on les transmet via
+  // `ThemeData.withFont(base:, bold:, italic:, boldItalic:)`.
+  static Future<({
+    pw.Font base,
+    pw.Font bold,
+    pw.Font medium,
+    pw.Font? condensed,
+  })> _loadFontFamily() async {
     try {
-      final fontData = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
-      return pw.Font.ttf(fontData);
+      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      final bold = await rootBundle.load('assets/fonts/Roboto-Bold.ttf');
+      final medium = await rootBundle.load('assets/fonts/Roboto-Medium.ttf');
+      pw.Font? condensed;
+      try {
+        condensed =
+            pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Condensed.ttf'));
+      } catch (_) {
+        condensed = null;
+      }
+      return (
+        base: pw.Font.ttf(regular),
+        bold: pw.Font.ttf(bold),
+        medium: pw.Font.ttf(medium),
+        condensed: condensed,
+      );
     } catch (_) {
-      // Fallback sur la police par défaut si l'asset n'est pas trouvé
-      return pw.Font.helvetica();
+      // Fallback : uniquement la police régulière (les variantes retombent
+      // alors sur Helvetica — sans accents si un bold est demandé).
+      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      return (
+        base: pw.Font.ttf(regular),
+        bold: pw.Font.ttf(regular),
+        medium: pw.Font.ttf(regular),
+        condensed: null,
+      );
     }
   }
 
@@ -36,13 +69,13 @@ class PrintingService {
     bool share = false,
     bool isFreePlan = false,
   }) async {
-    final font = await _getFont();
+    final fontFamily = await _loadFontFamily();
     final pdf = await generateInvoicePdf(
       invoice: invoice,
       client: client,
       company: company,
       template: template,
-      font: font,
+      fontFamily: fontFamily,
       isFreePlan: isFreePlan,
     );
 
@@ -64,11 +97,20 @@ class PrintingService {
     required Client client,
     required Company company,
     required InvoiceTemplate template,
-    pw.Font? font,
+    // Police complète (base + variantes). Facultatif : sinon chargée ici.
+    ({
+      pw.Font base,
+      pw.Font bold,
+      pw.Font medium,
+      pw.Font? condensed,
+    })? fontFamily,
     bool isFreePlan = false,
   }) async {
     final pdf = pw.Document();
-    final baseFont = font ?? await _getFont();
+    // 🖋️ Chargement des variantes (regular/bold/medium) : indispensable pour
+    // que les textes en GRAS accentués rendent avec Roboto (Unicode) et non
+    // avec Helvetica-Bold (qui échoue sur les accents).
+    final fonts = fontFamily ?? await _loadFontFamily();
 
     // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping +
     // arrière-plan enregistrés dans l'espace de travail drag & drop). Sans
@@ -140,7 +182,12 @@ class PrintingService {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        theme: pw.ThemeData.withFont(base: baseFont),
+        theme: pw.ThemeData.withFont(
+          base: fonts.base,
+          bold: fonts.bold,
+          italic: fonts.medium,
+          boldItalic: fonts.bold,
+        ),
         margin: (positions.isEmpty && blockConfig == null)
             ? const pw.EdgeInsets.all(32)
             : pw.EdgeInsets.zero,
