@@ -257,10 +257,31 @@ class AppRouter {
         path: '/templates',
         builder: (context, state) => const TemplateStoreScreen(),
       ),
-      // 🛒 Checkout du panier de modèles (paiement ENKAP ou gratuit)
+      // 🛒 Checkout du panier de modèles (paiement ENKAP ou gratuit).
+      // L'`extra` envoyé par la boutique / l'aperçu est transmis à l'écran :
+      //   • InvoiceTemplate            → commande d'un modèle unique
+      //   • List<InvoiceTemplate>      → commande du panier complet
+      //   • Map (template, cartTemplates) → les deux formes combinées
       GoRoute(
         path: '/templates/checkout',
-        builder: (context, state) => const TemplateCheckoutScreen(),
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is InvoiceTemplate) {
+            return TemplateCheckoutScreen(template: extra);
+          }
+          if (extra is List<InvoiceTemplate> && extra.isNotEmpty) {
+            return TemplateCheckoutScreen(cartTemplates: extra);
+          }
+          if (extra is Map<String, dynamic>) {
+            final t = extra['template'];
+            final cart = extra['cartTemplates'];
+            return TemplateCheckoutScreen(
+              template: t is InvoiceTemplate ? t : null,
+              cartTemplates: cart is List<InvoiceTemplate> ? cart : null,
+            );
+          }
+          return const TemplateCheckoutScreen();
+        },
       ),
       // 📁 Mes modèles (espace de stockage des modèles achetés)
       GoRoute(

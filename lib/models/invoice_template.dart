@@ -288,7 +288,7 @@ class InvoiceTemplate {
         id: 'default_1',
         name: 'Améthyste',
         description: 'Classique raffiné aux tons améthyste — conforme SYSCOHADA',
-        primaryColor: const Color(0xFF300546),
+        primaryColor: const Color.fromARGB(76, 48, 5, 70),
         textColor: const Color(0xFF1E1A1F),
         backgroundColor: const Color(0xFFFFF7FC),
         fontSize: 12.5,
@@ -434,6 +434,25 @@ class InvoiceTemplate {
         designVersion: 2,
       ),
     ];
+  }
+
+  /// 👮 La personnalisation de la facture (atelier drag & drop, fond,
+  /// mapping) est réservée à l'administrateur et au propriétaire du modèle :
+  ///   • administrateur (rôle admin / super-admin) ;
+  ///   • créateur du modèle (`createdBy`) ;
+  ///   • acheteur (`purchasedBy`) ;
+  ///   • abonné premium (`hasPremiumAccess`) ;
+  ///   • modèle gratuit (prix 0 : acquis par tous, comme dans la boutique).
+  bool canBeCustomizedBy({
+    required String userId,
+    required bool isAdmin,
+    required bool hasPremiumAccess,
+  }) {
+    if (isAdmin) return true;
+    if (price <= 0) return true;
+    if (hasPremiumAccess) return true;
+    if (userId.isNotEmpty && createdBy == userId) return true;
+    return userId.isNotEmpty && purchasedBy.contains(userId);
   }
 
   InvoiceTemplate copyWith({

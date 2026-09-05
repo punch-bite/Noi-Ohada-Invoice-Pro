@@ -6,8 +6,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../services/template_cart.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
+import '../../widgets/enkap_checkout_dialog.dart';
 import '../../widgets/glass_widgets.dart';
 
 /// 🛒 Écran d'achat / validation d'un modèle de facture premium ou gratuit.
@@ -26,10 +29,6 @@ class TemplateCheckoutScreen extends StatefulWidget {
 }
 
 class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
-  static const Color goldAccent = Color(0xFFC9A227);
-  static const Color bgSurface = Color(0xFF1E1A24);
-  static const Color bgBackground = Color(0xFF120F17);
-
   final TemplateService _templateService = TemplateService();
 
   late List<InvoiceTemplate> _items;
@@ -75,27 +74,110 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
       return;
     }
 
+    final isFree = _totalPrice <= 0;
+
+    // 🆓 Panier 100 % gratuit : déblocage immédiat, sans paiement.
+    if (isFree) {
+      await _unlockTemplates(reference: null);
+      return;
+    }
+
+    // 💳 Panier payant : numéro Mobile Money requis (sauf carte bancaire).
+    final phone = _phoneController.text.trim();
+    if (_selectedPaymentMethod != 'card' && phone.length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez saisir un numéro de téléphone valide.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
+    // 💳 Paiement ENKAP (Orange Money / MTN / Moov / carte) : crée la
+    // commande, ouvre la page sécurisée E-nkap et vérifie automatiquement la
+    // confirmation. Le déblocage n'est validé qu'après confirmation — le
+    // serveur revérifie la commande ENKAP avant l'ajout à `purchasedBy`.
+    final reference = 'TPL-${DateTime.now().millisecondsSinceEpoch}';
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => EnkapCheckoutDialog(
+        amount: _totalPrice,
+        currency: 'XAF',
+        description: _items.length == 1
+            ? 'Achat modèle : ${_items.first.name}'
+            : 'Achat de ${_items.length} modèles de facture',
+        merchantReference: reference,
+        providerName: _providerName,
+        phoneNumber: _selectedPaymentMethod == 'card' ? null : phone,
+        customerName: auth.user?.displayName,
+        customerEmail: auth.user?.email,
+        onSuccess: () => _unlockTemplates(reference: reference),
+        onCancel: () {
+          if (!mounted) return;
+          setState(() => _isProcessing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Paiement annulé.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Libellé lisible du mode de paiement sélectionné (pour ENKAP).
+  String get _providerName {
+    switch (_selectedPaymentMethod) {
+      case 'om':
+        return 'Orange Money';
+      case 'mtn':
+        return 'MTN Mobile Money';
+      case 'moov':
+        return 'Moov Money';
+      default:
+        return 'Carte Bancaire';
+    }
+  }
+
+  /// Débloque les modèles : appelé directement pour un panier gratuit
+  /// (`reference` = null) ou après confirmation du paiement ENKAP.
+  Future<void> _unlockTemplates({required String? reference}) async {
+    final auth = Provider.of<AppAuthProvider>(context, listen: false);
+    final userId = auth.user?.id ?? '';
+    final isFree = reference == null;
+
+    if (!mounted) return;
     setState(() => _isProcessing = true);
 
     try {
       final templateIds = _items.map((e) => e.id).toList();
-      final isFree = _totalPrice <= 0;
 
       final success = await _templateService.purchaseTemplates(
         userId: userId,
         templateIds: templateIds,
-        reference: isFree ? null : 'PAY_${DateTime.now().millisecondsSinceEpoch}',
+        reference: reference,
       );
 
       if (!mounted) return;
       setState(() => _isProcessing = false);
 
+      final theme = context.read<ThemeProvider>();
+
       if (success || isFree) {
+        // 🧹 Retire les modèles acquis du panier local (boutique / aperçu).
+        for (final id in templateIds) {
+          TemplateCart.instance.remove(id);
+        }
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            backgroundColor: bgSurface,
+            backgroundColor: theme.cardColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
               children: [
@@ -104,7 +186,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 Expanded(
                   child: Text(
                     isFree ? 'Modèle débloqué !' : 'Paiement Réussi !',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: theme.textColor, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -113,7 +195,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               isFree
                   ? 'Le modèle est désormais disponible dans vos modèles.'
                   : 'Félicitations ! Votre modèle est prêt à être personnalisé.',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+              style: TextStyle(color: theme.subTextColor),
             ),
             actions: [
               TextButton(
@@ -121,13 +203,13 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   Navigator.of(ctx).pop();
                   context.go('/templates/mine');
                 },
-                child: const Text('Voir Mes Modèles',
-                    style: TextStyle(color: goldAccent)),
+                child: Text('Voir Mes Modèles',
+                    style: TextStyle(color: theme.accentGold)),
               ),
               if (_items.isNotEmpty)
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: RoyalColors.primary,
+                    backgroundColor: theme.primaryColor,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () {
@@ -162,28 +244,33 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    final goldAccent = theme.accentGold;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
     if (_items.isEmpty) {
-      return Scaffold(
-        backgroundColor: bgBackground,
+      return GlassScaffold(
         appBar: AppBar(
-          backgroundColor: bgSurface,
-          title: const Text('Panier de Modèles'),
+          backgroundColor: Colors.transparent,
+          title: Text('Panier de Modèles', style: TextStyle(color: textColor)),
         ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.shopping_basket_outlined,
-                  size: 64, color: Colors.white38),
+              Icon(Icons.shopping_basket_outlined,
+                  size: 64, color: subTextColor),
               const SizedBox(height: 16),
-              const Text('Votre panier est vide',
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
+              Text('Votre panier est vide',
+                  style: TextStyle(color: textColor, fontSize: 18)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () => context.go('/templates'),
                 icon: const Icon(Icons.storefront),
                 label: const Text('Voir la boutique'),
-                style: ElevatedButton.styleFrom(backgroundColor: RoyalColors.primary),
+                style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor),
               )
             ],
           ),
@@ -193,22 +280,21 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
 
     final isFree = _totalPrice <= 0;
 
-    return Scaffold(
-      backgroundColor: bgBackground,
+    return GlassScaffold(
       appBar: AppBar(
-        backgroundColor: bgSurface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Confirmation & Règlement',
           style: TextStyle(
-            color: Colors.white,
+            color: textColor,
             fontWeight: FontWeight.bold,
             fontFamily: 'Manrope',
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
       ),
@@ -220,7 +306,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             Text(
               'Articles Sélectionnés',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
+                color: textColor,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -248,8 +334,8 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                         children: [
                           Text(
                             item.name,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: textColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
                             ),
@@ -258,7 +344,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                           Text(
                             item.category.toUpperCase(),
                             style: TextStyle(
-                              color: goldAccent.withValues(alpha: 0.8),
+                              color: goldAccent,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -289,38 +375,50 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               Text(
                 'Mode de Paiement',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: textColor,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 12),
-              _buildPaymentOption(
-                id: 'om',
-                name: 'Orange Money',
-                icon: Icons.phone_android,
-                color: Colors.orange,
-              ),
-              const SizedBox(height: 10),
-              _buildPaymentOption(
-                id: 'mtn',
-                name: 'MTN Mobile Money',
-                icon: Icons.phone_iphone,
-                color: Colors.yellow.shade700,
-              ),
-              const SizedBox(height: 10),
-              _buildPaymentOption(
-                id: 'moov',
-                name: 'Moov Money',
-                icon: Icons.mobile_friendly,
-                color: Colors.blue,
-              ),
-              const SizedBox(height: 10),
-              _buildPaymentOption(
-                id: 'card',
-                name: 'Carte Bancaire / Visa',
-                icon: Icons.credit_card,
-                color: Colors.purpleAccent,
+              RadioGroup<String>(
+                groupValue: _selectedPaymentMethod,
+                onChanged: (val) => setState(() => _selectedPaymentMethod = val ?? 'om'),
+                child: Column(
+                  children: [
+                    _buildPaymentOption(
+                      id: 'om',
+                      name: 'Orange Money',
+                      icon: Icons.phone_android,
+                      color: Colors.orange,
+                      theme: theme,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildPaymentOption(
+                      id: 'mtn',
+                      name: 'MTN Mobile Money',
+                      icon: Icons.phone_iphone,
+                      color: Colors.yellow.shade700,
+                      theme: theme,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildPaymentOption(
+                      id: 'moov',
+                      name: 'Moov Money',
+                      icon: Icons.mobile_friendly,
+                      color: Colors.blue,
+                      theme: theme,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildPaymentOption(
+                      id: 'card',
+                      name: 'Carte Bancaire / Visa',
+                      icon: Icons.credit_card,
+                      color: Colors.purpleAccent,
+                      theme: theme,
+                    ),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 16),
@@ -329,15 +427,16 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: textColor),
                   decoration: InputDecoration(
                     labelText: 'Numéro de Téléphone Mobile Money',
-                    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                    prefixIcon: const Icon(Icons.phone, color: goldAccent),
+                    labelStyle: TextStyle(color: subTextColor),
+                    prefixIcon: Icon(Icons.phone, color: goldAccent),
                     filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    fillColor: theme.inputFillColor,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: theme.inputBorderColor),
                     ),
                   ),
                 ),
@@ -351,15 +450,15 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Total à régler',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
+                        style: TextStyle(color: textColor, fontSize: 16),
                       ),
                       Text(
                         isFree
                             ? 'GRATUIT'
                             : '${_totalPrice.toStringAsFixed(0)} FCFA',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: goldAccent,
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -374,7 +473,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                     child: ElevatedButton(
                       onPressed: _isProcessing ? null : _processCheckout,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: RoyalColors.primary,
+                        backgroundColor: theme.primaryColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -424,16 +523,18 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     required String name,
     required IconData icon,
     required Color color,
+    required ThemeProvider theme,
   }) {
     final isSelected = _selectedPaymentMethod == id;
+    final goldAccent = theme.accentGold;
     return GestureDetector(
       onTap: () => setState(() => _selectedPaymentMethod = id),
       child: Container(
         decoration: BoxDecoration(
-          color: bgSurface,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? goldAccent : Colors.white.withValues(alpha: 0.1),
+            color: isSelected ? goldAccent : theme.dividerColor,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -445,8 +546,8 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             Expanded(
               child: Text(
                 name,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: theme.textColor,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -454,8 +555,6 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             ),
             Radio<String>(
               value: id,
-              groupValue: _selectedPaymentMethod,
-              onChanged: (val) => setState(() => _selectedPaymentMethod = val!),
               activeColor: goldAccent,
             ),
           ],
@@ -464,3 +563,4 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     );
   }
 }
+

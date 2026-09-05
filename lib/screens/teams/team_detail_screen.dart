@@ -15,6 +15,7 @@ import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/stock_service.dart';
 import '../../services/team_service.dart';
+import '../../widgets/glass_widgets.dart';
 
 class TeamDetailScreen extends StatefulWidget {
   final String teamId;
@@ -81,20 +82,18 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final userId = auth.user?.id;
 
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: bgColor,
+      return GlassScaffold(
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_team == null) {
-      return Scaffold(
-        backgroundColor: bgColor,
+      return GlassScaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 16),
               Text(
                 'Équipe non trouvée',
@@ -109,22 +108,26 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final isOwner = _team!.isOwnerOf(userId!);
     final isAdmin = _team!.isAdmin(userId);
 
-    return Scaffold(
-      backgroundColor: bgColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: Text(
           _team!.name,
-          style: TextStyle(color: textColor),
+          style: TextStyle(
+            color: textColor,
+            fontFamily: 'Roboto',
+            fontWeight: FontWeight.bold,
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.chat_bubble_rounded, color: textColor),
+            icon: Icon(Icons.chat_bubble_rounded, color: primaryColor),
             tooltip: 'Messagerie de l\'équipe',
             onPressed: () => context.push(
               '/teams/chat',
@@ -133,10 +136,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: textColor),
-            onSelected: (value) {
-              if (value == 'leave') _leaveTeam();
-              if (value == 'delete' && isOwner) _deleteTeam();
-            },
+            color: theme.cardColor,
             itemBuilder: (context) => [
               if (!isOwner)
                 const PopupMenuItem(
@@ -149,6 +149,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   child: Text('Supprimer l\'équipe', style: TextStyle(color: Colors.red)),
                 ),
             ],
+            onSelected: (value) {
+              if (value == 'leave') _leaveTeam();
+              if (value == 'delete' && isOwner) _deleteTeam();
+            },
           ),
         ],
       ),
@@ -162,18 +166,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             children: [
               // Description
               if (_team!.description.isNotEmpty)
-                Container(
+                GlassCard(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[850] : Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
                   child: Text(
                     _team!.description,
-                    style: TextStyle(color: subTextColor),
+                    style: TextStyle(color: subTextColor, height: 1.4),
                   ),
                 ),
-              const SizedBox(height: 16),
+              if (_team!.description.isNotEmpty) const SizedBox(height: 16),
 
               // ===== Statistiques =====
               Row(
@@ -181,7 +181,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   _statCard(
                     label: 'Membres',
                     value: _team!.memberIds.length.toString(),
-                    icon: Icons.people,
+                    icon: Icons.people_rounded,
                     color: Colors.blue,
                     isDark: isDark,
                     textColor: textColor,
@@ -190,14 +190,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   _statCard(
                     label: 'Administrateurs',
                     value: _team!.adminIds.length.toString(),
-                    icon: Icons.admin_panel_settings,
+                    icon: Icons.admin_panel_settings_rounded,
                     color: Colors.purple,
                     isDark: isDark,
                     textColor: textColor,
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // ===== Statistiques de partage =====
               _buildShareStats(isDark, textColor, subTextColor),
@@ -265,8 +265,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               onPressed: _openShareSheet,
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
-              icon: const Icon(Icons.ios_share),
-              label: const Text('Partager'),
+              icon: const Icon(Icons.ios_share_rounded),
+              label: const Text('Partager', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
     );
   }
@@ -279,16 +279,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final amount = (_stats['totalAmount'] as num?)?.toDouble() ?? 0;
     final fmt = _fmt(amount);
 
-    return Container(
-      width: double.infinity,
+    return GlassCard(
+      borderRadius: BorderRadius.circular(16),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : Colors.grey[50],
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -343,7 +336,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -390,25 +383,22 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         const SizedBox(height: 12),
 
         if (_shares.isEmpty)
-          Container(
+          GlassCard(
+            borderRadius: BorderRadius.circular(14),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[850] : Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-            ),
             child: Center(
               child: Column(
                 children: [
                   Icon(
                     Icons.share_outlined,
                     size: 32,
-                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                    color: isDark ? Colors.grey[500] : Colors.grey[400],
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Aucune donnée partagée pour le moment.',
                     style: TextStyle(
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      color: isDark ? Colors.grey[300] : Colors.grey[600],
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -417,7 +407,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? Colors.grey[500] : Colors.grey[500],
+                      color: isDark ? Colors.grey[400] : Colors.grey[500],
                     ),
                   ),
                 ],
@@ -612,12 +602,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     required Color textColor,
   }) {
     return Expanded(
-      child: Container(
+      child: GlassCard(
+        borderRadius: BorderRadius.circular(14),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.grey[850] : Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-        ),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),

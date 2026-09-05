@@ -11,11 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noi_ohada_invoice_pro/models/invoice_template.dart';
 import 'package:noi_ohada_invoice_pro/providers/auth_provider.dart';
+import 'package:noi_ohada_invoice_pro/providers/subscription_provider.dart';
 import 'package:noi_ohada_invoice_pro/providers/theme_provider.dart';
 import 'package:noi_ohada_invoice_pro/screens/customization/template_preview_screen.dart';
 import 'package:noi_ohada_invoice_pro/services/config_service.dart';
 import 'package:noi_ohada_invoice_pro/services/hive_service.dart';
 import 'package:noi_ohada_invoice_pro/services/logger_service.dart';
+import 'package:noi_ohada_invoice_pro/services/template_cart.dart';
 import 'package:provider/provider.dart';
 
 import 'helpers/fake_firebase.dart';
@@ -40,7 +42,19 @@ void main() {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppAuthProvider()),
+        // L'aperçu lit canAccessPremiumTemplates (gating premium).
+        ChangeNotifierProxyProvider<AppAuthProvider, SubscriptionProvider>(
+          create: (context) => SubscriptionProvider(
+            context.read<AppAuthProvider>(),
+          ),
+          update: (context, authProvider, previous) {
+            return previous ?? SubscriptionProvider(authProvider);
+          },
+        ),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        // 🛒 Panier de modèles (singleton) — requis par l'aperçu
+        // (`context.watch<TemplateCart>()`), comme dans main.dart.
+        ChangeNotifierProvider<TemplateCart>.value(value: TemplateCart.instance),
       ],
       child: MaterialApp(
         home: TemplatePreviewScreen(template: template),
@@ -67,7 +81,8 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(buildApp(sampleTemplate()));
-    // Laisse _loadData (personnalisations sauvegardées) se terminer.
+    // Laisse _loadData (personnalisations sauvegardées) et _loadOwnership
+    // (sans utilisateur connecté → résolu localement) se terminer.
     await tester.pumpAndSettle();
 
     // Titre de l'en-tête = nom du modèle + sous-titre A4.

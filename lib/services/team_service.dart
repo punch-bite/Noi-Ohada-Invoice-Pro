@@ -232,12 +232,31 @@ class TeamService {
     required String invitationId,
     required String requestedBy,
   }) async {
-    await _manageMember(
-      action: 'accept',
-      teamId: '',
-      invitationId: invitationId,
-      requestedBy: requestedBy,
-    );
+    try {
+      await _manageMember(
+        action: 'accept',
+        teamId: '',
+        invitationId: invitationId,
+        requestedBy: requestedBy,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Server accept invitation failed, trying direct Firestore acceptance: $e');
+      final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+      if (invDoc.exists) {
+        final data = invDoc.data() ?? {};
+        final teamId = data['teamId']?.toString() ?? '';
+        if (teamId.isNotEmpty) {
+          await _db.collection('teams').doc(teamId).update({
+            'memberIds': FieldValue.arrayUnion([requestedBy]),
+          });
+          await _db.collection('team_invitations').doc(invitationId).update({
+            'status': 'accepted',
+          });
+          return;
+        }
+      }
+      rethrow;
+    }
   }
 
   /// L'invité REFUSE une invitation.
@@ -245,30 +264,56 @@ class TeamService {
     required String invitationId,
     required String requestedBy,
   }) async {
-    await _manageMember(
-      action: 'decline',
-      teamId: '',
-      invitationId: invitationId,
-      requestedBy: requestedBy,
-    );
+    try {
+      await _manageMember(
+        action: 'decline',
+        teamId: '',
+        invitationId: invitationId,
+        requestedBy: requestedBy,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Server decline invitation failed, trying direct Firestore decline: $e');
+      final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+      if (invDoc.exists) {
+        await _db.collection('team_invitations').doc(invitationId).update({
+          'status': 'declined',
+        });
+        return;
+      }
+      rethrow;
+    }
   }
 
   /// Liste les invitations EN ATTENTE d'un utilisateur.
   /// Retourne une liste de maps : {id, teamId, teamName, inviterName,
   /// inviterUid, role, createdAt}.
   Future<List<Map<String, dynamic>>> getMyInvitations(String userId) async {
-    final body = await _manageMember(
-      action: 'get-invitations',
-      teamId: '',
-      userId: userId,
-      requestedBy: userId,
-    );
-    final list = body['invitations'];
-    if (list is List) {
-      return list
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+    try {
+      final body = await _manageMember(
+        action: 'get-invitations',
+        teamId: '',
+        userId: userId,
+        requestedBy: userId,
+      );
+      final list = body['invitations'];
+      if (list is List) {
+        return list
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Server get-invitations failed, using Firestore fallback: $e');
+      try {
+        final snap = await _db
+            .collection('team_invitations')
+            .where('targetUserId', isEqualTo: userId)
+            .where('status', isEqualTo: 'pending')
+            .get();
+        return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      } catch (err) {
+        debugPrint('⚠️ Firestore get-invitations fallback error: $err');
+      }
     }
     return [];
   }

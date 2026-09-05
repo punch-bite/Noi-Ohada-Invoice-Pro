@@ -90,5 +90,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+        <!-- 🔔 Canal par défaut des notifications push FCM (cf.
+             PushNotificationService / kPushChannelId) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="noi_notifications"/>
     </application>
 </manifest>

@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/mail_service.dart';
 import '../../services/printing_service.dart';
@@ -164,11 +165,43 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (mounted) await _loadTemplates();
   }
 
+  /// 👮 La personnalisation de la facture est réservée à l'administrateur
+  /// et au propriétaire du modèle (créateur / acheteur / accès premium /
+  /// modèle gratuit).
+  bool _canCustomizeActiveTemplate() {
+    final template = _selectedTemplate;
+    if (template == null) return false;
+    final auth = context.read<AppAuthProvider>();
+    return template.canBeCustomizedBy(
+      userId: auth.user?.id ?? '',
+      isAdmin: auth.isAdmin,
+      hasPremiumAccess:
+          context.read<SubscriptionProvider>().canAccessPremiumTemplates,
+    );
+  }
+
+  /// Message de restriction (personnalisation non autorisée).
+  void _showCustomizationRestricted() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            "Personnalisation réservée à l'administrateur et au propriétaire "
+            "du modèle. Acquérez-le dans la boutique pour le personnaliser."),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   /// Ouvre l'espace de personnalisation (drag & drop) du modèle actif.
   Future<void> _openWorkspace() async {
     final template = _selectedTemplate;
     if (template == null) {
       await _openTemplatePicker();
+      return;
+    }
+    if (!_canCustomizeActiveTemplate()) {
+      _showCustomizationRestricted();
       return;
     }
     await context.push('/templates/workspace', extra: template);
@@ -1102,6 +1135,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Future<void> _openBackgroundSheet() async {
     final template = _selectedTemplate;
     if (template == null || !mounted) return;
+    // 👮 Le fond fait partie des personnalisations réservées à l'admin et
+    // au propriétaire du modèle.
+    if (!_canCustomizeActiveTemplate()) {
+      _showCustomizationRestricted();
+      return;
+    }
     await showBackgroundSettingsSheet(
       context,
       current: _backgroundSettings,

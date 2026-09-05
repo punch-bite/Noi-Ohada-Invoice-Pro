@@ -28,7 +28,9 @@ const {
   applicationDefault,
 } = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('./logger');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -186,7 +188,7 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-API-Key');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -237,6 +239,68 @@ function isValidEmail(value) {
     value.length <= 254 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
 }
+
+// ============================================================
+//  🔐 PROTECTION API — clé secrète obligatoire (entête `x-api-key`)
+//
+//  L'application Flutter envoie la clé dans chaque appel (injectée au
+//  build via `--dart-define=API_SECRET_KEY=...` → ConfigService
+//  .serverHeaders()). Les endpoints publiés ci-dessous restent PUBLICS :
+//    • / et /health        : sonde de disponibilité
+//    • /download           : lien public de téléchargement de l'app
+//    • /enkap/callback/:r  : webhook ITN du PSP E-nkap (serveur→serveur,
+//                            il ne peut pas envoyer notre clé)
+//    • /enkap/return/:r    : page de retour après paiement (navigateur)
+//    • /enkap/order/status : statut de commande consulté par la page web
+//  Si API_SECRET_KEY n'est pas configurée → fail-open (rétro-compatibilité
+//  avec les déploiements existants) ; configurez-la pour verrouiller.
+// ============================================================
+const PUBLIC_PATHS = new Set(['/', '/health', '/download']);
+
+function requestIsPublic(req) {
+  const p = String(req.path || '');
+  if (PUBLIC_PATHS.has(p)) return true;
+  if (p.startsWith('/enkap/callback/')) return true;
+  if (p.startsWith('/enkap/return/')) return true;
+  if (p === '/enkap/order/status') return true;
+  return false;
+}
+
+/// Comparaison à temps constant (anti timing-attack) : on compare les
+/// SHA-256 pour égaliser les longueurs avant timingSafeEqual.
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+function requireApiKey(req, res, next) {
+  const configured = String(process.env.API_SECRET_KEY || '').trim();
+  if (!configured || requestIsPublic(req)) return next();
+  const provided = String(req.headers['x-api-key'] || '').trim();
+  if (provided && safeEqual(provided, configured)) return next();
+  logger.warn('⛔ clé API invalide', { path: req.path, ip: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() });
+  return res
+    .status(401)
+    .json({ error: 'Accès non autorisé (clé API manquante ou invalide)' });
+}
+
+// Enregistrement AVANT toutes les routes (le CORS/OPTIONS ci-dessus reste
+// prioritaire pour que les preflight navigateur ne soient pas bloqués).
+app.use(requireApiKey);
+
+// 🔗 Lien public de téléchargement de l'application : redirige vers l'URL
+// courante de l'APK / de la boutique (variable APP_DOWNLOAD_URL) — le lien
+// distribué aux utilisateurs reste STABLE même si l'APK change d'hébergeur.
+app.get('/download', (req, res) => {
+  const target = String(process.env.APP_DOWNLOAD_URL || '').trim();
+  if (!target) {
+    return res
+      .status(404)
+      .json({ error: 'Lien de téléchargement non configuré (APP_DOWNLOAD_URL)' });
+  }
+  return res.redirect(302, target);
+});
 
 // ============================================================
 //  ROUTES
@@ -877,6 +941,81 @@ function sendMailWithTimeout(mailOptions, maxMs = 8000) {
 
 // Écrit une notification Firestore pour un utilisateur (SDK admin →
 // contourne les règles). `userId` = destinataire, `createdBy` = émetteur.
+// ============================================================
+//  PUSH (FCM) — notification système vers tous les appareils d'un user
+//
+//  Les tokens sont enregistrés par l'app Flutter dans `fcm_tokens/{token}`
+//  (PushNotificationService) : { uid, platform, updatedAt }. Le serveur
+//  (SDK admin) lit cette collection pour délivrer la push.
+// ============================================================
+const PUSH_MAX_TOKENS_PER_USER = 20;
+
+async function sendPushToUser(userId, { title, body, refId, refType, data } = {}) {
+  try {
+    if (!userId) return;
+    const tokensSnap = await db
+      .collection('fcm_tokens')
+      .where('uid', '==', userId)
+      .limit(PUSH_MAX_TOKENS_PER_USER)
+      .get();
+    const tokens = tokensSnap.docs.map((d) => d.id).filter(Boolean);
+    if (!tokens.length) return;
+
+    // Le champ `data` FCM n'accepte que des chaînes (app → deep link).
+    const payloadData = {};
+    if (refId) payloadData.referenceId = String(refId);
+    if (refType) payloadData.referenceType = String(refType);
+    if (data && typeof data === 'object') {
+      for (const [k, v] of Object.entries(data)) {
+        if (v == null) continue;
+        payloadData[String(k).slice(0, 64)] = String(v).slice(0, 256);
+      }
+    }
+
+    const response = await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: String(title || '').slice(0, 150),
+        body: String(body || '').slice(0, 300),
+      },
+      data: payloadData,
+      android: {
+        priority: 'high',
+        notification: { channelId: 'noi_notifications' },
+      },
+      apns: { payload: { aps: { sound: 'default', badge: 1 } } },
+    });
+
+    // Purge des tokens morts (app désinstallée / token révoqué).
+    const deadTokens = [];
+    response.responses.forEach((r, i) => {
+      if (r.success) return;
+      const code = String(r.error?.code || '');
+      if (
+        code.includes('registration-token-not-registered') ||
+        code.includes('invalid-registration-token') ||
+        code.includes('invalid-argument')
+      ) {
+        deadTokens.push(tokens[i]);
+      }
+    });
+    await Promise.all(
+      deadTokens.map((t) =>
+        db.collection('fcm_tokens').doc(t).delete().catch(() => {}),
+      ),
+    );
+
+    logger.info('push sent', {
+      userId,
+      ok: response.successCount,
+      fail: response.failureCount,
+      purged: deadTokens.length,
+    });
+  } catch (e) {
+    logger.warn('⚠️ sendPushToUser échec:', { error: e.message });
+  }
+}
+
 async function createNotification({
   userId,
   type,
@@ -904,6 +1043,13 @@ async function createNotification({
       recipients: [userId],
       createdBy: createdBy || '',
     });
+
+    // 🔔 Push FCM (non-bloquant) : bannière système sur les appareils du
+    // destinataire. L'échec d'une push ne doit JAMAIS faire échouer la
+    // notification Firestore (source de vérité de l'app).
+    sendPushToUser(userId, { title, body, refId, refType, data }).catch(
+      (e) => logger.warn('⚠️ push createNotification:', { error: e.message }),
+    );
   } catch (e) {
     logger.warn('⚠️ createNotification échec:', { error: e.message });
   }

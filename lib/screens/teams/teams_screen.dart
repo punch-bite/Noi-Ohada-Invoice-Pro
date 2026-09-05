@@ -6,6 +6,7 @@ import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/team_service.dart';
 import '../../models/team.dart';
+import '../../widgets/glass_widgets.dart';
 
 class TeamsScreen extends StatefulWidget {
   const TeamsScreen({super.key});
@@ -18,7 +19,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
   final TeamService _teamService = TeamService();
   List<Team> _teams = [];
   bool _isLoading = true;
-  // Nombre d'invitations d'équipe en attente pour l'utilisateur connecté.
   int _pendingInvites = 0;
 
   @override
@@ -34,10 +34,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
     if (auth.user != null) {
       _teams = await _teamService.getUserTeams(auth.user!.id);
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
-  /// Charge le nombre d'invitations en attente (pour afficher la bannière).
   Future<void> _loadPendingInvites() async {
     final auth = context.read<AppAuthProvider>();
     final uid = auth.user?.id ?? '';
@@ -45,9 +44,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     try {
       final invites = await _teamService.getMyInvitations(uid);
       if (mounted) setState(() => _pendingInvites = invites.length);
-    } catch (_) {
-      // Best-effort : le badge est optionnel.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -55,84 +52,86 @@ class _TeamsScreenState extends State<TeamsScreen> {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
     final textColor = theme.textColor;
-    final bgColor = theme.backgroundColor;
+    final subTextColor = theme.subTextColor;
     final hasTeamAccess = context.watch<SubscriptionProvider>().hasTeamAccess;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+    return GlassScaffold(
       appBar: AppBar(
-        title: Text('Équipes', style: TextStyle(color: textColor)),
+        title: Text(
+          'Équipes',
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontFamily: 'Manrope'),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(Icons.add, color: textColor),
+            icon: Icon(Icons.add, color: theme.accentGold),
             onPressed: () => _openCreate(context, hasTeamAccess),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: theme.primaryColor))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 if (_pendingInvites > 0)
-                  _invitationsBanner(context, isDark, textColor),
+                  _invitationsBanner(context, theme),
                 if (!hasTeamAccess)
-                  _premiumLockCard(context, isDark, textColor),
+                  _premiumLockCard(context, theme),
                 if (_teams.isEmpty)
-                  _emptyState(context, isDark, textColor, hasTeamAccess)
+                  _emptyState(context, theme, hasTeamAccess)
                 else
-                  ..._teams.map((t) => _teamCard(t, isDark, textColor)),
+                  ..._teams.map((t) => _teamCard(t, theme)),
               ],
             ),
     );
   }
 
-  /// Bannière « invitations en attente » → ouvre /teams/invitations.
-  Widget _invitationsBanner(
-    BuildContext context,
-    bool isDark,
-    Color textColor,
-  ) {
-    final primaryColor = context.read<ThemeProvider>().primaryColor;
-    return Card(
-      color: primaryColor.withValues(alpha: 0.08),
+  Widget _invitationsBanner(BuildContext context, ThemeProvider theme) {
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: primaryColor.withValues(alpha: 0.35)),
-      ),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: primaryColor,
-            borderRadius: BorderRadius.circular(10),
+      onTap: () => context.push('/teams/invitations'),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.primaryColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.mail_outline, color: Colors.white, size: 22),
           ),
-          child: const Icon(Icons.mail_outline, color: Colors.white, size: 20),
-        ),
-        title: Text(
-          '$_pendingInvites invitation(s) en attente',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: textColor,
-            fontSize: 13.5,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$_pendingInvites invitation(s) en attente',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: theme.textColor,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Acceptez pour rejoindre une équipe',
+                  style: TextStyle(
+                    color: theme.subTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        subtitle: Text(
-          'Acceptez pour rejoindre une équipe',
-          style: TextStyle(
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
-          ),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.push('/teams/invitations'),
+          Icon(Icons.chevron_right, color: theme.accentGold),
+        ],
       ),
     );
   }
 
-  /// Ouvre la création d'équipe — réservée aux abonnés premium / admin.
   void _openCreate(BuildContext context, bool hasTeamAccess) {
     if (!hasTeamAccess) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -149,86 +148,88 @@ class _TeamsScreenState extends State<TeamsScreen> {
     context.push('/teams/create');
   }
 
-  /// Carte de verrouillage premium affichée en tête de liste pour les
-  /// utilisateurs gratuits (l'équipe = fonctionnalité Business).
-  Widget _premiumLockCard(BuildContext context, bool isDark, Color textColor) {
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
-    return Card(
-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+  Widget _premiumLockCard(BuildContext context, ThemeProvider theme) {
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: const Color(0xFFE9B949).withValues(alpha: 0.4),
-          width: 0.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(Icons.lock_outline, color: Color(0xFFB8860B), size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Équipe premium',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Passez à un plan payant pour créer et gérer vos équipes.',
-                    style: TextStyle(fontSize: 12.5, color: subTextColor),
-                  ),
-                ],
-              ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, color: theme.accentGold, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Équipe premium',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: theme.textColor),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Passez à un plan payant pour créer et gérer vos équipes.',
+                  style: TextStyle(fontSize: 12, color: theme.subTextColor),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () => context.push('/subscription'),
-              child: const Text('Débloquer'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-          ],
-        ),
+            onPressed: () => context.push('/subscription'),
+            child: const Text('Débloquer', style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _teamCard(Team team, bool isDark, Color textColor) {
-    return Card(
-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+  Widget _teamCard(Team team, ThemeProvider theme) {
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 0.5),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue.withValues(alpha: 0.1),
-          child: Text(
-            team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+      onTap: () => context.push('/teams/${team.id}'),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: theme.primaryColor.withValues(alpha: 0.2),
+            child: Text(
+              team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
+              style: TextStyle(fontWeight: FontWeight.bold, color: theme.primaryColor),
+            ),
           ),
-        ),
-        title: Text(team.name, style: TextStyle(color: textColor)),
-        subtitle: Text(
-          '${team.memberIds.length} membres',
-          style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.push('/teams/${team.id}'),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  team.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: theme.textColor,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${team.memberIds.length} membre(s)',
+                  style: TextStyle(color: theme.subTextColor, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: theme.subTextColor),
+        ],
       ),
     );
   }
 
   Widget _emptyState(
     BuildContext context,
-    bool isDark,
-    Color textColor,
+    ThemeProvider theme,
     bool hasTeamAccess,
   ) {
-    // Hauteur fixe pour centrer l'état vide dans la ListView.
     return SizedBox(
       height: 340,
       child: Center(
@@ -237,25 +238,31 @@ class _TeamsScreenState extends State<TeamsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.groups, size: 64, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+              Icon(Icons.groups, size: 64, color: theme.subTextColor),
               const SizedBox(height: 16),
               Text(
                 'Aucune équipe',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.textColor),
               ),
               const SizedBox(height: 8),
               Text(
                 hasTeamAccess
-                    ? 'Créez votre première équipe'
-                    : 'Créez vos équipes avec un abonnement premium',
+                    ? 'Créez votre première équipe pour collaborer.'
+                    : 'Créez vos équipes avec un abonnement premium.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                style: TextStyle(color: theme.subTextColor, fontSize: 13),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: () => _openCreate(context, hasTeamAccess),
                 icon: Icon(hasTeamAccess ? Icons.add : Icons.workspace_premium),
                 label: Text(hasTeamAccess ? 'Créer une équipe' : 'Débloquer l\'équipe'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ],
           ),
@@ -263,4 +270,4 @@ class _TeamsScreenState extends State<TeamsScreen> {
       ),
     );
   }
-}
+}

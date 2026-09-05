@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
@@ -29,10 +31,6 @@ class TemplatesScreen extends StatefulWidget {
 }
 
 class _TemplatesScreenState extends State<TemplatesScreen> {
-  static const Color goldAccent = Color(0xFFC9A227);
-  static const Color bgSurface = Color(0xFF1E1A24);
-  static const Color bgBackground = Color(0xFF120F17);
-
   final TemplateService _templateService = TemplateService();
 
   List<InvoiceTemplate> _templates = [];
@@ -45,6 +43,19 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     super.initState();
     _selectedId = widget.currentTemplateId;
     _loadTemplates();
+  }
+
+  /// 👮 La personnalisation de la facture est réservée à l'administrateur
+  /// et au propriétaire du modèle (créateur / acheteur / accès premium /
+  /// modèle gratuit).
+  bool _canCustomize(InvoiceTemplate template) {
+    final auth = context.read<AppAuthProvider>();
+    return template.canBeCustomizedBy(
+      userId: auth.user?.id ?? '',
+      isAdmin: auth.isAdmin,
+      hasPremiumAccess:
+          context.read<SubscriptionProvider>().canAccessPremiumTemplates,
+    );
   }
 
   Future<void> _loadTemplates() async {
@@ -90,40 +101,45 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    final goldAccent = theme.accentGold;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
     final filtered = _templates.where((t) {
       if (_searchQuery.isEmpty) return true;
       return t.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           t.description.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return Scaffold(
-      backgroundColor: bgBackground,
+    return GlassScaffold(
       appBar: AppBar(
-        backgroundColor: bgSurface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Choisir un Modèle',
           style: TextStyle(
-            color: Colors.white,
+            color: textColor,
             fontWeight: FontWeight.bold,
             fontFamily: 'Manrope',
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
             tooltip: 'Boutique de Modèles',
-            icon: const Icon(Icons.storefront, color: goldAccent),
+            icon: Icon(Icons.storefront, color: goldAccent),
             onPressed: () => context.push('/templates'),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: goldAccent),
             )
           : Column(
@@ -133,25 +149,25 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                   child: Column(
                     children: [
                       TextField(
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: textColor),
                         decoration: InputDecoration(
                           hintText: 'Rechercher un modèle...',
-                          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                          prefixIcon: const Icon(Icons.search, color: goldAccent),
+                          hintStyle: TextStyle(color: subTextColor),
+                          prefixIcon: Icon(Icons.search, color: goldAccent),
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          fillColor: theme.inputFillColor,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                            borderSide: BorderSide(color: theme.inputBorderColor),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                            borderSide: BorderSide(color: theme.inputBorderColor),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: goldAccent),
+                            borderSide: BorderSide(color: goldAccent),
                           ),
                         ),
                         onChanged: (val) => setState(() => _searchQuery = val),
@@ -162,11 +178,10 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () => context.push('/templates/mine'),
-                              icon: const Icon(Icons.collections_bookmark, size: 18),
-                              label: const Text('Mes Modèles'),
+                              icon: Icon(Icons.collections_bookmark, size: 18, color: textColor),
+                              label: Text('Mes Modèles', style: TextStyle(color: textColor)),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                side: BorderSide(color: theme.dividerColor),
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -181,7 +196,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                               icon: const Icon(Icons.shopping_bag, size: 18),
                               label: const Text('Boutique Pro'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: RoyalColors.primary,
+                                backgroundColor: theme.primaryColor,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
@@ -334,7 +349,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                                                   ),
                                                 ),
                                                 if (isSelected)
-                                                  const Icon(
+                                                  Icon(
                                                     Icons.check_circle,
                                                     color: goldAccent,
                                                     size: 18,
@@ -356,28 +371,47 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                                               mainAxisAlignment:
                                                   MainAxisAlignment.spaceBetween,
                                               children: [
-                                                InkWell(
-                                                  onTap: () {
-                                                    context.push('/templates/workspace',
-                                                        extra: template);
-                                                  },
-                                                  child: const Row(
+                                                if (_canCustomize(template))
+                                                  InkWell(
+                                                    onTap: () {
+                                                      context.push(
+                                                          '/templates/workspace',
+                                                          extra: template);
+                                                    },
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.tune,
+                                                            size: 14,
+                                                            color: goldAccent),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          'Éditer',
+                                                          style: TextStyle(
+                                                            color: goldAccent,
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                else
+                                                  const Row(
                                                     children: [
-                                                      Icon(Icons.tune,
-                                                          size: 14,
-                                                          color: goldAccent),
+                                                      Icon(Icons.lock_outline,
+                                                          size: 12,
+                                                          color: Colors.white24),
                                                       SizedBox(width: 4),
                                                       Text(
-                                                        'Éditer',
+                                                        'Verrouillé',
                                                         style: TextStyle(
-                                                          color: goldAccent,
+                                                          color: Colors.white24,
                                                           fontSize: 11,
-                                                          fontWeight: FontWeight.w600,
                                                         ),
                                                       ),
                                                     ],
                                                   ),
-                                                ),
                                                 InkWell(
                                                   onTap: () {
                                                     context.push('/templates/preview',
@@ -386,7 +420,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                                                   child: Icon(
                                                     Icons.visibility,
                                                     size: 16,
-                                                    color: Colors.white.withValues(alpha: 0.6),
+                                                    color: subTextColor,
                                                   ),
                                                 ),
                                               ],

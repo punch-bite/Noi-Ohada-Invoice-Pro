@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/team_service.dart';
+import '../../widgets/glass_widgets.dart';
 
 class TeamInvitationsScreen extends StatefulWidget {
   const TeamInvitationsScreen({super.key});
@@ -97,14 +98,20 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
     final textColor = theme.textColor;
-    final bgColor = theme.backgroundColor;
 
-    return Scaffold(
-      backgroundColor: bgColor,
+    return GlassScaffold(
       appBar: AppBar(
-        title: Text('Mes invitations', style: TextStyle(color: textColor)),
+        title: Text(
+          'Mes invitations',
+          style: TextStyle(
+            color: textColor,
+            fontFamily: 'Roboto',
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.canPop()
@@ -127,7 +134,6 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
 
   Widget _invitationCard(Map<String, dynamic> inv) {
     final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
     final textColor = theme.textColor;
     final subTextColor = theme.subTextColor;
     final primaryColor = theme.primaryColor;
@@ -137,17 +143,10 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
     final isAdminInvite = (inv['role'] ?? 'member') == 'admin';
     final busy = _busyId == id;
 
-    return Card(
-      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: primaryColor.withValues(alpha: 0.25),
-          width: 1,
-        ),
-      ),
-      child: Padding(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        borderRadius: BorderRadius.circular(16),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +155,7 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
               children: [
                 CircleAvatar(
                   backgroundColor: primaryColor.withValues(alpha: 0.12),
-                  child: Icon(Icons.group_add, color: primaryColor),
+                  child: Icon(Icons.group_add_rounded, color: primaryColor),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -193,6 +192,9 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -214,6 +216,9 @@ class _TeamInvitationsScreenState extends State<TeamInvitationsScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),

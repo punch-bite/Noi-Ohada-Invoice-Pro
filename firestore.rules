@@ -195,6 +195,32 @@ service cloud.firestore {
     }
 
     // ===========================================
+    // 💬 MESSAGERIE D'ÉQUIPE (conversations de groupe)
+    // ===========================================
+    // Les messages vivent dans `team_messages/{teamId}/messages` — les
+    // règles Firestore ne s'héritent PAS des documents parents → match
+    // explicite requis (sinon deny-by-default : chat bloqué en prod).
+    // Lecture/écriture réservées aux membres de l'équipe (propriétaire,
+    // admins, membres) ; l'admin global a tous les droits.
+    match /team_messages/{teamId} {
+      allow read, write: if isAdmin()
+        || isTeamMember(teamId, request.auth.uid);
+
+      match /messages/{messageId} {
+        // 🔒 Seuls les membres de l'équipe voient les messages.
+        allow read: if isAdmin() || isTeamMember(teamId, request.auth.uid);
+        // ✍️ Un membre ne peut écrire que SON propre nom (anti-usurpation).
+        allow create: if isSignedIn()
+          && isTeamMember(teamId, request.auth.uid)
+          && request.resource.data.senderId == request.auth.uid;
+        // 🛠️ Modification/suppression : admin global OU l'auteur du message.
+        allow update, delete: if isAdmin()
+          || (isTeamMember(teamId, request.auth.uid)
+              && resource.data.senderId == request.auth.uid);
+      }
+    }
+
+    // ===========================================
     // SYSTÈME
     // ===========================================
     match /templates/{templateId} {
@@ -218,6 +244,18 @@ service cloud.firestore {
             && isTeamMember(request.resource.data.teamId, request.auth.uid)
             && request.resource.data.userId is string
             && isTeamMember(request.resource.data.teamId, request.resource.data.userId)));
+    }
+    // 🔔 Tokens FCM (notifications push) : chaque utilisateur gère SES
+    // propres tokens. Le serveur (SDK admin) lit `fcm_tokens` pour envoyer
+    // les push — il contourne les règles.
+    match /fcm_tokens/{tokenId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
     match /logs/{logId} {
       allow read, write: if isAdmin();

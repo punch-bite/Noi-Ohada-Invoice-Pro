@@ -17,7 +17,6 @@ import 'invoice_layout_engine.dart' show A4Dimensions;
 import 'template_custom_service.dart';
 
 class PrintingService {
-  
   // Chargement de la police pour supporter les caractères spéciaux et accents
   static Future<pw.Font> _getFont() async {
     try {
@@ -35,6 +34,7 @@ class PrintingService {
     required Company company,
     required InvoiceTemplate template,
     bool share = false,
+    bool isFreePlan = false,
   }) async {
     final font = await _getFont();
     final pdf = await generateInvoicePdf(
@@ -43,12 +43,14 @@ class PrintingService {
       company: company,
       template: template,
       font: font,
+      isFreePlan: isFreePlan,
     );
 
     if (share) {
       await Printing.sharePdf(
         bytes: pdf,
-        filename: '${invoice.isDevis ? "Devis" : "Facture"}_${invoice.invoiceNumber}.pdf',
+        filename:
+            '${invoice.isDevis ? "Devis" : "Facture"}_${invoice.invoiceNumber}.pdf',
       );
     } else {
       await Printing.layoutPdf(
@@ -63,6 +65,7 @@ class PrintingService {
     required Company company,
     required InvoiceTemplate template,
     pw.Font? font,
+    bool isFreePlan = false,
   }) async {
     final pdf = pw.Document();
     final baseFont = font ?? await _getFont();
@@ -94,9 +97,8 @@ class PrintingService {
         : null;
     if (preset == null) bgBytes ??= _templateBackgroundBytes(template);
     final bgOpacity = custom.background.opacity.clamp(0.0, 1.0);
-    final bgFit = custom.background.fit == 'contain'
-        ? pw.BoxFit.contain
-        : pw.BoxFit.fill;
+    final bgFit =
+        custom.background.fit == 'contain' ? pw.BoxFit.contain : pw.BoxFit.fill;
     final pw.Widget? background;
     if (bgBytes != null) {
       background = pw.Positioned.fill(
@@ -133,7 +135,7 @@ class PrintingService {
     //     'positions' est présente → rendu WYSIWYG aligné sur le workspace ;
     //   • ANCIEN format x/y/scale (modèles admin) : clés variables à la racine ;
     //   • aucune personnalisation : layout fixe historique.
-    final blockConfig = _blockLayoutFromCustom(custom.positions);
+    final blockConfig = _blockLayoutFromCustom(positions);
 
     pdf.addPage(
       pw.MultiPage(
@@ -153,6 +155,8 @@ class PrintingService {
                 template,
                 mapping: mapping,
                 background: background,
+                customPositions: positions,
+                isFreePlan: isFreePlan,
               ),
             ];
           }
@@ -188,6 +192,23 @@ class PrintingService {
                     _buildFooter(company, template),
                   ],
                 ),
+                if (isFreePlan)
+                  pw.Positioned(
+                    bottom: 8,
+                    left: 0,
+                    right: 0,
+                    child: pw.Center(
+                      child: pw.Text(
+                        'Généré par OHADA Invoice Pro — Version Gratuite',
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          color: _withOpacity(
+                              _getPdfColor(template.textColor), 0.4),
+                          fontStyle: pw.FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ];
@@ -216,10 +237,7 @@ class PrintingService {
     final pageW = PdfPageFormat.a4.width;
     final pageH = PdfPageFormat.a4.height;
     final children = <pw.Widget>[
-      // Base pleine page : donne une taille au Stack (sinon il collapserait
-      // car tous ses enfants sont positionnés).
       pw.SizedBox(width: pageW, height: pageH),
-      // `background` est déjà un Positioned.fill → enfant direct du Stack.
       if (background != null) background,
     ];
 
@@ -231,19 +249,26 @@ class PrintingService {
       final y = ((raw['y'] as num?) ?? 0.04).toDouble().clamp(0.0, 0.98);
       final scale = ((raw['scale'] as num?) ?? 1.0).toDouble().clamp(0.5, 2.5);
 
-      final widget = _variableWidget(id, scale, invoice, client, company, template, mapping: mapping);
+      final widget = _variableWidget(
+        id,
+        scale,
+        invoice,
+        client,
+        company,
+        template,
+        mapping: mapping,
+        customPositions: positions,
+      );
       if (widget == null) return;
 
-      // Les blocs larges (tableau des lignes) ont besoin d'une largeur bornée.
       final width = id == 'items' ? (pageW - 48) * 0.92 : null;
 
       children.add(
         pw.Positioned(
           left: x * pageW,
           top: y * pageH,
-          child: width == null
-              ? widget
-              : pw.SizedBox(width: width, child: widget),
+          child:
+              width == null ? widget : pw.SizedBox(width: width, child: widget),
         ),
       );
     });
@@ -253,19 +278,17 @@ class PrintingService {
 
   // ============================================================
   //  🧩 RENDU PAR BLOCS (drag & drop — nouveau format)
-  //  Miroir du InvoiceRenderer : blocs → rangées (ordre) → colonnes,
-  //  en respectant colSpan, visibilité, marges et espacements — garantit
-  //  la cohérence workspace / aperçu / impression.
   // ============================================================
 
-  /// Extrait la config drag & drop d'une personnalisation au nouveau format
-  /// (clé 'positions'), ou null si la personnalisation est d'un autre format.
   static InvoiceLayoutConfig? _blockLayoutFromCustom(
     Map<String, dynamic> custom,
   ) {
-    if (custom['positions'] is! Map) return null;
+    if (custom.isEmpty) return null;
     try {
-      return InvoiceLayoutConfig.fromMap(custom);
+      if (custom.containsKey('positions')) {
+        return InvoiceLayoutConfig.fromMap(custom);
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -279,19 +302,18 @@ class PrintingService {
     InvoiceTemplate template, {
     Map<String, String> mapping = const {},
     pw.Widget? background,
+    Map<String, dynamic> customPositions = const {},
+    bool isFreePlan = false,
   }) {
     final pageW = PdfPageFormat.a4.width;
     final pageH = PdfPageFormat.a4.height;
-    // Les constantes A4 sont en px (96 DPI), la page PDF en pt → ratio.
     final scaleRatio = pageW / A4Dimensions.width;
     final padding = config.pagePadding.clamp(8.0, 80.0).toDouble() * scaleRatio;
     final gutter = A4Dimensions.gutter * scaleRatio;
     final colW = (pageW - padding * 2 - gutter) / 2;
 
     final children = <pw.Widget>[
-      // Base pleine page : donne une taille au Stack.
       pw.SizedBox(width: pageW, height: pageH),
-      // `background` est déjà un Positioned.fill → enfant direct du Stack.
       if (background != null) background,
       pw.Padding(
         padding: pw.EdgeInsets.all(padding),
@@ -309,17 +331,33 @@ class PrintingService {
                 colW: colW,
                 gutter: gutter,
                 mapping: mapping,
+                customPositions: customPositions,
               ),
               if (block.index < LayoutBlock.values.length - 1)
                 pw.SizedBox(
-                  height:
-                      config.blockSpacing.clamp(0.0, 60.0).toDouble() *
-                          scaleRatio,
+                  height: config.blockSpacing.clamp(0.0, 60.0).toDouble() *
+                      scaleRatio,
                 ),
             ],
           ],
         ),
       ),
+      if (isFreePlan)
+        pw.Positioned(
+          bottom: 8,
+          left: 0,
+          right: 0,
+          child: pw.Center(
+            child: pw.Text(
+              'Généré par OHADA Invoice Pro — Version Gratuite',
+              style: pw.TextStyle(
+                fontSize: 8,
+                color: _withOpacity(_getPdfColor(template.textColor), 0.4),
+                fontStyle: pw.FontStyle.italic,
+              ),
+            ),
+          ),
+        ),
     ];
 
     return pw.Stack(children: children);
@@ -335,9 +373,11 @@ class PrintingService {
     required double colW,
     required double gutter,
     Map<String, String> mapping = const {},
+    Map<String, dynamic> customPositions = const {},
   }) {
     final entries = config.positions.entries
-        .where((e) => e.value.blockIndex == block.index && config.styleOf(e.key).visible)
+        .where((e) =>
+            e.value.blockIndex == block.index && config.styleOf(e.key).visible)
         .toList()
       ..sort((a, b) {
         final byOrder = a.value.order.compareTo(b.value.order);
@@ -365,6 +405,8 @@ class PrintingService {
             colW: colW,
             gutter: gutter,
             mapping: mapping,
+            customPositions: customPositions,
+            config: config,
           ),
           pw.SizedBox(height: 6),
         ],
@@ -381,11 +423,13 @@ class PrintingService {
     required double colW,
     required double gutter,
     Map<String, String> mapping = const {},
+    Map<String, dynamic> customPositions = const {},
+    InvoiceLayoutConfig? config,
   }) {
     row.sort((a, b) => a.value.column.compareTo(b.value.column));
 
-    pw.Widget build(MapEntry<LayoutElement, ElementPosition> entry,
-            double width) =>
+    pw.Widget build(
+            MapEntry<LayoutElement, ElementPosition> entry, double width) =>
         pw.SizedBox(
           width: width,
           child: _pdfElement(
@@ -395,6 +439,8 @@ class PrintingService {
             company,
             template,
             mapping: mapping,
+            customPositions: customPositions,
+            config: config,
           ),
         );
 
@@ -423,7 +469,7 @@ class PrintingService {
   }
 
   /// Correspondance LayoutElement → widget PDF (données réelles de la facture,
-  /// mapping utilisateur inclus).
+  /// mapping utilisateur inclus, options personnalisées et styles d'éléments).
   static pw.Widget _pdfElement(
     LayoutElement element,
     Invoice invoice,
@@ -431,8 +477,15 @@ class PrintingService {
     Company company,
     InvoiceTemplate template, {
     Map<String, String> mapping = const {},
+    Map<String, dynamic> customPositions = const {},
+    InvoiceLayoutConfig? config,
   }) {
-    // Réutilisation des rendus par variable existants (mapping inclus).
+    // Application du style spécifique à cet élément si présent dans le config.
+    final elStyle = config?.styleOf(element);
+    if (elStyle != null && !elStyle.visible) {
+      return pw.SizedBox();
+    }
+
     const byVariable = <LayoutElement, String>{
       LayoutElement.logo: 'logo',
       LayoutElement.companyName: 'company_name',
@@ -460,19 +513,28 @@ class PrintingService {
         company,
         template,
         mapping: mapping,
+        customPositions: customPositions,
       );
       return widget ?? pw.SizedBox();
     }
 
-    final text = _getPdfColor(template.textColor);
+    final text = elStyle?.color != null
+        ? _getPdfColor(elStyle!.color!)
+        : _getPdfColor(template.textColor);
     final primary = _getPdfColor(template.primaryColor);
     final sub = _withOpacity(text, 0.6);
-    final fs = template.fontSize.clamp(6.0, 40.0).toDouble();
+    final fs =
+        (elStyle?.fontSize ?? template.fontSize).clamp(6.0, 40.0).toDouble();
 
     switch (element) {
       case LayoutElement.footerText:
+        final customLegal = customPositions['custom_legal_text'] as String?;
+        final legalTextToDisplay =
+            (customLegal != null && customLegal.trim().isNotEmpty)
+                ? customLegal.trim()
+                : company.legalText;
         return pw.Text(
-          company.legalText,
+          legalTextToDisplay,
           style: pw.TextStyle(
             fontSize: fs - 1,
             color: sub,
@@ -480,6 +542,11 @@ class PrintingService {
           ),
         );
       case LayoutElement.legalMention:
+        final customLegal = customPositions['custom_legal_text'] as String?;
+        final legalTextToDisplay =
+            (customLegal != null && customLegal.trim().isNotEmpty)
+                ? customLegal.trim()
+                : company.legalText;
         return pw.Container(
           padding: const pw.EdgeInsets.all(8),
           decoration: pw.BoxDecoration(
@@ -507,15 +574,17 @@ class PrintingService {
                 'N° Contribuable : ${company.taxId.isEmpty ? '—' : company.taxId}',
                 style: pw.TextStyle(fontSize: fs - 2, color: sub),
               ),
-              if (company.legalText.isNotEmpty)
+              if (legalTextToDisplay.isNotEmpty) ...[
+                pw.SizedBox(height: 2),
                 pw.Text(
-                  company.legalText,
+                  legalTextToDisplay,
                   style: pw.TextStyle(
                     fontSize: fs - 2,
                     color: sub,
                     fontStyle: pw.FontStyle.italic,
                   ),
                 ),
+              ],
             ],
           ),
         );
@@ -530,7 +599,7 @@ class PrintingService {
           child: pw.Column(
             children: [
               pw.Text(
-                'Paiement Mobile Money accepté',
+                'Paiement Mobile Money / Bank',
                 style: pw.TextStyle(
                   fontSize: fs - 2,
                   fontWeight: pw.FontWeight.bold,
@@ -546,16 +615,56 @@ class PrintingService {
           ),
         );
       case LayoutElement.signature:
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+        final showSignature =
+            (customPositions['show_signature_line'] as bool?) ?? true;
+        final showPaidStamp =
+            (customPositions['show_paid_stamp'] as bool?) ?? true;
+        final stampText = (customPositions['stamp_text'] as String?) ?? 'PAYÉ';
+        return pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Container(
-                width: 120, height: 1, color: _withOpacity(text, 0.4)),
-            pw.SizedBox(height: 4),
-            pw.Text(
-              'Signature',
-              style: pw.TextStyle(fontSize: fs - 2, color: sub),
-            ),
+            if (showPaidStamp)
+              pw.Transform.rotate(
+                angle: -0.15,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(
+                        color: _getPdfColor(const Color(0xFFBAAB6D)), width: 2),
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Text(
+                    stampText,
+                    style: pw.TextStyle(
+                      fontSize: fs,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _getPdfColor(const Color(0xFFBAAB6D)),
+                    ),
+                  ),
+                ),
+              )
+            else
+              pw.SizedBox(),
+            if (showSignature)
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    width: 120,
+                    height: 1,
+                    color: _withOpacity(text, 0.4),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Signature & Cachet',
+                    style: pw.TextStyle(fontSize: fs - 2, color: sub),
+                  ),
+                ],
+              )
+            else
+              pw.SizedBox(),
           ],
         );
       default:
@@ -700,6 +809,7 @@ class PrintingService {
     Company company,
     InvoiceTemplate template, {
     Map<String, String> mapping = const {},
+    required Map<String, dynamic> customPositions,
   }) {
     final primary = _getPdfColor(template.primaryColor);
     final text = _getPdfColor(template.textColor);
@@ -712,8 +822,16 @@ class PrintingService {
     final mappedVar = mapping[id];
     if (mappedVar != null && mappedVar.isNotEmpty) {
       final mapped = _variableValue(
-        mappedVar, scale, invoice, client, company, template,
-        primary: primary, text: text, fs: fs, sub: sub,
+        mappedVar,
+        scale,
+        invoice,
+        client,
+        company,
+        template,
+        primary: primary,
+        text: text,
+        fs: fs,
+        sub: sub,
       );
       if (mapped != null) return mapped;
     }
@@ -1077,7 +1195,7 @@ class PrintingService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
-        color: _withOpacity(primaryColor, 0.05),
+        color: _withOpacity(primaryColor, 0.00),
         border: pw.Border.all(
           color: _withOpacity(primaryColor, 0.3),
           width: 1,
@@ -1478,8 +1596,18 @@ class PrintingService {
   /// Formate une date en « 12 Oct 2023 ».
   static String _formatDate(DateTime d) {
     const months = [
-      'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
-      'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
+      'Jan',
+      'Fév',
+      'Mar',
+      'Avr',
+      'Mai',
+      'Juin',
+      'Juil',
+      'Août',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Déc',
     ];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }

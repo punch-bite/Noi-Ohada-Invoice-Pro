@@ -6,6 +6,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/glass_widgets.dart';
@@ -19,10 +21,6 @@ class TemplateStoreScreen extends StatefulWidget {
 }
 
 class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
-  static const Color goldAccent = Color(0xFFC9A227);
-  static const Color bgSurface = Color(0xFF1E1A24);
-  static const Color bgBackground = Color(0xFF120F17);
-
   final TemplateService _templateService = TemplateService();
 
   List<InvoiceTemplate> _allTemplates = [];
@@ -68,6 +66,14 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    final sub = context.watch<SubscriptionProvider>();
+    final isDark = theme.isDarkMode;
+    final goldAccent = theme.accentGold;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final hasPremiumAccess = sub.canAccessPremiumTemplates;
+
     final filtered = _allTemplates.where((t) {
       final matchesCat = _selectedCategory == 'Tous' ||
           t.category.toLowerCase() == _selectedCategory.toLowerCase();
@@ -77,34 +83,33 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
       return matchesCat && matchesSearch;
     }).toList();
 
-    return Scaffold(
-      backgroundColor: bgBackground,
+    return GlassScaffold(
       appBar: AppBar(
-        backgroundColor: bgSurface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Boutique de Modèles Pro',
           style: TextStyle(
-            color: Colors.white,
+            color: textColor,
             fontWeight: FontWeight.bold,
             fontFamily: 'Manrope',
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
             tooltip: 'Mes Modèles',
-            icon: const Icon(Icons.collections_bookmark, color: goldAccent),
+            icon: Icon(Icons.collections_bookmark, color: goldAccent),
             onPressed: () => context.push('/templates/mine'),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: goldAccent),
             )
           : Column(
@@ -114,25 +119,25 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                   child: Column(
                     children: [
                       TextField(
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: textColor),
                         decoration: InputDecoration(
                           hintText: 'Rechercher un style (ex: Améthyste, Exécutif)...',
-                          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                          prefixIcon: const Icon(Icons.search, color: goldAccent),
+                          hintStyle: TextStyle(color: subTextColor),
+                          prefixIcon: Icon(Icons.search, color: goldAccent),
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          fillColor: theme.inputFillColor,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                            borderSide: BorderSide(color: theme.inputBorderColor),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                            borderSide: BorderSide(color: theme.inputBorderColor),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: goldAccent),
+                            borderSide: BorderSide(color: goldAccent),
                           ),
                         ),
                         onChanged: (val) => setState(() => _searchQuery = val),
@@ -157,17 +162,17 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                   setState(() => _selectedCategory = cat);
                                 }
                               },
-                              selectedColor: RoyalColors.primary,
-                              backgroundColor: Colors.white.withValues(alpha: 0.05),
+                              selectedColor: theme.primaryColor,
+                              backgroundColor: theme.cardColor,
                               labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.7),
+                                color: isSelected ? Colors.white : textColor,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                 fontSize: 13,
                               ),
                               side: BorderSide(
                                 color: isSelected
                                     ? goldAccent
-                                    : Colors.white.withValues(alpha: 0.1),
+                                    : theme.dividerColor,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
@@ -185,7 +190,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                       ? Center(
                           child: Text(
                             'Aucun modèle dans cette catégorie',
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                            style: TextStyle(color: subTextColor),
                           ),
                         )
                       : GridView.builder(
@@ -199,7 +204,9 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final template = filtered[index];
-                            final isOwned = _userPurchasedIds.contains(template.id) || template.price <= 0;
+                            final isOwned = hasPremiumAccess ||
+                                _userPurchasedIds.contains(template.id) ||
+                                template.price <= 0;
 
                             return GlassCard(
                               padding: EdgeInsets.zero,
@@ -207,77 +214,83 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: template.backgroundColor,
-                                        borderRadius: const BorderRadius.vertical(
-                                          top: Radius.circular(16),
+                                    // 👁️ Toute la zone visuelle ouvre l'aperçu A4 du modèle.
+                                    child: GestureDetector(
+                                      onTap: () => context.push(
+                                          '/templates/preview',
+                                          extra: template),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: template.backgroundColor,
+                                          borderRadius: const BorderRadius.vertical(
+                                            top: Radius.circular(16),
+                                          ),
                                         ),
-                                      ),
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: template.primaryColor,
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  template.category.toUpperCase(),
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 8,
-                                                    fontWeight: FontWeight.bold,
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: template.primaryColor,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    template.category.toUpperCase(),
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 8,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: isOwned
-                                                      ? RoyalColors.tertiary
-                                                      : goldAccent,
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                                child: Text(
-                                                  isOwned
-                                                      ? 'POSSÉDÉ'
-                                                      : '${template.price.toStringAsFixed(0)} FCFA',
-                                                  style: TextStyle(
-                                                    color: isOwned ? Colors.white : Colors.black,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: isOwned
+                                                        ? RoyalColors.tertiary
+                                                        : goldAccent,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  child: Text(
+                                                    isOwned
+                                                        ? 'POSSÉDÉ'
+                                                        : '${template.price.toStringAsFixed(0)} FCFA',
+                                                    style: TextStyle(
+                                                      color: isOwned ? Colors.white : Colors.black,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
                                                   ),
                                                 ),
+                                              ],
+                                            ),
+                                            const Spacer(),
+                                            Container(
+                                              height: 5,
+                                              decoration: BoxDecoration(
+                                                color: template.primaryColor,
+                                                borderRadius: BorderRadius.circular(2),
                                               ),
-                                            ],
-                                          ),
-                                          const Spacer(),
-                                          Container(
-                                            height: 5,
-                                            decoration: BoxDecoration(
-                                              color: template.primaryColor,
-                                              borderRadius: BorderRadius.circular(2),
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Container(
-                                            height: 4,
-                                            width: 70,
-                                            decoration: BoxDecoration(
-                                              color: template.textColor.withValues(alpha: 0.3),
-                                              borderRadius: BorderRadius.circular(2),
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              height: 4,
+                                              width: 70,
+                                              decoration: BoxDecoration(
+                                                color: template.textColor.withValues(alpha: 0.3),
+                                                borderRadius: BorderRadius.circular(2),
+                                              ),
                                             ),
-                                          ),
-                                          const Spacer(),
-                                        ],
+                                            const Spacer(),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -289,8 +302,8 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                       children: [
                                         Text(
                                           template.name,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: textColor,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
                                           ),
@@ -299,17 +312,43 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                         ),
                                         const SizedBox(height: 2),
                                         Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            const Icon(Icons.star,
-                                                color: Colors.amber, size: 12),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              template.rating > 0
-                                                  ? template.rating.toStringAsFixed(1)
-                                                  : '5.0',
-                                              style: TextStyle(
-                                                color: Colors.white.withValues(alpha: 0.7),
-                                                fontSize: 11,
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.star,
+                                                    color: Colors.amber, size: 12),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  template.rating > 0
+                                                      ? template.rating.toStringAsFixed(1)
+                                                      : '5.0',
+                                                  style: TextStyle(
+                                                    color: subTextColor,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            // 👁️ Redirection vers l'aperçu A4 du modèle.
+                                            GestureDetector(
+                                              onTap: () => context.push(
+                                                  '/templates/preview',
+                                                  extra: template),
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.visibility_rounded,
+                                                      size: 12, color: goldAccent),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                    'Aperçu',
+                                                    style: TextStyle(
+                                                      color: goldAccent,
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -330,7 +369,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                             },
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: isOwned
-                                                  ? RoyalColors.primary
+                                                  ? theme.primaryColor
                                                   : goldAccent,
                                               foregroundColor:
                                                   isOwned ? Colors.white : Colors.black,
@@ -364,3 +403,4 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
     );
   }
 }
+

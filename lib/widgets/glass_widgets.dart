@@ -26,6 +26,7 @@ class GlassScaffold extends StatelessWidget {
     this.startColor,
     this.endColor,
     this.enableBlur = true,
+    FloatingActionButton? floatingActionButton,
   });
 
   @override
@@ -55,9 +56,7 @@ class GlassScaffold extends StatelessWidget {
           top: -80,
           right: -60,
           child: _GlowOrb(
-            color: (isDark
-                    ? const Color(0xFF7C6CF0)
-                    : const Color(0xFF818CF8))
+            color: (isDark ? const Color(0xFF7C6CF0) : const Color(0xFF818CF8))
                 .withValues(alpha: 0.35),
             size: 220,
           ),
@@ -434,81 +433,81 @@ class GlassTextField extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.08)
         : Colors.black.withValues(alpha: 0.04);
 
-      return TextFormField(
-        controller: controller,
-        focusNode: focusNode,
-        enabled: enabled,
-        obscureText: obscureText,
-        maxLines: maxLines,
-        maxLength: maxLength,
-        keyboardType: keyboardType,
-        textCapitalization: textCapitalization,
-        textInputAction: textInputAction,
-        inputFormatters: inputFormatters,
-        validator: validator,
-        onChanged: onChanged,
-        autocorrect: false,
-        // 📏 Hauteur compacte 36-40px + padding aéré
-        style: TextStyle(
-          fontSize: 14,
-          color: isDark ? Colors.white : const Color(0xFF14161C),
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      enabled: enabled,
+      obscureText: obscureText,
+      maxLines: maxLines,
+      maxLength: maxLength,
+      keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      textInputAction: textInputAction,
+      inputFormatters: inputFormatters,
+      validator: validator,
+      onChanged: onChanged,
+      autocorrect: false,
+      // 📏 Hauteur compacte 36-40px + padding aéré
+      style: TextStyle(
+        fontSize: 14,
+        color: isDark ? Colors.white : const Color(0xFF14161C),
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          fontSize: 12,
+          color: isDark ? Colors.grey[400] : Colors.grey[600],
         ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(
-            fontSize: 12,
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
-          ),
-          hintText: hint,
-          hintStyle: TextStyle(
-            color: isDark ? Colors.grey[600] : Colors.grey[400],
-            fontSize: 13,
-          ),
-          prefixIcon: prefixIcon != null
-              ? Icon(prefixIcon,
-                  size: 18, color: scheme.primary.withValues(alpha: 0.7))
-              : null,
-          suffixIcon: suffixIcon != null
-              ? IconButton(
-                  onPressed: onSuffixTap,
-                  icon: Icon(suffixIcon,
-                      size: 18, color: scheme.primary.withValues(alpha: 0.7)),
-                )
-              : null,
-          counterText: maxLength != null ? null : '',
-          filled: true,
-          fillColor: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.white.withValues(alpha: 0.7),
-          // 📏 Hauteur 50-54px : padding vertical adapté
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: maxLines > 1 ? 14 : 12,
-          ),
-          // 🙈 Bordure ultra-fine, presque invisible au repos.
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: borderColor, width: 0.6),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-                color: scheme.primary.withValues(alpha: 0.7), width: 1),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-                color: Colors.red.withValues(alpha: 0.6), width: 0.8),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.red, width: 1),
-          ),
+        hintText: hint,
+        hintStyle: TextStyle(
+          color: isDark ? Colors.grey[600] : Colors.grey[400],
+          fontSize: 13,
         ),
-      );
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon,
+                size: 18, color: scheme.primary.withValues(alpha: 0.7))
+            : null,
+        suffixIcon: suffixIcon != null
+            ? IconButton(
+                onPressed: onSuffixTap,
+                icon: Icon(suffixIcon,
+                    size: 18, color: scheme.primary.withValues(alpha: 0.7)),
+              )
+            : null,
+        counterText: maxLength != null ? null : '',
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.7),
+        // 📏 Hauteur 50-54px : padding vertical adapté
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: maxLines > 1 ? 14 : 12,
+        ),
+        // 🙈 Bordure ultra-fine, presque invisible au repos.
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: borderColor, width: 0.6),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+              color: scheme.primary.withValues(alpha: 0.7), width: 1),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide:
+              BorderSide(color: Colors.red.withValues(alpha: 0.6), width: 0.8),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.red, width: 1),
+        ),
+      ),
+    );
   }
 }

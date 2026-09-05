@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/template_custom_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
@@ -21,10 +22,6 @@ class MyTemplatesScreen extends StatefulWidget {
 }
 
 class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
-  static const Color goldAccent = Color(0xFFC9A227);
-  static const Color bgSurface = Color(0xFF1E1A24);
-  static const Color bgBackground = Color(0xFF120F17);
-
   final TemplateService _templateService = TemplateService();
 
   List<InvoiceTemplate> _myTemplates = [];
@@ -88,34 +85,39 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: bgBackground,
+    final theme = context.watch<ThemeProvider>();
+    final isDark = theme.isDarkMode;
+    final goldAccent = theme.accentGold;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
+    return GlassScaffold(
       appBar: AppBar(
-        backgroundColor: bgSurface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Mes Modèles de Facture',
           style: TextStyle(
-            color: Colors.white,
+            color: textColor,
             fontWeight: FontWeight.bold,
             fontFamily: 'Manrope',
           ),
         ),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
             tooltip: 'Ajouter depuis la Boutique',
-            icon: const Icon(Icons.add_shopping_cart, color: goldAccent),
+            icon: Icon(Icons.add_shopping_cart, color: goldAccent),
             onPressed: () => context.push('/templates'),
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: goldAccent),
             )
           : SingleChildScrollView(
@@ -127,7 +129,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                     Text(
                       'Modèle Actuellement Utilisé',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: textColor,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -167,8 +169,8 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                   children: [
                                     Text(
                                       _activeTemplate!.name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: textColor,
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -182,7 +184,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(color: goldAccent),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'ACTIF',
                                         style: TextStyle(
                                           color: goldAccent,
@@ -197,7 +199,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                 Text(
                                   _activeTemplate!.description,
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.7),
+                                    color: subTextColor,
                                     fontSize: 12,
                                   ),
                                   maxLines: 2,
@@ -213,7 +215,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                       icon: const Icon(Icons.tune, size: 16),
                                       label: const Text('Personnaliser (Drag & Drop)'),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: RoyalColors.primary,
+                                        backgroundColor: theme.primaryColor,
                                         foregroundColor: Colors.white,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(10),
@@ -237,15 +239,15 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                       Text(
                         'Vos Modèles Enregistrés (${_myTemplates.length})',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: textColor,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       TextButton.icon(
                         onPressed: () => context.push('/templates'),
-                        icon: const Icon(Icons.add, color: goldAccent, size: 18),
-                        label: const Text(
+                        icon: Icon(Icons.add, color: goldAccent, size: 18),
+                        label: Text(
                           'Boutique',
                           style: TextStyle(color: goldAccent),
                         ),
@@ -281,8 +283,8 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                     children: [
                                       Text(
                                         t.name,
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: textColor,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 15,
                                         ),
@@ -290,7 +292,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                       Text(
                                         t.description,
                                         style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.6),
+                                          color: subTextColor,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -298,15 +300,15 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                   ),
                                 ),
                                 if (isActive)
-                                  const Icon(Icons.check_circle,
+                                  Icon(Icons.check_circle,
                                       color: goldAccent, size: 24)
                                 else
                                   OutlinedButton(
                                     onPressed: () => _setActiveTemplate(t),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
+                                      foregroundColor: textColor,
                                       side: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.3)),
+                                          color: theme.dividerColor),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -316,29 +318,28 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                   ),
                               ],
                             ),
-                            const Divider(color: Colors.white12, height: 24),
+                            Divider(color: theme.dividerColor, height: 24),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 TextButton.icon(
                                   onPressed: () => _resetTemplateCustom(t),
-                                  icon: const Icon(Icons.refresh,
-                                      size: 16, color: Colors.white54),
-                                  label: const Text('Réinitialiser',
+                                  icon: Icon(Icons.refresh,
+                                      size: 16, color: subTextColor),
+                                  label: Text('Réinitialiser',
                                       style: TextStyle(
-                                          color: Colors.white54, fontSize: 12)),
+                                          color: subTextColor, fontSize: 12)),
                                 ),
                                 const SizedBox(width: 8),
                                 OutlinedButton.icon(
                                   onPressed: () =>
                                       context.push('/templates/preview', extra: t),
-                                  icon: const Icon(Icons.visibility, size: 16),
-                                  label: const Text('Aperçu',
-                                      style: TextStyle(fontSize: 12)),
+                                  icon: Icon(Icons.visibility, size: 16, color: textColor),
+                                  label: Text('Aperçu',
+                                      style: TextStyle(fontSize: 12, color: textColor)),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
                                     side: BorderSide(
-                                        color: Colors.white.withValues(alpha: 0.2)),
+                                        color: theme.dividerColor),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -349,7 +350,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
                                   label: const Text('Éditer',
                                       style: TextStyle(fontSize: 12)),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: RoyalColors.primary,
+                                    backgroundColor: theme.primaryColor,
                                     foregroundColor: Colors.white,
                                   ),
                                 ),
@@ -369,3 +370,4 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
     );
   }
 }
+

@@ -13,6 +13,7 @@ import 'services/theme_service.dart';
 import 'services/security_service.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
+import 'services/push_notification_service.dart';
 import 'services/reminder_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/stock_service.dart';
@@ -136,6 +137,18 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
     await _writeLog('✅ Firebase OK');
   } catch (e) {
     await _writeLog('⚠️ Firebase: $e');
+  }
+
+  // ===== PUSH (FCM) — non-bloquant : permissions, token, handlers =====
+  // Le token est enregistré/purgé automatiquement selon l'authentification
+  // (authStateChanges) par PushNotificationService.
+  bootstrapContext.onStatusChange('Notifications push...');
+  await _writeLog('🔔 Push (FCM)...');
+  try {
+    PushNotificationService.instance.init().ignore();
+    await _writeLog('✅ Push lancé (arrière-plan)');
+  } catch (e) {
+    await _writeLog('⚠️ Push: $e');
   }
 
   // ===== FIRESTORE (NON BLOQUANT) =====
