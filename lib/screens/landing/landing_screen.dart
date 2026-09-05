@@ -11,8 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../providers/theme_provider.dart';
+import '../../services/config_service.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/animated_background.dart';
 
@@ -209,6 +211,10 @@ class _LandingScreenState extends State<LandingScreen>
                         .animate()
                         .fadeIn(delay: 100.ms)
                         .slideY(begin: 0.3, end: 0),
+                    const SizedBox(height: 12),
+                    // 🔗 Lien de téléchargement de l'application
+                    // (route /download du serveur → APK/boutique courants).
+                    _buildDownloadButton(theme),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -733,6 +739,70 @@ class _LandingScreenState extends State<LandingScreen>
         ],
       ),
     );
+  }
+
+  /// 🔗 Bouton « Télécharger l'application » — ouvre le lien public de
+  /// distribution : par défaut la route `/download` du serveur, qui
+  /// redirige vers l'APK/boutique courants (modifiable sur Vercel sans
+  /// republier l'application).
+  Widget _buildDownloadButton(ThemeProvider theme) {
+    return GestureDetector(
+      onTap: _openDownloadLink,
+      child: Container(
+        height: 54,
+        width: double.infinity,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: theme.isDarkMode
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.white,
+          border: Border.all(
+            color: const Color(0xFF7C3AED).withValues(alpha: 0.45),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.download_for_offline_rounded,
+              size: 22,
+              color: Color(0xFF7C3AED),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Télécharger l\'application',
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: theme.textColor,
+              ),
+            ),
+          ],
+        ),
+      )
+          .animate()
+          .fadeIn(delay: 180.ms)
+          .slideY(begin: 0.3, end: 0),
+    );
+  }
+
+  /// Ouvre le lien de téléchargement (navigateur / store externe).
+  Future<void> _openDownloadLink() async {
+    final raw = ConfigService.appDownloadUrl.trim();
+    final uri = raw.isEmpty ? null : Uri.tryParse(raw);
+    if (uri == null) return;
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        debugPrint('⚠️ Ouverture du lien de téléchargement impossible : $raw');
+      }
+    } catch (e) {
+      debugPrint('⚠️ launchUrl(download): $e');
+    }
   }
 
   Widget _buildDot(int index, ThemeProvider theme) {

@@ -1238,35 +1238,50 @@ app.post(
         if (inv.status !== 'pending') {
           return res.status(400).json({ error: 'Invitation déjà traitée' });
         }
-        await invSnap.ref.update({
+        // ⚠️ SDK Node : arrayUnion/arrayRemove sont VARIADIQUES — passer un
+        // tableau créerait un tableau IMBRIQUÉ, refusé par Firestore
+        // (« Nested arrays are not supported ») → c'était le bug de
+        // l'acceptation d'invitation.
+        const invTeamId = String(inv.teamId || '');
+        const teamSnap = invTeamId
+          ? await db.collection('teams').doc(invTeamId).get()
+          : null;
+
+        // 🔒 Écriture ATOMIQUE : statut de l'invitation + ajout du membre
+        // dans le MÊME batch — impossible de finir avec une invitation
+        // « accepted » mais un membre non ajouté (état incohérent).
+        const batch = db.batch();
+        batch.update(invSnap.ref, {
           status: action === 'accept' ? 'accepted' : 'declined',
           respondedAt: serverTimestamp(),
         });
-
-        if (action === 'accept') {
-          const teamSnap = await db.collection('teams').doc(inv.teamId).get();
-          if (teamSnap.exists && teamSnap.data() && teamSnap.data().isActive !== false) {
-            await teamSnap.ref.update({
-              memberIds: FieldValue.arrayUnion([requestedBy]),
-              adminIds:
-                inv.role === 'admin'
-                  ? FieldValue.arrayUnion([requestedBy])
-                  : FieldValue.arrayRemove([requestedBy]),
-              updatedAt: serverTimestamp(),
-            });
-          }
+        if (
+          action === 'accept' &&
+          teamSnap &&
+          teamSnap.exists &&
+          teamSnap.data() &&
+          teamSnap.data().isActive !== false
+        ) {
+          batch.update(teamSnap.ref, {
+            memberIds: FieldValue.arrayUnion(requestedBy),
+            adminIds:
+              inv.role === 'admin'
+                ? FieldValue.arrayUnion(requestedBy)
+                : FieldValue.arrayRemove(requestedBy),
+            updatedAt: serverTimestamp(),
+          });
         }
+        await batch.commit();
 
         // 📢 Message (notification) au propriétaire.
         const inviteeData =
           (await db.collection('users').doc(requestedBy).get()).data() || {};
         const inviteeName =
           inviteeData.displayName || inviteeData.name || 'Un membre';
-        const teamDoc = await db.collection('teams').doc(inv.teamId).get();
-        const teamData = teamDoc.exists ? teamDoc.data() || {} : {};
+        const teamData =
+          teamSnap && teamSnap.exists ? teamSnap.data() || {} : {};
         const ownerId = teamData.ownerId || inv.inviterUid;
         const teamDisplay = inv.teamName || 'votre équipe';
-
         await createNotification({
           userId: ownerId,
           createdBy: requestedBy,
@@ -1374,8 +1389,8 @@ app.post(
             .json({ error: 'Le propriétaire ne peut pas être retiré' });
         }
         await teamRef.update({
-          memberIds: FieldValue.arrayRemove([userId]),
-          adminIds: FieldValue.arrayRemove([userId]),
+          memberIds: FieldValue.arrayRemove(userId),
+          adminIds: FieldValue.arrayRemove(userId),
           updatedAt: serverTimestamp(),
         });
         // Révocation : désactive les partages qui mentionnaient ce membre et
@@ -1402,7 +1417,7 @@ app.post(
               await db
                 .collection(coll)
                 .doc(d.invoiceId)
-                .update({ sharedWithUsers: FieldValue.arrayRemove([userId]) });
+                .update({ sharedWithUsers: FieldValue.arrayRemove(userId) });
             } catch (_) {
               /* doc introuvable / déjà retiré */
             }
@@ -1433,8 +1448,8 @@ app.post(
         await teamRef.update({
           adminIds:
             action === 'promote'
-              ? FieldValue.arrayUnion([userId])
-              : FieldValue.arrayRemove([userId]),
+              ? FieldValue.arrayUnion(userId)
+              : FieldValue.arrayRemove(userId),
           updatedAt: serverTimestamp(),
         });
         logger.info('team promote/demote', {

@@ -387,7 +387,7 @@ class EnkapService {
       await _client
           .post(
             Uri.parse('$apiBase/enkap/register'),
-            headers: {'Content-Type': 'application/json'},
+            headers: ConfigService.serverHeaders(),
             body: json.encode({
               'reference': reference,
               'user_id': userId,

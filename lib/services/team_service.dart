@@ -129,7 +129,7 @@ class TeamService {
       resp = await http
           .post(
             Uri.parse('$apiBase/team/manage-member'),
-            headers: {'Content-Type': 'application/json'},
+            headers: ConfigService.serverHeaders(),
             body: jsonEncode({
               'action': action,
               'teamId': teamId,

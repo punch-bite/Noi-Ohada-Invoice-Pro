@@ -183,6 +183,31 @@ class ConfigService {
   // 🔧 `_env` : priorité au --dart-define (CodeMagic) puis .env puis défaut.
   static String get apiBaseUrl => _env('API_BASE_URL', def: _defaultApiBaseUrl);
   static int get apiTimeout => _getInt('API_TIMEOUT', 30);
+
+  /// 🔐 Clé secrète des endpoints serveur (Vercel) — injectée au build via
+  /// `--dart-define=API_SECRET_KEY=...` (elle ne vit jamais en clair dans
+  /// l'APK). Envoyée dans l'entête `x-api-key` de chaque appel API.
+  static String get apiSecretKey => _env('API_SECRET_KEY');
+
+  /// 🔗 Lien public de téléchargement de l'application — pointe par défaut
+  /// sur la route `/download` du serveur, qui redirige vers l'APK/boutique
+  /// courants (variable APP_DOWNLOAD_URL sur Vercel : modifiable SANS
+  /// republier l'application).
+  static String get appDownloadUrl =>
+      _env('APP_DOWNLOAD_URL', def: '$_defaultApiBaseUrl/download');
+
+  /// Entêtes standards des appels API serveur (Vercel) : JSON + clé d'API.
+  /// Utilisez CETTE méthode partout où vous appelez l'API — le serveur
+  /// renvoie 401 sans `x-api-key` valide quand API_SECRET_KEY est définie.
+  static Map<String, String> serverHeaders() {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    final key = apiSecretKey.trim();
+    if (key.isNotEmpty) headers['x-api-key'] = key;
+    return headers;
+  }
   static String get supportEmail => _get('SUPPORT_EMAIL');
   static String get supportPhone => _get('SUPPORT_PHONE');
 

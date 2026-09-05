@@ -668,7 +668,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Stack(children: [
-                  // Image / motif de fond
+                  // Image / motif de fond — 📐 L'IMAGE personnalisée est
+                  // elle-même contrainte au ratio A4 par TemplateBackgroundLayer
+                  // (AspectRatio 794/1123) : elle reste donc TOUJOURS
+                  // proportionnelle au papier, quel que soit le contenu.
                   TemplateBackgroundLayer(
                     presetId: _background.presetId,
                     imageBytes: decodeBackgroundImage(_background.fileData),
