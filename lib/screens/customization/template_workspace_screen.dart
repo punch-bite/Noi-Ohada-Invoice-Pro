@@ -10,6 +10,7 @@ import '../../models/invoice_layout.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/template_custom_service.dart';
@@ -28,13 +29,16 @@ class TemplateWorkspaceScreen extends StatefulWidget {
 
 class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     with TickerProviderStateMixin {
-  static const Color _primary = Color(0xFF300546);
-  static const Color _bgSurface = Color(0xFFFFF7FC);
-  static const Color _surfaceVariant = Color(0xFFE8E0E6);
-  static const Color _onSurface = Color(0xFF1E1A1F);
-  static const Color _onSurfaceVariant = Color(0xFF4C444E);
-  static const Color _tertiaryContainer = Color(0xFFBAAB6D);
-  static const Color _outline = Color(0xFF7D747F);
+  // ── 🎨 THÈME DE L'APPLICATION — l'atelier suit le mode clair/sombre ──
+  // (anciennement des couleurs figées : l'atelier ne suivait pas le thème).
+  ThemeProvider get _tp => Provider.of<ThemeProvider>(context, listen: false);
+  Color get _primary => _tp.primaryColor;
+  Color get _bgSurface => _tp.backgroundColor;
+  Color get _surfaceVariant => _tp.cardColor;
+  Color get _onSurface => _tp.textColor;
+  Color get _onSurfaceVariant => _tp.subTextColor;
+  Color get _tertiaryContainer => _tp.accentGold;
+  Color get _outline => _tp.dividerColor;
 
   final DatabaseService _db = DatabaseService();
   Company? _company;
@@ -358,7 +362,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                         'Aperçu rapide — ${_workingTemplate.name}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -375,7 +379,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                           color: _tertiaryContainer.withValues(alpha: 0.6),
                         ),
                       ),
-                      child: const Text(
+                      child: Text(
                         'DONNÉES D\'EXEMPLE',
                         style: TextStyle(
                           color: _tertiaryContainer,
@@ -687,10 +691,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: _onSurface),
+          icon: Icon(Icons.arrow_back, color: _onSurface),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('Atelier Personnalisation',
+        title: Text('Atelier Personnalisation',
             style: TextStyle(
                 color: _onSurface, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
@@ -707,11 +711,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   shape: BoxShape.circle,
                   color: _primary.withValues(alpha: 0.08),
                 ),
-                child: const Icon(Icons.lock_outline_rounded,
+                child: Icon(Icons.lock_outline_rounded,
                     size: 40, color: _primary),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Personnalisation réservée',
                 style: TextStyle(
                   fontSize: 18,
@@ -720,7 +724,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 "La personnalisation de ce modèle de facture est réservée à "
                 "l'administrateur et au propriétaire du modèle. Acquérez-le "
                 "dans la boutique pour le personnaliser.",
@@ -757,7 +761,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     // 👮 Personnalisation réservée à l'administrateur et au propriétaire du
     // modèle : écran bloquant (aucune modification ni sauvegarde possible).
     if (!_accessChecked) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: _bgSurface,
         body: Center(child: CircularProgressIndicator()),
       );
@@ -774,17 +778,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.black12,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: _onSurface),
+          icon: Icon(Icons.arrow_back, color: _onSurface),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Atelier Personnalisation',
+        title: Text('Atelier Personnalisation',
             style: TextStyle(color: _onSurface, fontWeight: FontWeight.bold, fontSize: 18)),
         actions: [
           // 👁️ Aperçu rapide : rendu A4 fidèle (Stitch) de la customisation
           // EN COURS, sans quitter l'atelier.
           IconButton(
             tooltip: 'Aperçu rapide',
-            icon: const Icon(Icons.visibility_outlined, color: _onSurface),
+            icon: Icon(Icons.visibility_outlined, color: _onSurface),
             onPressed: _openQuickPreview,
           ),
           ElevatedButton.icon(
@@ -804,7 +808,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: _primary))
+          ? Center(child: CircularProgressIndicator(color: _primary))
           : Column(children: [
               Expanded(child: _buildInvoicePreviewArea()),
               _buildBottomControlPanel(),
@@ -892,7 +896,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.swap_horiz, color: Colors.white70, size: 12),
                   SizedBox(width: 4),
                   Text(
@@ -1042,7 +1046,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.image_not_supported_outlined, color: Colors.white70, size: 16),
                 SizedBox(height: 2),
                 Text('Logo masqué',
@@ -1188,7 +1192,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         }
         // Section entièrement masquée : zone de dépôt pendant un drag.
         if (cells.isEmpty && _draggingKey != null) {
-          cells.add(const Expanded(
+          cells.add(Expanded(
             child: SizedBox(
               height: 40,
               child: Center(
@@ -1222,7 +1226,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   padding: const EdgeInsets.only(left: 2, bottom: 2),
                   child: Text(
                       'Section ${s + 1} · ${_sectionsLayout[s].length}/$_maxPerSection colonnes',
-                      style: const TextStyle(fontSize: 7.5, color: _outline)),
+                      style: TextStyle(fontSize: 7.5, color: _outline)),
                 ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1265,7 +1269,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     ? _tertiaryContainer
                     : _surfaceVariant.withValues(alpha: 0.6)),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: const [
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.add, size: 14, color: _outline),
             SizedBox(width: 4),
             Text('Nouvelle section (pleine largeur)',
@@ -1312,7 +1316,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     color: isOver ? _tertiaryContainer : _outline),
                 const SizedBox(height: 2),
                 Text(isOver ? 'Placer ici' : 'Vide',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 7, color: _outline, letterSpacing: 0.3)),
               ]),
             ),
@@ -1332,7 +1336,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       border: Border.all(
                           color: _outline.withValues(alpha: 0.4), width: 0.8),
                     ),
-                    child: const Icon(Icons.close, size: 9, color: _outline),
+                    child: Icon(Icons.close, size: 9, color: _outline),
                   ),
                 ),
               ),
@@ -1358,7 +1362,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           child: CustomPaint(
             painter: _DashedRectPainter(
                 color: _outline.withValues(alpha: 0.35), radius: 6),
-            child: const Center(
+            child: Center(
                 child: Icon(Icons.add, size: 13, color: _outline)),
           ),
         ),
@@ -1497,7 +1501,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     color: _primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Icon(Icons.drag_indicator, size: 14, color: _primary),
+                  child: Icon(Icons.drag_indicator, size: 14, color: _primary),
                 ),
               ),
             ),
@@ -1839,7 +1843,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(Icons.qr_code_2, size: 20, color: Colors.black87),
             SizedBox(width: 4),
             Text('PAYQR', style: TextStyle(color: Colors.black87, fontSize: 7, fontWeight: FontWeight.bold)),
@@ -1872,7 +1876,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
               Text('Payer via Mobile Money',
                   style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: _primary)),
               Text('Scanner le QR Code sécurisé',
@@ -2058,7 +2062,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       decoration: BoxDecoration(
                           color: _tertiaryContainer,
                           borderRadius: BorderRadius.circular(3)),
-                      child: const Text('PRO',
+                      child: Text('PRO',
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 7,
@@ -2169,11 +2173,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  const Icon(Icons.tune, color: _primary, size: 20),
+                  Icon(Icons.tune, color: _primary, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(_blockTitle(key),
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 15.5)),
                   ),
                 ]),
@@ -2182,7 +2186,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: const Text('Afficher ce bloc',
+                    title: Text('Afficher ce bloc',
                         style: TextStyle(fontSize: 13.5)),
                     value: _blockVisibility[key] ?? true,
                     activeThumbColor: _primary,
@@ -2368,7 +2372,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: const Text("Afficher le Logo"),
+              title: Text("Afficher le Logo"),
               value: _workingTemplate.showLogo,
               activeThumbColor: _primary,
               onChanged: (val) {
@@ -2418,8 +2422,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   }
                 }
               },
-              icon: const Icon(Icons.upload_file, color: _primary),
-              label: const Text('Téléverser un logo (PNG / JPEG)', style: TextStyle(color: _primary)),
+              icon: Icon(Icons.upload_file, color: _primary),
+              label: Text('Téléverser un logo (PNG / JPEG)', style: TextStyle(color: _primary)),
             ),
             const SizedBox(height: 16),
           ]),
@@ -2443,7 +2447,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               const Text('Taille de Police Globale',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               Text('${_customFontSize.toInt()} pt',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: _primary, fontWeight: FontWeight.bold, fontSize: 16)),
             ]),
             const SizedBox(height: 6),
@@ -2620,7 +2624,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: const Text('Afficher le Tampon d\'état'),
+              title: Text('Afficher le Tampon d\'état'),
               value: _showPaidStamp,
               activeThumbColor: _primary,
               onChanged: (val) {
@@ -2652,7 +2656,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               ),
             const Divider(height: 24),
             SwitchListTile(
-              title: const Text('Afficher la Ligne de Signature'),
+              title: Text('Afficher la Ligne de Signature'),
               value: _showSignatureLine,
               activeThumbColor: _primary,
               onChanged: (val) {
@@ -2691,8 +2695,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             SwitchListTile(
-              title: const Text('Détails des Taxes & TVA 18% SYSCOHADA'),
-              subtitle: const Text('Affiche le calcul explicite de la TVA et du Hors-Taxe'),
+              title: Text('Détails des Taxes & TVA 18% SYSCOHADA'),
+              subtitle: Text('Affiche le calcul explicite de la TVA et du Hors-Taxe'),
               value: _workingTemplate.showTaxDetails, activeThumbColor: _primary,
               onChanged: (val) {
                 setSS(() {});
@@ -2711,8 +2715,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               },
             ),
             SwitchListTile(
-              title: const Text('Conditions & Délais de Paiement'),
-              subtitle: const Text('Affiche les clauses de règlement'),
+              title: Text('Conditions & Délais de Paiement'),
+              subtitle: Text('Affiche les clauses de règlement'),
               value: _workingTemplate.showPaymentTerms, activeThumbColor: _primary,
               onChanged: (val) {
                 setSS(() {});
@@ -2768,7 +2772,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 14),
             SwitchListTile(
-              title: const Text('Afficher le QR Code PayQR'),
+              title: Text('Afficher le QR Code PayQR'),
               value: _workingTemplate.showPaymentQR, activeThumbColor: _primary,
               onChanged: (val) {
                 setSS(() {});
