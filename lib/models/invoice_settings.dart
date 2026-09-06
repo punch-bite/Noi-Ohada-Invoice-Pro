@@ -95,7 +95,7 @@ class InvoiceSettings {
       showClientInfo: map['showClientInfo'] ?? true,
       showPaymentTerms: map['showPaymentTerms'] ?? true,
       showTaxDetails: map['showTaxDetails'] ?? true,
-      watermarkText: map['watermarkText'] ?? 'OHADA Invoice Pro',
+      watermarkText: map['watermarkText'] ?? 'NOI OHADA Invoice Pro',
     );
   }
 

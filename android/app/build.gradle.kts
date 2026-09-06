@@ -61,6 +61,9 @@ val hasReleaseKeystore =
 android {
     namespace = "com.noi.noi_ohada_invoice_pro"
     compileSdk = 36
+    // Le plugin `jni` (via path_provider) exige ce NDK (cf. build_output.log).
+    // C'est aussi le NDK par défaut de Flutter 3.41.9 (FlutterExtension.kt).
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.noi.noi_ohada_invoice_pro"
