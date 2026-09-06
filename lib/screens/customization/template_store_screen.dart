@@ -11,6 +11,7 @@ import '../../providers/theme_provider.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/template_thumbnail.dart';
 
 /// 🏪 Boutique de modèles de facture (Modèles officiels, OHADA Pro & Créations Admin).
 class TemplateStoreScreen extends StatefulWidget {
@@ -219,78 +220,82 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                                       onTap: () => context.push(
                                           '/templates/preview',
                                           extra: template),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: template.backgroundColor,
-                                          borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(16),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          // 🖼️ Image du modèle : visuel uploadé (admin),
+                                          // sinon mini-facture générée depuis son design.
+                                          ClipRRect(
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                              top: Radius.circular(16),
+                                            ),
+                                            child: TemplateThumbnail(
+                                                template: template),
                                           ),
-                                        ),
-                                        padding: const EdgeInsets.all(12),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          Positioned(
+                                            top: 8,
+                                            left: 8,
+                                            right: 8,
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                      horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: template.primaryColor,
-                                                    borderRadius: BorderRadius.circular(4),
+                                                    color:
+                                                        template.primaryColor,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
                                                   ),
                                                   child: Text(
-                                                    template.category.toUpperCase(),
+                                                    template.category
+                                                        .toUpperCase(),
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 8,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                      horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
                                                   decoration: BoxDecoration(
                                                     color: isOwned
                                                         ? RoyalColors.tertiary
                                                         : goldAccent,
-                                                    borderRadius: BorderRadius.circular(10),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            10),
                                                   ),
                                                   child: Text(
                                                     isOwned
                                                         ? 'POSSÉDÉ'
                                                         : '${template.price.toStringAsFixed(0)} FCFA',
                                                     style: TextStyle(
-                                                      color: isOwned ? Colors.white : Colors.black,
+                                                      color: isOwned
+                                                          ? Colors.white
+                                                          : Colors.black,
                                                       fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
                                               ],
                                             ),
-                                            const Spacer(),
-                                            Container(
-                                              height: 5,
-                                              decoration: BoxDecoration(
-                                                color: template.primaryColor,
-                                                borderRadius: BorderRadius.circular(2),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Container(
-                                              height: 4,
-                                              width: 70,
-                                              decoration: BoxDecoration(
-                                                color: template.textColor.withValues(alpha: 0.3),
-                                                borderRadius: BorderRadius.circular(2),
-                                              ),
-                                            ),
-                                            const Spacer(),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
