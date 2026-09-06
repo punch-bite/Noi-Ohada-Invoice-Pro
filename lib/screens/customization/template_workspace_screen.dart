@@ -15,7 +15,6 @@ import '../../services/database_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../models/invoice_settings.dart';
-import '../../widgets/stitch_a4_invoice_preview.dart';
 import '../../widgets/template_background_palette.dart';
 
 /// 🎨 Écran d'atelier visuel de personnalisation de facture — Design Stitch Refined.
@@ -400,24 +399,44 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
-                      child: StitchA4InvoicePreview(
-                        data: StitchPreviewData.sample(),
-                        accentColor: effective.primaryColor,
-                        pageColor: effective.backgroundColor,
-                        showLogo: effective.showLogo,
-                        showBorder: effective.showBorder,
-                        showTaxDetails: effective.showTaxDetails,
-                        showPaymentTerms: effective.showPaymentTerms,
-                        showPaymentQR: effective.showPaymentQR,
-                        fontFamily: effective.fontFamily,
-                        fontScale: effective.fontSize / 12,
-                        layoutConfig: _layoutConfig,
-                        backgroundSettings: _background,
-                        backgroundImage:
-                            decodeBackgroundImage(_background.fileData),
-                        showPaidStamp: _showPaidStamp,
-                        watermarkText: _invoiceSettings.watermarkText,
-                        showWatermark: _invoiceSettings.showWatermark,
+                      child: AspectRatio(
+                        aspectRatio: 794 / 1123,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(6),
+                            border: effective.showBorder
+                                ? Border.all(
+                                    color: effective.primaryColor
+                                        .withValues(alpha: 0.35),
+                                    width: 1.5)
+                                : null,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8)),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(children: [
+                            TemplateBackgroundLayer(
+                              presetId: _background.presetId,
+                              imageBytes:
+                                  decodeBackgroundImage(_background.fileData),
+                              opacity: _background.opacity,
+                              blur: _background.blur,
+                              fit: _background.fit,
+                            ),
+                            Column(children: [
+                              _buildCleanInvoiceHeader(),
+                              Expanded(
+                                  child: SingleChildScrollView(
+                                      child: _buildCleanInvoiceBody())),
+                            ]),
+                            if (_showPaidStamp) _buildPaidStamp(),
+                          ]),
+                        ),
                       ),
                     ),
                   ),
@@ -922,6 +941,33 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  /// En-tête PROPRE (aperçu rapide) : bandeau société coloré avec les
+  /// éléments d'en-tête (logo, info entreprise, titre) dans l'ordre choisi,
+  /// sans les poignées de glisser redimensionnement ni la bannière.
+  Widget _buildCleanInvoiceHeader() {
+    final headerColor = _workingTemplate.primaryColor;
+    return Container(
+      color: headerColor,
+      padding: const EdgeInsets.all(12),
+      child: Stack(children: [
+        Positioned.fill(child: CustomPaint(painter: _DotPatternPainter())),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            for (final key in _headerElements)
+              Expanded(
+                flex: key == 'company_info' ? 2 : 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _buildHeaderElementContent(key),
+                ),
+              ),
+          ],
+        ),
+      ]),
+    );
+  }
+
   Widget _buildDraggableHeaderElement(String key) {
     final isDragging = _draggingHeaderKey == key;
     final isDragOver = _dragOverHeaderKey == key;
@@ -1158,6 +1204,38 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           for (var s = 0; s < _sectionsLayout.length; s++) _buildSectionRow(s),
           if (_draggingKey != null) _buildNewSectionDropZone(),
         ],
+      ),
+    );
+  }
+
+  /// APERÇU PROPRE (rapide plein écran) : même contenu que le canvas
+  /// d'édition, mais SANS les affordances de drag & drop (manettes,
+  /// bordures, boutons +, zones vides). Reflète strictement l'ordre des
+  /// sections et la visibilité des blocs définis dans l'atelier.
+  Widget _buildCleanInvoiceBody() {
+    final cells = <Widget>[];
+    for (final section in _sectionsLayout) {
+      final inRow = <Widget>[];
+      for (final key in section) {
+        if (key == _emptyColumnKey) continue;
+        if (!_isBlockVisible(key)) continue;
+        final block =
+            _invoiceBlocks.firstWhere((b) => b.key == key, orElse: () => _invoiceBlocks.first);
+        inRow.add(Expanded(child: block.builder(_alignOf(key))));
+      }
+      if (inRow.isNotEmpty) {
+        cells.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: inRow),
+        ));
+      }
+    }
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: cells,
       ),
     );
   }

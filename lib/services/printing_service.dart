@@ -188,6 +188,27 @@ class PrintingService {
     //   • aucune personnalisation : layout fixe historique.
     final blockConfig = _blockLayoutFromCustom(positions);
 
+    // 🧩 Rendu par blocs métier (format atelier) : si l'utilisateur a une
+    // configuration « blocks_sections » (ordre des sections) sauvegardée,
+    // on la privilégie sur les anciens formats pour que l'APERÇU et le PDF
+    // respectent exactement l'ordre et la visibilité définis dans l'atelier.
+    List<List<String>>? workspaceSections;
+    Map<String, bool>? workspaceVisibility;
+    final wsSections = positions['blocks_sections'];
+    if (wsSections is List && wsSections.isNotEmpty) {
+      workspaceSections = [
+        for (final s in wsSections)
+          if (s is List) List<String>.from(s.whereType<String>()) else <String>[],
+      ];
+      final wsVis = positions['block_visibility'];
+      if (wsVis is Map) {
+        workspaceVisibility = <String, bool>{};
+        wsVis.forEach((k, v) {
+          if (v is bool) workspaceVisibility![k.toString()] = v;
+        });
+      }
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -201,6 +222,22 @@ class PrintingService {
             ? const pw.EdgeInsets.all(32)
             : pw.EdgeInsets.zero,
         build: (pw.Context context) {
+          // 1️⃣ Priorité : rendu par blocs métier (atelier) — ordre + visibilité.
+          if (workspaceSections != null) {
+            return [
+              _buildWorkspaceBlocksPdf(
+                sections: workspaceSections,
+                visibility: workspaceVisibility ?? const <String, bool>{},
+                invoice: invoice,
+                client: client,
+                company: company,
+                template: effectiveTemplate,
+                mapping: mapping,
+                customPositions: positions,
+                background: background,
+              ),
+            ];
+          }
           if (blockConfig != null) {
             return [
               _buildBlockLayoutPdf(
@@ -437,6 +474,259 @@ class PrintingService {
     ];
 
     return pw.Stack(children: children);
+  }
+
+  // ============================================================
+  //  🧩 RENDU PAR BLOCS MÉTIER (workspace drag & drop)
+  //  Compose l'en-tête société PUIS les sections de blocs dans leur
+  //  ordre tel que défini dans l'atelier, en respectant la visibilité.
+  //  Utilisé quand `blocks_sections` est présent dans la personnalisation.
+  // ============================================================
+  static const Map<String, List<LayoutElement>> _workspaceBlockElements = {
+    'billing_info': [
+      LayoutElement.clientName,
+      LayoutElement.clientAddress,
+      LayoutElement.clientPhone,
+      LayoutElement.clientEmail,
+    ],
+    'items_table': [LayoutElement.itemsTable],
+    'totals': [
+      LayoutElement.subtotal,
+      LayoutElement.taxAmount,
+      LayoutElement.discount,
+      LayoutElement.totalAmount,
+    ],
+    'legal_mentions': [LayoutElement.legalMention],
+    'signature_block': [LayoutElement.signature],
+    'qr_block': [LayoutElement.qrCode],
+  };
+
+  static const String _emptySpaceMarker = 'empty_column';
+
+  /// En-tête société (logo + raison sociale + coordonnées) — toujours rendu
+  /// en tête du flux, indépendamment de l'ordre des blocs du corps.
+  static pw.Widget _buildCompanyHeaderPdf(
+    Invoice invoice,
+    Company company,
+    InvoiceTemplate template,
+  ) {
+    final primary = _getPdfColor(template.primaryColor);
+    final text = _getPdfColor(template.textColor);
+    final sub = _withOpacity(text, 0.6);
+
+    pw.Widget? logo;
+    if (template.showLogo && company.logoPath.isNotEmpty) {
+      try {
+        final bytes = _logoBytesFromPath(company.logoPath);
+        if (bytes != null) {
+          logo = pw.Image(
+            pw.MemoryImage(bytes),
+            width: 80,
+            height: 80,
+            fit: pw.BoxFit.contain,
+          );
+        }
+      } catch (_) {
+        logo = null;
+      }
+    }
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        if (logo != null) ...[
+          logo,
+          pw.SizedBox(width: 12),
+        ],
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                company.name,
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+              if (company.address.isNotEmpty)
+                pw.Text('Adresse: ${company.address}',
+                    style: pw.TextStyle(fontSize: 10, color: sub)),
+              if (company.phone.isNotEmpty)
+                pw.Text('Tél: ${company.phone}',
+                    style: pw.TextStyle(fontSize: 10, color: sub)),
+              if (company.email.isNotEmpty)
+                pw.Text('Email: ${company.email}',
+                    style: pw.TextStyle(fontSize: 10, color: sub)),
+              if (company.taxId.isNotEmpty)
+                pw.Text('NUI: ${company.taxId}',
+                    style: pw.TextStyle(fontSize: 10, color: sub)),
+              if (company.rccm.isNotEmpty)
+                pw.Text('RCCM: ${company.rccm}',
+                    style: pw.TextStyle(fontSize: 10, color: sub)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Rendu d'un bloc spécifique du corps dans l'ordre de l'atelier.
+  static pw.Widget? _workspaceBlockPdf(
+    String key,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    required Map<String, String> mapping,
+    required Map<String, dynamic> customPositions,
+    required double fs,
+    PdfColor? text,
+    PdfColor? sub,
+  }) {
+    final t = text ?? _getPdfColor(template.textColor);
+    final s = sub ?? _withOpacity(t, 0.6);
+
+    switch (key) {
+      case 'invoice_meta':
+        final primary = _getPdfColor(template.primaryColor);
+        return pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              invoice.isDevis ? 'DEVIS' : 'FACTURE',
+              style: pw.TextStyle(
+                fontSize: 26,
+                fontWeight: pw.FontWeight.bold,
+                color: primary,
+              ),
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text('N° ${invoice.invoiceNumber}',
+                    style: pw.TextStyle(fontSize: 14, color: t)),
+                pw.Text(
+                  'Date: ${invoice.issueDate.day}/${invoice.issueDate.month}/${invoice.issueDate.year}',
+                  style: pw.TextStyle(fontSize: 10, color: s),
+                ),
+                pw.Text(
+                  'Échéance: ${invoice.dueDate.day}/${invoice.dueDate.month}/${invoice.dueDate.year}',
+                  style: pw.TextStyle(fontSize: 10, color: s),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 'billing_info': {
+        final elts = _workspaceBlockElements[key] ?? const <LayoutElement>[];
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('Facturé à :',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _getPdfColor(template.primaryColor),
+                )),
+            pw.SizedBox(height: 4),
+            for (final e in elts) _pdfElement(e, invoice, client, company, template,
+                mapping: mapping, customPositions: customPositions),
+          ],
+        );
+      }
+      case 'items_table':
+        return _pdfElement(LayoutElement.itemsTable, invoice, client, company,
+            template,
+            mapping: mapping, customPositions: customPositions);
+      case 'totals':
+        final elts = _workspaceBlockElements[key] ?? const <LayoutElement>[];
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            for (final e in elts) _pdfElement(e, invoice, client, company, template,
+                mapping: mapping, customPositions: customPositions),
+          ],
+        );
+      case 'legal_mentions':
+        return _pdfElement(LayoutElement.legalMention, invoice, client, company,
+            template,
+            mapping: mapping, customPositions: customPositions);
+      case 'signature_block':
+        return _pdfElement(LayoutElement.signature, invoice, client, company,
+            template,
+            mapping: mapping, customPositions: customPositions);
+      case 'qr_block':
+        return _pdfElement(LayoutElement.qrCode, invoice, client, company,
+            template,
+            mapping: mapping, customPositions: customPositions);
+      default:
+        return null;
+    }
+  }
+
+  /// Compose tout le flux dans l'ordre des sections de l'atelier.
+  static pw.Widget _buildWorkspaceBlocksPdf({
+    required List<List<String>> sections,
+    required Map<String, bool> visibility,
+    required Invoice invoice,
+    required Client client,
+    required Company company,
+    required InvoiceTemplate template,
+    required Map<String, String> mapping,
+    required Map<String, dynamic> customPositions,
+    required pw.Widget? background,
+  }) {
+    final pageW = PdfPageFormat.a4.width;
+    final pageH = PdfPageFormat.a4.height;
+    final text = _getPdfColor(template.textColor);
+    final sub = _withOpacity(text, 0.6);
+    final fs = template.fontSize.clamp(6.0, 40.0).toDouble();
+
+    final cells = <pw.Widget>[
+      // En-tête société systématiquement en tête.
+      _buildCompanyHeaderPdf(invoice, company, template),
+    ];
+    for (final section in sections) {
+      for (final key in section) {
+        if (key == _emptySpaceMarker) continue;
+        if (!(visibility[key] ?? true)) continue;
+        final cell = _workspaceBlockPdf(
+          key,
+          invoice,
+          client,
+          company,
+          template,
+          mapping: mapping,
+          customPositions: customPositions,
+          fs: fs,
+          text: text,
+          sub: sub,
+        );
+        if (cell == null) continue;
+        cells.add(cell);
+      }
+    }
+
+    return pw.Stack(
+      children: [
+        pw.SizedBox(width: pageW, height: pageH),
+        if (background != null) background,
+        pw.Padding(
+          padding: const pw.EdgeInsets.all(28),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < cells.length; i++) ...[
+                if (i > 0) pw.SizedBox(height: 14),
+                cells[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   static pw.Widget _buildPdfBlock(
