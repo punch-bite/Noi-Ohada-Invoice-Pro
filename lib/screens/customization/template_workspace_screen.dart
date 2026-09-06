@@ -438,7 +438,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  Future<void> _saveConfig() async {
+  Future<void> _saveConfig({bool showFeedback = false}) async {
     final updatedPositions = _layoutConfig.toMap();
     updatedPositions['header_elements_order'] = _headerElements;
     updatedPositions['blocks_sections'] = _sectionsLayout;
@@ -468,7 +468,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       mapping: _workingTemplate.mapping,
       background: _background,
     );
-    if (!mounted) return;
+    // 🔇 Feedback UNIQUEMENT sur la sauvegarde explicite (bouton
+    // ENREGISTRER). `_saveConfig()` est aussi appelé automatiquement à
+    // chaque drag & drop / toggle : un SnackBar à chaque interaction
+    // apparaissait en répétition — d'où le paramètre [showFeedback].
+    if (!showFeedback || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(children: [
@@ -744,7 +748,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             onPressed: _openQuickPreview,
           ),
           ElevatedButton.icon(
-            onPressed: _saveConfig,
+            onPressed: () => _saveConfig(showFeedback: true),
             style: ElevatedButton.styleFrom(
               backgroundColor: _primary,
               foregroundColor: Colors.white,
