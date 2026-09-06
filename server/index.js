@@ -656,9 +656,10 @@ app.get('/enkap/order', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) =>
-  res.json({ ok: true, service: 'noi-ohada-payment-callback', time: new Date().toISOString() })
-);
+// 🔒 Sonde de disponibilité — réponse MINIMALE : ne révèle ni le service,
+// ni le nom du projet, ni les endpoints (les détails internes ne concernent
+// pas le public).
+app.get('/health', (req, res) => res.json({ ok: true }));
 
 // ============================================================
 //  ENVOI D'EMAIL (SMTP côté serveur)
@@ -1511,25 +1512,53 @@ app.post(
   }
 );
 
-app.get('/', (req, res) =>
-  res.json({
-    service: 'NOI OHADA — callbacks paiement (ENKAP) + email',
-    endpoints: [
-      'POST /enkap/register',
-      'PUT /enkap/callback/:reference',
-      'GET /enkap/return/:reference',
-      'POST /enkap/order (proxy web/mobile)',
-      'GET /enkap/order/status (proxy web/mobile)',
-      'PUT /enkap/order/setup (proxy web/mobile)',
-      'GET /enkap/order (proxy web/mobile)',
-      'POST /email/send (SMTP côté serveur)',
-      'POST /wallet/credit (vérifié ENKAP)',
-      'POST /template/purchase (vérifié ENKAP)',
-      'POST /team/manage-member (invitations + membres équipe)',
-      'GET /health',
-    ],
-  })
-);
+// ============================================================
+//  PAGE D'ACCUEIL — vitrine publique NEUTRE
+//
+//  🔒 La racine n'expose AUCUNE information technique : ni liste
+//  d'endpoints, ni noms de services, ni stack. C'est une simple
+//  landing (même charte que /download) avec lien vers la page de
+//  téléchargement. Les API réelles restent derrière `requireApiKey`
+//  (x-api-key) et ne sont documentées que pour l'application.
+// ============================================================
+app.get('/', (req, res) => {
+  res.status(200).type('html').send(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Noi OHADA Invoice Pro</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+background:linear-gradient(135deg,#0B0D17 0%,#1E2433 50%,#0B0D17 100%);
+min-height:100vh;color:#E2E8F0;display:flex;flex-direction:column;
+align-items:center;justify-content:center;padding:2rem;text-align:center}
+.logo{width:84px;height:84px;background:linear-gradient(135deg,#4338CA,#7C3AED);
+border-radius:22px;display:flex;align-items:center;justify-content:center;
+margin:0 auto 1.4rem;font-size:2.1rem;box-shadow:0 20px 40px rgba(124,58,237,.3)}
+h1{font-size:1.7rem;font-weight:800;margin-bottom:.5rem;
+background:linear-gradient(135deg,#818CF8,#C084FC);-webkit-background-clip:text;
+-webkit-text-fill-color:transparent;background-clip:text}
+.tag{display:inline-block;background:rgba(52,211,153,.12);color:#34D399;
+padding:.3rem .8rem;border-radius:999px;font-size:.7rem;font-weight:700;
+letter-spacing:.04em;margin-bottom:1.1rem}
+p{color:#94A3B8;font-size:.92rem;line-height:1.6;max-width:480px}
+.btn{display:inline-block;margin-top:1.8rem;padding:.8rem 1.6rem;border-radius:12px;
+background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;text-decoration:none;
+font-weight:700;font-size:.9rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,.4)}
+.ft{margin-top:2.2rem;font-size:.75rem;color:#64748B}
+</style></head><body>
+<div class="logo">📄</div>
+<span class="tag">✓ CONFORME SYSCOHADA RÉVISÉ</span>
+<h1>Noi OHADA Invoice Pro</h1>
+<p>La solution de facturation et de gestion commerciale pour les entrepreneurs
+et PME de l'espace OHADA — factures aux normes, stocks, équipes et paiements
+mobiles sécurisés.</p>
+<a class="btn" href="/download">⬇ Télécharger l'application</a>
+<div class="ft">© ${new Date().getFullYear()} Noi OHADA Invoice Pro</div>
+</body></html>`);
+});
 
 // ============================================================
 //  MIDDLEWARE D'ERREURS GLOBAL (journalisation)
