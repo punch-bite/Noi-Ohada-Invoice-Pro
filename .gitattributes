@@ -1,0 +1,25 @@
+# ── Binaires : AUCUNE conversion de fin de ligne (sinon corruption) ──
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.jks binary
+
+# ── Fins de ligne sources ──
+*.dart text
+*.js text
+*.ts text
+*.json text
+*.yaml text
+*.yml text
+*.md text
+*.html text
+*.css text
+*.sh text eol=lf
+*.ps1 text eol=crlf
