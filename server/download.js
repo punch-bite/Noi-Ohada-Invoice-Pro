@@ -11,6 +11,22 @@ const { initializeApp, getApps, getApp, cert } = require('firebase-admin/app');
 const { getStorage } = require('firebase-admin/storage');
 const logger = require('./logger');
 
+// ── Icônes monochromes (SVG inline, style line-icons) ────────────────────────
+// stroke=currentColor : héritent de la couleur du texte parent.
+const ICONS = {
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M7.5 10L12 14.5 16.5 10M4 20.5h16"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3.2 2.8 14.8 0 18M12 3c-2.8 3.2-2.8 14.8 0 18"/></svg>',
+  apple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></svg>',
+  android: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9.5a7 7 0 0 1 14 0v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5v-8z"/><path d="M12 5.5V3M8 6L6.5 3.5M16 6l1.5-2.5"/><circle cx="9" cy="13.5" r=".5" fill="currentColor"/><circle cx="15" cy="13.5" r=".5" fill="currentColor"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-2.5-1.8L13 22l-2.5-1.8L8 22l-2-1.5V2z"/><path d="M9 7.5h6M9 11.5h6M9 15.5h3.5"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 2.9-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.6c2.7.4 5 2.1 5 4.9"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20M6 15h4"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V11M12 21V4M19 21v-6M2.5 21h19"/></svg>',
+};
+
 const app = express();
 
 function initFirebase() {
@@ -137,7 +153,7 @@ function renderDownloadPage(user, builds) {
   const androidReady = !!builds.android && androidUrl !== '#';
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Noi OHADA — Telecharger</title>
+<link rel="icon" type="image/png" href="/favicon.png"><title>Noi OHADA — Telecharger</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -168,7 +184,8 @@ letter-spacing:.04em;margin-bottom:.7rem}
 gap:.7rem;margin:1rem 0 1.2rem;text-align:left}
 .feat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
 border-radius:14px;padding:.9rem}
-.feat .fi{font-size:1.25rem;margin-bottom:.45rem}
+.feat .fi{width:40px;height:40px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:.45rem;color:#fff}
+.feat .fi svg{width:22px;height:22px}
 .feat .ft2{font-weight:700;font-size:.85rem;margin-bottom:.25rem}
 .feat .fd{font-size:.76rem;color:#94A3B8;line-height:1.45}
 .stats{display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem;margin-bottom:1.5rem}
@@ -190,6 +207,7 @@ box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
 .btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,.4)}
 .btn.dis{background:rgba(255,255,255,.1);color:#64748B;cursor:not-allowed;box-shadow:none}
 .btn.dis:hover{transform:none}
+.btn svg{width:14px;height:14px;flex:none}
 .dlhead{margin:1.8rem 0 1rem;font-size:1.05rem;font-weight:800;text-align:left}
 .dlhead small{display:block;font-weight:400;color:#94A3B8;font-size:.78rem;margin-top:.25rem}
 .ft{margin-top:1.5rem;font-size:.78rem;color:#64748B}
@@ -197,7 +215,7 @@ box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
 .badge{display:inline-block;background:rgba(129,140,248,.15);color:#818CF8;
 padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;margin-left:.4rem}
 </style></head><body><div class="container">
-<div class="logo">📄</div>
+<div class="logo"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></div>
 <h1>Noi OHADA Invoice Pro</h1>
 <p class="sub">Telechargez l'application sur votre appareil</p>
 <div class="user">Connecte en tant que <strong>${user.email || user.uid}</strong></div>
@@ -212,46 +230,46 @@ padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;margin-
 </div>
 
 <div class="features">
-  <div class="feat"><div class="fi">🧾</div><div class="ft2">Factures &amp; devis</div>
+  <div class="feat"><div class="fi">${ICONS.receipt}</div><div class="ft2">Factures &amp; devis</div>
   <div class="fd">Factures conformes (TVA, IRC, remises), devis convertibles
   et PDF professionnels aux couleurs de votre entreprise.</div></div>
-  <div class="feat"><div class="fi">📦</div><div class="ft2">Stocks &amp; livraisons</div>
+  <div class="feat"><div class="fi">${ICONS.box}</div><div class="ft2">Stocks &amp; livraisons</div>
   <div class="fd">Alertes de rupture et stock faible, gestion des livraisons
   et valorisation automatique de l'inventaire.</div></div>
-  <div class="feat"><div class="fi">👥</div><div class="ft2">Équipes</div>
+  <div class="feat"><div class="fi">${ICONS.users}</div><div class="ft2">Équipes</div>
   <div class="fd">Invitez vos collaborateurs par e-mail, partagez factures
   et clients, avec des rôles administrateur ou membre.</div></div>
-  <div class="feat"><div class="fi">💳</div><div class="ft2">Paiements ENKAP</div>
+  <div class="feat"><div class="fi">${ICONS.card}</div><div class="ft2">Paiements ENKAP</div>
   <div class="fd">Encaissez par Mobile Money (MTN, Orange…) via le proxy
   sécurisé ENKAP et suivez votre portefeuille intégré.</div></div>
-  <div class="feat"><div class="fi">☁️</div><div class="ft2">Cloud &amp; hors-ligne</div>
+  <div class="feat"><div class="fi">${ICONS.cloud}</div><div class="ft2">Cloud &amp; hors-ligne</div>
   <div class="fd">Synchronisation Firestore temps réel, sauvegarde Google
   Drive, fonctionnement hors-ligne avec reprise automatique.</div></div>
-  <div class="feat"><div class="fi">📊</div><div class="ft2">Tableau de bord</div>
+  <div class="feat"><div class="fi">${ICONS.chart}</div><div class="ft2">Tableau de bord</div>
   <div class="fd">Chiffre d'affaires, créances, top clients et relances de
   paiement automatiques — tout visible d'un coup d'œil.</div></div>
 </div>
 
 <div class="stats">
-  <span class="stat">💱 FCFA multi-devises</span>
-  <span class="stat">🔐 Données chiffrées</span>
-  <span class="stat">📴 Mode hors-ligne</span>
-  <span class="stat">🔔 Relances automatiques</span>
+  <span class="stat">FCFA multi-devises</span>
+  <span class="stat">Données chiffrées</span>
+  <span class="stat">Mode hors-ligne</span>
+  <span class="stat">Relances automatiques</span>
 </div>
 
-<div class="dlhead">📥 Téléchargements<small>Choisissez votre plateforme — l'application s'installe comme n'importe quelle application.</small></div>
-<div class="card"><div class="info"><div class="icon">🍎</div><div>
+<div class="dlhead">Téléchargements<small>Choisissez votre plateforme — l'application s'installe comme n'importe quelle application.</small></div>
+<div class="card"><div class="info"><div class="icon">${ICONS.apple}</div><div>
 <div class="bld">iOS <span class="badge">IPA</span></div>
 <div class="meta">${builds.ios ? formatSize(builds.ios.size) + ' • iPhone/iPad' : 'Bientôt disponible'}</div>
-</div></div><a href="${iosUrl}" ${iosReady ? 'download rel="noopener"' : ''} class="btn ${iosReady ? '' : 'dis'}">${iosReady ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
-<div class="card"><div class="info"><div class="icon">🤖</div><div>
+</div></div><a href="${iosUrl}" ${iosReady ? 'download rel="noopener"' : ''} class="btn ${iosReady ? '' : 'dis'}">${iosReady ? ICONS.download + ' Telecharger' : ICONS.clock + ' Indisponible'}</a></div>
+<div class="card"><div class="info"><div class="icon">${ICONS.android}</div><div>
 <div class="bld">Android <span class="badge">APK</span></div>
 <div class="meta">${builds.android ? formatSize(builds.android.size) + ' • Android 6+' : 'Bientôt disponible'}</div>
-</div></div><a href="${androidUrl}" ${androidReady ? 'download rel="noopener"' : ''} class="btn ${androidReady ? '' : 'dis'}">${androidReady ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
-<div class="card"><div class="info"><div class="icon">🌐</div><div>
+</div></div><a href="${androidUrl}" ${androidReady ? 'download rel="noopener"' : ''} class="btn ${androidReady ? '' : 'dis'}">${androidReady ? ICONS.download + ' Telecharger' : ICONS.clock + ' Indisponible'}</a></div>
+<div class="card"><div class="info"><div class="icon">${ICONS.globe}</div><div>
 <div class="bld">Web <span class="badge">PWA</span></div>
 <div class="meta">Accessible en ligne</div>
-</div></div><a href="https://app.noi-ohada-invoice-pro.com" class="btn" target="_blank">🌍 Ouvrir</a></div>
+</div></div><a href="https://app.noi-ohada-invoice-pro.com" class="btn" target="_blank">${ICONS.globe} Ouvrir</a></div>
 <div class="ft"><p>Besoin d'aide ? <a href="mailto:support@noi-ohada-invoice-pro.com">Support</a></p>
 <p style="margin-top:.4rem">© ${new Date().getFullYear()} Noi OHADA Invoice Pro</p></div>
 </div></body></html>`;
