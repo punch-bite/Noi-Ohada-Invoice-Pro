@@ -1514,50 +1514,224 @@ app.post(
 
 // ============================================================
 //  PAGE D'ACCUEIL — vitrine publique NEUTRE
-//
-//  🔒 La racine n'expose AUCUNE information technique : ni liste
-//  d'endpoints, ni noms de services, ni stack. C'est une simple
-//  landing (même charte que /download) avec lien vers la page de
-//  téléchargement. Les API réelles restent derrière `requireApiKey`
-//  (x-api-key) et ne sont documentées que pour l'application.
+//  🔒 Aucune info technique : pas d'endpoints, pas de stack.
+//  Les API restent derrière requireApiKey (x-api-key).
 // ============================================================
-app.get('/', (req, res) => {
-  res.status(200).type('html').send(`<!DOCTYPE html>
+const LANDING_CSS = `
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#0B0D17 0%,#1E2433 50%,#0B0D17 100%);min-height:100vh;color:#E2E8F0;padding:0}
+.wrap{max-width:1060px;margin:0 auto;padding:0 1.4rem}
+header{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 0}
+.brand{display:flex;align-items:center;gap:.7rem;font-weight:800;font-size:1rem}
+.brand .bl{width:40px;height:40px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 8px 18px rgba(124,58,237,.3)}
+.navcta{background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;padding:.55rem 1.1rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:.82rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
+.navcta:hover{transform:translateY(-2px)}
+.hero{text-align:center;padding:3.2rem 0 2.2rem}
+.tag{display:inline-block;background:rgba(52,211,153,.12);color:#34D399;padding:.3rem .8rem;border-radius:999px;font-size:.7rem;font-weight:700;letter-spacing:.05em;margin-bottom:1.1rem}
+.hero h1{font-size:clamp(1.8rem,5vw,2.7rem);font-weight:800;line-height:1.18;margin-bottom:.9rem}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,#818CF8,#C084FC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero .lead{color:#94A3B8;font-size:1rem;line-height:1.65;max-width:620px;margin:0 auto 1.7rem}
+.ctas{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.85rem 1.5rem;border-radius:12px;background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;text-decoration:none;font-weight:700;font-size:.9rem;box-shadow:0 4px 14px rgba(124,58,237,.3);transition:all .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(124,58,237,.45)}
+.btn.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);box-shadow:none;color:#E2E8F0}
+.btn.ghost:hover{background:rgba(255,255,255,.1);box-shadow:none}
+.stats{display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem;margin-top:2.2rem}
+.stat{background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.25);color:#C7D2FE;border-radius:999px;padding:.4rem .95rem;font-size:.74rem;font-weight:600}
+section{padding:3rem 0 .8rem}
+h2.st{font-size:clamp(1.3rem,3.4vw,1.7rem);font-weight:800;text-align:center;margin-bottom:.5rem}
+p.sts{color:#94A3B8;text-align:center;font-size:.9rem;max-width:560px;margin:0 auto 1.8rem;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.9rem}
+.feat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.15rem;transition:all .25s;text-align:left}
+.feat:hover{transform:translateY(-4px);border-color:rgba(129,140,248,.35);background:rgba(255,255,255,.06)}
+.feat .fi{width:44px;height:44px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:.8rem}
+.feat .ft2{font-weight:800;font-size:.92rem;margin-bottom:.35rem}
+.feat .fd{font-size:.8rem;color:#94A3B8;line-height:1.55}
+.pay{display:grid;grid-template-columns:1.1fr 1fr;gap:1.2rem;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:1.6rem}
+.pay h3{font-size:1.12rem;font-weight:800;margin-bottom:.6rem}
+.pay p{color:#94A3B8;font-size:.85rem;line-height:1.6;margin-bottom:.9rem}
+.chips{display:flex;flex-wrap:wrap;gap:.5rem}
+.chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:.4rem .85rem;font-size:.75rem;font-weight:600}
+.paycard{background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:18px;padding:1.5rem;box-shadow:0 16px 36px rgba(124,58,237,.35);text-align:left}
+.paycard .pc1{font-size:.7rem;letter-spacing:.08em;opacity:.85;font-weight:700}
+.paycard .pc2{font-size:1.02rem;font-weight:800;margin:.5rem 0 .8rem}
+.paycard .pcr{display:flex;justify-content:space-between;font-size:.79rem;padding:.45rem 0;border-top:1px solid rgba(255,255,255,.22)}
+.who{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.9rem}
+.who .w{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:1.05rem;text-align:left}
+.who .wi{font-size:1.3rem;margin-bottom:.5rem}
+.who .wt{font-weight:800;font-size:.88rem;margin-bottom:.3rem}
+.who .wd{font-size:.76rem;color:#94A3B8;line-height:1.5}
+.sec{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.sec .sc{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.3rem;text-align:left}
+.sec .sc h3{font-size:1rem;font-weight:800;margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem}
+.sec .sc ul{list-style:none}
+.sec .sc li{font-size:.82rem;color:#94A3B8;padding:.32rem 0;line-height:1.5;display:flex;gap:.55rem}
+.sec .sc li b{color:#34D399}
+.cta{background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:22px;padding:2.4rem 1.6rem;text-align:center;box-shadow:0 18px 40px rgba(124,58,237,.35);margin-top:1rem}
+.cta h2{font-size:clamp(1.25rem,3.4vw,1.6rem);font-weight:800;margin-bottom:.6rem}
+.cta p{color:rgba(255,255,255,.85);font-size:.9rem;margin-bottom:1.4rem}
+.cta .btn{background:#0B0D17;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+footer{padding:2.2rem 0 2.6rem;text-align:center;font-size:.78rem;color:#64748B}
+footer .fl{display:flex;gap:1.2rem;justify-content:center;margin-bottom:.9rem;flex-wrap:wrap}
+footer a{color:#818CF8;text-decoration:none}
+@media (max-width:720px){.pay{grid-template-columns:1fr}.sec{grid-template-columns:1fr}header .navcta{padding:.45rem .8rem;font-size:.75rem}}
+`;
+const LANDING_TOP = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Noi OHADA Invoice Pro</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-background:linear-gradient(135deg,#0B0D17 0%,#1E2433 50%,#0B0D17 100%);
-min-height:100vh;color:#E2E8F0;display:flex;flex-direction:column;
-align-items:center;justify-content:center;padding:2rem;text-align:center}
-.logo{width:84px;height:84px;background:linear-gradient(135deg,#4338CA,#7C3AED);
-border-radius:22px;display:flex;align-items:center;justify-content:center;
-margin:0 auto 1.4rem;font-size:2.1rem;box-shadow:0 20px 40px rgba(124,58,237,.3)}
-h1{font-size:1.7rem;font-weight:800;margin-bottom:.5rem;
-background:linear-gradient(135deg,#818CF8,#C084FC);-webkit-background-clip:text;
--webkit-text-fill-color:transparent;background-clip:text}
-.tag{display:inline-block;background:rgba(52,211,153,.12);color:#34D399;
-padding:.3rem .8rem;border-radius:999px;font-size:.7rem;font-weight:700;
-letter-spacing:.04em;margin-bottom:1.1rem}
-p{color:#94A3B8;font-size:.92rem;line-height:1.6;max-width:480px}
-.btn{display:inline-block;margin-top:1.8rem;padding:.8rem 1.6rem;border-radius:12px;
-background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;text-decoration:none;
-font-weight:700;font-size:.9rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
-.btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,.4)}
-.ft{margin-top:2.2rem;font-size:.75rem;color:#64748B}
-</style></head><body>
-<div class="logo">📄</div>
-<span class="tag">✓ CONFORME SYSCOHADA RÉVISÉ</span>
-<h1>Noi OHADA Invoice Pro</h1>
-<p>La solution de facturation et de gestion commerciale pour les entrepreneurs
-et PME de l'espace OHADA — factures aux normes, stocks, équipes et paiements
-mobiles sécurisés.</p>
-<a class="btn" href="/download">⬇ Télécharger l'application</a>
-<div class="ft">© ${new Date().getFullYear()} Noi OHADA Invoice Pro</div>
-</body></html>`);
+<title>Noi OHADA Invoice Pro — Facturation conforme OHADA</title>
+<meta name="description" content="Factures et devis conformes SYSCOHADA révisé, stocks, équipes, paiements Mobile Money sécurisés. L'application de gestion commerciale des entrepreneurs OHADA.">
+<style>${LANDING_CSS}</style></head><body><div class="wrap">
+<header>
+  <div class="brand"><span class="bl">📄</span> Noi OHADA Invoice Pro</div>
+  <a class="navcta" href="/download">⬇ Télécharger</a>
+</header>
+
+<section class="hero">
+  <span class="tag">✓ CONFORME SYSCOHADA RÉVISÉ</span>
+  <h1>Gérez votre business avec des factures <em>conformes OHADA</em></h1>
+  <p class="lead">Créez des factures et devis professionnels en quelques secondes,
+  suivez vos stocks en temps réel, encaissez par Mobile Money et travaillez en
+  équipe — en ligne comme hors connexion, en FCFA comme en multi-devises.</p>
+  <div class="ctas">
+    <a class="btn" href="/download">⬇ Télécharger l'application</a>
+    <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">🌐 Ouvrir la version web</a>
+  </div>
+  <div class="stats">
+    <span class="stat">🧾 Factures conformes</span>
+    <span class="stat">💱 FCFA multi-devises</span>
+    <span class="stat">📴 100% hors-ligne</span>
+    <span class="stat">🔐 Données chiffrées</span>
+    <span class="stat">🔔 Relances auto</span>
+  </div>
+</section>
+
+<section>
+  <h2 class="st">Tout votre commerce dans une seule application</h2>
+  <p class="sts">Des outils complets, pensés pour le terrain et les réalités
+  des entreprises de l'espace OHADA.</p>
+  <div class="grid">
+    <div class="feat"><div class="fi">🧾</div><div class="ft2">Factures &amp; devis professionnels</div>
+    <div class="fd">Factures conformes SYSCOHADA (TVA, IRC, remises, mentions légales),
+    devis convertibles en un geste, PDF aux couleurs de votre entreprise.</div></div>
+    <div class="feat"><div class="fi">👥</div><div class="ft2">Clients &amp; historique</div>
+    <div class="fd">Fiches clients complètes, historique d'achats, soldes et
+    créances suivis automatiquement pour un recouvrement sans effort.</div></div>
+    <div class="feat"><div class="fi">📦</div><div class="ft2">Stocks &amp; livraisons</div>
+    <div class="fd">Alertes de rupture et stock faible, suivi des livraisons et
+    valorisation automatique de l'inventaire à chaque vente.</div></div>
+    <div class="feat"><div class="fi">📊</div><div class="ft2">Tableau de bord</div>
+    <div class="fd">Chiffre d'affaires, bénéfices, dettes clients et meilleures
+    ventes — vos indicateurs clés mis à jour en temps réel.</div></div>
+    <div class="feat"><div class="fi">👥</div><div class="ft2">Travail en équipe</div>
+    <div class="fd">Invitez vos collaborateurs par e-mail, partagez factures et
+    clients, avec des rôles administrateur ou membre et des notifications.</div></div>
+    <div class="feat"><div class="fi">🎨</div><div class="ft2">Modèles personnalisés</div>
+    <div class="fd">Boutique de modèles de factures : logo, couleurs et mise en
+    page personnalisés pour une image professionnelle à chaque envoi.</div></div>
+    <div class="feat"><div class="fi">🔔</div><div class="ft2">Relances automatiques</div>
+    <div class="fd">Rappels de paiement planifiés (1er rappel, 2e rappel, dernier
+    avertissement) pour réduire vos impayés sans lever le petit doigt.</div></div>
+    <div class="feat"><div class="fi">🛡️</div><div class="ft2">Sécurité avancée</div>
+    <div class="fd">Authentification Firebase, vérification biométrique,
+    verrouillage d'application et données chiffrées en transit et au repos.</div></div>
+  </div>
+</section>
+`;
+
+const LANDING_BOTTOM = `
+<section>
+  <h2 class="st">Encaissez par Mobile Money, en toute sécurité</h2>
+  <p class="sts">Le proxy de paiement intégré E-nkap connecte votre application
+  aux opérateurs de Mobile Money — sans manipulation, sans risque.</p>
+  <div class="pay">
+    <div>
+      <h3>💳 Paiements intégrés &amp; portefeuille</h3>
+      <p>Vos clients règlent leurs factures ou vos abonnements par Mobile Money
+      ou carte bancaire. La confirmation est instantanée : votre abonnement ou
+      votre transaction est activé automatiquement, avec preuve de paiement.</p>
+      <div class="chips">
+        <span class="chip">🟡 Orange Money</span>
+        <span class="chip">🟡 MTN Mobile Money</span>
+        <span class="chip">💳 Carte bancaire</span>
+        <span class="chip">💰 Portefeuille intégré</span>
+      </div>
+    </div>
+    <div class="paycard">
+      <div class="pc1">PAIEMENT SÉCURISÉ E-NKAP</div>
+      <div class="pc2">Confirmation instantanée 🔒</div>
+      <div class="pcr"><span>Création de commande</span><span>✓ Immédiate</span></div>
+      <div class="pcr"><span>Notification de paiement</span><span>✓ Temps réel</span></div>
+      <div class="pcr"><span>Activation d'abonnement</span><span>✓ Automatique</span></div>
+      <div class="pcr"><span>Reçu de paiement</span><span>✓ Conservé</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2 class="st">Conçu pour les acteurs de l'espace OHADA</h2>
+  <p class="sts">Quelle que soit votre activité, l'application s'adapte à
+  votre façon de vendre et de facturer.</p>
+  <div class="who">
+    <div class="w"><div class="wi">🏪</div><div class="wt">Commerçants &amp; boutiques</div>
+    <div class="wd">Ventes au comptant, gestion du stock et reçus instantanés.</div></div>
+    <div class="w"><div class="wi">🧑‍💼</div><div class="wt">Prestataires &amp; freelances</div>
+    <div class="wd">Devis, factures d'honoraires et suivi des règlements clients.</div></div>
+    <div class="w"><div class="wi">🏭</div><div class="wt">PME &amp; grossistes</div>
+    <div class="wd">Catalogue produits, prix de revient, marges et équipes de vente.</div></div>
+    <div class="w"><div class="wi">🚚</div><div class="wt">Distributeurs &amp; livreurs</div>
+    <div class="wd">Bons de livraison liés aux factures et suivi des tournées.</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec">
+    <div class="sc">
+      <h3>🛡️ Sécurité &amp; confidentialité</h3>
+      <ul>
+        <li><b>✓</b> Authentification sécurisée (Firebase Auth, vérification e-mail)</li>
+        <li><b>✓</b> Déverrouillage biométrique et code PIN de l'application</li>
+        <li><b>✓</b> Données chiffrées en transit (TLS) et isolées par utilisateur</li>
+        <li><b>✓</b> API verrouillées par clé — aucune manipulation externe</li>
+        <li><b>✓</b> Sauvegarde et restauration Google Drive</li>
+      </ul>
+    </div>
+    <div class="sc">
+      <h3>📜 Conformité OHADA</h3>
+      <ul>
+        <li><b>✓</b> Actes de commerce conformes au SYSCOHADA révisé</li>
+        <li><b>✓</b> TVA (18% et taux spéciaux), IRC, remises et escomptes</li>
+        <li><b>✓</b> Mentions obligatoires : NCC, RCCM, capital social…</li>
+        <li><b>✓</b> Devise XAF/XOF et monnaies locales gérées</li>
+        <li><b>✓</b> Numérotation et archivage conformes aux exigences</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="cta">
+    <h2>Prêt à facturer comme un professionnel ?</h2>
+    <p>Téléchargez Noi OHADA Invoice Pro et émettez votre première facture
+    conforme en moins de deux minutes.</p>
+    <a class="btn" href="/download">⬇ Télécharger maintenant</a>
+  </div>
+</section>
+
+<footer>
+  <div class="fl">
+    <a href="/download">Télécharger</a>
+    <a href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">Version web</a>
+    <a href="mailto:support@noi-ohada-invoice-pro.com">Support</a>
+  </div>
+  © ${new Date().getFullYear()} Noi OHADA Invoice Pro — Tous droits réservés.
+</footer>
+</div></body></html>`;
+
+app.get('/', (req, res) => {
+  res.status(200).type('html').send(LANDING_TOP + LANDING_BOTTOM);
 });
 
 // ============================================================
