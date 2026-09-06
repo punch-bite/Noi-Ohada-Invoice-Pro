@@ -11,7 +11,10 @@ import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/template_custom_service.dart';
+import '../../models/invoice_settings.dart';
+import '../../widgets/stitch_a4_invoice_preview.dart';
 import '../../widgets/template_background_palette.dart';
 
 /// 🎨 Écran d'atelier visuel de personnalisation de facture — Design Stitch Refined.
@@ -38,6 +41,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   late InvoiceLayoutConfig _layoutConfig;
   late InvoiceTemplate _workingTemplate;
   TemplateBackgroundSettings _background = const TemplateBackgroundSettings();
+  // 📦 Paramètres globaux de facture (appliqués à l'aperçu rapide).
+  InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
 
   bool _isLoading = true;
   // 👮 Contrôle d'accès : personnalisation réservée à l'admin/propriétaire.
@@ -311,6 +316,126 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       _initBlocks();
       _isLoading = false;
     });
+    // 📦 Paramètres globaux de facture (couleurs / police / filigrane)
+    // chargés en ARRIÈRE-PLAN : l'atelier s'affiche immédiatement, et
+    // l'aperçu rapide les lira au moment où il est ouvert.
+    try {
+      final s = await SettingsService.instance.loadSettings();
+      if (mounted) setState(() => _invoiceSettings = s);
+    } catch (_) {
+      // Repli silencieux : défauts (aucune surcharge du design).
+    }
+  }
+
+  // ── 👁️ APERÇU RAPIDE (rendu A4 Stitch fidèle) ───────────────────────────
+
+  /// Ouvre un dialog plein écran montrant la facture d'exemple rendue avec
+  /// TOUTES les customisations en cours (layout drag & drop, fond, tampon)
+  /// + les paramètres globaux (couleurs, police, filigrane) — sans quitter
+  /// l'atelier ni sauvegarder.
+  void _openQuickPreview() {
+    final effective =
+        SettingsService.applyToTemplate(_workingTemplate, _invoiceSettings);
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.85),
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: const Color(0xFF14101A),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Barre haute : titre + fermer.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'Aperçu rapide — ${_workingTemplate.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _tertiaryContainer.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _tertiaryContainer.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      child: const Text(
+                        'DONNÉES D\'EXEMPLE',
+                        style: TextStyle(
+                          color: _tertiaryContainer,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                // 🔍 Zoom / pan au doigt.
+                child: InteractiveViewer(
+                  maxScale: 2.5,
+                  minScale: 0.5,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: StitchA4InvoicePreview(
+                        data: StitchPreviewData.sample(),
+                        accentColor: effective.primaryColor,
+                        pageColor: effective.backgroundColor,
+                        showLogo: effective.showLogo,
+                        showBorder: effective.showBorder,
+                        showTaxDetails: effective.showTaxDetails,
+                        showPaymentTerms: effective.showPaymentTerms,
+                        showPaymentQR: effective.showPaymentQR,
+                        fontFamily: effective.fontFamily,
+                        fontScale: effective.fontSize / 12,
+                        layoutConfig: _layoutConfig,
+                        backgroundSettings: _background,
+                        backgroundImage:
+                            decodeBackgroundImage(_background.fileData),
+                        showPaidStamp: _showPaidStamp,
+                        watermarkText: _invoiceSettings.watermarkText,
+                        showWatermark: _invoiceSettings.showWatermark,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Rendu A4 avec vos personnalisations en cours — '
+                  'pincez pour zoomer.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveConfig() async {
@@ -611,6 +736,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         title: const Text('Atelier Personnalisation',
             style: TextStyle(color: _onSurface, fontWeight: FontWeight.bold, fontSize: 18)),
         actions: [
+          // 👁️ Aperçu rapide : rendu A4 fidèle (Stitch) de la customisation
+          // EN COURS, sans quitter l'atelier.
+          IconButton(
+            tooltip: 'Aperçu rapide',
+            icon: const Icon(Icons.visibility_outlined, color: _onSurface),
+            onPressed: _openQuickPreview,
+          ),
           ElevatedButton.icon(
             onPressed: _saveConfig,
             style: ElevatedButton.styleFrom(

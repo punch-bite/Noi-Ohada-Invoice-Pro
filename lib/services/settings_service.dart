@@ -18,6 +18,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/invoice_settings.dart';
+import '../models/invoice_template.dart';
 import 'cloud_access_service.dart';
 
 class SettingsService {
@@ -165,5 +166,49 @@ class SettingsService {
     } catch (e) {
       debugPrint('⚠️ SettingsService: clearLocal échoué: $e');
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  🎨 FUSION SETTINGS → TEMPLATE (aperçus + PDF)
+  // ══════════════════════════════════════════════════════════════════
+
+  /// Produit le « template effectif » : les personnalisations globales de
+  /// facture ([InvoiceSettings]) OVERRIDENT le design du modèle ([template])
+  /// UNIQUEMENT quand l'utilisateur a réellement modifié la valeur (≠ défaut).
+  /// Sinon, on conserve le design propre du modèle (premium, boutique…).
+  ///
+  /// Utilisé par l'aperçu A4 (`StitchA4InvoicePreview`), l'atelier et le
+  /// PDF (`PrintingService`) pour un rendu WYSIWYG cohérent.
+  static InvoiceTemplate applyToTemplate(
+    InvoiceTemplate template,
+    InvoiceSettings settings,
+  ) {
+    final d = InvoiceSettings.defaultSettings;
+    return template.copyWith(
+      primaryColor: settings.primaryColorValue != d.primaryColorValue
+          ? settings.primaryColor
+          : null,
+      textColor:
+          settings.textColorValue != d.textColorValue ? settings.textColor : null,
+      backgroundColor: settings.backgroundColorValue != d.backgroundColorValue
+          ? settings.backgroundColor
+          : null,
+      fontFamily:
+          settings.fontFamily != d.fontFamily ? settings.fontFamily : null,
+      fontSize: settings.fontSize != d.fontSize ? settings.fontSize : null,
+      showLogo:
+          settings.showLogo != d.showLogo ? settings.showLogo : null,
+      showBorder:
+          settings.showBorder != d.showBorder ? settings.showBorder : null,
+      showTaxDetails: settings.showTaxDetails != d.showTaxDetails
+          ? settings.showTaxDetails
+          : null,
+      showPaymentTerms: settings.showPaymentTerms != d.showPaymentTerms
+          ? settings.showPaymentTerms
+          : null,
+      showPaymentQR: settings.showPaymentQR != d.showPaymentQR
+          ? settings.showPaymentQR
+          : null,
+    );
   }
 }

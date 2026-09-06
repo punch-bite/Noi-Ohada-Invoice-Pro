@@ -769,6 +769,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   /// les personnalisations sauvegardées du modèle actif.
   Widget _buildInvoicePaper(RoyalScheme c) {
     final template = _selectedTemplate;
+    // 🎨 Template EFFECTIF : les personnalisations globales (couleurs,
+    // police, affichage) sont appliquées au modèle pour l'aperçu.
+    final effective = template == null
+        ? null
+        : SettingsService.applyToTemplate(template, _invoiceSettings);
     final stitchData = StitchPreviewDataX.fromInvoice(
       invoice: _invoice,
       client: _client,
@@ -835,15 +840,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         // Papier de la facture.
         StitchA4InvoicePreview(
           data: stitchData,
-          accentColor: template?.primaryColor,
-          pageColor: template?.backgroundColor,
-          showLogo: template?.showLogo ?? true,
-          showBorder: template?.showBorder ?? false,
-          showTaxDetails: template?.showTaxDetails ?? true,
-          showPaymentTerms: template?.showPaymentTerms ?? true,
-          showPaymentQR: template?.showPaymentQR ?? false,
-          fontFamily: template?.fontFamily ?? 'WorkSans',
-          fontScale: (template?.fontSize ?? 12) / 12,
+          accentColor: effective?.primaryColor,
+          pageColor: effective?.backgroundColor,
+          showLogo: effective?.showLogo ?? true,
+          showBorder: effective?.showBorder ?? false,
+          showTaxDetails: effective?.showTaxDetails ?? true,
+          showPaymentTerms: effective?.showPaymentTerms ?? true,
+          showPaymentQR: effective?.showPaymentQR ?? false,
+          fontFamily: effective?.fontFamily ?? 'WorkSans',
+          fontScale: (effective?.fontSize ?? 12) / 12,
           layoutConfig: _layoutConfig,
           backgroundSettings: _backgroundSettings,
           backgroundImage: _previewBackground,

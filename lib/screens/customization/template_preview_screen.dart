@@ -22,6 +22,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/template_cart.dart';
 import '../../services/template_custom_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
@@ -41,6 +42,11 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   late InvoiceLayoutConfig _layoutConfig;
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
+  // 🎨 Modèle EFFECTIF (paramètres globaux appliqués au modèle).
+  late InvoiceTemplate _effectiveTemplate = widget.template;
+  // 🧧 Filigrane global (InvoiceSettings).
+  String _watermarkText = '';
+  bool _showWatermark = false;
   bool _isLoading = true;
   double _zoom = 1.0;
   // 🛒 Possession du modèle (pour n'afficher Panier/Commander que si utile).
@@ -82,9 +88,11 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
 
   Future<void> _loadData() async {
     // 🧩 Personnalisations sauvegardées du modèle (positions drag & drop +
-    // fond image/préréglage) — mêmes sources que le workspace et le PDF.
+    // fond image/préreéglage) — mêmes sources que le workspace et le PDF.
     final custom = await TemplateCustomService.loadCustom(widget.template.id);
     if (!mounted) return;
+    // 1️⃣ Affichage IMMÉDIAT avec le modèle brut (ne jamais bloquer l'aperçu
+    // sur le chargement des paramètres globaux).
     setState(() {
       if (custom.positions.isNotEmpty) {
         _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
@@ -92,6 +100,20 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       _backgroundSettings = custom.background;
       _isLoading = false;
     });
+    // 2️⃣ Puis les paramètres globaux (couleurs / police / filigrane) sont
+    // appliqués en arrière-plan : le template effectif se met à jour.
+    try {
+      final settings = await SettingsService.instance.loadSettings();
+      if (!mounted) return;
+      setState(() {
+        _effectiveTemplate =
+            SettingsService.applyToTemplate(widget.template, settings);
+        _watermarkText = settings.watermarkText;
+        _showWatermark = settings.showWatermark;
+      });
+    } catch (_) {
+      // Repli silencieux : le design du modèle reste utilisé.
+    }
   }
 
   /// Définit ce modèle comme modèle actif (sélection persistée localement).
@@ -190,22 +212,25 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                           child: Transform.scale(
                             scale: _zoom,
                             alignment: Alignment.topCenter,
-                            child: StitchA4InvoicePreview(
+                             child: StitchA4InvoicePreview(
                               data: StitchPreviewData.sample(),
-                              accentColor: template.primaryColor,
-                              pageColor: template.backgroundColor,
-                              showLogo: template.showLogo,
-                              showBorder: template.showBorder,
-                              showTaxDetails: template.showTaxDetails,
-                              showPaymentTerms: template.showPaymentTerms,
-                              showPaymentQR: template.showPaymentQR,
-                              fontFamily: template.fontFamily,
-                              fontScale: template.fontSize / 12,
+                              accentColor: _effectiveTemplate.primaryColor,
+                              pageColor: _effectiveTemplate.backgroundColor,
+                              showLogo: _effectiveTemplate.showLogo,
+                              showBorder: _effectiveTemplate.showBorder,
+                              showTaxDetails: _effectiveTemplate.showTaxDetails,
+                              showPaymentTerms:
+                                  _effectiveTemplate.showPaymentTerms,
+                              showPaymentQR: _effectiveTemplate.showPaymentQR,
+                              fontFamily: _effectiveTemplate.fontFamily,
+                              fontScale: _effectiveTemplate.fontSize / 12,
                               layoutConfig: _layoutConfig,
                               backgroundSettings: _backgroundSettings,
                               backgroundImage: bgImage,
                               // Tampon « PAYÉ » — démonstration maquette.
                               showPaidStamp: true,
+                              watermarkText: _watermarkText,
+                              showWatermark: _showWatermark,
                             ),
                           ),
                         ),

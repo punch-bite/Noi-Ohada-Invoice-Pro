@@ -120,6 +120,11 @@ class PrintingService {
     // 📦 Paramètres globaux de facture (filigrane, couleurs, police…)
     // Chargés en même temps pour limiter les awaits.
     final settings = await SettingsService.instance.loadSettings();
+    // 🎨 Template EFFECTIF : les personnalisations globales (couleurs,
+    // police, taille, options d'affichage) sont appliquées au modèle pour
+    // un PDF WYSIWYG aligné sur l'aperçu.
+    final effectiveTemplate =
+        SettingsService.applyToTemplate(template, settings);
     final positions = custom.positions.isNotEmpty
         ? custom.positions
         : Map<String, dynamic>.from(template.positions);
@@ -203,7 +208,7 @@ class PrintingService {
                 invoice,
                 client,
                 company,
-                template,
+                effectiveTemplate,
                 mapping: mapping,
                 background: background,
                 customPositions: positions,
@@ -219,7 +224,7 @@ class PrintingService {
                 invoice,
                 client,
                 company,
-                template,
+                effectiveTemplate,
                 mapping: mapping,
                 background: background,
               ),
@@ -232,15 +237,15 @@ class PrintingService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(invoice, company, template),
+                    _buildHeader(invoice, company, effectiveTemplate),
                     pw.SizedBox(height: 16),
-                    _buildClientInfo(client, template),
+                    _buildClientInfo(client, effectiveTemplate),
                     pw.SizedBox(height: 16),
-                    _buildItemsTable(invoice, template),
+                    _buildItemsTable(invoice, effectiveTemplate),
                     pw.SizedBox(height: 16),
-                    _buildTotals(invoice, template),
+                    _buildTotals(invoice, effectiveTemplate),
                     pw.SizedBox(height: 16),
-                    _buildFooter(company, template),
+                    _buildFooter(company, effectiveTemplate),
                   ],
                 ),
                 // 🧧 FILIGRANE personnalisé (InvoiceSettings).
@@ -274,7 +279,7 @@ class PrintingService {
                         style: pw.TextStyle(
                           fontSize: 8,
                           color: _withOpacity(
-                              _getPdfColor(template.textColor), 0.4),
+                              _getPdfColor(effectiveTemplate.textColor), 0.4),
                           fontStyle: pw.FontStyle.italic,
                         ),
                       ),
