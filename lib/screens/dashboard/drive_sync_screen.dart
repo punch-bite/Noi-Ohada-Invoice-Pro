@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'package:google_sign_in/google_sign_in.dart' show GoogleSignInAccount;
+
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/google_drive_sync_service.dart';
@@ -38,8 +40,18 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
 
   Future<void> _init() async {
     final state = await _service.getSyncState();
-    _googleEmail = _service.connectedGoogleEmail ?? state?['email'];
-    _connected = _googleEmail?.isNotEmpty ?? false;
+    // 🔄 Restaure la session Google silencieusement : au boot de l'app,
+    // `GoogleSignIn.currentUser` est null même si l'utilisateur a déjà
+    // autorisé l'accès (l'état Firestore, lui, dit « enabled »).
+    GoogleSignInAccount? account;
+    try {
+      account = await _service.ensureSignedIn();
+    } catch (_) {
+      account = null;
+    }
+    _googleEmail = account?.email ?? state?['email'];
+    // ✅ Session réellement vivante uniquement si `account != null`.
+    _connected = account != null;
     final lastSync = state?['lastSyncAt'];
     if (lastSync != null) {
       _lastSyncLabel = _formatTimestamp(lastSync);
@@ -95,31 +107,45 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
   Future<void> _syncNow() async {
     setState(() => _syncing = true);
     try {
-      if (!_connected) {
-        final account = await _service.signInWithGoogle();
-        if (account == null) {
-          if (mounted) setState(() => _syncing = false);
-          return;
-        }
-        final error = await _service.validateEmailBinding();
-        if (error != null) {
-          if (!mounted) return;
-          setState(() => _syncing = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(error), backgroundColor: Colors.orange),
-          );
-          return;
-        }
+      // 🔄 TOUJOURS restaurer/établir la session Google AVANT l'upload.
+      // L'état Firestore (`_connected` venant de l'email sauvegardé) ne
+      // garantit PAS que la session Google est vivante dans cette exécution
+      // de l'app : après un redémarrage, `GoogleSignIn.currentUser` est null
+      // et l'upload échouait avec « Connexion Google requise ».
+      final account = await _service.ensureSignedIn();
+      if (account == null) {
+        if (!mounted) return;
         setState(() {
-          _connected = true;
-          _googleEmail = account.email;
+          _syncing = false;
+          _connected = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connexion Google annulée ou indisponible'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
       }
+      final error = await _service.validateEmailBinding();
+      if (error != null) {
+        if (!mounted) return;
+        setState(() => _syncing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _connected = true;
+        _googleEmail = account.email;
+      });
       await _service.uploadBackupToDrive();
       if (!mounted) return;
       setState(() {
         _syncing = false;
-        _lastSyncLabel = 'À l\'instant';
+        _lastSyncLabel = "À l'instant";
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

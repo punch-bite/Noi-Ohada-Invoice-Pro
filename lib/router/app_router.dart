@@ -43,6 +43,7 @@ import '../screens/dashboard/suppliers/create_supplier_screen.dart';
 import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
 import '../screens/dashboard/invoice_settings_edit_screen.dart';
+import '../screens/dashboard/data_export_screen.dart';
 import '../screens/dashboard/wallet_screen.dart';
 import '../screens/dashboard/company_config_screen.dart';
 import '../screens/dashboard/reminders_screen.dart';
@@ -453,6 +454,11 @@ class AppRouter {
       GoRoute(
         path: '/dashboard/settings/invoice',
         builder: (context, state) => const InvoiceSettingsEditScreen(),
+      ),
+      // 📤 Export des données (JSON / CSV)
+      GoRoute(
+        path: '/dashboard/settings/export',
+        builder: (context, state) => const DataExportScreen(),
       ),
       GoRoute(
         path: '/dashboard/company-config',

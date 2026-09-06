@@ -152,6 +152,16 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(
+                  icon: Icons.ios_share_rounded,
+                  title: 'Exporter mes données',
+                  subtitle: 'Clients, stock, factures, statistiques (JSON/CSV)',
+                  onTap: () => context.push('/dashboard/settings/export'),
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
+                _SettingsDivider(isDark: isDark),
+                _SettingsTile(
                   icon: Icons.cloud_upload_outlined,
                   title: 'Sauvegarde Google Drive',
                   subtitle: 'Synchroniser vos données (Business)',

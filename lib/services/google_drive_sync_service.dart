@@ -18,11 +18,10 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'config_service.dart';
-import 'database_service.dart';
+import 'data_export_service.dart';
 
 class GoogleDriveSyncService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final DatabaseService _databaseService = DatabaseService();
 
   static const String _col = 'drive_sync';
   static const String _driveScope =
@@ -67,10 +66,21 @@ class GoogleDriveSyncService {
   }
 
   // ===== AUTHENTIFICATION GOOGLE (scope Drive) =====
+  //
+  // ⚠️ google_sign_in ≥ 6.3 : sur Android, `authentication.accessToken` pour
+  // les scopes additionnels (drive.file) n'est fiable QUE si `serverClientId`
+  // (OAuth Web Client ID) est fourni. On le passe donc AUSSI sur mobile quand
+  // il est configuré (même clé que le web). Sans lui, `_getAccessToken()`
+  // renvoie null → l'upload Drive échoue avec 401 « Connexion requise ».
   GoogleSignIn _signIn() => GoogleSignIn(
         // clientId (web) requis pour le scope Drive sur navigateur. Sur
         // mobile, google-sign_in utilise google-services.json / Info.plist.
         clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
+        serverClientId: kIsWeb
+            ? null
+            : (ConfigService.firebaseWebClientId.isNotEmpty
+                ? ConfigService.firebaseWebClientId
+                : null),
         scopes: [_driveScope],
       );
 
@@ -84,14 +94,34 @@ class GoogleDriveSyncService {
     return await googleSignIn.signIn();
   }
 
+  /// 🔄 Restaure silencieusement la session Google (au démarrage de l'app,
+  /// la session n'est PAS vivante) puis bascule sur la connexion interactive
+  /// si le silencieux échoue. À appeler AVANT chaque sync.
+  Future<GoogleSignInAccount?> ensureSignedIn() async {
+    final googleSignIn = _signIn();
+    final current = googleSignIn.currentUser;
+    if (current != null) return current;
+    try {
+      final silent = await googleSignIn.signInSilently();
+      if (silent != null) return silent;
+    } catch (e) {
+      debugPrint('ℹ️ signInSilently échoué : $e');
+    }
+    return await googleSignIn.signIn();
+  }
+
   Future<void> signOut() => _signIn().signOut();
 
   /// Email du compte Google actuellement connecté (null si aucun).
   String? get connectedGoogleEmail => _signIn().currentUser?.email;
 
   /// Retourne le token OAuth2 du compte connecté (pour l'API Drive).
+  ///
+  /// 🔄 Restaure d'abord la session (silencieux) : après un redémarrage de
+  /// l'app, `GoogleSignIn.currentUser` est null et l'ancien code renvoyait
+  /// null → « Connexion Google requise » à chaque sync.
   Future<String?> _getAccessToken() async {
-    final account = _signIn().currentUser;
+    final account = await ensureSignedIn();
     if (account == null) return null;
     final auth = await account.authentication;
     return auth.accessToken;
@@ -111,20 +141,21 @@ class GoogleDriveSyncService {
   }
 
   // ===== GÉNÉRATION DU BACKUP JSON =====
+  /// Backup complet : clients, stock (produits + mouvements), factures,
+  /// fournisseurs et statistiques — délègue à [DataExportService] (source
+  /// unique avec l'export manuel de l'app).
   Future<Map<String, dynamic>> buildBackup() async {
-    final clients = await _databaseService.getClients();
-    final products = await _databaseService.getProducts();
-    final invoices = await _databaseService.getInvoices();
-
-    return {
-      'app': 'noi_ohada_invoice_pro',
-      'version': 1,
-      'exportedAt': DateTime.now().toIso8601String(),
-      'ownerEmail': _email ?? '',
-      'clients': clients.map((c) => c.toMap()).toList(),
-      'products': products.map((p) => p.toMap()).toList(),
-      'invoices': invoices.map((i) => i.toMap()).toList(),
-    };
+    final allSections = ExportSection.values.toSet();
+    final data = await DataExportService().fetchDataForBackup(allSections);
+    return DataExportService.buildBackupFromData(
+      company: data.company,
+      clients: data.clients.map((c) => c.toMap()).toList(),
+      products: data.products.map((p) => p.toMap()).toList(),
+      deliveries: data.deliveries.map((d) => d.toMap()).toList(),
+      invoices: data.invoices.map((i) => i.toMap()).toList(),
+      suppliers: data.suppliers.map((s) => s.toMap()).toList(),
+      statistics: data.statistics,
+    );
   }
 
   String encodeBackupJson(Map<String, dynamic> backup) =>
