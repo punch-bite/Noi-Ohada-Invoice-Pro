@@ -11,10 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../providers/theme_provider.dart';
-import '../../services/config_service.dart';
 import '../../widgets/glass_widgets.dart';
 import '../../widgets/animated_background.dart';
 
