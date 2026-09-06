@@ -241,19 +241,33 @@ class TeamService {
       );
     } catch (e) {
       debugPrint('⚠️ Server accept invitation failed, trying direct Firestore acceptance: $e');
-      final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
-      if (invDoc.exists) {
-        final data = invDoc.data() ?? {};
-        final teamId = data['teamId']?.toString() ?? '';
-        if (teamId.isNotEmpty) {
-          await _db.collection('teams').doc(teamId).update({
-            'memberIds': FieldValue.arrayUnion([requestedBy]),
-          });
-          await _db.collection('team_invitations').doc(invitationId).update({
-            'status': 'accepted',
-          });
-          return;
+      // ⚠️ Fallback direct : NE FONCTIONNE que pour un ADMIN GLOBAL — les
+      // règles Firestore (firestore.rules) interdisent à un simple invité
+      // d'écrire sur `teams` et `team_invitations` (write: isAdmin()).
+      try {
+        final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+        if (invDoc.exists) {
+          final data = invDoc.data() ?? {};
+          final teamId = data['teamId']?.toString() ?? '';
+          if (teamId.isNotEmpty) {
+            await _db.collection('teams').doc(teamId).update({
+              'memberIds': FieldValue.arrayUnion([requestedBy]),
+            });
+            await _db.collection('team_invitations').doc(invitationId).update({
+              'status': 'accepted',
+            });
+            return;
+          }
         }
+      } catch (err) {
+        debugPrint('⚠️ Firestore direct acceptance refused (règles): $err');
+        // Permission-denied attendu pour un invité non-admin : on remonte un
+        // message ACTIONNABLE plutôt que l'exception Firestore brute.
+        throw Exception(
+          'L\'acceptation a échoué côté serveur et les règles de sécurité '
+          'Firestore interdisent l\'écriture directe. Vérifiez votre '
+          'connexion internet puis réessayez.',
+        );
       }
       rethrow;
     }
@@ -273,12 +287,23 @@ class TeamService {
       );
     } catch (e) {
       debugPrint('⚠️ Server decline invitation failed, trying direct Firestore decline: $e');
-      final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
-      if (invDoc.exists) {
-        await _db.collection('team_invitations').doc(invitationId).update({
-          'status': 'declined',
-        });
-        return;
+      // ⚠️ Fallback direct : NE FONCTIONNE que pour un ADMIN GLOBAL (règles
+      // Firestore : write sur team_invitations → isAdmin() uniquement).
+      try {
+        final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+        if (invDoc.exists) {
+          await _db.collection('team_invitations').doc(invitationId).update({
+            'status': 'declined',
+          });
+          return;
+        }
+      } catch (err) {
+        debugPrint('⚠️ Firestore direct decline refused (règles): $err');
+        throw Exception(
+          'Le refus a échoué côté serveur et les règles de sécurité '
+          'Firestore interdisent l\'écriture directe. Vérifiez votre '
+          'connexion internet puis réessayez.',
+        );
       }
       rethrow;
     }
@@ -305,12 +330,20 @@ class TeamService {
     } catch (e) {
       debugPrint('⚠️ Server get-invitations failed, using Firestore fallback: $e');
       try {
+        // ⚠️ Le champ écrit par le serveur est `inviteeUid` (cf. server/index.js
+        // createNotification / invite) — PAS `targetUserId`. La requête reste
+        // à UNE seule égalité : Firestore l'auto-indexe, aucun index composite
+        // n'est requis (un where composé status+inviteeUid déclencherait
+        // « The query requires an index » en production).
         final snap = await _db
             .collection('team_invitations')
-            .where('targetUserId', isEqualTo: userId)
-            .where('status', isEqualTo: 'pending')
+            .where('inviteeUid', isEqualTo: userId)
             .get();
-        return snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+        return snap.docs
+            .map((d) => {'id': d.id, ...d.data()})
+            .where((inv) =>
+                (inv['status'] ?? 'pending').toString() == 'pending')
+            .toList();
       } catch (err) {
         debugPrint('⚠️ Firestore get-invitations fallback error: $err');
       }

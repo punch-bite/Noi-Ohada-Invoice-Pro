@@ -144,7 +144,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 background:linear-gradient(135deg,#0B0D17 0%,#1E2433 50%,#0B0D17 100%);
 min-height:100vh;color:#E2E8F0;display:flex;flex-direction:column;
 align-items:center;justify-content:center;padding:2rem}
-.container{max-width:560px;width:100%;text-align:center}
+.container{max-width:820px;width:100%;text-align:center}
 .logo{width:72px;height:72px;background:linear-gradient(135deg,#4338CA,#7C3AED);
 border-radius:18px;display:flex;align-items:center;justify-content:center;
 margin:0 auto 1.2rem;font-size:1.8rem;box-shadow:0 20px 40px rgba(124,58,237,.3)}
@@ -155,6 +155,25 @@ background:linear-gradient(135deg,#818CF8,#C084FC);-webkit-background-clip:text;
 .user{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
 border-radius:12px;padding:.6rem 1rem;margin-bottom:1.5rem;font-size:.85rem;color:#94A3B8}
 .user strong{color:#E2E8F0}
+.hero{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+border-radius:20px;padding:1.6rem 1.4rem;margin-bottom:1rem;text-align:left}
+.hero .tag{display:inline-block;background:rgba(52,211,153,.12);color:#34D399;
+padding:.25rem .7rem;border-radius:999px;font-size:.7rem;font-weight:700;
+letter-spacing:.04em;margin-bottom:.7rem}
+.hero h2{font-size:1.15rem;font-weight:800;line-height:1.35;margin-bottom:.5rem}
+.hero h2 em{font-style:normal;background:linear-gradient(135deg,#818CF8,#C084FC);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{color:#94A3B8;font-size:.85rem;line-height:1.55}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:.7rem;margin:1rem 0 1.2rem;text-align:left}
+.feat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+border-radius:14px;padding:.9rem}
+.feat .fi{font-size:1.25rem;margin-bottom:.45rem}
+.feat .ft2{font-weight:700;font-size:.85rem;margin-bottom:.25rem}
+.feat .fd{font-size:.76rem;color:#94A3B8;line-height:1.45}
+.stats{display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem;margin-bottom:1.5rem}
+.stat{background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.25);
+color:#C7D2FE;border-radius:999px;padding:.35rem .85rem;font-size:.72rem;font-weight:600}
 .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
 border-radius:16px;padding:1.2rem;margin-bottom:.8rem;display:flex;align-items:center;
 justify-content:space-between;transition:all .2s}
@@ -171,6 +190,8 @@ box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
 .btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,.4)}
 .btn.dis{background:rgba(255,255,255,.1);color:#64748B;cursor:not-allowed;box-shadow:none}
 .btn.dis:hover{transform:none}
+.dlhead{margin:1.8rem 0 1rem;font-size:1.05rem;font-weight:800;text-align:left}
+.dlhead small{display:block;font-weight:400;color:#94A3B8;font-size:.78rem;margin-top:.25rem}
 .ft{margin-top:1.5rem;font-size:.78rem;color:#64748B}
 .ft a{color:#818CF8;text-decoration:none}
 .badge{display:inline-block;background:rgba(129,140,248,.15);color:#818CF8;
@@ -180,6 +201,45 @@ padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;margin-
 <h1>Noi OHADA Invoice Pro</h1>
 <p class="sub">Telechargez l'application sur votre appareil</p>
 <div class="user">Connecte en tant que <strong>${user.email || user.uid}</strong></div>
+
+<div class="hero">
+  <span class="tag">✓ CONFORME SYSCOHADA RÉVISÉ</span>
+  <h2>La facturation professionnelle <em>conforme OHADA</em>, dans votre poche.</h2>
+  <p>Noi OHADA Invoice Pro est la solution de gestion commerciale conçue pour les
+  entrepreneurs, PME et indépendants de l'espace OHADA : créez des factures et devis
+  aux normes SYSCOHADA révisé, suivez vos stocks, encaissez via le paiement mobile
+  et gardez vos données à l'abri dans le cloud — même hors connexion.</p>
+</div>
+
+<div class="features">
+  <div class="feat"><div class="fi">🧾</div><div class="ft2">Factures &amp; devis</div>
+  <div class="fd">Factures conformes (TVA, IRC, remises), devis convertibles
+  et PDF professionnels aux couleurs de votre entreprise.</div></div>
+  <div class="feat"><div class="fi">📦</div><div class="ft2">Stocks &amp; livraisons</div>
+  <div class="fd">Alertes de rupture et stock faible, gestion des livraisons
+  et valorisation automatique de l'inventaire.</div></div>
+  <div class="feat"><div class="fi">👥</div><div class="ft2">Équipes</div>
+  <div class="fd">Invitez vos collaborateurs par e-mail, partagez factures
+  et clients, avec des rôles administrateur ou membre.</div></div>
+  <div class="feat"><div class="fi">💳</div><div class="ft2">Paiements ENKAP</div>
+  <div class="fd">Encaissez par Mobile Money (MTN, Orange…) via le proxy
+  sécurisé ENKAP et suivez votre portefeuille intégré.</div></div>
+  <div class="feat"><div class="fi">☁️</div><div class="ft2">Cloud &amp; hors-ligne</div>
+  <div class="fd">Synchronisation Firestore temps réel, sauvegarde Google
+  Drive, fonctionnement hors-ligne avec reprise automatique.</div></div>
+  <div class="feat"><div class="fi">📊</div><div class="ft2">Tableau de bord</div>
+  <div class="fd">Chiffre d'affaires, créances, top clients et relances de
+  paiement automatiques — tout visible d'un coup d'œil.</div></div>
+</div>
+
+<div class="stats">
+  <span class="stat">💱 FCFA multi-devises</span>
+  <span class="stat">🔐 Données chiffrées</span>
+  <span class="stat">📴 Mode hors-ligne</span>
+  <span class="stat">🔔 Relances automatiques</span>
+</div>
+
+<div class="dlhead">📥 Téléchargements<small>Choisissez votre plateforme — l'application s'installe comme n'importe quelle application.</small></div>
 <div class="card"><div class="info"><div class="icon">🍎</div><div>
 <div class="bld">iOS <span class="badge">IPA</span></div>
 <div class="meta">${builds.ios ? formatSize(builds.ios.size) + ' • iPhone/iPad' : 'Bientôt disponible'}</div>
