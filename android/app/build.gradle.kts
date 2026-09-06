@@ -22,6 +22,12 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("androidx.multidex:multidex:2.0.1")
+
+    // 🔧 Core library desugaring — REQUIS par flutter_local_notifications
+    // (checkReleaseAarMetadata : « requires core library desugaring »).
+    // Permet d'utiliser les APIs java.time/java.util.stream sur les vieux
+    // niveaux d'API Android.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 // ============================================================
@@ -77,6 +83,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // ✅ Requis par flutter_local_notifications (cf. dependencies).
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlin {
         compilerOptions {
