@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  NOI OHADA Invoice Pro — Serveur de callbacks (ENKAP)
 //
 //  Reçoit les callbacks de confirmation ENKAP (Orange Money / MTN / Carte)
@@ -255,7 +255,7 @@ function isValidEmail(value) {
 //  Si API_SECRET_KEY n'est pas configurée → fail-open (rétro-compatibilité
 //  avec les déploiements existants) ; configurez-la pour verrouiller.
 // ============================================================
-const PUBLIC_PATHS = new Set(['/', '/health', '/download']);
+const PUBLIC_PATHS = new Set(['/', '/health', '/download', '/logo.png', '/favicon.png']);
 
 function requestIsPublic(req) {
   const p = String(req.path || '');
@@ -1513,6 +1513,40 @@ app.post(
 );
 
 // ============================================================
+//  🖼️ LOGO & FAVICON — servis depuis le bundle (server/public/)
+//  Le vrai logo de l'application (mêmes fichiers que la PWA).
+// ============================================================
+app.get('/logo.png', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'public', 'logo.png'));
+});
+app.get('/favicon.png', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'public', 'favicon.png'));
+});
+
+// ── Icônes monochromes (SVG inline, style line-icons) ────────────────────────
+// stroke=currentColor : héritent de la couleur du texte parent.
+const ICON = {
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-2.5-1.8L13 22l-2.5-1.8L8 22l-2-1.5V2z"/><path d="M9 7.5h6M9 11.5h6M9 15.5h3.5"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+  box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V11M12 21V4M19 21v-6M2.5 21h19"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 2.9-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.6c2.7.4 5 2.1 5 4.9"/></svg>',
+  brush: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3.5l5 5L9.5 19.5c-.9.9-2.7 1.4-4.9 1.4-.2-2.2.4-4 1.4-5L15.5 3.5z"/><path d="M13.5 5.5l5 5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.2 7.2-2.2 7.2h16.4S18 15 18 9z"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3.4v6.8c0 4.9-3.4 8.4-8 9.8-4.6-1.4-8-4.9-8-9.8V5.4L12 2z"/><path d="M8.8 12l2.2 2.2 4.2-4.2"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20M6 15h4"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M7.5 10L12 14.5 16.5 10M4 20.5h16"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3.2 2.8 14.8 0 18M12 3c-2.8 3.2-2.8 14.8 0 18"/></svg>',
+  store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5L5.5 4h13L20 9.5M4 9.5a2.4 2.4 0 0 0 4.8 0 2.4 2.4 0 0 0 4.8 0 2.4 2.4 0 0 0 4.8 0M5.5 12.5V21h13v-8.5M9.5 21v-5h5v5"/></svg>',
+  briefcase: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="18" height="13" rx="2"/><path d="M8.5 7.5V5.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2M3 12.5h18"/></svg>',
+  factory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 21V10.5L9 14v-3.5l6 3.5V4.5h6.5V21h-19z"/><path d="M6 17.5h2.5M12 17.5h2.5M17.5 17.5H20"/></svg>',
+  truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7h12.5v10H1.5zM14 10.5h4.5l3.5 3.5v3h-8"/><circle cx="6" cy="19.5" r="1.8"/><circle cx="17.5" cy="19.5" r="1.8"/></svg>',
+  scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v17M8 20.5h8M12 5.5l6.5 2.5M12 5.5L5.5 8"/><path d="M5.5 8l-2.5 5.5a2.8 2.8 0 0 0 5 0L5.5 8zM18.5 8L16 13.5a2.8 2.8 0 0 0 5 0L18.5 8z"/></svg>',
+};
+
+// ============================================================
 //  PAGE D'ACCUEIL — vitrine publique NEUTRE
 //  🔒 Aucune info technique : pas d'endpoints, pas de stack.
 //  Les API restent derrière requireApiKey (x-api-key).
@@ -1524,8 +1558,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .wrap{max-width:1060px;margin:0 auto;padding:0 1.4rem}
 header{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 0}
 .brand{display:flex;align-items:center;gap:.7rem;font-weight:800;font-size:1rem}
-.brand .bl{width:40px;height:40px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 8px 18px rgba(124,58,237,.3)}
-.navcta{background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;padding:.55rem 1.1rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:.82rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s}
+.brand .bl{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
+.brand .bl img{width:34px;height:34px;object-fit:contain}
+.hero-logo{width:92px;height:92px;object-fit:contain;display:block;margin:0 auto 1.3rem;filter:drop-shadow(0 14px 28px rgba(124,58,237,.35))}
+.navcta{background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;padding:.55rem 1.1rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:.82rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s;display:inline-flex;align-items:center;gap:.4rem}
+.navcta svg{width:15px;height:15px}
 .navcta:hover{transform:translateY(-2px)}
 .hero{text-align:center;padding:3.2rem 0 2.2rem}
 .tag{display:inline-block;background:rgba(52,211,153,.12);color:#34D399;padding:.3rem .8rem;border-radius:999px;font-size:.7rem;font-weight:700;letter-spacing:.05em;margin-bottom:1.1rem}
@@ -1535,6 +1572,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:1.2
 .ctas{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.85rem 1.5rem;border-radius:12px;background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;text-decoration:none;font-weight:700;font-size:.9rem;box-shadow:0 4px 14px rgba(124,58,237,.3);transition:all .2s}
 .btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(124,58,237,.45)}
+.btn svg{width:16px;height:16px}
 .btn.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);box-shadow:none;color:#E2E8F0}
 .btn.ghost:hover{background:rgba(255,255,255,.1);box-shadow:none}
 .stats{display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem;margin-top:2.2rem}
@@ -1545,7 +1583,8 @@ p.sts{color:#94A3B8;text-align:center;font-size:.9rem;max-width:560px;margin:0 a
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.9rem}
 .feat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.15rem;transition:all .25s;text-align:left}
 .feat:hover{transform:translateY(-4px);border-color:rgba(129,140,248,.35);background:rgba(255,255,255,.06)}
-.feat .fi{width:44px;height:44px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:.8rem}
+.feat .fi{width:44px;height:44px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:11px;display:flex;align-items:center;justify-content:center;margin-bottom:.8rem;color:#fff}
+.feat .fi svg{width:22px;height:22px}
 .feat .ft2{font-weight:800;font-size:.92rem;margin-bottom:.35rem}
 .feat .fd{font-size:.8rem;color:#94A3B8;line-height:1.55}
 .pay{display:grid;grid-template-columns:1.1fr 1fr;gap:1.2rem;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:1.6rem}
@@ -1559,12 +1598,14 @@ p.sts{color:#94A3B8;text-align:center;font-size:.9rem;max-width:560px;margin:0 a
 .paycard .pcr{display:flex;justify-content:space-between;font-size:.79rem;padding:.45rem 0;border-top:1px solid rgba(255,255,255,.22)}
 .who{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.9rem}
 .who .w{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:1.05rem;text-align:left}
-.who .wi{font-size:1.3rem;margin-bottom:.5rem}
+.who .wi{width:40px;height:40px;background:rgba(129,140,248,.14);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:.55rem;color:#818CF8}
+.who .wi svg{width:20px;height:20px}
 .who .wt{font-weight:800;font-size:.88rem;margin-bottom:.3rem}
 .who .wd{font-size:.76rem;color:#94A3B8;line-height:1.5}
 .sec{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 .sec .sc{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.3rem;text-align:left}
-.sec .sc h3{font-size:1rem;font-weight:800;margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem}
+.sec .sc h3{font-size:1rem;font-weight:800;margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem;color:#E2E8F0}
+.sec .sc h3 svg{width:20px;height:20px;color:#818CF8;flex:none}
 .sec .sc ul{list-style:none}
 .sec .sc li{font-size:.82rem;color:#94A3B8;padding:.32rem 0;line-height:1.5;display:flex;gap:.55rem}
 .sec .sc li b{color:#34D399}
@@ -1581,30 +1622,32 @@ const LANDING_TOP = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="/favicon.png">
 <title>Noi OHADA Invoice Pro — Facturation conforme OHADA</title>
 <meta name="description" content="Factures et devis conformes SYSCOHADA révisé, stocks, équipes, paiements Mobile Money sécurisés. L'application de gestion commerciale des entrepreneurs OHADA.">
 <style>${LANDING_CSS}</style></head><body><div class="wrap">
 <header>
-  <div class="brand"><span class="bl">📄</span> Noi OHADA Invoice Pro</div>
-  <a class="navcta" href="/download">⬇ Télécharger</a>
+  <div class="brand"><span class="bl"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span> Noi OHADA Invoice Pro</div>
+  <a class="navcta" href="/download">${ICON.download} Télécharger</a>
 </header>
 
 <section class="hero">
+  <img class="hero-logo" src="/logo.png" alt="Logo Noi OHADA Invoice Pro">
   <span class="tag">✓ CONFORME SYSCOHADA RÉVISÉ</span>
   <h1>Gérez votre business avec des factures <em>conformes OHADA</em></h1>
   <p class="lead">Créez des factures et devis professionnels en quelques secondes,
   suivez vos stocks en temps réel, encaissez par Mobile Money et travaillez en
   équipe — en ligne comme hors connexion, en FCFA comme en multi-devises.</p>
   <div class="ctas">
-    <a class="btn" href="/download">⬇ Télécharger l'application</a>
-    <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">🌐 Ouvrir la version web</a>
+    <a class="btn" href="/download">${ICON.download} Télécharger l'application</a>
+    <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">${ICON.globe} Ouvrir la version web</a>
   </div>
   <div class="stats">
-    <span class="stat">🧾 Factures conformes</span>
-    <span class="stat">💱 FCFA multi-devises</span>
-    <span class="stat">📴 100% hors-ligne</span>
-    <span class="stat">🔐 Données chiffrées</span>
-    <span class="stat">🔔 Relances auto</span>
+    <span class="stat">Factures conformes</span>
+    <span class="stat">FCFA multi-devises</span>
+    <span class="stat">hors-ligne</span>
+    <span class="stat">Données chiffrées</span>
+    <span class="stat">Relances auto</span>
   </div>
 </section>
 
@@ -1613,28 +1656,28 @@ const LANDING_TOP = `<!DOCTYPE html>
   <p class="sts">Des outils complets, pensés pour le terrain et les réalités
   des entreprises de l'espace OHADA.</p>
   <div class="grid">
-    <div class="feat"><div class="fi">🧾</div><div class="ft2">Factures &amp; devis professionnels</div>
+    <div class="feat"><div class="fi">${ICON.receipt}</div><div class="ft2">Factures &amp; devis professionnels</div>
     <div class="fd">Factures conformes SYSCOHADA (TVA, IRC, remises, mentions légales),
     devis convertibles en un geste, PDF aux couleurs de votre entreprise.</div></div>
-    <div class="feat"><div class="fi">👥</div><div class="ft2">Clients &amp; historique</div>
+    <div class="feat"><div class="fi">${ICON.file}</div><div class="ft2">Clients &amp; historique</div>
     <div class="fd">Fiches clients complètes, historique d'achats, soldes et
     créances suivis automatiquement pour un recouvrement sans effort.</div></div>
-    <div class="feat"><div class="fi">📦</div><div class="ft2">Stocks &amp; livraisons</div>
+    <div class="feat"><div class="fi">${ICON.box}</div><div class="ft2">Stocks &amp; livraisons</div>
     <div class="fd">Alertes de rupture et stock faible, suivi des livraisons et
     valorisation automatique de l'inventaire à chaque vente.</div></div>
-    <div class="feat"><div class="fi">📊</div><div class="ft2">Tableau de bord</div>
+    <div class="feat"><div class="fi">${ICON.chart}</div><div class="ft2">Tableau de bord</div>
     <div class="fd">Chiffre d'affaires, bénéfices, dettes clients et meilleures
     ventes — vos indicateurs clés mis à jour en temps réel.</div></div>
-    <div class="feat"><div class="fi">👥</div><div class="ft2">Travail en équipe</div>
+    <div class="feat"><div class="fi">${ICON.users}</div><div class="ft2">Travail en équipe</div>
     <div class="fd">Invitez vos collaborateurs par e-mail, partagez factures et
     clients, avec des rôles administrateur ou membre et des notifications.</div></div>
-    <div class="feat"><div class="fi">🎨</div><div class="ft2">Modèles personnalisés</div>
+    <div class="feat"><div class="fi">${ICON.brush}</div><div class="ft2">Modèles personnalisés</div>
     <div class="fd">Boutique de modèles de factures : logo, couleurs et mise en
     page personnalisés pour une image professionnelle à chaque envoi.</div></div>
-    <div class="feat"><div class="fi">🔔</div><div class="ft2">Relances automatiques</div>
+    <div class="feat"><div class="fi">${ICON.bell}</div><div class="ft2">Relances automatiques</div>
     <div class="fd">Rappels de paiement planifiés (1er rappel, 2e rappel, dernier
     avertissement) pour réduire vos impayés sans lever le petit doigt.</div></div>
-    <div class="feat"><div class="fi">🛡️</div><div class="ft2">Sécurité avancée</div>
+    <div class="feat"><div class="fi">${ICON.shield}</div><div class="ft2">Sécurité avancée</div>
     <div class="fd">Authentification Firebase, vérification biométrique,
     verrouillage d'application et données chiffrées en transit et au repos.</div></div>
   </div>
@@ -1648,15 +1691,15 @@ const LANDING_BOTTOM = `
   aux opérateurs de Mobile Money — sans manipulation, sans risque.</p>
   <div class="pay">
     <div>
-      <h3>💳 Paiements intégrés &amp; portefeuille</h3>
+      <h3>${ICON.card} Paiements intégrés &amp; portefeuille</h3>
       <p>Vos clients règlent leurs factures ou vos abonnements par Mobile Money
       ou carte bancaire. La confirmation est instantanée : votre abonnement ou
       votre transaction est activé automatiquement, avec preuve de paiement.</p>
       <div class="chips">
-        <span class="chip">🟡 Orange Money</span>
-        <span class="chip">🟡 MTN Mobile Money</span>
-        <span class="chip">💳 Carte bancaire</span>
-        <span class="chip">💰 Portefeuille intégré</span>
+        <span class="chip">Orange Money</span>
+        <span class="chip">MTN Mobile Money</span>
+        <span class="chip">Carte bancaire</span>
+        <span class="chip">Portefeuille intégré</span>
       </div>
     </div>
     <div class="paycard">
@@ -1675,13 +1718,13 @@ const LANDING_BOTTOM = `
   <p class="sts">Quelle que soit votre activité, l'application s'adapte à
   votre façon de vendre et de facturer.</p>
   <div class="who">
-    <div class="w"><div class="wi">🏪</div><div class="wt">Commerçants &amp; boutiques</div>
+    <div class="w"><div class="wi">${ICON.store}</div><div class="wt">Commerçants &amp; boutiques</div>
     <div class="wd">Ventes au comptant, gestion du stock et reçus instantanés.</div></div>
-    <div class="w"><div class="wi">🧑‍💼</div><div class="wt">Prestataires &amp; freelances</div>
+    <div class="w"><div class="wi">${ICON.briefcase}</div><div class="wt">Prestataires &amp; freelances</div>
     <div class="wd">Devis, factures d'honoraires et suivi des règlements clients.</div></div>
-    <div class="w"><div class="wi">🏭</div><div class="wt">PME &amp; grossistes</div>
+    <div class="w"><div class="wi">${ICON.factory}</div><div class="wt">PME &amp; grossistes</div>
     <div class="wd">Catalogue produits, prix de revient, marges et équipes de vente.</div></div>
-    <div class="w"><div class="wi">🚚</div><div class="wt">Distributeurs &amp; livreurs</div>
+    <div class="w"><div class="wi">${ICON.truck}</div><div class="wt">Distributeurs &amp; livreurs</div>
     <div class="wd">Bons de livraison liés aux factures et suivi des tournées.</div></div>
   </div>
 </section>
@@ -1689,7 +1732,7 @@ const LANDING_BOTTOM = `
 <section>
   <div class="sec">
     <div class="sc">
-      <h3>🛡️ Sécurité &amp; confidentialité</h3>
+      <h3>${ICON.shield} Sécurité &amp; confidentialité</h3>
       <ul>
         <li><b>✓</b> Authentification sécurisée (Firebase Auth, vérification e-mail)</li>
         <li><b>✓</b> Déverrouillage biométrique et code PIN de l'application</li>
@@ -1699,7 +1742,7 @@ const LANDING_BOTTOM = `
       </ul>
     </div>
     <div class="sc">
-      <h3>📜 Conformité OHADA</h3>
+      <h3>${ICON.scale} Conformité OHADA</h3>
       <ul>
         <li><b>✓</b> Actes de commerce conformes au SYSCOHADA révisé</li>
         <li><b>✓</b> TVA (18% et taux spéciaux), IRC, remises et escomptes</li>
@@ -1716,7 +1759,7 @@ const LANDING_BOTTOM = `
     <h2>Prêt à facturer comme un professionnel ?</h2>
     <p>Téléchargez Noi OHADA Invoice Pro et émettez votre première facture
     conforme en moins de deux minutes.</p>
-    <a class="btn" href="/download">⬇ Télécharger maintenant</a>
+    <a class="btn" href="/download">${ICON.download} Télécharger maintenant</a>
   </div>
 </section>
 
