@@ -78,7 +78,11 @@ workflows:
 
       - name: Builder l'App Bundle (AAB) (obfusqué)
         script: |
+          # ⚠️ Même flag que l'APK ci-dessus : Flutter 3.41 exige Gradle >= 8.14,
+          # notre wrapper est en 8.7 (largement suffisant pour AGP 8.6.0 — cf.
+          # APK buildé avec succès). Le flag saute la validation de version.
           flutter build appbundle --release \
+            --android-skip-build-dependency-validation \
             --dart-define="API_BASE_URL=$API_BASE_URL" \
             --obfuscate \
             --split-debug-info=build/symbols/aab
