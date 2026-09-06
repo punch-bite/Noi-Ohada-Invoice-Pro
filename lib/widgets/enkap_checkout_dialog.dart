@@ -154,19 +154,31 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
   }
 
   /// Appelé quand la WebView navigue vers notre page de retour
-  /// (`/enkap/return/<ref>?status=...`). On déclenche une vérification
-  /// immédiate, et on termine si le statut est final.
+  /// (`/enkap/return/<ref>?status=...` ou `/enkap/return?orderMerchantId=…`).
+  /// On déclenche une vérification immédiate, et on termine si le statut est
+  /// final. NB : les paramètres sont cherchés sous plusieurs noms — la doc
+  /// E-nkap mentionne `status`, certains flux renvoient `orderStatus` /
+  /// `transactionStatus` et la référence en query (`orderMerchantId`).
   Future<void> _handleReturnNavigation(Uri uri) async {
     final path = uri.path;
     if (!path.contains('/enkap/return')) return;
-    final status = uri.queryParameters['status'] ?? '';
+    final q = uri.queryParameters;
+    final status = (q['status'] ??
+            q['orderStatus'] ??
+            q['transactionStatus'] ??
+            '')
+        .toString();
     if (EnkapService.isConfirmed(status)) {
       _finish(success: true);
-    } else if (EnkapService.isFailed(status)) {
-      _finish(success: false);
-    } else {
-      await _checkStatus();
+      return;
     }
+    if (EnkapService.isFailed(status)) {
+      _finish(success: false);
+      return;
+    }
+    // Statut non final (ou absent) : on interroge immédiatement le serveur —
+    // l'ITN (notificationUrl) a souvent déjà confirmé le paiement.
+    await _checkStatus();
   }
 
   void _finish({required bool success}) {
@@ -303,17 +315,24 @@ class _EnkapCheckoutDialogState extends State<EnkapCheckoutDialog> {
               _loadingPage = progress < 100;
             });
           },
-          onPageStarted: (_) {
+          onPageStarted: (pageUrl) {
             if (!mounted) return;
             setState(() {
               _loadingPage = true;
             });
+            // 🔁 Double filet : `onUrlChange` ne se déclenche pas toujours
+            // sur les redirections serveur (302) selon la plateforme — on
+            // teste aussi l'URL au début de chaque chargement.
+            final u = Uri.tryParse(pageUrl);
+            if (u != null) _handleReturnNavigation(u);
           },
-          onPageFinished: (_) {
+          onPageFinished: (pageUrl) {
             if (!mounted) return;
             setState(() {
               _loadingPage = false;
             });
+            final u = Uri.tryParse(pageUrl);
+            if (u != null) _handleReturnNavigation(u);
           },
           onWebResourceError: (_) {
             if (!mounted) return;

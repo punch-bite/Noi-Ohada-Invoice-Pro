@@ -345,10 +345,45 @@ app.post(
 /// Page de retour ENKAP : après paiement, ENKAP redirige le client vers
 /// `<returnUrl>/<reference>?status=<status>`. On affiche une confirmation.
 /// 🔒 Les paramètres sont ÉCHAPPÉS (anti-XSS reflétée).
+///
+/// NB : le handler ci-dessous (SANS segment) gère aussi le cas où E-nkap
+/// appelle le `returnUrl` EXACT sans apposer la référence (setup ignoré,
+/// anciennes commandes…) — sinon le WebView intégré affiche le 404 brut
+/// « Cannot GET /enkap/return » (HTML illisible).
+app.get('/enkap/return', (req, res) => {
+  const reference = escapeHtml(
+    (req.query.orderMerchantId ||
+      req.query.merchantReferenceId ||
+      req.query.reference ||
+      '').toString(),
+  );
+  const status = escapeHtml(
+    (req.query.status || req.query.orderStatus || '').toString(),
+  );
+  sendReturnPage(res, reference, status);
+});
+
 app.get('/enkap/return/:reference', (req, res) => {
   const reference = escapeHtml(req.params.reference || '');
   const status = escapeHtml((req.query.status || '').toString());
-  const ok = (req.query.status || '').toString().toUpperCase() === 'CONFIRMED';
+  sendReturnPage(res, reference, status);
+});
+
+/// Construit et envoie la page de confirmation de paiement. Utilisée par les
+/// deux variantes de la route de retour (avec/sans référence).
+function sendReturnPage(res, reference, status) {
+  const ok = (status || '').toUpperCase() === 'CONFIRMED';
+  const failed = ['FAILED', 'CANCELED', 'CANCELLED'].includes(
+    (status || '').toUpperCase(),
+  );
+  const icon = ok ? '✅' : failed ? '❌' : 'ℹ️';
+  const title = ok
+    ? 'Paiement confirmé'
+    : failed
+    ? 'Paiement non abouti'
+    : 'Retour de paiement';
+  // Auto-retour dans la WebView : tente window.close() (fonctionne dans le
+  // WebView intégré de l'app), sinon l'utilisateur utilise le bouton.
   res.status(200).type('html').send(`<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -356,15 +391,22 @@ app.get('/enkap/return/:reference', (req, res) => {
 <style>body{font-family:system-ui,sans-serif;background:#f5f6fa;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
 .card{background:#fff;border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.08)}
 .icon{font-size:56px} h1{font-size:20px;margin:12px 0 6px} p{color:#666;margin:4px 0;font-size:14px}
-.btn{display:inline-block;margin-top:18px;padding:12px 22px;border-radius:10px;background:#4338ca;color:#fff;text-decoration:none;font-weight:600}</style>
+.btn{display:inline-block;margin-top:18px;padding:12px 22px;border-radius:10px;background:#4338ca;color:#fff;text-decoration:none;font-weight:600;border:none;font-size:14px}
+.btn:active{opacity:.85}</style>
 </head><body><div class="card">
-<div class="icon">${ok ? '✅' : 'ℹ️'}</div>
-<h1>${ok ? 'Paiement confirmé' : 'Retour de paiement'}</h1>
-<p>Référence : <b>${reference}</b></p>
+<div class="icon">${icon}</div>
+<h1>${title}</h1>
+${reference ? `<p>Référence : <b>${reference}</b></p>` : ''}
 <p>Statut : <b>${status || 'N/A'}</b></p>
 <p>Vous pouvez fermer cette page et revenir à l'application.</p>
+<button class="btn" onclick="window.close();history.length>1?history.back():null">← Revenir à l'application</button>
+<script>
+// Fermeture automatique dans le WebView intégré (window.close y est autorisé
+// quand la page a été ouverte par l'app) ; sans effet dans un onglet externe.
+setTimeout(function(){ try { window.close(); } catch (_) {} }, 1500);
+</script>
 </div></body></html>`);
-});
+}
 
 /// Callback instantané ENKAP (ITN) : ENKAP appelle
 /// `PUT <notificationUrl>/<merchantReference>` avec `{"status":"CONFIRMED"}`.
