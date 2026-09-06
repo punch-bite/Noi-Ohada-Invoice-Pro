@@ -49,20 +49,70 @@ function checkRateLimit(ip, max = 30, windowMs = 60000) {
   return true;
 }
 
+// ── Résolution du bucket Storage ─────────────────────────────────────────────
+// 1) FIREBASE_STORAGE_BUCKET (variable Vercel — recommandé)
+// 2) candidats usuels du projet `facture-ohada` (nouveau / ancien format),
+//    testés une fois puis mis en cache.
+let _resolvedBucket = null;
+
+// Tente de lister les builds sur chaque bucket candidat et mémorise celui
+// qui répond. Retourne le bucket opérationnel ou null.
+async function resolveWorkingBucket() {
+  if (_resolvedBucket) return getStorage(firebaseApp).bucket(_resolvedBucket);
+  const candidates = [
+    (process.env.FIREBASE_STORAGE_BUCKET || '').trim(),
+    'facture-ohada.firebasestorage.app',
+    'facture-ohada.appspot.com',
+  ].filter(Boolean);
+  const storage = getStorage(firebaseApp);
+  for (const name of [...new Set(candidates)]) {
+    const bucket = storage.bucket(name);
+    try {
+      await bucket.getFiles({ prefix: 'builds/', maxResults: 1 });
+      _resolvedBucket = name;
+      logger.info(`Bucket Storage resolu : ${name}`);
+      return bucket;
+    } catch (_) { /* candidat suivant */ }
+  }
+  return null;
+}
+
 async function getBuilds() {
   try {
-    const bucket = getStorage().bucket();
+    const bucket = await resolveWorkingBucket();
+    if (!bucket) {
+      logger.warn('Aucun bucket Storage exploitable (FIREBASE_STORAGE_BUCKET absent ?)');
+      return { ios: null, android: null, web: null };
+    }
     const [files] = await bucket.getFiles({ prefix: 'builds/' });
     const builds = { ios: null, android: null, web: null };
     for (const file of files) {
       const name = file.name.toLowerCase();
       const md = file.metadata || {};
       if (name.endsWith('.ipa') && !builds.ios) {
-        builds.ios = { name: file.name.split('/').pop(), size: md.size || 0 };
+        builds.ios = { name: file.name.split('/').pop(), size: md.size || 0, updated: md.updated, url: null };
       } else if (name.endsWith('.apk') && !builds.android) {
-        builds.android = { name: file.name.split('/').pop(), size: md.size || 0 };
+        builds.android = { name: file.name.split('/').pop(), size: md.size || 0, updated: md.updated, url: null };
       } else if (name.includes('web') && name.endsWith('.zip') && !builds.web) {
-        builds.web = { name: file.name.split('/').pop(), size: md.size || 0 };
+        builds.web = { name: file.name.split('/').pop(), size: md.size || 0, updated: md.updated, url: null };
+      }
+    }
+    // URLs signées (lecture directe, valables 7 jours) pour les builds trouvés.
+    for (const key of ['ios', 'android', 'web']) {
+      if (!builds[key]) continue;
+      try {
+        const file = bucket.file(`builds/${builds[key].name}`);
+        const [url] = await file.getSignedUrl({
+          action: 'read',
+          expires: Date.now() + 7 * 24 * 3600 * 1000,
+        });
+        builds[key].url = url;
+      } catch (e) {
+        logger.warn(`URL signée impossible pour ${builds[key].name}:`, { error: e.message });
+        // Fallback : mediaLink si le fichier est public, sinon le bouton reste désactivé.
+        const [meta] = await bucket.file(`builds/${builds[key].name}`)
+          .getMetadata().catch(() => [null]);
+        builds[key].url = (meta && meta.mediaLink) || '#';
       }
     }
     return builds;
@@ -81,8 +131,10 @@ function formatSize(bytes) {
 }
 
 function renderDownloadPage(user, builds) {
-  const iosUrl = '#';
-  const androidUrl = '#';
+  const iosUrl = builds.ios?.url || '#';
+  const androidUrl = builds.android?.url || '#';
+  const iosReady = !!builds.ios && iosUrl !== '#';
+  const androidReady = !!builds.android && androidUrl !== '#';
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Noi OHADA — Telecharger</title>
@@ -130,12 +182,12 @@ padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;margin-
 <div class="user">Connecte en tant que <strong>${user.email || user.uid}</strong></div>
 <div class="card"><div class="info"><div class="icon">🍎</div><div>
 <div class="bld">iOS <span class="badge">IPA</span></div>
-<div class="meta">${builds.ios ? formatSize(builds.ios.size) + ' • iPhone/iPad' : 'Bientot disponible'}</div>
-</div></div><a href="${iosUrl}" class="btn ${builds.ios ? '' : 'dis'}">${builds.ios ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
+<div class="meta">${builds.ios ? formatSize(builds.ios.size) + ' • iPhone/iPad' : 'Bientôt disponible'}</div>
+</div></div><a href="${iosUrl}" ${iosReady ? 'download rel="noopener"' : ''} class="btn ${iosReady ? '' : 'dis'}">${iosReady ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
 <div class="card"><div class="info"><div class="icon">🤖</div><div>
 <div class="bld">Android <span class="badge">APK</span></div>
-<div class="meta">${builds.android ? formatSize(builds.android.size) + ' • Android 6+' : 'Bientot disponible'}</div>
-</div></div><a href="${androidUrl}" class="btn ${builds.android ? '' : 'dis'}">${builds.android ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
+<div class="meta">${builds.android ? formatSize(builds.android.size) + ' • Android 6+' : 'Bientôt disponible'}</div>
+</div></div><a href="${androidUrl}" ${androidReady ? 'download rel="noopener"' : ''} class="btn ${androidReady ? '' : 'dis'}">${androidReady ? '⬇ Telecharger' : '⏳ Indisponible'}</a></div>
 <div class="card"><div class="info"><div class="icon">🌐</div><div>
 <div class="bld">Web <span class="badge">PWA</span></div>
 <div class="meta">Accessible en ligne</div>
