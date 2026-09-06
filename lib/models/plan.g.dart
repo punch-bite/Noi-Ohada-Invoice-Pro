@@ -32,8 +32,7 @@ class PlanAdapter extends TypeAdapter<Plan> {
       maxTeamMembers: fields[15] as int,
       hasGoogleDriveSync: fields[16] as bool,
       hasClientRelance: fields[17] as bool,
-      // Champ 18 ajouté après coup : null-safe pour les données Hive existantes.
-      maxSuppliers: (fields[18] as int?) ?? -1,
+      maxSuppliers: fields[18] as int,
       features: (fields[12] as List).cast<String>(),
       isPopular: fields[13] as bool,
       isActive: fields[14] as bool,
