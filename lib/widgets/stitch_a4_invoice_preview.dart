@@ -170,7 +170,12 @@ class StitchA4InvoicePreview extends StatelessWidget {
   final Uint8List? backgroundImage;
 
   /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
+    /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
   final bool showPaidStamp;
+
+  /// 🧧 Texte du filigrane (défaut : vide → pas de filigrane).
+  final String watermarkText;
+  final bool showWatermark;
 
   const StitchA4InvoicePreview({
     super.key,
@@ -188,6 +193,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
     this.backgroundSettings = const TemplateBackgroundSettings(),
     this.backgroundImage,
     this.showPaidStamp = false,
+    this.watermarkText = '',
+    this.showWatermark = false,
   });
 
   static const InvoiceLayoutConfig _emptyConfig = InvoiceLayoutConfig(
@@ -289,6 +296,9 @@ class StitchA4InvoicePreview extends StatelessWidget {
             // Tampon « PAYÉ » doré pivoté (-12°) — maquette.
             if (showPaidStamp && data.isPaid)
               Positioned.fill(child: _buildPaidStamp()),
+            // 🧧 Filigrane personnalisé (paramètres de facture, InvoiceSettings).
+            if (showWatermark && watermarkText.isNotEmpty)
+              Positioned.fill(child: _buildWatermark(cText)),
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1043,6 +1053,33 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 color: RoyalColors.tertiaryFixedDim,
                 height: 1.0,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  //  🧧 FILIGRANE personnalisé (InvoiceSettings.watermarkText)
+  // ============================================================
+
+  Widget _buildWatermark(Color baseColor) {
+    return Center(
+      child: Transform.rotate(
+        angle: -12 * math.pi / 180,
+        child: Opacity(
+          opacity: 0.08,
+          child: Text(
+            watermarkText,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 44,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 4,
+              color: baseColor,
+              height: 1.0,
             ),
           ),
         ),

@@ -4,7 +4,7 @@ import 'package:hive/hive.dart';
 
 part 'invoice_settings.g.dart';
 
-@HiveType(typeId: 5) // Assure-toi que l'ID est unique
+@HiveType(typeId: 24) // Unique (5 = Product : collision corrigée, cf. HiveService)
 class InvoiceSettings {
   @HiveField(0)
   final bool showLogo;

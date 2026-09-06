@@ -69,7 +69,7 @@ class DashboardStatsAdapter extends TypeAdapter<DashboardStats> {
 
 class CustomerAdapter extends TypeAdapter<Customer> {
   @override
-  final int typeId = 13;
+  final int typeId = 26;
 
   @override
   Customer read(BinaryReader reader) {

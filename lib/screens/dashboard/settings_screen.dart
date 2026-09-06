@@ -140,6 +140,16 @@ class SettingsScreen extends StatelessWidget {
                   subTextColor: subTextColor,
                   premium: !subscriptionProvider.canCollectClientPayments,
                 ),
+                                _SettingsDivider(isDark: isDark),
+                _SettingsTile(
+                  icon: Icons.design_services_outlined,
+                  title: 'Paramètres de facture',
+                  subtitle: 'Filigrane, couleurs, police, marges',
+                  onTap: () => context.push('/dashboard/settings/invoice'),
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(
                   icon: Icons.cloud_upload_outlined,

@@ -42,6 +42,7 @@ import '../screens/dashboard/suppliers/create_supplier_screen.dart';
 // Écrans - Utilitaires & Analytics
 import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
+import '../screens/dashboard/invoice_settings_edit_screen.dart';
 import '../screens/dashboard/wallet_screen.dart';
 import '../screens/dashboard/company_config_screen.dart';
 import '../screens/dashboard/reminders_screen.dart';
@@ -444,9 +445,14 @@ class AppRouter {
         path: '/dashboard/analytics',
         builder: (context, state) => const AnalyticsScreen(),
       ),
-      GoRoute(
+            GoRoute(
         path: '/dashboard/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      // 🎨 Éditeur des paramètres de facture (filigrane, couleurs, police…)
+      GoRoute(
+        path: '/dashboard/settings/invoice',
+        builder: (context, state) => const InvoiceSettingsEditScreen(),
       ),
       GoRoute(
         path: '/dashboard/company-config',

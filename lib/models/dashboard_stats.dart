@@ -129,7 +129,7 @@ class DashboardStats {
 //  CUSTOMER (Client pour les statistiques)
 // ============================================================
 
-@HiveType(typeId: 13)
+@HiveType(typeId: 26) // Unique (13 = Subscription : collision corrigée, cf. HiveService)
 class Customer {
   @HiveField(0)
   final String name;

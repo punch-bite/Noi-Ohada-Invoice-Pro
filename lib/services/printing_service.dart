@@ -15,6 +15,7 @@ import '../models/line_item.dart';
 import '../widgets/template_background_palette.dart';
 import 'invoice_layout_engine.dart' show A4Dimensions;
 import 'template_custom_service.dart';
+import 'settings_service.dart';
 
 class PrintingService {
   // Chargement de la police pour supporter les caractères spéciaux et accents.
@@ -112,10 +113,13 @@ class PrintingService {
     // avec Helvetica-Bold (qui échoue sur les accents).
     final fonts = fontFamily ?? await _loadFontFamily();
 
-    // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping +
+        // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping +
     // arrière-plan enregistrés dans l'espace de travail drag & drop). Sans
     // positions, on garde le layout fixe historique.
     final custom = await TemplateCustomService.loadCustom(template.id);
+    // 📦 Paramètres globaux de facture (filigrane, couleurs, police…)
+    // Chargés en même temps pour limiter les awaits.
+    final settings = await SettingsService.instance.loadSettings();
     final positions = custom.positions.isNotEmpty
         ? custom.positions
         : Map<String, dynamic>.from(template.positions);
@@ -221,7 +225,7 @@ class PrintingService {
               ),
             ];
           }
-          return [
+                    return [
             pw.Stack(
               children: [
                 if (background != null) background,
@@ -239,6 +243,26 @@ class PrintingService {
                     _buildFooter(company, template),
                   ],
                 ),
+                // 🧧 FILIGRANE personnalisé (InvoiceSettings).
+                if (settings.showWatermark && settings.watermarkText.isNotEmpty)
+                  pw.Positioned.fill(
+                    child: pw.Transform.rotate(
+                      angle: -0.5,
+                      child: pw.Center(
+                        child: pw.Opacity(
+                          opacity: 0.08,
+                          child: pw.Text(
+                            settings.watermarkText,
+                            style: pw.TextStyle(
+                              fontSize: 48,
+                              color: _getPdfColor(settings.textColor),
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (isFreePlan)
                   pw.Positioned(
                     bottom: 8,

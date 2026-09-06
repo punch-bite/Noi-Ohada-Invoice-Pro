@@ -28,7 +28,9 @@ import '../../services/printing_service.dart';
 import '../../services/template_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_custom_service.dart';
+import '../../services/settings_service.dart';
 import '../../models/invoice.dart';
+import '../../models/invoice_settings.dart';
 import '../../models/client.dart';
 import '../../models/company.dart';
 import '../../models/invoice_template.dart';
@@ -71,6 +73,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   // partagé avec le workspace et l'impression PDF (WYSIWYG).
   InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
 
+  // 📦 Paramètres de facture (filigrane, couleurs…) — SettingsService.
+  InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
+
   // 🔍 Zoom de l'aperçu papier (bouton flottant de la maquette).
   double _zoom = 1.0;
 
@@ -89,6 +94,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    _invoiceSettings = await SettingsService.instance.loadSettings();
     _invoice = await _db.getInvoice(widget.invoiceId);
     if (_invoice != null) {
       _client = await _db.getClient(_invoice!.clientId);
@@ -841,6 +847,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           layoutConfig: _layoutConfig,
           backgroundSettings: _backgroundSettings,
           backgroundImage: _previewBackground,
+          watermarkText: _invoiceSettings.watermarkText,
+          showWatermark: _invoiceSettings.showWatermark,
         ),
         if (!hasDecoratedBg) ...[
           const SizedBox(height: 8),

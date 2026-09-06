@@ -4,7 +4,7 @@ import 'package:uuid/uuid.dart';
 
 part 'supplier.g.dart';
 
-@HiveType(typeId: 8)
+@HiveType(typeId: 25) // Unique (8 = LineItem : collision corrigée, cf. HiveService)
 class Supplier {
   @HiveField(0) final String id;
   @HiveField(1) final String userId;
