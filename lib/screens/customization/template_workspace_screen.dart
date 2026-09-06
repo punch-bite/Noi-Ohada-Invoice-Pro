@@ -468,6 +468,46 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       mapping: _workingTemplate.mapping,
       background: _background,
     );
+
+    // 🔁 WYSIWYG : aligne les réglages globaux de facture (InvoiceSettings)
+    // sur le design de l'atelier. SANS ça, `applyToTemplate` — utilisé par
+    // l'aperçu A4 ET la facture imprimée — écrase la couleur / police /
+    // taille / toggles choisis ICI avec d'anciennes valeurs globales dès
+    // qu'elles diffèrent des défauts : la personnalisation de l'atelier
+    // semblait alors « sans effet » sur l'aperçu et l'impression.
+    // (Le filigrane, lui, reste piloté uniquement par les InvoiceSettings.)
+    try {
+      final t = _workingTemplate;
+      final s = _invoiceSettings;
+      final differs = s.primaryColorValue != t.primaryColorValue ||
+          s.textColorValue != t.textColorValue ||
+          s.backgroundColorValue != t.backgroundColorValue ||
+          s.fontFamily != t.fontFamily ||
+          s.fontSize != t.fontSize ||
+          s.showLogo != t.showLogo ||
+          s.showBorder != t.showBorder ||
+          s.showTaxDetails != t.showTaxDetails ||
+          s.showPaymentTerms != t.showPaymentTerms ||
+          s.showPaymentQR != t.showPaymentQR;
+      if (differs) {
+        _invoiceSettings = await SettingsService.instance
+            .updateSettings((cur) => cur.copyWith(
+                  primaryColor: t.primaryColor,
+                  textColor: t.textColor,
+                  backgroundColor: t.backgroundColor,
+                  fontFamily: t.fontFamily,
+                  fontSize: t.fontSize,
+                  showLogo: t.showLogo,
+                  showBorder: t.showBorder,
+                  showTaxDetails: t.showTaxDetails,
+                  showPaymentTerms: t.showPaymentTerms,
+                  showPaymentQR: t.showPaymentQR,
+                ));
+      }
+    } catch (e) {
+      debugPrint('⚠️ Sync InvoiceSettings (atelier) échouée: $e');
+    }
+
     // 🔇 Feedback UNIQUEMENT sur la sauvegarde explicite (bouton
     // ENREGISTRER). `_saveConfig()` est aussi appelé automatiquement à
     // chaque drag & drop / toggle : un SnackBar à chaque interaction
