@@ -194,14 +194,13 @@ class EnkapService {
 
     try {
       if (_useServerProxy) {
-        // Web : relais par notre serveur (qui détient les secrets ENKAP).
+        // Web/mobile : relais par notre serveur (qui détient les secrets
+        // ENKAP). On envoie `x-api-key` (ConfigService.serverHeaders) : le
+        // serveur renvoie 401 sans cette clé quand API_SECRET_KEY est définie.
         final resp = await _client
             .post(
               Uri.parse('$_serverBase/enkap/order'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
+              headers: ConfigService.serverHeaders(),
               body: json.encode(payload),
             )
             .timeout(const Duration(seconds: 20));
@@ -272,10 +271,7 @@ class EnkapService {
         await _client
             .post(
               Uri.parse('$_serverBase/enkap/order/setup'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
+              headers: ConfigService.serverHeaders(),
               body: json.encode({
                 'returnUrl': returnUrl,
                 'notificationUrl': notificationUrl,
@@ -316,7 +312,7 @@ class EnkapService {
         final uri = Uri.parse('$_serverBase/enkap/order/status')
             .replace(queryParameters: params);
         final resp = await _client
-            .get(uri, headers: {'Accept': 'application/json'})
+            .get(uri, headers: ConfigService.serverHeaders())
             .timeout(const Duration(seconds: 15));
         final data = _decode(resp);
         return data['status'] ?? '';
@@ -349,7 +345,7 @@ class EnkapService {
         final uri = Uri.parse('$_serverBase/enkap/order')
             .replace(queryParameters: params);
         final resp = await _client
-            .get(uri, headers: {'Accept': 'application/json'})
+            .get(uri, headers: ConfigService.serverHeaders())
             .timeout(const Duration(seconds: 15));
         return _decode(resp);
       }
