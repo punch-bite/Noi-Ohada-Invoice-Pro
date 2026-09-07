@@ -528,75 +528,6 @@ class PrintingService {
 
   static const String _emptySpaceMarker = 'empty_column';
 
-  /// En-tête société (logo + raison sociale + coordonnées) — toujours rendu
-  /// en tête du flux, indépendamment de l'ordre des blocs du corps.
-  static pw.Widget _buildCompanyHeaderPdf(
-    Invoice invoice,
-    Company company,
-    InvoiceTemplate template,
-  ) {
-    final primary = _getPdfColor(template.primaryColor);
-    final text = _getPdfColor(template.textColor);
-    final sub = _withOpacity(text, 0.6);
-
-    pw.Widget? logo;
-    if (template.showLogo && company.logoPath.isNotEmpty) {
-      try {
-        final bytes = _logoBytesFromPath(company.logoPath);
-        if (bytes != null) {
-          logo = pw.Image(
-            pw.MemoryImage(bytes),
-            width: 80,
-            height: 80,
-            fit: pw.BoxFit.contain,
-          );
-        }
-      } catch (_) {
-        logo = null;
-      }
-    }
-
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        if (logo != null) ...[
-          logo,
-          pw.SizedBox(width: 12),
-        ],
-        pw.Expanded(
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                company.name,
-                style: pw.TextStyle(
-                  fontSize: 24,
-                  fontWeight: pw.FontWeight.bold,
-                  color: primary,
-                ),
-              ),
-              if (company.address.isNotEmpty)
-                pw.Text('Adresse: ${company.address}',
-                    style: pw.TextStyle(fontSize: 10, color: sub)),
-              if (company.phone.isNotEmpty)
-                pw.Text('Tél: ${company.phone}',
-                    style: pw.TextStyle(fontSize: 10, color: sub)),
-              if (company.email.isNotEmpty)
-                pw.Text('Email: ${company.email}',
-                    style: pw.TextStyle(fontSize: 10, color: sub)),
-              if (company.taxId.isNotEmpty)
-                pw.Text('NUI: ${company.taxId}',
-                    style: pw.TextStyle(fontSize: 10, color: sub)),
-              if (company.rccm.isNotEmpty)
-                pw.Text('RCCM: ${company.rccm}',
-                    style: pw.TextStyle(fontSize: 10, color: sub)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   /// Rendu d'un bloc spécifique du corps dans l'ordre de l'atelier.
   static pw.Widget? _workspaceBlockPdf(
     String key,
@@ -615,47 +546,32 @@ class PrintingService {
 
     switch (key) {
       case 'invoice_meta':
-        final primary = _getPdfColor(template.primaryColor);
-        return pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        // Le titre « FACTURE / DEVIS » est déjà porté par le bandeau
+        // d'en-tête → on n'imprime QUE la méta (N°, dates) pour éviter le
+        // doublon du mot titre sur la facture.
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
+            pw.Text('N° ${invoice.invoiceNumber}',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: t)),
+            pw.SizedBox(height: 2),
             pw.Text(
-              invoice.isDevis ? 'DEVIS' : 'FACTURE',
-              style: pw.TextStyle(
-                fontSize: 26,
-                fontWeight: pw.FontWeight.bold,
-                color: primary,
-              ),
+              'Date: ${invoice.issueDate.day}/${invoice.issueDate.month}/${invoice.issueDate.year}',
+              style: pw.TextStyle(fontSize: 10, color: s),
             ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Text('N° ${invoice.invoiceNumber}',
-                    style: pw.TextStyle(fontSize: 14, color: t)),
-                pw.Text(
-                  'Date: ${invoice.issueDate.day}/${invoice.issueDate.month}/${invoice.issueDate.year}',
-                  style: pw.TextStyle(fontSize: 10, color: s),
-                ),
-                pw.Text(
-                  'Échéance: ${invoice.dueDate.day}/${invoice.dueDate.month}/${invoice.dueDate.year}',
-                  style: pw.TextStyle(fontSize: 10, color: s),
-                ),
-              ],
+            pw.Text(
+              'Échéance: ${invoice.dueDate.day}/${invoice.dueDate.month}/${invoice.dueDate.year}',
+              style: pw.TextStyle(fontSize: 10, color: s),
             ),
           ],
         );
       case 'billing_info': {
         final elts = _workspaceBlockElements[key] ?? const <LayoutElement>[];
+        // L'élément client_nom imprime déjà l'étiquette « Facturé à : » → on
+        // ne la répète PAS ici (suppression du doublon de mots).
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('Facturé à :',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _getPdfColor(template.primaryColor),
-                )),
-            pw.SizedBox(height: 4),
             for (final e in elts) _pdfElement(e, invoice, client, company, template,
                 mapping: mapping, customPositions: customPositions),
           ],
@@ -708,17 +624,79 @@ class PrintingService {
     final text = _getPdfColor(template.textColor);
     final sub = _withOpacity(text, 0.6);
     final fs = template.fontSize.clamp(6.0, 40.0).toDouble();
+    const pad = 24.0;
+    const gap = 10.0;
+    final contentW = pageW - pad * 2;
 
-    final cells = <pw.Widget>[
-      // En-tête société systématiquement en tête.
-      _buildCompanyHeaderPdf(invoice, company, template),
-    ];
-    for (final section in sections) {
-      for (final key in section) {
-        if (key == _emptySpaceMarker) continue;
-        if (!(visibility[key] ?? true)) continue;
-        final cell = _workspaceBlockPdf(
-          key,
+    // 1️⃣ EN-TÊTE : PAS de bandeau — le logo / société / titre est rendu
+    // comme une rangée normale du corps, à colonnes de largeur ÉGALE, dans
+    // la MÊME grille que les sections (drag & drop identique au corps).
+    final headerRow = _workspaceHeaderRowPdf(
+      invoice,
+      company,
+      template,
+      customPositions: customPositions,
+      contentW: contentW,
+      gap: gap,
+      fs: fs,
+      text: text,
+      sub: sub,
+    );
+
+    // 2️⃣ CORPS : chaque section = rangée pleine largeur, blocs à largeurs
+    // ÉGALES côte à côte (colonnes identiques à l'aperçu de l'atelier).
+    // Une section « vide » réserve la largeur d'une colonne.
+    // La DERNIÈRE section, si elle ne contient QUE des blocs de pied
+    // (mentions légales / signature / QR), est sortie du flux puis ancrée
+    // TOUT EN BAS de la page A4, pleine largeur.
+    const footerish = {'legal_mentions', 'signature_block', 'qr_block'};
+    List<String> footerKeys = const [];
+    final bodySections = <List<String>>[];
+    for (var i = 0; i < sections.length; i++) {
+      final sec = sections[i];
+      if (i == sections.length - 1 &&
+          sec.isNotEmpty &&
+          sec.every((k) =>
+              k == _emptySpaceMarker || footerish.contains(k))) {
+        footerKeys = sec;
+      } else {
+        bodySections.add(sec);
+      }
+    }
+
+    final bodyRows = <pw.Widget>[];
+    for (final section in bodySections) {
+      final keys = section
+          .where((k) => k != _emptySpaceMarker && (visibility[k] ?? true))
+          .toList();
+      if (keys.isEmpty) continue;
+      bodyRows.add(_workspaceRowPdf(
+        keys,
+        contentW,
+        gap,
+        invoice,
+        client,
+        company,
+        template,
+        mapping: mapping,
+        customPositions: customPositions,
+        fs: fs,
+        text: text,
+        sub: sub,
+      ));
+      bodyRows.add(pw.SizedBox(height: 14));
+    }
+
+    pw.Widget? footerWidget;
+    if (footerKeys.isNotEmpty) {
+      final keys = footerKeys
+          .where((k) => k != _emptySpaceMarker && (visibility[k] ?? true))
+          .toList();
+      if (keys.isNotEmpty) {
+        footerWidget = _workspaceRowPdf(
+          keys,
+          contentW,
+          gap,
           invoice,
           client,
           company,
@@ -729,8 +707,6 @@ class PrintingService {
           text: text,
           sub: sub,
         );
-        if (cell == null) continue;
-        cells.add(cell);
       }
     }
 
@@ -739,18 +715,274 @@ class PrintingService {
         pw.SizedBox(width: pageW, height: pageH),
         if (background != null) background,
         pw.Padding(
-          padding: const pw.EdgeInsets.all(28),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < cells.length; i++) ...[
-                if (i > 0) pw.SizedBox(height: 14),
-                cells[i],
+          padding: const pw.EdgeInsets.all(pad),
+          child: pw.SizedBox(
+            height: pageH - pad * 2,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                headerRow,
+                pw.SizedBox(height: 16),
+                ...bodyRows,
+                if (footerWidget != null) pw.Spacer(),
+                if (footerWidget != null) footerWidget,
               ],
-            ],
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  /// Rangée d'en-tête PDF — PAS de bandeau : le logo / société / titre est
+  /// rendu comme une rangée normale du corps, à colonnes de largeur ÉGALE,
+  /// dans la MÊME grille que les sections (drag & drop identique au corps).
+  /// L'ordre des éléments vient de `header_elements_order`.
+  static pw.Widget _workspaceHeaderRowPdf(
+    Invoice invoice,
+    Company company,
+    InvoiceTemplate template, {
+    required Map<String, dynamic> customPositions,
+    required double contentW,
+    required double gap,
+    required double fs,
+    required PdfColor text,
+    required PdfColor sub,
+  }) {
+    final primary = _getPdfColor(template.primaryColor);
+    const defaults = ['logo', 'company_info', 'invoice_title'];
+    final rawOrder = (customPositions['header_elements_order'] as List?)
+            ?.whereType<String>()
+            .toList() ??
+        const <String>[];
+    const known = {'logo', 'company_info', 'invoice_title'};
+    final order = <String>[];
+    for (final e in rawOrder) {
+      if (known.contains(e) && !order.contains(e)) order.add(e);
+    }
+    for (final e in defaults) {
+      if (!order.contains(e)) order.add(e);
+    }
+    if (order.isEmpty) order.addAll(defaults);
+
+    // ↔️ Largeurs pondérées (header_widths) : company_info = 2 par défaut.
+    double hweight(String k) {
+      final m = customPositions['header_widths'];
+      if (m is Map) {
+        final v = m[k];
+        if (v is num) return v.toDouble().clamp(0.4, 3.0);
+      }
+      return k == 'company_info' ? 2.0 : 1.0;
+    }
+
+    // 🔠 Alignement horizontal par colonne (header_alignments).
+    double hdx(String k) {
+      final m = customPositions['header_alignments'];
+      final s = (m is Map) ? m[k] : null;
+      final v = s is String ? s : null;
+      if (v == 'center') return 0.0;
+      if (v == 'right' || (v == null && k == 'invoice_title')) return 1.0;
+      return -1.0;
+    }
+
+    final htotal = order.fold<double>(0, (a, k) => a + hweight(k));
+    final havail = order.isEmpty ? 0.0 : contentW - gap * (order.length - 1);
+
+    String companyName() {
+      final o = customPositions['company_name'] as String?;
+      return (o != null && o.trim().isNotEmpty) ? o.trim() : company.name;
+    }
+
+    pw.Widget content(String key) {
+      switch (key) {
+        case 'logo':
+          if (!template.showLogo) return pw.SizedBox();
+          final custom = customPositions['custom_logo_base64'] as String?;
+          Uint8List? bytes;
+          if (custom != null && custom.isNotEmpty) {
+            try {
+              bytes = base64Decode(custom);
+            } catch (_) {
+              bytes = null;
+            }
+          }
+          bytes ??= _logoBytesFromPath(company.logoPath);
+          if (bytes == null) return pw.SizedBox();
+          return pw.Image(
+            pw.MemoryImage(bytes),
+            width: 52,
+            height: 52,
+            fit: pw.BoxFit.contain,
+          );
+        case 'company_info':
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                companyName(),
+                maxLines: 2,
+                style: pw.TextStyle(
+                  fontSize: fs + 4,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+              pw.SizedBox(height: 3),
+              if (company.address.isNotEmpty)
+                pw.Text(company.address,
+                    style: pw.TextStyle(fontSize: fs - 1, color: sub)),
+              if (company.phone.isNotEmpty)
+                pw.Text('Tél: ${company.phone}',
+                    style: pw.TextStyle(fontSize: fs - 1, color: sub)),
+              if (company.email.isNotEmpty)
+                pw.Text(company.email,
+                    style: pw.TextStyle(fontSize: fs - 1, color: sub)),
+            ],
+          );
+        case 'invoice_title':
+        default:
+          final t = customPositions['invoice_title_text'] as String?;
+          final title = (t != null && t.trim().isNotEmpty)
+              ? t.trim()
+              : (invoice.isDevis ? 'DEVIS' : 'FACTURE');
+          final children = <pw.Widget>[
+            pw.Text(
+              title,
+              textAlign: pw.TextAlign.right,
+              style: pw.TextStyle(
+                fontSize: fs + 10,
+                fontWeight: pw.FontWeight.bold,
+                color: primary,
+              ),
+            ),
+          ];
+          // QR dans l'en-tête (si choisi dans l'atelier).
+          final qrPos = customPositions['qr_position'] as String?;
+          if ((qrPos == 'header') && template.showPaymentQR) {
+            children.add(pw.SizedBox(height: 4));
+            children.add(pw.Container(
+              padding: const pw.EdgeInsets.all(4),
+              decoration: pw.BoxDecoration(
+                color: _withOpacity(primary, 0.08),
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'Scannez le QR de paiement',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(fontSize: 6, color: sub),
+              ),
+            ));
+          }
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: children,
+          );
+      }
+    }
+
+    final rowChildren = <pw.Widget>[];
+    for (var i = 0; i < order.length; i++) {
+      final key = order[i];
+      if (i > 0) rowChildren.add(pw.SizedBox(width: gap));
+      final w = order.isEmpty ? contentW : havail * hweight(key) / htotal;
+      rowChildren.add(pw.SizedBox(
+        width: w,
+        child: pw.Align(
+          alignment: pw.Alignment(hdx(key), 0),
+          child: content(key),
+        ),
+      ));
+    }
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: rowChildren,
+    );
+  }
+
+  /// Rangée PDF d'une section : les blocs sont rendus à largeurs ÉGALES
+  /// côte à côte (comme les colonnes `Expanded` de l'aperçu de l'atelier).
+  static pw.Widget _workspaceRowPdf(
+    List<String> keys,
+    double contentW,
+    double gap,
+    Invoice invoice,
+    Client client,
+    Company company,
+    InvoiceTemplate template, {
+    required Map<String, String> mapping,
+    required Map<String, dynamic> customPositions,
+    required double fs,
+    required PdfColor text,
+    required PdfColor sub,
+  }) {
+    // 🔧 Largeurs proportionnelles aux poids (`block_widths`), 1.0 par défaut :
+    // respecte les « formes personnalisées » définies dans l'atelier.
+    double weight(String k) {
+      final m = customPositions['block_widths'];
+      if (m is Map) {
+        final v = m[k];
+        if (v is num) return v.toDouble().clamp(0.3, 3.0);
+      }
+      return 1.0;
+    }
+
+    final totalW = keys.fold<double>(0, (a, k) => a + weight(k));
+    final availW = keys.isEmpty ? 0.0 : contentW - gap * (keys.length - 1);
+
+    // 🎨 Couleurs personnalisées par bloc (fond + texte) sauvegardées dans
+    // l'atelier (`block_bg_colors` / `block_text_colors`).
+    Color? colorFrom(String mapKey, String k) {
+      final m = customPositions[mapKey];
+      if (m is Map) {
+        final v = m[k];
+        if (v is int && v != 0) return Color(v);
+      }
+      return null;
+    }
+
+    final children = <pw.Widget>[];
+    for (var i = 0; i < keys.length; i++) {
+      final key = keys[i];
+      if (i > 0) children.add(pw.SizedBox(width: gap));
+
+      final kTextColor = colorFrom('block_text_colors', key);
+      final kText = kTextColor == null ? text : _getPdfColor(kTextColor);
+      final kSub = _withOpacity(kText, 0.6);
+      pw.Widget? cell = _workspaceBlockPdf(
+        key,
+        invoice,
+        client,
+        company,
+        template,
+        mapping: mapping,
+        customPositions: customPositions,
+        fs: fs,
+        text: kText,
+        sub: kSub,
+      );
+
+      final kBg = colorFrom('block_bg_colors', key);
+      if (cell != null && kBg != null) {
+        cell = pw.Container(
+          padding: const pw.EdgeInsets.all(4),
+          decoration: pw.BoxDecoration(
+            color: _withOpacity(_getPdfColor(kBg), 0.20),
+            borderRadius: pw.BorderRadius.circular(4),
+            border: pw.Border.all(
+              color: _withOpacity(_getPdfColor(kBg), 0.45),
+            ),
+          ),
+          child: cell,
+        );
+      }
+
+      final w = keys.isEmpty ? contentW : availW * weight(key) / totalW;
+      children.add(pw.SizedBox(width: w, child: cell ?? pw.SizedBox()));
+    }
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: children,
     );
   }
 
@@ -938,13 +1170,10 @@ class PrintingService {
             (customLegal != null && customLegal.trim().isNotEmpty)
                 ? customLegal.trim()
                 : company.legalText;
+        // 🧾 Mentions légales SANS fond ni barre de couleur (demande user) :
+        // texte seul, lisible sur le fond de la page.
         return pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          decoration: pw.BoxDecoration(
-            color: _withOpacity(primary, 0.04),
-            border: pw.Border(left: pw.BorderSide(color: primary, width: 2)),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
+          padding: const pw.EdgeInsets.symmetric(vertical: 6),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -1163,12 +1392,9 @@ class PrintingService {
           fs,
         );
       case 'total_amount':
-        return pw.Container(
+        // TOTAL TTC sans fond (transparent) pour ne jamais masquer le texte.
+        return pw.Padding(
           padding: const pw.EdgeInsets.all(6),
-          decoration: pw.BoxDecoration(
-            color: _withOpacity(primary, 0.1),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
           child: _totalRowPdf(
             'TOTAL TTC',
             '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
@@ -1334,12 +1560,9 @@ class PrintingService {
           fs,
         );
       case 'total_amount':
-        return pw.Container(
+        // TOTAL TTC sans fond (transparent) pour ne jamais masquer le texte.
+        return pw.Padding(
           padding: const pw.EdgeInsets.all(6),
-          decoration: pw.BoxDecoration(
-            color: _withOpacity(primary, 0.1),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
           child: _totalRowPdf(
             'TOTAL TTC',
             '${invoice.totalAmount.toStringAsFixed(0)} FCFA',

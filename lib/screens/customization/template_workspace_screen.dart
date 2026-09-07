@@ -64,6 +64,18 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
 
   // Header Drag & Drop state
   List<String> _headerElements = ['logo', 'company_info', 'invoice_title'];
+  // 🔧 Colonnes d'en-tête : largeur (poids) + alignement par élément.
+  final Map<String, double> _headerWidth = {};
+  final Map<String, TextAlign> _headerAlign = {};
+
+  double _headerWidthOf(String key) => (_headerWidth[key] ??
+          (key == 'company_info' ? 2.0 : 1.0))
+      .clamp(0.4, 3.0);
+
+  int _headerFlexOf(String key) => (_headerWidthOf(key) * 10).round().clamp(4, 30);
+
+  TextAlign _headerAlignOf(String key) =>
+      _headerAlign[key] ?? (key == 'invoice_title' ? TextAlign.right : TextAlign.left);
   String? _draggingHeaderKey;
   String? _dragOverHeaderKey;
   String? _selectedHeaderKey;
@@ -103,6 +115,49 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     'signature_block': TextAlign.center,
     'qr_block': TextAlign.center,
   };
+
+  // 🔧 Largeur relative de chaque bloc (facteur appliqué sur la largeur de sa
+  // section ; 1.0 = colonne de largeur égale). Permet des « formes
+  // personnalisées » (ex. un bloc deux fois plus large qu'un voisin).
+  final Map<String, double> _blockWidth = {};
+
+  /// Poids d'un bloc (0.3 → 3.0) ; 1.0 par défaut (colonne égale).
+  double _widthOf(String key) => (_blockWidth[key] ?? 1.0).clamp(0.3, 3.0);
+
+  /// Flex int pour `Expanded` (proportionnel au poids).
+  int _flexOf(String key) => (_widthOf(key) * 10).round().clamp(3, 30);
+
+  // 🎨 Couleurs personnalisées par bloc (fond + texte). 0 / absent = défaut
+  // (fond transparent, texte du thème). ARGB 32 bits.
+  final Map<String, int> _blockBg = {};
+  final Map<String, int> _blockText = {};
+
+  /// Couleur de fond choisie pour un bloc (null = transparent).
+  Color? _bgOf(String key) {
+    final v = _blockBg[key];
+    return (v == null || v == 0) ? null : Color(v);
+  }
+
+  /// Couleur de texte choisie pour un bloc (null = couleur du thème).
+  Color? _textColorOf(String key) {
+    final v = _blockText[key];
+    return (v == null || v == 0) ? null : Color(v);
+  }
+
+  /// Enveloppe le contenu d'un bloc avec le fond teinté choisi (aperçu).
+  Widget _tintBlock(String key, Widget child) {
+    final bg = _bgOf(key);
+    if (bg == null) return child;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: bg.withValues(alpha: 0.45), width: 1),
+      ),
+      child: child,
+    );
+  }
 
   String? _draggingKey;
   String? _dragOverKey;
@@ -278,6 +333,34 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             }
           });
         }
+        if (custom.positions['block_widths'] is Map) {
+          (custom.positions['block_widths'] as Map).forEach((k, v) {
+            if (v is num) _blockWidth[k.toString()] = v.toDouble();
+          });
+        }
+        if (custom.positions['block_bg_colors'] is Map) {
+          (custom.positions['block_bg_colors'] as Map).forEach((k, v) {
+            if (v is num) _blockBg[k.toString()] = v.toInt();
+          });
+        }
+        if (custom.positions['block_text_colors'] is Map) {
+          (custom.positions['block_text_colors'] as Map).forEach((k, v) {
+            if (v is num) _blockText[k.toString()] = v.toInt();
+          });
+        }
+        if (custom.positions['header_widths'] is Map) {
+          (custom.positions['header_widths'] as Map).forEach((k, v) {
+            if (v is num) _headerWidth[k.toString()] = v.toDouble();
+          });
+        }
+        if (custom.positions['header_alignments'] is Map) {
+          (custom.positions['header_alignments'] as Map).forEach((k, v) {
+            final key = k.toString();
+            for (final t in TextAlign.values) {
+              if (t.name == v) _headerAlign[key] = t;
+            }
+          });
+        }
         if (custom.positions['qr_position'] != null) {
           _qrPosition = custom.positions['qr_position'] as String;
         }
@@ -445,9 +528,21 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                               ),
                             Column(children: [
                               _buildCleanInvoiceHeader(),
+                              // 📐 Le contenu occupe TOUTE la hauteur A4 :
+                              // hauteur minimale = hauteur du viewport, et les
+                              // sections sont réparties verticalement (pas de
+                              // bloc compact en haut avec un vide en bas).
                               Expanded(
-                                  child: SingleChildScrollView(
-                                      child: _buildCleanInvoiceBody())),
+                                child: LayoutBuilder(builder: (_, boxC) {
+                                  return SingleChildScrollView(
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                          minHeight: boxC.maxHeight),
+                                      child: _buildCleanInvoiceBody(),
+                                    ),
+                                  );
+                                }),
+                              ),
                             ]),
                             if (_showPaidStamp) _buildPaidStamp(),
                           ],
@@ -479,6 +574,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   Future<void> _saveConfig({bool showFeedback = false}) async {
     final updatedPositions = _layoutConfig.toMap();
     updatedPositions['header_elements_order'] = _headerElements;
+    updatedPositions['header_widths'] = Map<String, double>.from(_headerWidth);
+    updatedPositions['header_alignments'] =
+        _headerAlign.map((k, v) => MapEntry(k, v.name));
     updatedPositions['blocks_sections'] = _sectionsLayout;
     // Compat : ordre à plat (d'éventuels anciens lecteurs / exports).
     updatedPositions['blocks_order'] =
@@ -486,6 +584,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['block_visibility'] = _blockVisibility;
     updatedPositions['block_alignment'] =
         _blockAlignment.map((k, v) => MapEntry(k, v.name));
+    updatedPositions['block_widths'] = Map<String, double>.from(_blockWidth);
+    updatedPositions['block_bg_colors'] = Map<String, int>.from(_blockBg);
+    updatedPositions['block_text_colors'] = Map<String, int>.from(_blockText);
     updatedPositions['qr_position'] = _qrPosition;
     updatedPositions['custom_legal_text'] = _customLegalText;
     updatedPositions['stamp_text'] = _stampText;
@@ -994,8 +1095,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               children: [
                 for (final key in _headerElements)
                   Expanded(
-                    flex: key == 'company_info' ? 2 : 1,
-                    child: _buildDraggableHeaderElement(key),
+                    flex: _headerFlexOf(key),
+                    child: Align(
+                      alignment: _wa(_headerAlignOf(key)),
+                      child: _buildDraggableHeaderElement(key),
+                    ),
                   ),
               ],
             ),
@@ -1020,10 +1124,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           children: [
             for (final key in _headerElements)
               Expanded(
-                flex: key == 'company_info' ? 2 : 1,
+                flex: _headerFlexOf(key),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _buildHeaderElementContent(key),
+                  child: Align(
+                    alignment: _wa(_headerAlignOf(key)),
+                    child: _buildHeaderElementContent(key),
+                  ),
                 ),
               ),
           ],
@@ -1090,7 +1197,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               _dragOverHeaderKey = null;
             }),
             child: GestureDetector(
-              onTap: () => setState(() => _selectedHeaderKey = key),
+              onTap: () {
+                setState(() => _selectedHeaderKey = key);
+                _showHeaderElementSheet(key);
+              },
               child: _wrapHeaderWithIndicator(
                 key,
                 _buildHeaderElementContent(key),
@@ -1101,6 +1211,119 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           ),
         );
       },
+    );
+  }
+
+  /// Réglages de la colonne d'en-tête (largeur + alignement).
+  void _showHeaderElementSheet(String key) {
+    final title = switch (key) {
+      'logo' => 'Logo',
+      'company_info' => 'Infos Société',
+      _ => 'Titre',
+    };
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.view_column_outlined, color: _primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Colonne « $title »',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15.5)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              // 🔠 Alignement de la colonne.
+              Row(children: [
+                const Text('Alignement :',
+                    style: TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                IconButton(
+                  onPressed: () {
+                    setSS(() => _headerAlign[key] = TextAlign.left);
+                    setState(() => _headerAlign[key] = TextAlign.left);
+                    _saveConfig();
+                  },
+                  icon: const Icon(Icons.format_align_left, size: 18),
+                  color: _headerAlignOf(key) == TextAlign.left
+                      ? _primary
+                      : _onSurfaceVariant,
+                  constraints: const BoxConstraints(minWidth: 34),
+                  padding: EdgeInsets.zero,
+                ),
+                IconButton(
+                  onPressed: () {
+                    setSS(() => _headerAlign[key] = TextAlign.center);
+                    setState(() => _headerAlign[key] = TextAlign.center);
+                    _saveConfig();
+                  },
+                  icon: const Icon(Icons.format_align_center, size: 18),
+                  color: _headerAlignOf(key) == TextAlign.center
+                      ? _primary
+                      : _onSurfaceVariant,
+                  constraints: const BoxConstraints(minWidth: 34),
+                  padding: EdgeInsets.zero,
+                ),
+                IconButton(
+                  onPressed: () {
+                    setSS(() => _headerAlign[key] = TextAlign.right);
+                    setState(() => _headerAlign[key] = TextAlign.right);
+                    _saveConfig();
+                  },
+                  icon: const Icon(Icons.format_align_right, size: 18),
+                  color: _headerAlignOf(key) == TextAlign.right
+                      ? _primary
+                      : _onSurfaceVariant,
+                  constraints: const BoxConstraints(minWidth: 34),
+                  padding: EdgeInsets.zero,
+                ),
+              ]),
+              const SizedBox(height: 4),
+              // ↔️ Largeur de la colonne.
+              Row(children: [
+                const Text('Largeur :',
+                    style: TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text('${(_headerWidthOf(key) * 100).round()}%',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: _primary,
+                        fontWeight: FontWeight.bold)),
+              ]),
+              Slider(
+                value: _headerWidthOf(key),
+                min: 0.5,
+                max: 2.5,
+                activeColor: _primary,
+                onChanged: (val) {
+                  setSS(() => _headerWidth[key] = val);
+                  setState(() => _headerWidth[key] = val);
+                  _saveConfig();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1257,8 +1480,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   Widget _buildDraggableInvoiceBody() {
+    // 🖼️ Corps TRANSPARENT : le fond personnalisé (TemplateBackgroundLayer)
+    // est dessiné sous la colonne ; un fond blanc opaque le masquerait.
     return Container(
-      color: Colors.white,
+      color: Colors.transparent,
       padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1283,13 +1508,15 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       for (final key in section) {
         // 🧱 Les colonnes vides sont visibles dans l'aperçu
         if (key == _emptyColumnKey) {
-          inRow.add(Expanded(child: _buildEmptyColumnPreview()));
+          inRow.add(Expanded(
+              flex: _flexOf(key), child: _buildEmptyColumnPreview()));
           continue;
         }
         if (!_isBlockVisible(key)) continue;
         final block =
             _invoiceBlocks.firstWhere((b) => b.key == key, orElse: () => _invoiceBlocks.first);
-        inRow.add(Expanded(child: block.builder(_alignOf(key))));
+        inRow.add(Expanded(
+            flex: _flexOf(key), child: _tintBlock(key, block.builder(_alignOf(key)))));
       }
       if (inRow.isNotEmpty) {
         cells.add(Padding(
@@ -1299,10 +1526,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       }
     }
     return Container(
-      color: Colors.white,
+      // 🖼️ TRANSPARENT : laisse apparaître l'image de fond personnalisée.
+      color: Colors.transparent,
       padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        // 📐 Répartition verticale : quand le contenu est court, les sections
+        // occupent toute la hauteur A4 (au lieu d'un bloc compact en haut).
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: cells,
       ),
     );
@@ -1350,9 +1581,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         for (var i = 0; i < rawKeys.length; i++) {
           final key = rawKeys[i];
           if (key == _emptyColumnKey) {
-            cells.add(Expanded(child: _buildEmptyColumnCell(s, i)));
+            cells.add(Expanded(
+                flex: _flexOf(key), child: _buildEmptyColumnCell(s, i)));
           } else if (_isBlockVisible(key)) {
             cells.add(Expanded(
+              flex: _flexOf(key),
               child: _buildBlockCell(
                   _invoiceBlocks.firstWhere((b) => b.key == key), s),
             ));
@@ -1895,20 +2128,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     ),
                   ]),
                 ),
+              // 🔓 TOTAL TTC SANS fond : le bandeau plein cachait le texte
+              // (texte blanc sur couleur claire). On garde un texte lisible
+              // dans la couleur du thème.
               Container(
                 margin: const EdgeInsets.only(top: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _workingTemplate.primaryColor,
-                  borderRadius: BorderRadius.circular(4),
-                ),
                 child: Row(children: [
                   Flexible(
                     child: Text('TOTAL TTC',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: Colors.white,
+                            color: _onSurface,
                             fontSize: (_customFontSize * 0.75).clamp(7.0, 11.0),
                             fontWeight: FontWeight.w800)),
                   ),
@@ -1922,7 +2154,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: Colors.white,
+                            color: _onSurface,
                             fontSize: (_customFontSize * 0.75).clamp(7.0, 11.0),
                             fontWeight: FontWeight.w800)),
                   ),
@@ -2337,7 +2569,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2423,6 +2655,72 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     padding: EdgeInsets.zero,
                   ),
                 ]),
+                // 🔧 Largeur de la colonne du bloc (formes personnalisées).
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('Largeur :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('${(_widthOf(key) * 100).round()}%',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: _primary,
+                          fontWeight: FontWeight.bold)),
+                ]),
+                Slider(
+                  value: _widthOf(key),
+                  min: 0.5,
+                  max: 2.5,
+                  activeColor: _primary,
+                  onChanged: (val) {
+                    setSS(() => _blockWidth[key] = val);
+                    setState(() => _blockWidth[key] = val);
+                    _saveConfig();
+                  },
+                ),
+                // 🎨 Couleur de FOND du bloc.
+                const SizedBox(height: 6),
+                const Text('Couleur du fond :',
+                    style: TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 10, runSpacing: 8, children: [
+                  _colorChip(null, _bgOf(key) == null, () {
+                    setSS(() => _blockBg[key] = 0);
+                    setState(() => _blockBg[key] = 0);
+                    _saveConfig();
+                  }),
+                  for (final c in _paletteColors)
+                    _colorChip(c, _blockBg[key] == c.toARGB32(), () {
+                      setSS(() => _blockBg[key] = c.toARGB32());
+                      setState(() => _blockBg[key] = c.toARGB32());
+                      _saveConfig();
+                    }),
+                ]),
+                const SizedBox(height: 10),
+                // 🎨 Couleur du TEXTE du bloc.
+                const Text('Couleur du texte :',
+                    style: TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 10, runSpacing: 8, children: [
+                  _colorChip(null, _textColorOf(key) == null, () {
+                    setSS(() => _blockText[key] = 0);
+                    setState(() => _blockText[key] = 0);
+                    _saveConfig();
+                  }),
+                  for (final c in [
+                    Colors.black,
+                    Colors.white,
+                    ..._paletteColors,
+                  ])
+                    _colorChip(c, _blockText[key] == c.toARGB32(), () {
+                      setSS(() => _blockText[key] = c.toARGB32());
+                      setState(() => _blockText[key] = c.toARGB32());
+                      _saveConfig();
+                    }),
+                ]),
                 if (key == 'billing_info') ...[
                   const SizedBox(height: 8),
                   TextField(
@@ -2473,13 +2771,41 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  /// Pastille de couleur pour la palette des blocs (null = « Aucune »).
+  Widget _colorChip(Color? color, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: color ?? Colors.transparent,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? _primary : _outline.withValues(alpha: 0.5),
+            width: selected ? 3 : 1.2,
+          ),
+        ),
+        child: color == null
+            ? Icon(Icons.block, size: 14, color: _outline)
+            : (selected
+                ? Icon(Icons.check,
+                    size: 16,
+                    color: color.computeLuminance() > 0.55
+                        ? Colors.black
+                        : Colors.white)
+                : null),
+      ),
+    );
+  }
+
   // ── Modales & Bottom Sheets ───────────────────────────────────────────────
 
   void _showColorPickerSheet() {
     setState(() => _activeTool = 'couleur');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2539,7 +2865,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'logo');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2614,7 +2940,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'police');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2662,7 +2988,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'ombres');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2718,7 +3044,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'alignement');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2791,7 +3117,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'signature');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2859,7 +3185,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
@@ -2935,7 +3261,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() => _activeTool = 'qrcode');
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
