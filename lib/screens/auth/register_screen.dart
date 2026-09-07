@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/logo_image.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -114,30 +115,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                                            // Badge Icône d'inscription (dégradé + halo)
-                      Container(
-                        width: 66,
-                        height: 66,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              primary.withValues(alpha: 0.9),
-                              theme.secondaryColor.withValues(alpha: 0.7),
-                            ],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: primary.withValues(alpha: 0.35),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.person_add_alt_1_rounded,
-                            color: Colors.white, size: 28),
+                                            // Badge Icône d'inscription
+                      const LogoImage(
+                        path: 'assets/images/splash_logo.png',
+                        width: 70,
+                        height: 70,
                       ).animate().scale(
                             begin: const Offset(0.6, 0.6),
                             end: const Offset(1, 1),

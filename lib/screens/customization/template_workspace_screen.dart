@@ -1,6 +1,7 @@
 // lib/screens/customization/template_workspace_screen.dart
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -364,7 +365,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -391,43 +392,57 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ],
                 ),
               ),
+              // 🔍 Aperçu A4 - occupe toute la hauteur
               Expanded(
-                // 🔍 Zoom / pan au doigt.
                 child: InteractiveViewer(
                   maxScale: 2.5,
-                  minScale: 0.5,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 480),
-                      child: AspectRatio(
-                        aspectRatio: 794 / 1123,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(6),
-                            border: effective.showBorder
-                                ? Border.all(
-                                    color: effective.primaryColor
-                                        .withValues(alpha: 0.35),
-                                    width: 1.5)
-                                : null,
-                            boxShadow: [
-                              BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 8)),
-                            ],
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Stack(children: [
-                            TemplateBackgroundLayer(
-                              presetId: _background.presetId,
-                              imageBytes:
-                                  decodeBackgroundImage(_background.fileData),
-                              opacity: _background.opacity,
-                              blur: _background.blur,
-                              fit: _background.fit,
+                  minScale: 0.3,
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: AspectRatio(
+                      aspectRatio: 794 / 1123,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: effective.showBorder
+                              ? Border.all(
+                                  color: effective.primaryColor
+                                      .withValues(alpha: 0.35),
+                                  width: 1.5)
+                              : null,
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 18,
+                                offset: const Offset(0, 8)),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Fond de la facture (page) - couleur personnalisée ou blanc
+                            Positioned.fill(
+                              child: ColoredBox(
+                                color: effective.backgroundColorValue != 0
+                                    ? Color(effective.backgroundColorValue)
+                                    : Colors.white,
+                              ),
                             ),
+                            // Image / motif de fond personnalisé
+                            if (_background.hasCustomImage || _background.hasPreset)
+                              Positioned.fill(
+                                child: TemplateBackgroundLayer(
+                                  presetId: _background.presetId,
+                                  imageBytes:
+                                      decodeBackgroundImage(_background.fileData),
+                                  opacity: _background.opacity,
+                                  blur: _background.blur,
+                                  fit: _background.fit,
+                                ),
+                              ),
                             Column(children: [
                               _buildCleanInvoiceHeader(),
                               Expanded(
@@ -435,7 +450,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                                       child: _buildCleanInvoiceBody())),
                             ]),
                             if (_showPaidStamp) _buildPaidStamp(),
-                          ]),
+                          ],
                         ),
                       ),
                     ),
@@ -443,14 +458,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 child: Text(
                   'Rendu A4 avec vos personnalisations en cours — '
                   'pincez pour zoomer.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 11.5,
+                    fontSize: 10,
                   ),
                 ),
               ),
@@ -781,7 +796,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     // modèle : écran bloquant (aucune modification ni sauvegarde possible).
     if (!_accessChecked) {
       return Scaffold(
-        backgroundColor: _bgSurface,
+        backgroundColor: Colors.transparent,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -789,43 +804,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       return _buildAccessDeniedScreen();
     }
     return Scaffold(
-      backgroundColor: _bgSurface,
-      appBar: AppBar(
-        backgroundColor: Colors.white.withValues(alpha: 0.95),
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
-        surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.black12,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: _onSurface),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text('Atelier Personnalisation',
-            style: TextStyle(color: _onSurface, fontWeight: FontWeight.bold, fontSize: 18)),
-        actions: [
-          // 👁️ Aperçu rapide : rendu A4 fidèle (Stitch) de la customisation
-          // EN COURS, sans quitter l'atelier.
-          IconButton(
-            tooltip: 'Aperçu rapide',
-            icon: Icon(Icons.visibility_outlined, color: _onSurface),
-            onPressed: _openQuickPreview,
-          ),
-          ElevatedButton.icon(
-            onPressed: () => _saveConfig(showFeedback: true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            icon: const Icon(Icons.save, size: 16),
-            label: const Text('ENREGISTRER',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.8)),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
+      appBar: _buildGlassAppBar(),
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: _primary))
           : Column(children: [
@@ -835,12 +815,96 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  // ── 🎨 AppBar avec effet glass ─────────────────────────────────────────────
+  PreferredSizeWidget _buildGlassAppBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(kToolbarHeight),
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.75),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.arrow_back, color: _onSurface, size: 20),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Atelier Personnalisation',
+                      style: TextStyle(
+                        color: _onSurface,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  // 👁️ Aperçu rapide : rendu A4 fidèle (Stitch) de la customisation
+                  // EN COURS, sans quitter l'atelier.
+                  IconButton(
+                    tooltip: 'Aperçu rapide',
+                    icon: Icon(Icons.visibility_outlined, color: _onSurface, size: 20),
+                    onPressed: _openQuickPreview,
+                  ),
+                  _GlassButton(
+                    onPressed: () => _saveConfig(showFeedback: true),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.save, size: 14, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'ENREGISTRER',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Zone de prévisualisation ──────────────────────────────────────────────
 
   Widget _buildInvoicePreviewArea() {
     return Container(
       width: double.infinity,
-      color: _bgSurface,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: 0.05),
+            Colors.white.withValues(alpha: 0.02),
+          ],
+        ),
+      ),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -855,13 +919,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   borderRadius: BorderRadius.circular(_paperRadius),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
+                        color: Colors.black.withValues(alpha: 0.15),
                         blurRadius: _shadowBlur,
                         spreadRadius: 2,
                         offset: const Offset(0, 8)),
                     BoxShadow(
-                        color: _primary.withValues(alpha: 0.05),
-                        blurRadius: 8,
+                        color: _primary.withValues(alpha: 0.08),
+                        blurRadius: 12,
                         offset: const Offset(0, 2)),
                   ],
                 ),
@@ -1217,7 +1281,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     for (final section in _sectionsLayout) {
       final inRow = <Widget>[];
       for (final key in section) {
-        if (key == _emptyColumnKey) continue;
+        // 🧱 Les colonnes vides sont visibles dans l'aperçu
+        if (key == _emptyColumnKey) {
+          inRow.add(Expanded(child: _buildEmptyColumnPreview()));
+          continue;
+        }
         if (!_isBlockVisible(key)) continue;
         final block =
             _invoiceBlocks.firstWhere((b) => b.key == key, orElse: () => _invoiceBlocks.first);
@@ -1236,6 +1304,28 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: cells,
+      ),
+    );
+  }
+
+  /// 🧱 Aperçu d'une colonne vide (espaceur) - visible et positionné
+  Widget _buildEmptyColumnPreview() {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.grey.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.view_week_outlined,
+          size: 14,
+          color: Colors.grey.withValues(alpha: 0.3),
+        ),
       ),
     );
   }
@@ -2015,24 +2105,34 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   // ── Panneau inférieur (Toolbar & Catégories) ──────────────────────────────
 
   Widget _buildBottomControlPanel() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -6))
-        ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.6)
+                : Colors.white.withValues(alpha: 0.75),
+            border: Border(
+              top: BorderSide(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _buildCategoryTabs(),
+            _buildTemplateCarousel(),
+            Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
+            _buildToolBar(),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 4),
+          ]),
+        ),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _buildCategoryTabs(),
-        _buildTemplateCarousel(),
-        Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
-        _buildToolBar(),
-        SizedBox(height: MediaQuery.of(context).padding.bottom + 6),
-      ]),
     );
   }
 
@@ -2987,4 +3087,49 @@ class _DashedRectPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DashedRectPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+// ── 🎨 Widget Bouton Glass ─────────────────────────────────────────────────
+
+/// Bouton avec effet glass pour l'interface du workspace.
+class _GlassButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final Widget child;
+
+  const _GlassButton({
+    required this.onPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).primaryColor.withValues(alpha: 0.85),
+                Theme.of(context).primaryColor.withValues(alpha: 0.65),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Center(child: child),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

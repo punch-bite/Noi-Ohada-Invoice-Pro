@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/logo_image.dart';
 
 class VerifyTwoFactorScreen extends StatefulWidget {
   const VerifyTwoFactorScreen({super.key});
@@ -157,30 +158,11 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                                        // Icône de sécurité 2FA (dégradé + halo)
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            primary.withValues(alpha: 0.9),
-                            theme.secondaryColor.withValues(alpha: 0.7),
-                          ],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: primary.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.security_rounded,
-                          color: Colors.white, size: 28),
+                                        // Logo de la marque
+                    const LogoImage(
+                      path: 'assets/images/splash_logo.png',
+                      width: 68,
+                      height: 68,
                     ).animate().scale(
                           begin: const Offset(0.6, 0.6),
                           end: const Offset(1, 1),

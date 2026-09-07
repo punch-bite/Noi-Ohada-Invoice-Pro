@@ -31,9 +31,8 @@ class LogoImage extends StatelessWidget {
         if (parts.length == 2) {
           final base64String = parts[1];
           final bytes = base64Decode(base64String);
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.memory(
+          return _buildImageWithGlassEffect(
+            Image.memory(
               bytes,
               width: width,
               height: height,
@@ -47,12 +46,24 @@ class LogoImage extends StatelessWidget {
       }
     }
 
+    // Asset image
+    if (path!.startsWith('assets/')) {
+      return _buildImageWithGlassEffect(
+        Image.asset(
+          path!,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (_, __, ___) => _buildPlaceholder(),
+        ),
+      );
+    }
+
     // Sinon, c'est un chemin de fichier (local)
     if (!kIsWeb) {
       try {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
+        return _buildImageWithGlassEffect(
+          Image.file(
             File(path!),
             width: width,
             height: height,
@@ -69,19 +80,61 @@ class LogoImage extends StatelessWidget {
     return _buildPlaceholder();
   }
 
+  Widget _buildImageWithGlassEffect(Widget image) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(width * 0.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.4),
+          width: 2,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(width * 0.2 - 2),
+        child: image,
+      ),
+    );
+  }
+
   Widget _buildPlaceholder() {
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.grey[300]!,
+            Colors.grey[400]!,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(width * 0.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 2,
+        ),
       ),
       child: Icon(
         Icons.business,
-        size: width * 0.5,
-        color: Colors.grey[600],
+        size: width * 0.45,
+        color: Colors.white,
       ),
     );
   }

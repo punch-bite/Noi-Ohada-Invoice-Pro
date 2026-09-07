@@ -209,9 +209,13 @@ class TemplateBackgroundLayer extends StatelessWidget {
 
     Widget? child;
     if (imageBytes != null) {
+      // 🖼️ Image de fond : elle occupe TOUJOURS 100 % largeur × 100 % hauteur
+      // de la feuille A4 à la personnalisation (identique à l'impression), quel que
+      // soit le réglage « Remplir / Ajuster ». On force `fill` pour qu'elle
+      // recouvre tout l'arrière-plan, sans bandeau ni lettreboxage.
       Widget image = Image.memory(
         imageBytes!,
-        fit: fit == 'contain' ? BoxFit.contain : BoxFit.fill,
+        fit: BoxFit.fill,
         width: double.infinity,
         height: double.infinity,
         alignment: Alignment.center,
@@ -222,19 +226,13 @@ class TemplateBackgroundLayer extends StatelessWidget {
           child: image,
         );
       }
-      // 📐 PROPORTIONNALITÉ A4 : quelle que soit la hauteur réelle du
-      // conteneur (le corps du workspace laisse la hauteur libre), l'IMAGE
-      // est contrainte au ratio exact d'une feuille A4 (794×1123, cf.
-      // A4Dimensions) alignée en haut. Le fond s'affiche donc IDENTIQUE
-      // à l'impression PDF (même ratio) au lieu d'être étiré/découpé selon
-      // le contenu. Le motif des presets (dégradé plein, à droite) reste
-      // en fill — aucun risque de distorsion pour un dégradé.
-      child = Align(
-        alignment: Alignment.topCenter,
-        child: AspectRatio(
-          aspectRatio: 794 / 1123,
-          child: image,
-        ),
+      // 📐 L'image de fond occupe TOUJOURS 100 % de la largeur et 100 % de la
+      // hauteur disponibles (identique à l'impression PDF : Positioned.fill + fill),
+      // quel que soit le contenu du workspace : elle s'étend sur toute la
+      // feuille, sans bandeau ni lettreboxage. Les éléments de facture sont
+      // posés au-dessus, en calque.
+      child = SizedBox.expand(
+        child: image,
       );
     } else {
       final preset = BackgroundPreset.byId(presetId);

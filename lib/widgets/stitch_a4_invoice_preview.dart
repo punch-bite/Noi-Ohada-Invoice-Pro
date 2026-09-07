@@ -177,6 +177,12 @@ class StitchA4InvoicePreview extends StatelessWidget {
   final String watermarkText;
   final bool showWatermark;
 
+  /// 🧩 Personnalisations drag & drop sauvegardées du workspace (positions,
+  /// ordre des sections en-tête/body/pied, textes personnalisés, visibilité,
+  /// taille du logo…). Transmises depuis l'écran de détail pour que l'aperçu
+  /// soit fidèle à l'impression PDF (mêmes textes, ordre, visibilité).
+  final Map<String, dynamic> customPositions;
+
   const StitchA4InvoicePreview({
     super.key,
     required this.data,
@@ -195,6 +201,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
     this.showPaidStamp = false,
     this.watermarkText = '',
     this.showWatermark = false,
+    this.customPositions = const {},
   });
 
   static const InvoiceLayoutConfig _emptyConfig = InvoiceLayoutConfig(
@@ -209,6 +216,21 @@ class StitchA4InvoicePreview extends StatelessWidget {
   static const double _paperBaseHeight = _paperWidth * 1123 / 794;
 
   bool _vis(LayoutElement element) => layoutConfig.styleOf(element).visible;
+
+  /// Retourne un booléen d'une personnalisation sauvegardée (défaut si absent).
+
+  bool _cpBool(String key, bool fallback) {
+    final v = customPositions[key];
+    return v is bool ? v : fallback;
+  }
+ 
+  /// Retourne un texte d'une personnalisation sauvegardée (vide si absent).
+  String _cpString(String key) =>
+      (customPositions[key] as String? ?? '').trim();
+ 
+  /// Retourne une liste d'ordre (ex. ordre des éléments d'en-tête).
+  List<String> _cpStrings(String key) =>
+      (customPositions[key] as List?)?.whereType<String>().toList() ?? const [];
 
   String get _bodyFont =>
       (fontFamily == 'Manrope' || fontFamily == 'WorkSans')
@@ -294,7 +316,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 ),
               ),
             // Tampon « PAYÉ » doré pivoté (-12°) — maquette.
-            if (showPaidStamp && data.isPaid)
+            if (_effectiveShowPaidStamp && data.isPaid)
               Positioned.fill(child: _buildPaidStamp()),
             // 🧧 Filigrane personnalisé (paramètres de facture, InvoiceSettings).
             if (showWatermark && watermarkText.isNotEmpty)
@@ -356,71 +378,137 @@ class StitchA4InvoicePreview extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(24 * k, 20 * k, 24 * k, 20 * k),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showLogo) ...[
-                  _buildLogo(onAccent, k),
-                  SizedBox(width: 14 * k),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DE',
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 10.5 * k,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                          color: onAccent.withValues(alpha: 0.80),
-                        ),
-                      ),
-                      SizedBox(height: 2 * k),
-                      Text(
-                        data.companyName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 20 * k,
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                          color: onAccent,
-                        ),
-                      ),
-                      SizedBox(height: 4 * k),
-                      if (data.companyAddress.isNotEmpty)
-                        _contactLine(data.companyAddress, onAccent, k),
-                      if (data.companyPhone.isNotEmpty)
-                        _contactLine(data.companyPhone, onAccent, k),
-                      if (data.companyEmail.isNotEmpty)
-                        _contactLine(data.companyEmail, onAccent, k),
-                      if (data.companyWebsite.isNotEmpty)
-                        _contactLine(data.companyWebsite, onAccent, k),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 10 * k),
-                // Titre FACTURE / DEVIS — tracking large (maquette).
-                Text(
-                  data.isDevis ? 'DEVIS' : 'FACTURE',
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 26 * k,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.4,
-                    color: onAccent,
-                  ),
-                ),
-              ],
+              children: _buildHeaderRowChildren(onAccent, k),
             ),
           ),
         ],
       ),
-    );
+        );
   }
 
-  Widget _contactLine(String text, Color onAccent, double k) {
+    /// Nom de la société : la personnalisation (`company_name`) prend le dessus.
+  String get _customCompanyName {
+    final override = _cpString('company_name');
+    return override.isNotEmpty ? override : (data.companyName);
+  }
+ 
+  /// Nom du client : la personnalisation (`client_name`) prend le dessus.
+  String get _customClientName {
+    final override = _cpString('client_name');
+    return override.isNotEmpty ? override : (data.clientName);
+  }
+ 
+      /// Titre « FACTURE / DEVIS » : la personnalisation (`invoice_title_text`)
+  /// prend le dessus, sinon le libellé par défaut.
+  String get _customTitle {
+    final override = _cpString('invoice_title_text');
+    if (override.isNotEmpty) return override;
+    return data.isDevis ? 'DEVIS' : 'FACTURE';
+  }
+ 
+  /// Texte légal personnalisé (`custom_legal_text`) s'il a été saisi,
+  /// sinon vide → on utilise le texte par défaut du modèle/client.
+  String get _customLegalText => _cpString('custom_legal_text');
+ 
+  /// Texte du tampon « PAYÉ » personnalisé (`stamp_text`).
+  String get _customStampText => _cpString('stamp_text');
+ 
+  /// Intitulé de la ligne de signature (`signatory_title`).
+  String get _customSignatoryTitle {
+    final override = _cpString('signatory_title');
+    return override.isNotEmpty ? override : 'Signature';
+  }
+ 
+  /// Affichage du tampon « PAYÉ » (personnalisation ou défaut = facture payée).
+  bool get _effectiveShowPaidStamp =>
+      _cpBool('show_paid_stamp', showPaidStamp);
+ 
+  /// Affichage de la ligne de signature.
+  bool get _effectiveShowSignature =>
+      _cpBool('show_signature_line', _vis(LayoutElement.signature));
+ 
+  /// Enfants de la Row d'en-tête, réordonnés selon `header_elements_order`
+  /// (par défaut : logo → company_info → invoice_title) — identique au PDF.
+  List<Widget> _buildHeaderRowChildren(Color onAccent, double k) {
+    final order = _cpStrings('header_elements_order');
+    const defaults = ['logo', 'company_info', 'invoice_title'];
+    const known = {'logo', 'company_info', 'invoice_title'};
+    final seen = <String>{};
+    final resolved = <String>[];
+    for (final e in order) {
+      if (known.contains(e) && seen.add(e)) resolved.add(e);
+    }
+    for (final e in defaults) {
+      if (seen.add(e)) resolved.add(e);
+    }
+ 
+    final children = <Widget>[];
+    for (var i = 0; i < resolved.length; i++) {
+      final key = resolved[i];
+      final isLast = i == resolved.length - 1;
+      if (key == 'logo') {
+        if (showLogo) {
+          children.add(_buildLogo(onAccent, k));
+          if (!isLast) children.add(SizedBox(width: 14 * k));
+        }
+      } else if (key == 'company_info') {
+        children.add(Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'DE',
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 10.5 * k,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: onAccent.withValues(alpha: 0.80),
+                ),
+              ),
+              SizedBox(height: 2 * k),
+              Text(
+                _customCompanyName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 20 * k,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                  color: onAccent,
+                ),
+              ),
+              SizedBox(height: 4 * k),
+              if (data.companyAddress.isNotEmpty)
+                _contactLine(data.companyAddress, onAccent, k),
+              if (data.companyPhone.isNotEmpty)
+                _contactLine(data.companyPhone, onAccent, k),
+              if (data.companyEmail.isNotEmpty)
+                _contactLine(data.companyEmail, onAccent, k),
+              if (data.companyWebsite.isNotEmpty)
+                _contactLine(data.companyWebsite, onAccent, k),
+            ],
+          ),
+        ));
+        if (!isLast) children.add(SizedBox(width: 10 * k));
+      } else if (key == 'invoice_title') {
+        children.add(Text(
+          _customTitle,
+          style: TextStyle(
+            fontFamily: 'Manrope',
+            fontSize: 26 * k,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.4,
+            color: onAccent,
+          ),
+        ));
+      }
+    }
+    return children;
+  }
+ 
+  Widget _contactLine(String text,Color onAccent, double k) {
     return Padding(
       padding: EdgeInsets.only(top: 2 * k),
       child: Text(
@@ -531,7 +619,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
                       SizedBox(height: 6 * k),
                       if (data.clientName.isNotEmpty)
                         Text(
-                          data.clientName,
+                          _customClientName,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -895,9 +983,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
     final bool legalOn = _vis(LayoutElement.legalMention) &&
         (data.rccm.isNotEmpty ||
             data.taxId.isNotEmpty ||
-            data.legalMention.isNotEmpty);
+            data.legalMention.isNotEmpty ||
+            _customLegalText.isNotEmpty);
     final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
-    final bool signOn = _vis(LayoutElement.signature);
+    final bool signOn = _effectiveShowSignature;
 
     if (!termsOn && !legalOn && !qrOn && !signOn) {
       return const SizedBox.shrink();
@@ -939,22 +1028,11 @@ class StitchA4InvoicePreview extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (legalOn) ...[
+                                          if (legalOn) ...[
                       SizedBox(height: 8 * k),
-                      Text(
-                        'RCCM : ${data.rccm.isEmpty ? '—' : data.rccm}'
-                        '  ·  N° Contribuable : ${data.taxId.isEmpty ? '—' : data.taxId}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 9.5 * k,
-                          color: cSub,
-                        ),
-                      ),
-                      if (data.legalMention.isNotEmpty)
+                      if (_customLegalText.isNotEmpty) ...[
                         Text(
-                          data.legalMention,
+                          _customLegalText,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -964,6 +1042,31 @@ class StitchA4InvoicePreview extends StatelessWidget {
                             color: cSub,
                           ),
                         ),
+                      ] else ...[
+                        Text(
+                          'RCCM : ${data.rccm.isEmpty ? '—' : data.rccm}'
+                          '  ·  N° Contribuable : ${data.taxId.isEmpty ? '—' : data.taxId}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'WorkSans',
+                            fontSize: 9.5 * k,
+                            color: cSub,
+                          ),
+                        ),
+                        if (data.legalMention.isNotEmpty)
+                          Text(
+                            data.legalMention,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'WorkSans',
+                              fontSize: 9.5 * k,
+                              fontStyle: FontStyle.italic,
+                              color: cSub,
+                            ),
+                          ),
+                      ],
                     ],
                   ],
                 ),
@@ -1007,7 +1110,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
                       color: cSub.withValues(alpha: 0.45)),
                   SizedBox(height: 4 * k),
                   Text(
-                    'Signature',
+                    _customSignatoryTitle,
                     style: TextStyle(
                       fontFamily: 'WorkSans',
                       fontSize: 10 * k,
@@ -1043,8 +1146,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 width: 4,
               ),
             ),
-            child: Text(
-              'PAYÉ',
+                        child: Text(
+              _customStampText.isNotEmpty
+                  ? _customStampText
+                  : 'PAYÉ',
               style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 46,

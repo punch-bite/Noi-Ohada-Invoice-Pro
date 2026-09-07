@@ -68,6 +68,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Uint8List? _previewBackground;
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
+ 
+  /// 📐 Positions drag & drop du modèle actif (ordre des sections en-tête /
+  /// body / pied, visibilité des blocs, textes personnalisés, taille du logo…).
+  /// Transmises à l'aperçu pour être WYSIWYG avec l'impression PDF.
+  Map<String, dynamic> _customPositions = const {};
 
   // 🧩 Layout drag & drop du modèle actif (blocs / colonnes / ordre) —
   // partagé avec le workspace et l'impression PDF (WYSIWYG).
@@ -150,6 +155,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ? InvoiceLayoutConfig.fromMap(custom.positions)
         : InvoiceLayoutConfig.defaultLayout();
     _backgroundSettings = custom.background;
+    _customPositions = custom.positions;
     _previewBackground = decodeBackgroundImage(custom.background.fileData);
 
     if (!custom.background.hasCustomImage &&
@@ -224,6 +230,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
+        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
+        // pour que le PDF imprimé soit WYSIWYG avec l'aperçu.
+        customPositions: _customPositions,
+        customMapping: _selectedTemplate!.mapping,
+        customBackground: _backgroundSettings,
       );
     } catch (e) {
       if (!mounted) return;
@@ -245,6 +256,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
+        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
+        // pour que le PDF partagé soit WYSIWYG avec l'aperçu.
+        customPositions: _customPositions,
+        customMapping: _selectedTemplate!.mapping,
+        customBackground: _backgroundSettings,
       );
       final tempDir = await getTemporaryDirectory();
       final file =
@@ -274,6 +290,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
+        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
+        // pour que le PDF envoyé par email soit WYSIWYG avec l'aperçu.
+        customPositions: _customPositions,
+        customMapping: _selectedTemplate!.mapping,
+        customBackground: _backgroundSettings,
       );
       // TODO: Uploader le PDF (Firebase Storage…) pour obtenir un lien public.
       const pdfLink = '#';
@@ -854,6 +875,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           backgroundImage: _previewBackground,
           watermarkText: _invoiceSettings.watermarkText,
           showWatermark: _invoiceSettings.showWatermark,
+          customPositions: _customPositions,
         ),
         if (!hasDecoratedBg) ...[
           const SizedBox(height: 8),

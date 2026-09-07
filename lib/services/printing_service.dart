@@ -69,6 +69,12 @@ class PrintingService {
     required InvoiceTemplate template,
     bool share = false,
     bool isFreePlan = false,
+    // 🧩 Personnalisations optionnelles passées par l'écran de détail
+    // (positions drag & drop, mapping, arrière-plan). Si non fournies,
+    // elles sont chargées depuis TemplateCustomService.
+    Map<String, dynamic>? customPositions,
+    Map<String, String>? customMapping,
+    TemplateBackgroundSettings? customBackground,
   }) async {
     final fontFamily = await _loadFontFamily();
     final pdf = await generateInvoicePdf(
@@ -78,6 +84,9 @@ class PrintingService {
       template: template,
       fontFamily: fontFamily,
       isFreePlan: isFreePlan,
+      customPositions: customPositions,
+      customMapping: customMapping,
+      customBackground: customBackground,
     );
 
     if (share) {
@@ -106,6 +115,12 @@ class PrintingService {
       pw.Font? condensed,
     })? fontFamily,
     bool isFreePlan = false,
+    // 🧩 Personnalisations optionnelles passées par l'écran de détail
+    // (positions drag & drop, mapping, arrière-plan). Si non fournies,
+    // elles sont chargées depuis TemplateCustomService.
+    Map<String, dynamic>? customPositions,
+    Map<String, String>? customMapping,
+    TemplateBackgroundSettings? customBackground,
   }) async {
     final pdf = pw.Document();
     // 🖋️ Chargement des variantes (regular/bold/medium) : indispensable pour
@@ -114,8 +129,8 @@ class PrintingService {
     final fonts = fontFamily ?? await _loadFontFamily();
 
         // 🔧 APPLIQUE LA CUSTOMISATION de l'utilisateur (positions + mapping +
-    // arrière-plan enregistrés dans l'espace de travail drag & drop). Sans
-    // positions, on garde le layout fixe historique.
+    // arrière-plan). Priorité : personnalisations passées en paramètre (depuis
+    // l'écran de détail) > TemplateCustomService > template par défaut.
     final custom = await TemplateCustomService.loadCustom(template.id);
     // 📦 Paramètres globaux de facture (filigrane, couleurs, police…)
     // Chargés en même temps pour limiter les awaits.
@@ -125,31 +140,41 @@ class PrintingService {
     // un PDF WYSIWYG aligné sur l'aperçu.
     final effectiveTemplate =
         SettingsService.applyToTemplate(template, settings);
-    final positions = custom.positions.isNotEmpty
-        ? custom.positions
-        : Map<String, dynamic>.from(template.positions);
-    final mapping = custom.mapping.isNotEmpty
-        ? custom.mapping
-        : Map<String, String>.from(template.mapping);
+    // 🧩 Utilise les personnalisations passées en paramètre si fournies,
+    // sinon utilise celles de TemplateCustomService, sinon celles du template.
+    final positions = customPositions?.isNotEmpty == true
+        ? customPositions!
+        : custom.positions.isNotEmpty
+            ? custom.positions
+            : Map<String, dynamic>.from(template.positions);
+    final mapping = customMapping?.isNotEmpty == true
+        ? customMapping!
+        : custom.mapping.isNotEmpty
+            ? custom.mapping
+            : Map<String, String>.from(template.mapping);
 
     // 🖼️ ARRIÈRE-PLAN imprimé — priorité : image personnalisée (workspace)
     // > préréglage de la palette > image téléversée du modèle (admin).
     // L'opacité et l'ajustement personnalisés sont appliqués.
+    // Utilise customBackground si fourni (depuis l'écran de détail).
+    final bgSettings = customBackground ?? custom.background;
     Uint8List? bgBytes;
-    if (custom.background.hasCustomImage) {
+    if (bgSettings.hasCustomImage) {
       try {
-        bgBytes = base64Decode(custom.background.fileData);
+        bgBytes = base64Decode(bgSettings.fileData);
       } catch (_) {
         bgBytes = null;
       }
     }
     final preset = bgBytes == null
-        ? BackgroundPreset.byId(custom.background.presetId)
+        ? BackgroundPreset.byId(bgSettings.presetId)
         : null;
     if (preset == null) bgBytes ??= _templateBackgroundBytes(template);
-    final bgOpacity = custom.background.opacity.clamp(0.0, 1.0);
-    final bgFit =
-        custom.background.fit == 'contain' ? pw.BoxFit.contain : pw.BoxFit.fill;
+    final bgOpacity = bgSettings.opacity.clamp(0.0, 1.0);
+    // 🖼️ L'image de fond couvre TOUJOURS 100 % de la largeur et 100 % de la
+    // hauteur du papier (pleine page), quelle que soit la valeur « Remplir /
+    // Ajuster » choisie à la personnalisation : on force `fill` pour que
+    // l'image occupe tout l'arrière-plan A4 (aucun bandeau / lettreboxage).
     final pw.Widget? background;
     if (bgBytes != null) {
       background = pw.Positioned.fill(
@@ -157,7 +182,7 @@ class PrintingService {
           opacity: bgOpacity,
           child: pw.Image(
             pw.MemoryImage(bgBytes),
-            fit: bgFit,
+            fit: pw.BoxFit.fill,
           ),
         ),
       );
@@ -1763,14 +1788,15 @@ class PrintingService {
       try {
         final bytes = _logoBytesFromPath(item.imageData);
         if (bytes != null) {
-          imageWidget = pw.ClipRRect(
-            horizontalRadius: 4,
-            verticalRadius: 4,
-            child: pw.Image(
-              pw.MemoryImage(bytes),
-              width: 26,
-              height: 26,
-              fit: pw.BoxFit.cover,
+          imageWidget = pw.Container(
+            width: 26,
+            height: 26,
+            decoration: pw.BoxDecoration(
+              borderRadius: pw.BorderRadius.circular(4),
+              image: pw.DecorationImage(
+                image: pw.MemoryImage(bytes),
+                fit: pw.BoxFit.cover,
+              ),
             ),
           );
         }

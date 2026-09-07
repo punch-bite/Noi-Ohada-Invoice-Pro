@@ -1,0 +1,1162 @@
+     [0] // lib/widgets/stitch_a4_invoice_preview.dart
+     [0] //
+     [0] // 🧾 Aperçu A4 « Aperçu de la facture » — maquette Stitch
+     [0] // (design/stitch_refined_billing_interface/aper_u_de_la_facture/)
+     [0] //
+     [0] // Fidèle à la maquette mobile :
+     [0] //   • En-tête coloré à motif de points + dégradé horizontal → logo rond à
+     [0] //     initiales, colonne « DE » (société + coordonnées), titre FACTURE/DEVIS
+     [0] //   • Section « FACTURÉ À » ↔ récap FACTURE N° / DATE / ÉCHÉANCE / DEVISE
+     [0] //   • Tableau des lignes (en-tête teinté, séparateurs fins outline-variant)
+     [0] //   • Totaux alignés à droite + bloc plein « MONTANT TOTAL »
+     [0] //   • « Termes et conditions » + bande décorative basse
+     [0] //   • Tampon « PAYÉ » doré pivoté de -12°
+     [0] //
+     [0] // Les PARAMÈTRES DE PERSONNALISATION sauvegardés sont appliqués :
+     [0] //   • couleurs du modèle (primaryColor / backgroundColor / showBorder /
+     [0] //     fontSize de InvoiceTemplate)
+     [0] //   • visibilité des blocs du layout drag & drop (InvoiceLayoutConfig)
+     [0] //   • fond de page : image personnalisée ou préréglage de la palette
+     [0] //     (TemplateBackgroundSettings — opacité / flou / ajustement)
+     [0] 
+     [0] import 'dart:convert' show base64Decode;
+     [0] import 'dart:io' show File;
+     [0] import 'dart:math' as math;
+     [0] import 'dart:typed_data';
+     [0] 
+     [0] import 'package:flutter/material.dart';
+     [0] import 'package:intl/intl.dart';
+     [0] 
+     [0] import '../models/invoice_layout.dart';
+     [0] import '../services/template_custom_service.dart';
+     [0] import '../theme/royal_ledger.dart';
+     [0] import 'template_background_palette.dart';
+     [0] 
+     [0] /// Ligne du tableau des articles de l'aperçu.
+     [0] class StitchPreviewItem {
+     [2] final String description;
+     [2] final int quantity;
+     [2] final double unitPrice;
+     [2] final double total;
+     [0] 
+     [2] const StitchPreviewItem({
+     [4] required this.description,
+     [4] required this.quantity,
+     [4] required this.unitPrice,
+     [4] required this.total,
+     [2] });
+     [0] }
+     [0] 
+     [0] /// Données affichées dans l'aperçu (facture réelle ou exemple maquette).
+     [0] class StitchPreviewData {
+     [2] final String companyInitials;
+     [2] final String companyLogoPath;
+     [2] final String companyName;
+     [2] final String companyAddress;
+     [2] final String companyPhone;
+     [2] final String companyEmail;
+     [2] final String companyWebsite;
+     [0] 
+     [2] final String clientName;
+     [2] final String clientAddress;
+     [2] final String clientPhone;
+     [2] final String clientEmail;
+     [0] 
+     [2] final String invoiceNumber;
+     [2] final String issueDate;
+     [2] final String dueDate;
+     [2] final String currency;
+     [0] 
+     [2] final List<StitchPreviewItem> items;
+     [2] final double subtotal;
+     [2] final double taxRate;
+     [2] final double taxAmount;
+     [2] final double discount;
+     [2] final double totalAmount;
+     [0] 
+     [2] final String terms;
+     [2] final String legalMention;
+     [2] final String rccm;
+     [2] final String taxId;
+     [0] 
+     [2] final bool isDevis;
+     [2] final bool isPaid;
+     [0] 
+     [2] const StitchPreviewData({
+     [4] this.companyInitials = '',
+     [4] this.companyLogoPath = '',
+     [4] this.companyName = '',
+     [4] this.companyAddress = '',
+     [4] this.companyPhone = '',
+     [4] this.companyEmail = '',
+     [4] this.companyWebsite = '',
+     [4] this.clientName = '',
+     [4] this.clientAddress = '',
+     [4] this.clientPhone = '',
+     [4] this.clientEmail = '',
+     [4] this.invoiceNumber = '',
+     [4] this.issueDate = '',
+     [4] this.dueDate = '',
+     [4] this.currency = 'XAF',
+     [4] this.items = const [],
+     [4] this.subtotal = 0,
+     [4] this.taxRate = 18,
+     [4] this.taxAmount = 0,
+     [4] this.discount = 0,
+     [4] this.totalAmount = 0,
+     [4] this.terms = 'Merci pour votre confiance.',
+     [4] this.legalMention = '',
+     [4] this.rccm = '',
+     [4] this.taxId = '',
+     [4] this.isDevis = false,
+     [4] this.isPaid = false,
+     [2] });
+     [0] 
+     [2] /// Données d'exemple — identiques à la maquette Stitch.
+     [2] factory StitchPreviewData.sample() => const StitchPreviewData(
+     [8] companyInitials: 'NO!',
+     [8] companyName: 'Noi Concept digital',
+     [8] companyAddress: 'Dovv Essos Yaoundé Cameroun',
+     [8] companyPhone: '+237620409383',
+     [8] companyEmail: 'contact@noiconcept.com',
+     [8] companyWebsite: 'noiconcept.com',
+     [8] invoiceNumber: 'INV000342',
+     [8] issueDate: '26/03/2025',
+     [8] dueDate: '02/04/2025',
+     [8] currency: 'XAF',
+     [8] isPaid: true,
+     [6] );
+     [0] 
+     [2] /// Montant formaté maquette : `448 400` (séparateur = espace).
+     [2] static String money(double value) =>
+     [6] NumberFormat('#,##0').format(value).replaceAll(',', ' ');
+     [0] 
+     [2] /// Montant préfixé du symbole de la maquette : `Fr0`.
+     [2] static String amount(double value) => 'Fr${money(value)}';
+     [0] }
+     [0] 
+     [0] /// Aperçu A4 de la facture — fidèle à la maquette Stitch, piloté par les
+     [0] /// personnalisations sauvegardées du modèle actif.
+     [0] class StitchA4InvoicePreview extends StatelessWidget {
+     [2] /// Données de la facture (réelles ou d'exemple).
+     [2] final StitchPreviewData data;
+     [0] 
+     [2] /// 🎨 Couleur d'accent du modèle (primaryColor) — mauve de la maquette
+     [2] /// (`RoyalColors.secondary`) par défaut.
+     [2] final Color? accentColor;
+     [0] 
+     [2] /// 🎨 Couleur de papier du modèle (backgroundColor) — blanc par défaut.
+     [2] final Color? pageColor;
+     [0] 
+     [2] final bool showLogo;
+     [2] final bool showBorder;
+     [2] final bool showTaxDetails;
+     [2] final bool showPaymentTerms;
+     [2] final bool showPaymentQR;
+     [0] 
+     [2] /// Police du modèle (corps de texte) : 'WorkSans' | 'Manrope' | autre.
+     [2] final String fontFamily;
+     [0] 
+     [2] /// Échelle typographique du modèle (fontSize / 12).
+     [2] final double fontScale;
+     [0] 
+     [2] /// 🧩 Layout drag & drop : gère la visibilité de chaque bloc.
+     [2] final InvoiceLayoutConfig layoutConfig;
+     [0] 
+     [2] /// 🎨 Réglages de fond sauvegardés (image / préréglage palette).
+     [2] final TemplateBackgroundSettings backgroundSettings;
+     [0] 
+     [2] /// Image de fond décodée (découle de [backgroundSettings]).
+     [2] final Uint8List? backgroundImage;
+     [0] 
+     [2] /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
+     [4] /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
+     [2] final bool showPaidStamp;
+     [0] 
+     [2] /// 🧧 Texte du filigrane (défaut : vide → pas de filigrane).
+     [2] final String watermarkText;
+     [2] final bool showWatermark;
+     [0] 
+     [2] /// 🧩 Personnalisations drag & drop sauvegardées du workspace (positions,
+     [2] /// ordre des sections en-tête/body/pied, textes personnalisés, visibilité,
+     [2] /// taille du logo…). Transmises depuis l'écran de détail pour que l'aperçu
+     [2] /// soit fidèle à l'impression PDF (mêmes textes, ordre, visibilité).
+     [2] final Map<String, dynamic> customPositions;
+     [0] 
+     [2] const StitchA4InvoicePreview({
+     [4] super.key,
+     [4] required this.data,
+     [4] this.accentColor,
+     [4] this.pageColor,
+     [4] this.showLogo = true,
+     [4] this.showBorder = false,
+     [4] this.showTaxDetails = true,
+     [4] this.showPaymentTerms = true,
+     [4] this.showPaymentQR = false,
+     [4] this.fontFamily = 'WorkSans',
+     [4] this.fontScale = 1.0,
+     [4] this.layoutConfig = _emptyConfig,
+     [4] this.backgroundSettings = const TemplateBackgroundSettings(),
+     [4] this.backgroundImage,
+     [4] this.showPaidStamp = false,
+     [4] this.watermarkText = '',
+     [4] this.showWatermark = false,
+     [4] this.customPositions = const {},
+     [2] });
+     [0] 
+     [2] static const InvoiceLayoutConfig _emptyConfig = InvoiceLayoutConfig(
+     [4] positions: {},
+     [4] styles: {},
+     [2] );
+     [0] 
+     [2] /// Largeur de référence du dessin (échelle interne, rendue par FittedBox).
+     [2] static const double _paperWidth = 560;
+     [0] 
+     [2] /// Hauteur A4 correspondante (ratio 794 × 1123).
+     [2] static const double _paperBaseHeight = _paperWidth * 1123 / 794;
+     [0] 
+     [2] bool _vis(LayoutElement element) => layoutConfig.styleOf(element).visible;
+     [0] 
+     [2] /// Retourne un booléen d'une personnalisation sauvegardée (défaut si absent).
+     [0] 
+     [2] bool _cpBool(String key, bool fallback) {
+     [4] final v = customPositions[key];
+     [4] return v is bool ? v : fallback;
+     [2] }
+     [1] 
+     [2] /// Retourne un texte d'une personnalisation sauvegardée (vide si absent).
+     [2] String _cpString(String key) =>
+     [6] (customPositions[key] as String? ?? '').trim();
+     [1] 
+     [2] /// Retourne une taille (numérique) d'une personnalisation sauvegardée.
+     [0] 
+     [2] double _cpDouble(String key, double fallback) {
+     [4] final v = customPositions[key];
+     [4] return v is num ? (v as num).toDouble() : fallback;
+     [2] }
+     [1] 
+     [2] /// Retourne une liste d'ordre (ex. ordre des éléments d'en-tête).
+     [2] List<String> _cpStrings(String key) =>
+     [6] (customPositions[key] as List?)?.whereType<String>().toList() ?? const [];
+     [0] 
+     [2] String get _bodyFont =>
+     [6] (fontFamily == 'Manrope' || fontFamily == 'WorkSans')
+     [10] ? fontFamily
+     [10] : 'WorkSans';
+     [0] 
+     [2] @override
+     [2] Widget build(BuildContext context) {
+     [4] final Color accent = accentColor ?? RoyalColors.secondary;
+     [4] final bool lightAccent = accent.computeLuminance() > 0.55;
+     [4] final Color onAccent = lightAccent ? RoyalColors.onSurface : Colors.white;
+     [0] 
+     [4] final Color page = pageColor ?? RoyalColors.surfaceContainerLowest;
+     [4] final bool darkPage = page.computeLuminance() < 0.45;
+     [4] final Color cText = darkPage ? Colors.white : RoyalColors.onSurface;
+     [4] final Color cSub = darkPage
+     [8] ? Colors.white.withValues(alpha: 0.75)
+     [8] : RoyalColors.onSurfaceVariant;
+     [4] final Color line = darkPage
+     [8] ? Colors.white.withValues(alpha: 0.22)
+     [8] : RoyalColors.outlineVariant.withValues(alpha: 0.55);
+     [0] 
+     [4] final double k = fontScale.clamp(0.80, 1.35);
+     [0] 
+     [4] // Hauteur adaptative : la zone blanche de la maquette absorbe ~4 lignes,
+     [4] // au-delà la page s'allonge pour ne jamais déborder.
+     [4] double extra = 0;
+     [4] if (data.items.length > 4) extra += (data.items.length - 4) * 34 * k;
+     [4] final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
+     [4] final bool signOn = _vis(LayoutElement.signature);
+     [4] final bool legalOn = _vis(LayoutElement.legalMention) &&
+     [8] (data.rccm.isNotEmpty ||
+     [12] data.taxId.isNotEmpty ||
+     [12] data.legalMention.isNotEmpty);
+     [4] if (qrOn) extra += 96 * k;
+     [4] if (signOn) extra += 46 * k;
+     [4] if (legalOn) extra += 30 * k;
+     [0] 
+     [4] final bool hasBg = backgroundImage != null || backgroundSettings.hasPreset;
+     [0] 
+     [4] return FittedBox(
+     [6] fit: BoxFit.fitWidth,
+     [6] child: Container(
+     [8] width: _paperWidth,
+     [8] height: _paperBaseHeight + extra,
+     [8] clipBehavior: Clip.antiAlias,
+     [8] decoration: BoxDecoration(
+     [10] color: page,
+     [10] borderRadius: BorderRadius.circular(5),
+     [10] border: showBorder
+     [14] ? Border.all(color: accent.withValues(alpha: 0.35), width: 1.5)
+     [14] : Border.all(color: Colors.black.withValues(alpha: 0.05)),
+     [10] boxShadow: [
+     [12] BoxShadow(
+     [14] color: Colors.black.withValues(alpha: 0.16),
+     [14] blurRadius: 16,
+     [14] offset: const Offset(0, 6),
+     [12] ),
+     [10] ],
+     [8] ),
+     [8] child: Stack(
+     [10] children: [
+     [12] // 🎨 Fond personnalisé (image ou préréglage) — sous le contenu.
+     [12] Positioned.fill(
+     [14] child: TemplateBackgroundLayer(
+     [16] presetId:
+     [20] backgroundImage != null ? '' : backgroundSettings.presetId,
+     [16] imageBytes: backgroundImage,
+     [16] opacity: backgroundSettings.hasCustomImage
+     [20] ? 1.0
+     [20] : backgroundSettings.opacity,
+     [16] blur: backgroundSettings.blur,
+     [16] fit: backgroundSettings.fit,
+     [14] ),
+     [12] ),
+     [12] // Voile de lisibilité quand un fond décoratif est posé.
+     [12] if (hasBg)
+     [14] Positioned.fill(
+     [16] child: ColoredBox(
+     [18] color: darkPage
+     [22] ? Colors.black.withValues(alpha: 0.35)
+     [22] : Colors.white.withValues(alpha: 0.45),
+     [16] ),
+     [14] ),
+     [12] // Tampon « PAYÉ » doré pivoté (-12°) — maquette.
+     [12] if (showPaidStamp && data.isPaid)
+     [14] Positioned.fill(child: _buildPaidStamp()),
+     [12] // 🧧 Filigrane personnalisé (paramètres de facture, InvoiceSettings).
+     [12] if (showWatermark && watermarkText.isNotEmpty)
+     [14] Positioned.fill(child: _buildWatermark(cText)),
+     [12] Column(
+     [14] crossAxisAlignment: CrossAxisAlignment.stretch,
+     [14] children: [
+     [16] _buildHeader(accent, onAccent, k),
+     [16] _buildInfoRow(cText, cSub, k),
+     [16] Expanded(
+     [18] child:
+     [22] _buildItemsAndTotals(accent, onAccent, cText, cSub, line, k),
+     [16] ),
+     [16] _buildFooter(accent, cText, cSub, line, k),
+     [16] // Bande décorative basse de la maquette.
+     [16] Container(height: 8, color: accent.withValues(alpha: 0.85)),
+     [14] ],
+     [12] ),
+     [10] ],
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [4] // ============================================================
+     [2] //  🟣 EN-TÊTE — bandeau coloré à motif de points + dégradé
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildHeader(Color accent, Color onAccent, double k) {
+     [4] final Color dotColor =
+     [8] Color.lerp(accent, Colors.black, 0.5)!.withValues(alpha: 0.55);
+     [0] 
+     [4] return Container(
+     [6] color: accent,
+     [6] child: Stack(
+     [8] children: [
+     [10] // Motif de points (radial-gradient 8px, maquette).
+     [10] Positioned.fill(
+     [12] child: CustomPaint(
+     [14] painter: _DotsPatternPainter(dotColor),
+     [14] child: const SizedBox.expand(),
+     [12] ),
+     [10] ),
+     [10] // Dégradé de lisibilité gauche → droite (secondary/90 → /30).
+     [10] Positioned.fill(
+     [12] child: DecoratedBox(
+     [14] decoration: BoxDecoration(
+     [16] gradient: LinearGradient(
+     [18] colors: [
+     [20] accent.withValues(alpha: 0.92),
+     [20] accent.withValues(alpha: 0.70),
+     [20] accent.withValues(alpha: 0.30),
+     [18] ],
+     [16] ),
+     [14] ),
+     [12] ),
+     [10] ),
+     [10] Padding(
+     [12] padding: EdgeInsets.fromLTRB(24 * k, 20 * k, 24 * k, 20 * k),
+     [12] child: Row(
+     [14] crossAxisAlignment: CrossAxisAlignment.start,
+     [14] children: _buildHeaderRowChildren(onAccent, k),
+     [12] ),
+     [10] ),
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _contactLine(String text, Color onAccent, double k) {
+     [4] return Padding(
+     [6] padding: EdgeInsets.only(top: 2 * k),
+     [6] child: Text(
+     [8] text,
+     [8] maxLines: 1,
+     [8] overflow: TextOverflow.ellipsis,
+     [8] style: TextStyle(
+     [10] fontFamily: 'WorkSans',
+     [10] fontSize: 11.5 * k,
+     [10] color: onAccent.withValues(alpha: 0.90),
+     [10] height: 1.25,
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] /// Logo rond : image de la société, sinon cercle à initiales (maquette).
+     [2] Widget _buildLogo(Color onAccent, double k) {
+     [4] final double size = 64 * k;
+     [4] final Widget fallback = Text(
+     [6] data.companyInitials.toUpperCase(),
+     [6] maxLines: 1,
+     [6] overflow: TextOverflow.ellipsis,
+     [6] style: TextStyle(
+     [8] fontFamily: 'Manrope',
+     [8] fontSize: 19 * k,
+     [8] fontWeight: FontWeight.w900,
+     [8] fontStyle: FontStyle.italic,
+     [8] color: const Color(0xFF93000A), // on-error-container (maquette)
+     [6] ),
+     [4] );
+     [4] return Container(
+     [6] width: size,
+     [6] height: size,
+     [6] clipBehavior: Clip.antiAlias,
+     [6] decoration: BoxDecoration(
+     [8] color: const Color(0xFFFFDAD6), // error-container (maquette)
+     [8] shape: BoxShape.circle,
+     [8] border:
+     [12] Border.all(color: onAccent.withValues(alpha: 0.20), width: 2),
+     [6] ),
+     [6] alignment: Alignment.center,
+     [6] padding: const EdgeInsets.all(4),
+     [6] child: data.companyLogoPath.isEmpty
+     [10] ? fallback
+     [10] : _logoImage(data.companyLogoPath, size, fallback),
+     [4] );
+     [2] }
+     [0] 
+     [2] /// Charge le logo (data URI base64, URL ou chemin fichier) avec repli.
+     [2] Widget _logoImage(String path, double size, Widget fallback) {
+     [4] try {
+     [6] final ImageProvider provider;
+     [6] if (path.startsWith('data:image')) {
+     [8] final parts = path.split(',');
+     [8] provider =
+     [12] MemoryImage(base64Decode(parts.length == 2 ? parts[1] : path));
+     [6] } else if (path.startsWith('http')) {
+     [8] provider = NetworkImage(path);
+     [6] } else {
+     [8] provider = FileImage(File(path));
+     [6] }
+     [6] return Image(
+     [8] image: provider,
+     [8] width: size,
+     [8] height: size,
+     [8] fit: BoxFit.cover,
+     [8] errorBuilder: (_, __, ___) => fallback,
+     [6] );
+     [4] } catch (_) {
+     [6] return fallback;
+     [4] }
+     [2] }
+     [0] 
+     [2] // ============================================================
+     [2] //  📋 INFOS — « FACTURÉ À » ↔ N° / Date / Échéance / Devise
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildInfoRow(Color cText, Color cSub, double k) {
+     [4] final rows = <(String, String)>[
+     [6] ('FACTURE N°', data.invoiceNumber),
+     [6] ('DATE', data.issueDate),
+     [6] ('ÉCHÉANCE', data.dueDate),
+     [6] ('DEVISE', data.currency),
+     [4] ];
+     [0] 
+     [4] return Padding(
+     [6] padding: EdgeInsets.fromLTRB(24 * k, 16 * k, 24 * k, 12 * k),
+     [6] child: Row(
+     [8] crossAxisAlignment: CrossAxisAlignment.start,
+     [8] children: [
+     [10] // Bloc « FACTURÉ À » — coordonnées du client.
+     [10] Expanded(
+     [12] child: _vis(LayoutElement.clientName)
+     [16] ? Column(
+     [20] crossAxisAlignment: CrossAxisAlignment.start,
+     [20] children: [
+     [22] Text(
+     [24] 'FACTURÉ À',
+     [24] style: TextStyle(
+     [26] fontFamily: 'WorkSans',
+     [26] fontSize: 11 * k,
+     [26] fontWeight: FontWeight.w700,
+     [26] letterSpacing: 1.1,
+     [26] color: cSub,
+     [24] ),
+     [22] ),
+     [22] SizedBox(height: 6 * k),
+     [22] if (data.clientName.isNotEmpty)
+     [24] Text(
+     [26] data.clientName,
+     [26] maxLines: 2,
+     [26] overflow: TextOverflow.ellipsis,
+     [26] style: TextStyle(
+     [28] fontFamily: _bodyFont,
+     [28] fontSize: 13 * k,
+     [28] fontWeight: FontWeight.w600,
+     [28] color: cText,
+     [26] ),
+     [24] ),
+     [22] if (_vis(LayoutElement.clientAddress) &&
+     [26] data.clientAddress.isNotEmpty)
+     [24] _clientLine(data.clientAddress, cSub, k),
+     [22] if (_vis(LayoutElement.clientPhone) &&
+     [26] data.clientPhone.isNotEmpty)
+     [24] _clientLine(data.clientPhone, cSub, k),
+     [22] if (_vis(LayoutElement.clientEmail) &&
+     [26] data.clientEmail.isNotEmpty)
+     [24] _clientLine(data.clientEmail, cSub, k),
+     [20] ],
+     [18] )
+     [16] : const SizedBox(),
+     [10] ),
+     [10] SizedBox(width: 16 * k),
+     [10] // Récap facture (min-w 140px en maquette).
+     [10] SizedBox(
+     [12] width: 160 * k,
+     [12] child: Column(
+     [14] crossAxisAlignment: CrossAxisAlignment.stretch,
+     [14] children: [
+     [16] for (final (label, value) in rows)
+     [18] Padding(
+     [20] padding: EdgeInsets.only(bottom: 5 * k),
+     [20] child: Row(
+     [22] mainAxisAlignment: MainAxisAlignment.spaceBetween,
+     [22] children: [
+     [24] Flexible(
+     [26] child: Text(
+     [28] label,
+     [28] maxLines: 1,
+     [28] overflow: TextOverflow.ellipsis,
+     [28] style: TextStyle(
+     [30] fontFamily: 'WorkSans',
+     [30] fontSize: 10.5 * k,
+     [30] fontWeight: FontWeight.w700,
+     [30] letterSpacing: 0.8,
+     [30] color: cSub,
+     [28] ),
+     [26] ),
+     [24] ),
+     [24] SizedBox(width: 8 * k),
+     [24] Text(
+     [26] value,
+     [26] style: TextStyle(
+     [28] fontFamily: 'WorkSans',
+     [28] fontSize: 11.5 * k,
+     [28] color: cText,
+     [26] ),
+     [24] ),
+     [22] ],
+     [20] ),
+     [18] ),
+     [14] ],
+     [12] ),
+     [10] ),
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _clientLine(String text, Color cSub, double k) {
+     [4] return Padding(
+     [6] padding: EdgeInsets.only(top: 2 * k),
+     [6] child: Text(
+     [8] text,
+     [8] maxLines: 1,
+     [8] overflow: TextOverflow.ellipsis,
+     [8] style: TextStyle(
+     [10] fontFamily: 'WorkSans',
+     [10] fontSize: 11 * k,
+     [10] color: cSub,
+     [10] height: 1.3,
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] // ============================================================
+     [2] //  🧾 TABLEAU + TOTAUX
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildItemsAndTotals(
+     [4] Color accent,
+     [4] Color onAccent,
+     [4] Color cText,
+     [4] Color cSub,
+     [4] Color line,
+     [4] double k,
+     [2] ) {
+     [4] final BorderSide side = BorderSide(color: line, width: 1);
+     [0] 
+     [4] return Padding(
+     [6] padding: EdgeInsets.fromLTRB(24 * k, 4 * k, 24 * k, 0),
+     [6] child: Column(
+     [8] crossAxisAlignment: CrossAxisAlignment.stretch,
+     [8] children: [
+     [10] if (_vis(LayoutElement.itemsTable)) ...[
+     [12] // En-tête du tableau (bg accent/80, coins hauts arrondis).
+     [12] Container(
+     [14] padding:
+     [18] EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
+     [14] decoration: BoxDecoration(
+     [16] color: accent.withValues(alpha: 0.82),
+     [16] borderRadius:
+     [20] const BorderRadius.vertical(top: Radius.circular(4)),
+     [14] ),
+     [14] child: Row(
+     [16] children: [
+     [18] Expanded(
+     [20] flex: 8,
+     [20] child: _thText('DESCRIPTION', onAccent, k),
+     [18] ),
+     [18] Expanded(
+     [20] flex: 2,
+     [20] child: _thText('QTÉ', onAccent, k,
+     [24] align: TextAlign.center),
+     [18] ),
+     [18] Expanded(
+     [20] flex: 3,
+     [20] child:
+     [24] _thText('PRIX', onAccent, k, align: TextAlign.right),
+     [18] ),
+     [18] Expanded(
+     [20] flex: 3,
+     [20] child: _thText('MONTANT', onAccent, k,
+     [24] align: TextAlign.right),
+     [18] ),
+     [16] ],
+     [14] ),
+     [12] ),
+     [12] // Corps du tableau.
+     [12] if (data.items.isEmpty)
+     [14] Container(
+     [16] height: 64 * k,
+     [16] padding: EdgeInsets.symmetric(horizontal: 12 * k),
+     [16] decoration: BoxDecoration(
+     [18] border: Border(left: side, right: side, bottom: side),
+     [16] ),
+     [16] child: Row(
+     [18] children: [
+     [20] const Expanded(flex: 8, child: SizedBox()),
+     [20] _cellBorder(flex: 2, side: side),
+     [20] _cellBorder(flex: 3, side: side),
+     [20] _cellBorder(flex: 3, side: side),
+     [18] ],
+     [16] ),
+     [14] )
+     [12] else
+     [14] for (var i = 0; i < data.items.length; i++)
+     [16] _itemRow(data.items[i], cText, side, k),
+     [10] ],
+     [0] 
+     [10] // Totaux — alignés à droite (maquette).
+     [10] if (_vis(LayoutElement.subtotal) || _vis(LayoutElement.totalAmount)) ...[
+     [12] SizedBox(height: 14 * k),
+     [12] Padding(
+     [14] padding: EdgeInsets.only(right: 4 * k),
+     [14] child: Column(
+     [16] crossAxisAlignment: CrossAxisAlignment.end,
+     [16] children: [
+     [18] if (_vis(LayoutElement.subtotal))
+     [20] _totalLine('Sous-Total',
+     [24] StitchPreviewData.amount(data.subtotal), cSub, cText, k),
+     [18] if (showTaxDetails && _vis(LayoutElement.taxAmount))
+     [20] _totalLine(
+     [24] 'TVA (${data.taxRate.toStringAsFixed(0)}%)',
+     [24] StitchPreviewData.amount(data.taxAmount),
+     [24] cSub,
+     [24] cText,
+     [24] k),
+     [18] if (data.discount > 0 && _vis(LayoutElement.discount))
+     [20] _totalLine('Remise',
+     [24] '- ${StitchPreviewData.amount(data.discount)}', cSub, cText, k),
+     [18] if (_vis(LayoutElement.totalAmount)) ...[
+     [20] SizedBox(height: 8 * k),
+     [20] Container(
+     [22] width: 220 * k,
+     [22] padding: EdgeInsets.symmetric(
+     [26] horizontal: 12 * k, vertical: 9 * k),
+     [22] decoration: BoxDecoration(
+     [24] color: accent.withValues(alpha: 0.82),
+     [24] borderRadius: BorderRadius.circular(4),
+     [24] boxShadow: [
+     [26] BoxShadow(
+     [28] color: Colors.black.withValues(alpha: 0.10),
+     [28] blurRadius: 4,
+     [28] offset: const Offset(0, 2),
+     [26] ),
+     [24] ],
+     [22] ),
+     [22] child: Row(
+     [24] mainAxisAlignment: MainAxisAlignment.spaceBetween,
+     [24] children: [
+     [26] Text(
+     [28] 'MONTANT TOTAL',
+     [28] style: TextStyle(
+     [30] fontFamily: 'WorkSans',
+     [30] fontSize: 10.5 * k,
+     [30] fontWeight: FontWeight.w700,
+     [30] letterSpacing: 0.8,
+     [30] color: onAccent,
+     [28] ),
+     [26] ),
+     [26] Text(
+     [28] StitchPreviewData.amount(data.totalAmount),
+     [28] style: TextStyle(
+     [30] fontFamily: 'WorkSans',
+     [30] fontSize: 12.5 * k,
+     [30] fontWeight: FontWeight.w600,
+     [30] color: onAccent,
+     [28] ),
+     [26] ),
+     [24] ],
+     [22] ),
+     [20] ),
+     [18] ],
+     [16] ],
+     [14] ),
+     [12] ),
+     [10] ],
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _thText(String label, Color onAccent, double k,
+     [6] {TextAlign align = TextAlign.left}) {
+     [4] return Text(
+     [6] label,
+     [6] textAlign: align,
+     [6] maxLines: 1,
+     [6] overflow: TextOverflow.ellipsis,
+     [6] style: TextStyle(
+     [8] fontFamily: 'WorkSans',
+     [8] fontSize: 10 * k,
+     [8] fontWeight: FontWeight.w700,
+     [8] letterSpacing: 0.8,
+     [8] color: onAccent,
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] /// Colonne bordée à gauche (séparateur vertical, maquette).
+     [2] Widget _cellBorder({required int flex, required BorderSide side}) {
+     [4] return Expanded(
+     [6] flex: flex,
+     [6] child: Container(
+     [8] decoration: BoxDecoration(border: Border(left: side)),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _itemRow(StitchPreviewItem item, Color cText, BorderSide side, double k) {
+     [4] return Container(
+     [6] decoration: BoxDecoration(
+     [8] border: Border(left: side, right: side, bottom: side),
+     [6] ),
+     [6] padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+     [6] child: Row(
+     [8] children: [
+     [10] Expanded(
+     [12] flex: 8,
+     [12] child: Text(
+     [14] item.description,
+     [14] maxLines: 2,
+     [14] overflow: TextOverflow.ellipsis,
+     [14] style: TextStyle(
+     [16] fontFamily: _bodyFont,
+     [16] fontSize: 12 * k,
+     [16] fontWeight: FontWeight.w500,
+     [16] color: cText,
+     [14] ),
+     [12] ),
+     [10] ),
+     [10] _itemCell(item.quantity.toString(), cText, k,
+     [14] flex: 2, align: TextAlign.center, side: side),
+     [10] _itemCell(StitchPreviewData.money(item.unitPrice), cText, k,
+     [14] flex: 3, align: TextAlign.right, side: side),
+     [10] _itemCell(StitchPreviewData.money(item.total), cText, k,
+     [14] flex: 3, align: TextAlign.right, side: side),
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _itemCell(
+     [4] String text,
+     [4] Color cText,
+     [4] double k, {
+     [4] required int flex,
+     [4] required TextAlign align,
+     [4] required BorderSide side,
+     [2] }) {
+     [4] return Expanded(
+     [6] flex: flex,
+     [6] child: Container(
+     [8] decoration: BoxDecoration(border: Border(left: side)),
+     [8] padding: EdgeInsets.only(left: 8 * k),
+     [8] child: Text(
+     [10] text,
+     [10] textAlign: align,
+     [10] style: TextStyle(
+     [12] fontFamily: _bodyFont,
+     [12] fontSize: 11.5 * k,
+     [12] color: cText,
+     [10] ),
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] Widget _totalLine(
+     [6] String label, String value, Color cSub, Color cText, double k) {
+     [4] return Padding(
+     [6] padding: EdgeInsets.only(bottom: 6 * k),
+     [6] child: SizedBox(
+     [8] width: 220 * k,
+     [8] child: Row(
+     [10] mainAxisAlignment: MainAxisAlignment.spaceBetween,
+     [10] children: [
+     [12] Text(
+     [14] label,
+     [14] style: TextStyle(
+     [16] fontFamily: 'WorkSans',
+     [16] fontSize: 10.5 * k,
+     [16] fontWeight: FontWeight.w700,
+     [16] color: cSub,
+     [14] ),
+     [12] ),
+     [12] Text(
+     [14] value,
+     [14] style: TextStyle(
+     [16] fontFamily: _bodyFont,
+     [16] fontSize: 12 * k,
+     [16] fontWeight: FontWeight.w600,
+     [16] color: cText,
+     [14] ),
+     [12] ),
+     [10] ],
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] // ============================================================
+     [2] //  📜 PIED — termes & conditions / légal / QR / signature + bande
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildFooter(
+     [6] Color accent, Color cText, Color cSub, Color line, double k) {
+     [4] final bool termsOn = showPaymentTerms && _vis(LayoutElement.footerText);
+     [4] final bool legalOn = _vis(LayoutElement.legalMention) &&
+     [8] (data.rccm.isNotEmpty ||
+     [12] data.taxId.isNotEmpty ||
+     [12] data.legalMention.isNotEmpty);
+     [4] final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
+     [4] final bool signOn = _vis(LayoutElement.signature);
+     [0] 
+     [4] if (!termsOn && !legalOn && !qrOn && !signOn) {
+     [6] return const SizedBox.shrink();
+     [4] }
+     [0] 
+     [4] return Padding(
+     [6] padding: EdgeInsets.fromLTRB(24 * k, 0, 24 * k, 12 * k),
+     [6] child: Column(
+     [8] crossAxisAlignment: CrossAxisAlignment.start,
+     [8] children: [
+     [10] Row(
+     [12] crossAxisAlignment: CrossAxisAlignment.end,
+     [12] children: [
+     [14] Expanded(
+     [16] child: Column(
+     [18] crossAxisAlignment: CrossAxisAlignment.start,
+     [18] children: [
+     [20] if (termsOn) ...[
+     [22] Text(
+     [24] 'Termes et conditions',
+     [24] style: TextStyle(
+     [26] fontFamily: 'WorkSans',
+     [26] fontSize: 11.5 * k,
+     [26] fontWeight: FontWeight.w700,
+     [26] color: cSub,
+     [24] ),
+     [22] ),
+     [22] SizedBox(height: 3 * k),
+     [22] Text(
+     [24] data.terms.isEmpty
+     [28] ? 'Merci pour votre confiance.'
+     [28] : data.terms,
+     [24] maxLines: 3,
+     [24] overflow: TextOverflow.ellipsis,
+     [24] style: TextStyle(
+     [26] fontFamily: 'WorkSans',
+     [26] fontSize: 11 * k,
+     [26] color: cSub.withValues(alpha: 0.80),
+     [24] ),
+     [22] ),
+     [20] ],
+     [20] if (legalOn) ...[
+     [22] SizedBox(height: 8 * k),
+     [22] Text(
+     [24] 'RCCM : ${data.rccm.isEmpty ? '—' : data.rccm}'
+     [24] '  ·  N° Contribuable : ${data.taxId.isEmpty ? '—' : data.taxId}',
+     [24] maxLines: 2,
+     [24] overflow: TextOverflow.ellipsis,
+     [24] style: TextStyle(
+     [26] fontFamily: 'WorkSans',
+     [26] fontSize: 9.5 * k,
+     [26] color: cSub,
+     [24] ),
+     [22] ),
+     [22] if (data.legalMention.isNotEmpty)
+     [24] Text(
+     [26] data.legalMention,
+     [26] maxLines: 2,
+     [26] overflow: TextOverflow.ellipsis,
+     [26] style: TextStyle(
+     [28] fontFamily: 'WorkSans',
+     [28] fontSize: 9.5 * k,
+     [28] fontStyle: FontStyle.italic,
+     [28] color: cSub,
+     [26] ),
+     [24] ),
+     [20] ],
+     [18] ],
+     [16] ),
+     [14] ),
+     [14] if (qrOn) ...[
+     [16] SizedBox(width: 12 * k),
+     [16] Container(
+     [18] padding: const EdgeInsets.all(7),
+     [18] decoration: BoxDecoration(
+     [20] color: Colors.white.withValues(alpha: 0.85),
+     [20] border: Border.all(color: line),
+     [20] borderRadius: BorderRadius.circular(8),
+     [18] ),
+     [18] child: Column(
+     [20] children: [
+     [22] Icon(Icons.qr_code_2, size: 46 * k, color: accent),
+     [22] SizedBox(height: 3 * k),
+     [22] Text(
+     [24] 'Paiement Mobile Money',
+     [24] style: TextStyle(
+     [26] fontFamily: 'WorkSans',
+     [26] fontSize: 8.5 * k,
+     [26] color: cSub,
+     [24] ),
+     [22] ),
+     [20] ],
+     [18] ),
+     [16] ),
+     [14] ],
+     [12] ],
+     [10] ),
+     [10] if (signOn) ...[
+     [12] SizedBox(height: 14 * k),
+     [12] Align(
+     [14] alignment: Alignment.centerRight,
+     [14] child: Column(
+     [16] children: [
+     [18] Container(
+     [22] width: 120 * k,
+     [22] height: 1,
+     [22] color: cSub.withValues(alpha: 0.45)),
+     [18] SizedBox(height: 4 * k),
+     [18] Text(
+     [20] 'Signature',
+     [20] style: TextStyle(
+     [22] fontFamily: 'WorkSans',
+     [22] fontSize: 10 * k,
+     [22] color: cSub,
+     [20] ),
+     [18] ),
+     [16] ],
+     [14] ),
+     [12] ),
+     [10] ],
+     [8] ],
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] // ============================================================
+     [2] //  🏷️ TAMPON « PAYÉ »
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildPaidStamp() {
+     [4] return Center(
+     [6] child: Transform.rotate(
+     [8] angle: -12 * math.pi / 180,
+     [8] child: Opacity(
+     [10] opacity: 0.80,
+     [10] child: Container(
+     [12] padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
+     [12] decoration: BoxDecoration(
+     [14] color: Colors.white.withValues(alpha: 0.12),
+     [14] borderRadius: BorderRadius.circular(8),
+     [14] border: Border.all(
+     [16] color: RoyalColors.tertiaryFixedDim,
+     [16] width: 4,
+     [14] ),
+     [12] ),
+     [12] child: Text(
+     [14] 'PAYÉ',
+     [14] style: TextStyle(
+     [16] fontFamily: 'Manrope',
+     [16] fontSize: 46,
+     [16] fontWeight: FontWeight.w800,
+     [16] letterSpacing: 8,
+     [16] color: RoyalColors.tertiaryFixedDim,
+     [16] height: 1.0,
+     [14] ),
+     [12] ),
+     [10] ),
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] 
+     [2] // ============================================================
+     [2] //  🧧 FILIGRANE personnalisé (InvoiceSettings.watermarkText)
+     [2] // ============================================================
+     [0] 
+     [2] Widget _buildWatermark(Color baseColor) {
+     [4] return Center(
+     [6] child: Transform.rotate(
+     [8] angle: -12 * math.pi / 180,
+     [8] child: Opacity(
+     [10] opacity: 0.08,
+     [10] child: Text(
+     [12] watermarkText,
+     [12] textAlign: TextAlign.center,
+     [12] style: TextStyle(
+     [14] fontFamily: 'Manrope',
+     [14] fontSize: 44,
+     [14] fontWeight: FontWeight.w800,
+     [14] letterSpacing: 4,
+     [14] color: baseColor,
+     [14] height: 1.0,
+     [12] ),
+     [10] ),
+     [8] ),
+     [6] ),
+     [4] );
+     [2] }
+     [0] }
+     [0] 
+     [0] /// Conversion des modèles métier → données de l'aperçu.
+     [0] extension StitchPreviewDataX on StitchPreviewData {
+     [2] /// Construit les données d'aperçu depuis une facture réelle.
+     [2] static StitchPreviewData fromInvoice({
+     [4] required dynamic invoice,
+     [4] dynamic client,
+     [4] dynamic company,
+     [2] }) {
+     [4] String initials = '';
+     [4] final name = company?.name as String? ?? '';
+     [4] for (final part
+     [8] in name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).take(2)) {
+     [6] initials += part[0].toUpperCase();
+     [4] }
+     [4] if (initials.isEmpty) initials = 'NO';
+     [0] 
+     [4] String fmtDate(dynamic date) {
+     [6] if (date is DateTime) {
+     [8] return '${date.day.toString().padLeft(2, '0')}/'
+     [12] '${date.month.toString().padLeft(2, '0')}/${date.year}';
+     [6] }
+     [6] return '';
+     [4] }
+     [0] 
+     [4] final items = (invoice.items as List).map((e) {
+     [6] return StitchPreviewItem(
+     [8] description: e.description as String,
+     [8] quantity: e.quantity as int,
+     [8] unitPrice: (e.unitPrice as num).toDouble(),
+     [8] total: (e.totalPrice as num).toDouble(),
+     [6] );
+     [4] }).toList();
+     [0] 
+     [4] return StitchPreviewData(
+     [6] companyInitials: initials,
+     [6] companyLogoPath: company?.logoPath as String? ?? '',
+     [6] companyName: name,
+     [6] companyAddress: company?.address as String? ?? '',
+     [6] companyPhone: company?.phone as String? ?? '',
+     [6] companyEmail: company?.email as String? ?? '',
+     [6] companyWebsite: company?.website as String? ?? '',
+     [6] clientName: client?.name as String? ?? '',
+     [6] clientAddress: client?.address as String? ?? '',
+     [6] clientPhone: client?.phone as String? ?? '',
+     [6] clientEmail: client?.email as String? ?? '',
+     [6] invoiceNumber: invoice.invoiceNumber as String,
+     [6] issueDate: fmtDate(invoice.issueDate),
+     [6] dueDate: fmtDate(invoice.dueDate),
+     [6] currency: company?.currency as String? ?? 'XAF',
+     [6] items: items,
+     [6] subtotal: (invoice.subtotal as num).toDouble(),
+     [6] taxRate: (invoice.taxRate as num).toDouble(),
+     [6] taxAmount: (invoice.taxAmount as num).toDouble(),
+     [6] discount: (invoice.discount as num).toDouble(),
+     [6] totalAmount: (invoice.totalAmount as num).toDouble(),
+     [6] terms: invoice.terms as String? ?? '',
+     [6] legalMention: company?.legalText as String? ?? '',
+     [6] rccm: company?.rccm as String? ?? '',
+     [6] taxId: company?.taxId as String? ?? '',
+     [6] isDevis: (invoice.isDevis as bool?) ?? false,
+     [6] isPaid: (invoice.status as String? ?? '') == 'paid',
+     [4] );
+     [2] }
+     [0] }
+     [0] 
+     [0] /// Motif de points de l'en-tête (radial-gradient 8px de la maquette).
+     [0] class _DotsPatternPainter extends CustomPainter {
+     [2] final Color color;
+     [2] _DotsPatternPainter(this.color);
+     [0] 
+     [2] @override
+     [2] void paint(Canvas canvas, Size size) {
+     [4] const double cell = 8.0;
+     [4] const double radius = 1.2; // ~15 % de la cellule
+     [4] final Paint paint = Paint()..color = color;
+     [4] for (double y = cell / 2; y < size.height; y += cell) {
+     [6] for (double x = cell / 2; x < size.width; x += cell) {
+     [8] canvas.drawCircle(Offset(x, y), radius, paint);
+     [6] }
+     [4] }
+     [2] }
+     [0] 
+     [2] @override
+     [2] bool shouldRepaint(covariant _DotsPatternPainter oldDelegate) =>
+     [6] oldDelegate.color != color;
+     [0] }
+     [0] 
+     [0] 
+     [0] 
+     [0] 
+     [0] 
+     [0] 
+     [0] 
+     [0] 
+     [0] 

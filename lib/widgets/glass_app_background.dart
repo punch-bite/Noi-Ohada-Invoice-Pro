@@ -18,13 +18,12 @@ class GlassAppBackground extends StatelessWidget {
     final start = isDark ? const Color(0xFF0B0D17) : const Color(0xFFEDE9FE);
     final end = isDark ? const Color(0xFF1E2433) : const Color(0xFFFDF2F8);
 
-    return ColoredBox(
-      color: isDark ? const Color(0xFF0B0D17) : const Color(0xFFF6F7FB),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Dégradé de fond
-          DecoratedBox(
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Dégradé de fond (couvre tout l'écran)
+        Positioned.fill(
+          child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -33,38 +32,39 @@ class GlassAppBackground extends StatelessWidget {
               ),
             ),
           ),
-          // Halos lumineux doux (effet glass)
-          Positioned(
-            top: -100,
-            right: -80,
-            child: _Glow(
-              color: (isDark ? const Color(0xFF7C6CF0) : const Color(0xFF818CF8))
-                  .withValues(alpha: 0.22),
-              size: 280,
-            ),
+        ),
+        // Halos lumineux doux (effet glass)
+        Positioned(
+          top: -100,
+          right: -80,
+          child: _Glow(
+            color: (isDark ? const Color(0xFF7C6CF0) : const Color(0xFF818CF8))
+                .withValues(alpha: 0.22),
+            size: 280,
           ),
-          Positioned(
-            bottom: -120,
-            left: -90,
-            child: _Glow(
-              color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
-                  .withValues(alpha: 0.18),
-              size: 320,
-            ),
+        ),
+        Positioned(
+          bottom: -120,
+          left: -90,
+          child: _Glow(
+            color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
+                .withValues(alpha: 0.18),
+            size: 320,
           ),
-          // Légère atténuation pour la lisibilité
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
-              child: const SizedBox.shrink(),
-            ),
+        ),
+        // Légère atténuation pour la lisibilité
+        Positioned.fill(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
+            child: const SizedBox.shrink(),
           ),
-          child,
-        ],
-      ),
+        ),
+        child,
+      ],
     );
   }
 }
+
 
 class _Glow extends StatelessWidget {
   final Color color;

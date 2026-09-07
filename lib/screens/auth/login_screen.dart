@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/logo_image.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -147,34 +148,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                                    // Logo de la marque (verre dépoli + halo + ring)
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          primary.withValues(alpha: 0.9),
-                          theme.secondaryColor.withValues(alpha: 0.7),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: primary.withValues(alpha: 0.35),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        width: 3,
-                      ),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded,
-                        color: Colors.white, size: 34),
+                                    // Logo de la marque
+                  const LogoImage(
+                    path: 'assets/images/splash_logo.png',
+                    width: 80,
+                    height: 80,
                   ).animate().scale(
                         begin: const Offset(0.6, 0.6),
                         end: const Offset(1, 1),
