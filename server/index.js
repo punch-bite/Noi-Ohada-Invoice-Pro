@@ -1544,6 +1544,9 @@ const ICON = {
   factory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 21V10.5L9 14v-3.5l6 3.5V4.5h6.5V21h-19z"/><path d="M6 17.5h2.5M12 17.5h2.5M17.5 17.5H20"/></svg>',
   truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 7h12.5v10H1.5zM14 10.5h4.5l3.5 3.5v3h-8"/><circle cx="6" cy="19.5" r="1.8"/><circle cx="17.5" cy="19.5" r="1.8"/></svg>',
   scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v17M8 20.5h8M12 5.5l6.5 2.5M12 5.5L5.5 8"/><path d="M5.5 8l-2.5 5.5a2.8 2.8 0 0 0 5 0L5.5 8zM18.5 8L16 13.5a2.8 2.8 0 0 0 5 0L18.5 8z"/></svg>',
+  // Logos de paiement
+  momo: '<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/MoMo_Logo.png/320px-MoMo_Logo.png" alt="MoMo" style="height:32px;vertical-align:middle">',
+  card: '<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/320px-Visa_Inc._logo.svg.png" alt="Carte bancaire" style="height:32px;vertical-align:middle">',
 };
 
 // ============================================================
@@ -1592,6 +1595,9 @@ p.sts{color:#94A3B8;text-align:center;font-size:.9rem;max-width:560px;margin:0 a
 .pay p{color:#94A3B8;font-size:.85rem;line-height:1.6;margin-bottom:.9rem}
 .chips{display:flex;flex-wrap:wrap;gap:.5rem}
 .chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:.4rem .85rem;font-size:.75rem;font-weight:600}
+.pay-logos{display:flex;gap:1rem;margin:1rem 0;flex-wrap:wrap}
+.pay-logo-item{display:flex;flex-direction:column;align-items:center;gap:.3rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.8rem 1rem;min-width:90px}
+.pay-logo-item span{font-size:.7rem;color:#94A3B8;font-weight:600}
 .paycard{background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:18px;padding:1.5rem;box-shadow:0 16px 36px rgba(124,58,237,.35);text-align:left}
 .paycard .pc1{font-size:.7rem;letter-spacing:.08em;opacity:.85;font-weight:700}
 .paycard .pc2{font-size:1.02rem;font-weight:800;margin:.5rem 0 .8rem}
@@ -1691,10 +1697,24 @@ const LANDING_BOTTOM = `
   aux opérateurs de Mobile Money — sans manipulation, sans risque.</p>
   <div class="pay">
     <div>
-      <h3>${ICON.card} Paiements intégrés &amp; portefeuille</h3>
+      <h3>Paiements intégrés &amp; portefeuille</h3>
       <p>Vos clients règlent leurs factures ou vos abonnements par Mobile Money
       ou carte bancaire. La confirmation est instantanée : votre abonnement ou
       votre transaction est activé automatiquement, avec preuve de paiement.</p>
+      <div class="pay-logos">
+        <div class="pay-logo-item">
+          ${ICON.momo}
+          <span>MoMo</span>
+        </div>
+        <div class="pay-logo-item">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Orange_Money_logo.svg/320px-Orange_Money_logo.svg.png" alt="Orange Money" style="height:32px;vertical-align:middle">
+          <span>Orange Money</span>
+        </div>
+        <div class="pay-logo-item">
+          ${ICON.card}
+          <span>Carte bancaire</span>
+        </div>
+      </div>
       <div class="chips">
         <span class="chip">Orange Money</span>
         <span class="chip">MTN Mobile Money</span>
