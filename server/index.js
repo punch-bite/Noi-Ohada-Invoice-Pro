@@ -1595,9 +1595,30 @@ p.sts{color:#94A3B8;text-align:center;font-size:.9rem;max-width:560px;margin:0 a
 .pay p{color:#94A3B8;font-size:.85rem;line-height:1.6;margin-bottom:.9rem}
 .chips{display:flex;flex-wrap:wrap;gap:.5rem}
 .chip{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:.4rem .85rem;font-size:.75rem;font-weight:600}
-.pay-logos{display:flex;gap:1rem;margin:1rem 0;flex-wrap:wrap}
-.pay-logo-item{display:flex;flex-direction:column;align-items:center;gap:.3rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.8rem 1rem;min-width:90px}
-.pay-logo-item span{font-size:.7rem;color:#94A3B8;font-weight:600}
+.pay-logos{display:flex;gap:1.5rem;margin:1.5rem 0;flex-wrap:wrap;justify-content:center}
+.pay-logo-item{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:110px;height:110px;cursor:pointer}
+.pay-logo-bg{position:absolute;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.pay-logo-bg img{max-width:60px;max-height:40px;object-fit:contain;z-index:2;position:relative}
+.pay-logo-item span{font-size:.7rem;color:#94A3B8;font-weight:600;margin-top:.5rem;z-index:2}
+.rose-petals{position:absolute;width:100%;height:100%;top:0;left:0;pointer-events:none}
+.petal{position:absolute;width:50%;height:50%;background:linear-gradient(135deg,rgba(124,58,237,.9),rgba(67,56,202,.9));border-radius:0 50% 50% 50%;transform-origin:100% 100%;top:50%;left:50%;margin:-50% 0 0 -50%;opacity:0;transition:all .6s cubic-bezier(.4,0,.2,1);box-shadow:0 4px 15px rgba(124,58,237,.3)}
+.petal:nth-child(1){transform:rotate(0deg)}
+.petal:nth-child(2){transform:rotate(72deg)}
+.petal:nth-child(3){transform:rotate(144deg)}
+.petal:nth-child(4){transform:rotate(216deg)}
+.petal:nth-child(5){transform:rotate(288deg)}
+.pay-logo-item:hover .petal{opacity:1}
+.pay-logo-item:hover .petal:nth-child(1){transform:rotate(0deg) translate(5px,-15px)}
+.pay-logo-item:hover .petal:nth-child(2){transform:rotate(72deg) translate(15px,-5px)}
+.pay-logo-item:hover .petal:nth-child(3){transform:rotate(144deg) translate(10px,10px)}
+.pay-logo-item:hover .petal:nth-child(4){transform:rotate(216deg) translate(-10px,10px)}
+.pay-logo-item:hover .petal:nth-child(5){transform:rotate(288deg) translate(-15px,-5px)}
+.pay-logo-item:hover .pay-logo-bg img{transform:scale(1.1);transition:transform .3s ease}
+@keyframes roseBloom{0%{opacity:0;transform:scale(.5) rotate(-10deg)}50%{opacity:1;transform:scale(1.1) rotate(5deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+.pay-logo-item{animation:roseBloom .8s ease-out forwards}
+.pay-logo-item:nth-child(1){animation-delay:.1s}
+.pay-logo-item:nth-child(2){animation-delay:.2s}
+.pay-logo-item:nth-child(3){animation-delay:.3s}
 .paycard{background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:18px;padding:1.5rem;box-shadow:0 16px 36px rgba(124,58,237,.35);text-align:left}
 .paycard .pc1{font-size:.7rem;letter-spacing:.08em;opacity:.85;font-weight:700}
 .paycard .pc2{font-size:1.02rem;font-weight:800;margin:.5rem 0 .8rem}
@@ -1703,15 +1724,36 @@ const LANDING_BOTTOM = `
       votre transaction est activé automatiquement, avec preuve de paiement.</p>
       <div class="pay-logos">
         <div class="pay-logo-item">
-          ${ICON.momo}
+          <div class="rose-petals">
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+          </div>
+          <div class="pay-logo-bg">${ICON.momo}</div>
           <span>MoMo</span>
         </div>
         <div class="pay-logo-item">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Orange_Money_logo.svg/320px-Orange_Money_logo.svg.png" alt="Orange Money" style="height:32px;vertical-align:middle">
+          <div class="rose-petals">
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+          </div>
+          <div class="pay-logo-bg"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Orange_Money_logo.svg/320px-Orange_Money_logo.svg.png" alt="Orange Money" style="height:32px;vertical-align:middle"></div>
           <span>Orange Money</span>
         </div>
         <div class="pay-logo-item">
-          ${ICON.card}
+          <div class="rose-petals">
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+            <div class="petal"></div>
+          </div>
+          <div class="pay-logo-bg">${ICON.card}</div>
           <span>Carte bancaire</span>
         </div>
       </div>
