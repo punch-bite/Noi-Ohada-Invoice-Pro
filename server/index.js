@@ -1562,8 +1562,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 header{display:flex;align-items:center;justify-content:space-between;padding:1.2rem 0}
 .brand{display:flex;align-items:center;gap:.7rem;font-weight:800;font-size:1rem}
 .brand .bl{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
-.brand .bl img{width:34px;height:34px;object-fit:contain}
-.hero-logo{width:92px;height:92px;object-fit:contain;display:block;margin:0 auto 1.3rem;filter:drop-shadow(0 14px 28px rgba(124,58,237,.35))}
+.brand .bl img{width:34px;height:34px;object-fit:contain;max-width:100%;max-height:100%}
+.hero-logo{width:92px;height:92px;object-fit:contain;display:block;margin:0 auto 1.3rem;filter:drop-shadow(0 14px 28px rgba(124,58,237,.35));max-width:100%;max-height:100%}
 .navcta{background:linear-gradient(135deg,#4338CA,#7C3AED);color:#fff;padding:.55rem 1.1rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:.82rem;box-shadow:0 4px 12px rgba(124,58,237,.25);transition:all .2s;display:inline-flex;align-items:center;gap:.4rem}
 .navcta svg{width:15px;height:15px}
 .navcta:hover{transform:translateY(-2px)}

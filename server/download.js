@@ -163,7 +163,9 @@ align-items:center;justify-content:center;padding:2rem}
 .container{max-width:820px;width:100%;text-align:center}
 .logo{width:72px;height:72px;background:linear-gradient(135deg,#4338CA,#7C3AED);
 border-radius:18px;display:flex;align-items:center;justify-content:center;
-margin:0 auto 1.2rem;font-size:1.8rem;box-shadow:0 20px 40px rgba(124,58,237,.3)}
+margin:0 auto 1.2rem;font-size:1.8rem;box-shadow:0 20px 40px rgba(124,58,237,.3);
+overflow:hidden;padding:0}
+.logo img{width:100%;height:100%;object-fit:cover;border-radius:18px;display:block}
 h1{font-size:1.6rem;font-weight:800;margin-bottom:.4rem;
 background:linear-gradient(135deg,#818CF8,#C084FC);-webkit-background-clip:text;
 -webkit-text-fill-color:transparent;background-clip:text}
