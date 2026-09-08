@@ -283,7 +283,7 @@ class Plan {
         'Clients / produits / fournisseurs / factures illimités',
         'Module équipe (20 utilisateurs)',
         'Invitation par lien e-mail',
-        'Synchronisation Google Drive',
+        'Sauvegarde Google Drive',
         'Relance clients (email / WhatsApp / SMS)',
         'Support dédié 24/7',
       ],
