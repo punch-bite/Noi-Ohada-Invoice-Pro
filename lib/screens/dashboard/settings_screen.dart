@@ -165,12 +165,11 @@ class SettingsScreen extends StatelessWidget {
                 _SettingsTile(
                   icon: Icons.cloud_upload_outlined,
                   title: 'Sauvegarde Google Drive',
-                  subtitle: 'Synchroniser vos données (Business)',
+                  subtitle: 'Gratuit — sauvegardez vos données dans votre Drive',
                   onTap: () => context.push('/settings/drive-sync'),
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,
-                  premium: !subscriptionProvider.hasGoogleDriveSync,
                 ),
                 _SettingsDivider(isDark: isDark),
                 _SettingsTile(

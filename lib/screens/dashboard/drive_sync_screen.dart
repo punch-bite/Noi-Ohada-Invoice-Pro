@@ -1,9 +1,8 @@
 // lib/screens/dashboard/drive_sync_screen.dart
 // ============================================================
-//  ☁️ Synchronisation Google Drive (module Business).
-//  - Vérifie l'accès Business (hasGoogleDriveSync)
-//  - Connecte le compte Google de l'utilisateur (liaison par email)
-//  - Synchronise un backup JSON vers son Drive
+//  ☁️ Sauvegarde Google Drive — GRATUITE pour tous les utilisateurs.
+//  - Connecte n'importe quel compte Google choisi par l'utilisateur
+//  - Synchronise un backup JSON vers son Drive personnel
 // ============================================================
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 import 'package:flutter/material.dart';
@@ -13,7 +12,6 @@ import 'package:provider/provider.dart';
 import 'package:google_sign_in/google_sign_in.dart' show GoogleSignInAccount;
 
 import '../../providers/theme_provider.dart';
-import '../../providers/subscription_provider.dart';
 import '../../services/google_drive_sync_service.dart';
 import '../../widgets/glass_widgets.dart';
 
@@ -42,10 +40,11 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
     final state = await _service.getSyncState();
     // 🔄 Restaure la session Google silencieusement : au boot de l'app,
     // `GoogleSignIn.currentUser` est null même si l'utilisateur a déjà
-    // autorisé l'accès (l'état Firestore, lui, dit « enabled »).
+    // autorisé l'accès (l'état Firestore, lui, dit « enabled »). On ne
+    // JAMAIS ouvrir la boîte de dialogue à l'init.
     GoogleSignInAccount? account;
     try {
-      account = await _service.ensureSignedIn();
+      account = await _service.restoreSilentSession();
     } catch (_) {
       account = null;
     }
@@ -73,14 +72,7 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
     try {
       final account = await _service.signInWithGoogle();
       if (account == null) return;
-      final error = await _service.validateEmailBinding();
       if (!mounted) return;
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Colors.orange),
-        );
-        return;
-      }
       setState(() {
         _connected = true;
         _googleEmail = account.email;
@@ -124,15 +116,6 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
             content: Text('Connexion Google annulée ou indisponible'),
             backgroundColor: Colors.orange,
           ),
-        );
-        return;
-      }
-      final error = await _service.validateEmailBinding();
-      if (error != null) {
-        if (!mounted) return;
-        setState(() => _syncing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Colors.orange),
         );
         return;
       }
@@ -185,8 +168,6 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    final sub = context.watch<SubscriptionProvider>();
-    final hasAccess = sub.hasGoogleDriveSync;
 
     return GlassScaffold(
       appBar: AppBar(
@@ -212,52 +193,9 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
-                child: !hasAccess ? _buildLocked(theme) : _buildContent(theme),
+                child: _buildContent(theme),
               ),
       ),
-    );
-  }
-
-  Widget _buildLocked(ThemeProvider theme) {
-    return Column(
-      children: [
-        const SizedBox(height: 40),
-        Container(
-          width: 110,
-          height: 110,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
-            ),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.cloud_upload_rounded,
-              color: Colors.white, size: 52),
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'Fonctionnalité Business',
-          style: TextStyle(
-            color: theme.textColor,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Synchronisez automatiquement vos factures, clients et produits '
-          'vers votre Google Drive personnel. Disponible avec le plan '
-          'Business.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: theme.subTextColor, fontSize: 14, height: 1.5),
-        ),
-        const SizedBox(height: 28),
-        GradientButton(
-          label: 'Passer au plan Business',
-          icon: Icons.workspace_premium_rounded,
-          onPressed: () => context.push('/subscription'),
-        ),
-      ],
     );
   }
 
@@ -324,7 +262,7 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
               _infoRow(theme, 'Dossier cible',
                   'OHADA Invoice Pro / back-ups'),
               const Divider(height: 16),
-              _infoRow(theme, 'Email de liaison', _googleEmail ?? '—'),
+              _infoRow(theme, 'Compte Google', _googleEmail ?? '—'),
             ],
           ),
         ),

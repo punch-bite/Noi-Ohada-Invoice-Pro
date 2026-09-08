@@ -212,7 +212,7 @@ class Plan {
       hasCloudSync: false,
       hasTeamAccess: false,
       maxTeamMembers: 0,
-      hasGoogleDriveSync: false,
+      hasGoogleDriveSync: true,
       features: [
         '5 factures',
         '5 clients',
@@ -220,6 +220,7 @@ class Plan {
         '2 fournisseurs',
         'Export PDF',
         'Stockage Firestore',
+        'Sauvegarde Google Drive',
       ],
       isPopular: false,
       isActive: true,
@@ -242,7 +243,7 @@ class Plan {
       hasCloudSync: true,
       hasTeamAccess: false,
       maxTeamMembers: 0,
-      hasGoogleDriveSync: false,
+      hasGoogleDriveSync: true,
       hasClientRelance: true,
       features: [
         'Factures illimitées',
@@ -251,6 +252,7 @@ class Plan {
         '25 fournisseurs',
         'Export PDF illimité',
         'Synchronisation cloud',
+        'Sauvegarde Google Drive',
         'Relance clients (email / WhatsApp / SMS)',
         'Support prioritaire',
       ],

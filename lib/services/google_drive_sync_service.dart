@@ -1,15 +1,16 @@
 // lib/services/google_drive_sync_service.dart
 //
-// ✅ Synchronisation Google Drive (module Business) — par EMAIL utilisateur.
+// ✅ Synchronisation Google Drive — GRATUITE pour tous les utilisateurs.
 //
 // Ce service :
-//  1. Connecte le compte Google de l'utilisateur (scope Drive).
-//  2. Vérifie que l'email du compte Google correspond à celui de l'utilisateur
-//     Business (liaison par email : chacun sync vers SON Drive).
-//  3. Génère un backup JSON des données Firestore (clients, produits, factures).
-//  4. Téléverse le fichier vers Google Drive via l'API REST (HTTP) dans un
-//     dossier "OHADA Invoice Pro".
-//  5. Sauvegarde l'état de synchronisation dans Firestore (collection drive_sync).
+//  1. Connecte le compte Google choisi par l'utilisateur (scope Drive).
+//  2. Génère un backup JSON des données Firestore (clients, produits, factures).
+//  3. Téléverse le fichier vers Google Drive via l'API REST (HTTP) dans un
+//     dossier "OHADA Invoice Pro" du Drive choisi.
+//  4. Sauvegarde l'état de synchronisation dans Firestore (collection drive_sync).
+//
+// NB : l'utilisateur peut utiliser N'IMPORTE QUEL compte Google (il n'est plus
+// exigé qu'il corresponde à l'email de connexion de l'application).
 //
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -110,10 +111,21 @@ class GoogleDriveSyncService {
     return await googleSignIn.signIn();
   }
 
-  Future<void> signOut() => _signIn().signOut();
+  /// 🔄 Restaure UNIQUEMENT la session existante (sans jamais ouvrir la
+  /// boîte de dialogue Google). Utilisé à l'ouverture de l'écran pour
+  /// afficher l'état connecté sans interrompre l'utilisateur.
+  Future<GoogleSignInAccount?> restoreSilentSession() async {
+    final googleSignIn = _signIn();
+    if (googleSignIn.currentUser != null) return googleSignIn.currentUser;
+    try {
+      return await googleSignIn.signInSilently();
+    } catch (e) {
+      debugPrint('ℹ️ restoreSilentSession : $e');
+      return null;
+    }
+  }
 
-  /// Email du compte Google actuellement connecté (null si aucun).
-  String? get connectedGoogleEmail => _signIn().currentUser?.email;
+  Future<void> signOut() => _signIn().signOut();
 
   /// Retourne le token OAuth2 du compte connecté (pour l'API Drive).
   ///
@@ -125,19 +137,6 @@ class GoogleDriveSyncService {
     if (account == null) return null;
     final auth = await account.authentication;
     return auth.accessToken;
-  }
-
-  // ===== VALIDATION PAR EMAIL =====
-  /// Vérifie que le compte Google connecté correspond à l'email de
-  /// l'utilisateur connecté (liaison par email pour la synchronisation).
-  Future<String?> validateEmailBinding() async {
-    final googleEmail = connectedGoogleEmail;
-    if (googleEmail == null) return 'Aucun compte Google connecté';
-    if (_email != null && googleEmail.toLowerCase() != _email!.toLowerCase()) {
-      return 'Le compte Google ($googleEmail) ne correspond pas à votre '
-          'compte ($_email). Utilisez le même email que votre abonnement.';
-    }
-    return null;
   }
 
   // ===== GÉNÉRATION DU BACKUP JSON =====
@@ -205,10 +204,6 @@ class GoogleDriveSyncService {
     final token = await _getAccessToken();
     if (token == null) throw Exception('Connexion Google requise');
 
-    // Liaison par email
-    final bindingError = await validateEmailBinding();
-    if (bindingError != null) throw Exception(bindingError);
-
     final folderId = await _getOrCreateFolder(token);
     if (folderId == null) {
       throw Exception('Impossible de créer le dossier Drive');
@@ -244,7 +239,16 @@ class GoogleDriveSyncService {
       body: body.toString(),
     );
     if (res.statusCode != 200) {
-      throw Exception('Échec de l\'upload Drive (${res.statusCode}): ${res.body}');
+      var hint = '';
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        hint = kIsWeb
+            ? ' Sur le web, assurez-vous que l\'API Google Drive est activée '
+                'et que le scope drive.file est autorisé dans la console '
+                'Google (ou utilisez l\'application mobile).'
+            : ' Réautorisez l\'accès à votre Drive puis réessayez.';
+      }
+      throw Exception(
+          'Échec de l\'upload Drive (${res.statusCode})$hint ${res.body}');
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final fileId = data['id'] as String? ?? '';

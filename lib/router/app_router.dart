@@ -249,7 +249,7 @@ class AppRouter {
         builder: (context, state) => const SessionsScreen(),
       ),
 
-      // Sauvegarde Google Drive (Business)
+      // Sauvegarde Google Drive (gratuit pour tous les utilisateurs)
       GoRoute(
         path: '/settings/drive-sync',
         builder: (context, state) => const DriveSyncScreen(),

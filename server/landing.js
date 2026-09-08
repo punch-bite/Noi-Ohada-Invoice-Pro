@@ -4,7 +4,6 @@
 //  Page d'accueil raffinée, minimaliste, très douce :
 //    • fond sombre très doux avec une LUMIÈRE qui suit la souris
 //    • icônes monochromes hautes couture (SVG fin, trait 1.5)
-//    • moyens de paiement : Orange Money, MTN MoMo, Carte bancaire
 //    • aucune info technique (les API restent derrière l'auth)
 // ============================================================
 const fs = require('fs');
@@ -34,20 +33,8 @@ const ICON = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.3 3.9 8.5S14.6 18.1 12 20.5C9.4 18.1 8.1 15.2 8.1 12S9.4 5.9 12 3.5z"/></svg>',
   phone:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.6"/><path d="M10.5 18.2h3"/></svg>',
-  card:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="5" width="18.4" height="14" rx="2.6"/><path d="M2.8 9.6h18.4M6.2 15h4"/></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.6 4.4 4.4L19 7.4"/></svg>',
-};
-
-// Logos officiels des moyens de paiement (hébergés Wikimedia).
-const PAY = {
-  orange:
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Orange_Money_logo.svg/360px-Orange_Money_logo.svg.png',
-  momo:
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/MoMo_Logo.png/360px-MoMo_Logo.png',
-  visa:
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/360px-Visa_Inc._logo.svg.png',
 };
 
 const CSS = `
@@ -114,16 +101,6 @@ section{padding:54px 0 8px}
 .kicker{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--acc2);text-align:center;margin-bottom:12px}
 h2.st{font-size:clamp(1.4rem,3vw,1.9rem);font-weight:600;letter-spacing:-.02em;text-align:center}
 p.sts{color:var(--mut);text-align:center;font-size:14.5px;max-width:520px;margin:12px auto 34px;line-height:1.7}
-/* Paiements */
-.pay{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:6px}
-.pcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:26px 24px;display:flex;flex-direction:column;gap:18px;align-items:flex-start;transition:.25s}
-.pcard:hover{transform:translateY(-3px);background:var(--panel2);border-color:rgba(255,255,255,.14)}
-.pcard .tag{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
-.pmark{width:100%;height:58px;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:14px;padding:8px 14px}
-.pmark img{max-height:100%;width:auto;max-width:100%;object-fit:contain}
-.pcard .pnote{color:var(--mut);font-size:13.5px;line-height:1.6}
-.pcard .phint{display:inline-flex;align-items:center;gap:7px;color:var(--acc2);font-size:12.5px}
-.pcard .phint svg{width:15px;height:15px}
 /* Grille fonctionnalités */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .feat{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px;transition:.25s}
@@ -141,8 +118,8 @@ footer{border-top:1px solid var(--line);margin-top:56px;padding:30px 0 42px;disp
 .flinks a{color:var(--mut);text-decoration:none;font-size:13px;transition:.2s}
 .flinks a:hover{color:var(--ink)}
 .fcopy{color:var(--faint);font-size:12px}
-@media(max-width:860px){.pay,.grid{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.pay,.grid{grid-template-columns:1fr}.hnav a:not(.btn){display:none}}
+@media(max-width:860px){.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.grid{grid-template-columns:1fr}.hnav a:not(.btn){display:none}}
 `;
 
 function renderLanding() {
@@ -154,7 +131,7 @@ function renderLanding() {
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/png" href="/favicon.png">
 <title>Noi OHADA Invoice Pro — Facturation conforme OHADA</title>
-<meta name="description" content="Factures et devis conformes SYSCOHADA révisé, stocks, équipes et paiements Mobile Money sécurisés — Orange Money, MTN MoMo, carte bancaire.">
+<meta name="description" content="Factures et devis conformes SYSCOHADA révisé, gestion des stocks et équipes — facturation professionnelle en ligne comme hors connexion.">
 <style>${CSS}</style>
 </head><body>
 <div class="bg"><div class="halo h1"></div><div class="halo h2"></div><div class="halo h3"></div></div>
@@ -162,10 +139,9 @@ function renderLanding() {
 
 <div class="wrap">
   <header>
-    <a class="brand" href="/"><span class="logo"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
+    <a class="brand" href="/"><span class="logo text-decoration-none"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
     <nav class="hnav">
       <a href="#fonctionnalites">Fonctionnalités</a>
-      <a href="#paiements">Paiements</a>
       <a class="btn small primary" href="/download">${ICON.down} Télécharger</a>
     </nav>
   </header>
@@ -173,7 +149,7 @@ function renderLanding() {
   <section class="hero">
     <span class="eyebrow"><span class="dot"></span> Conforme SYSCOHADA révisé</span>
     <h1>Une facturation <span class="grad">professionnelle</span>, pensée pour votre commerce.</h1>
-    <p class="lead">Créez des factures et devis élégants en quelques secondes, suivez vos stocks et encaissez par Mobile Money — en ligne comme hors connexion.</p>
+    <p class="lead">Créez des factures et devis élégants en quelques secondes, suivez vos stocks — en ligne comme hors connexion.</p>
     <div class="cta">
       <a class="btn primary" href="/download">${ICON.down} Télécharger l'application</a>
       <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">${ICON.globe} Version web</a>
@@ -181,33 +157,6 @@ function renderLanding() {
     <div class="trust">
       <span>${ICON.check} Conforme OHADA</span>
       <span>${ICON.check} Hors-ligne inclus</span>
-      <span>${ICON.check} Paiement Mobile Money</span>
-    </div>
-  </section>
-
-  <section id="paiements">
-    <div class="kicker">Paiements intégrés</div>
-    <h2 class="st">Encaissés en toute simplicité</h2>
-    <p class="sts">Orange Money, MTN MoMo ou carte bancaire — confirmation instantanée via E-nkap, portefeuille et reçus automatiques.</p>
-    <div class="pay">
-      <div class="pcard" data-kind="orange">
-        <span class="tag">Mobile Money</span>
-        <span class="pmark"><img src="${PAY.orange}" alt="Orange Money" loading="lazy"></span>
-        <p class="pnote">Vos clients règlent en Orange Money, vous êtes crédité instantanément.</p>
-        <span class="phint">${ICON.check} Confirmation temps réel</span>
-      </div>
-      <div class="pcard" data-kind="momo">
-        <span class="tag">Mobile Money</span>
-        <span class="pmark"><img src="${PAY.momo}" alt="MTN Mobile Money" loading="lazy"></span>
-        <p class="pnote">Encaissez par MTN MoMo et suivez chaque transaction.</p>
-        <span class="phint">${ICON.check} Historique conservé</span>
-      </div>
-      <div class="pcard" data-kind="carte">
-        <span class="tag">Carte bancaire</span>
-        <span class="pmark"><img src="${PAY.visa}" alt="Carte bancaire" loading="lazy"></span>
-        <p class="pnote">Réglez vos abonnements et achats par carte, en toute sécurité.</p>
-        <span class="phint">${ICON.check} Paiement sécurisé</span>
-      </div>
     </div>
   </section>
 

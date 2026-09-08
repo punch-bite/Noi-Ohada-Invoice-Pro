@@ -96,8 +96,9 @@ class SubscriptionProvider extends ChangeNotifier {
   }
 
   bool get hasGoogleDriveSync {
-    if (_authProvider.user?.isAdmin == true) return true;
-    return hasPremiumAccess && effectivePlan.hasGoogleDriveSync;
+    // 🆓 Sauvegarde Google Drive : gratuite pour TOUS les utilisateurs.
+    // Chacun peut sauvegarder ses données vers son propre Drive.
+    return true;
   }
 
   bool get canSyncToCloud {
