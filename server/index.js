@@ -30,6 +30,7 @@ const {
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('./logger');
+const { renderLanding } = require('./landing');
 const crypto = require('crypto');
 
 const app = express();
@@ -255,7 +256,7 @@ function isValidEmail(value) {
 //  Si API_SECRET_KEY n'est pas configurée → fail-open (rétro-compatibilité
 //  avec les déploiements existants) ; configurez-la pour verrouiller.
 // ============================================================
-const PUBLIC_PATHS = new Set(['/', '/health', '/download', '/logo.png', '/favicon.png']);
+const PUBLIC_PATHS = new Set(['/', '/health', '/download', '/logo.png', '/favicon.png', '/app/version']);
 
 function requestIsPublic(req) {
   const p = String(req.path || '');
@@ -274,20 +275,101 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ha, hb);
 }
 
-function requireApiKey(req, res, next) {
-  const configured = String(process.env.API_SECRET_KEY || '').trim();
-  if (!configured || requestIsPublic(req)) return next();
-  const provided = String(req.headers['x-api-key'] || '').trim();
-  if (provided && safeEqual(provided, configured)) return next();
-  logger.warn('⛔ clé API invalide', { path: req.path, ip: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() });
+/// IP du client (derrière le proxy Vercel).
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    req.socket.remoteAddress ||
+    'unknown';
+}
+
+// ============================================================
+//  🔐 AUTHENTIFICATION — jeton Firebase (Bearer) OU ancienne clé API
+//
+//  Nouvelle méthode (plus sûre) : l'app envoie le jeton d'identité Firebase
+//  de l'utilisateur connecté (`Authorization: Bearer <idToken>`). Le serveur
+//  le VÉRIFIE cryptographiquement (getAuth().verifyIdToken) et en déduit le
+//  `uid` — plus aucun secret partagé embarqué dans l'APK, et un utilisateur
+//  ne peut PAS agir pour un autre (le serveur ignore le userId du body).
+//
+//  Transition (double authentification) : l'ancienne `x-api-key` reste
+//  acceptée tant qu'elle est configurée (API_SECRET_KEY) pour ne pas casser
+//  les APK déjà distribués. On la retirera plus tard.
+//
+//  `getAuth` est chargé paresseusement : le sous-module firebase-admin/auth
+//  tire des dépendances ESM ; require(esm) est supporté (Node ≥ 22.12), mais
+//  un lazy-load évite de faire échouer TOUT le module au démarrage.
+// ============================================================
+let _authModule = null;
+function loadAuth() {
+  if (!_authModule) {
+    _authModule = require('firebase-admin/auth');
+  }
+  const g = (_authModule && (_authModule.getAuth || _authModule.default?.getAuth));
+  if (typeof g !== 'function') throw new Error('getAuth indisponible');
+  return g;
+}
+
+/// Vérifie `Authorization: Bearer <idToken>` → renvoie le décodage (uid…)
+/// ou null si absent/invalide. Ne lève qu'en cas d'erreur d'infra.
+async function verifyFirebaseToken(req) {
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Bearer ')) return null;
+  const token = header.slice(7).trim();
+  if (!token) return null;
+  return loadAuth()().verifyIdToken(token);
+}
+
+/// uid de l'acteur authentifié. Si l'appel vient d'un JETON vérifié, on
+/// renvoie TOUJOURS le uid du jeton (on ignore le uid envoyé dans le body —
+/// anti-impersonation). Pour les anciens clients (clé API), repli sur le
+/// uid du body (comportement historique, à supprimer avec la transition).
+function actorUid(req, bodyUid) {
+  const a = req.auth || {};
+  if (a.method === 'token' && a.uid) return a.uid;
+  return bodyUid;
+}
+
+/// Middleware d'authentification (appliqué à toutes les routes non publiques).
+async function requireAuth(req, res, next) {
+  if (requestIsPublic(req)) return next();
+
+  // 1) Ancienne clé API (transition) — x-api-key
+  const configuredKey = String(process.env.API_SECRET_KEY || '').trim();
+  const providedKey = String(req.headers['x-api-key'] || '').trim();
+  if (configuredKey && providedKey && safeEqual(providedKey, configuredKey)) {
+    req.auth = { method: 'key' };
+    return next();
+  }
+
+  // 2) Jeton Firebase (Bearer) — méthode recommandée
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    if (decoded && decoded.uid) {
+      req.auth = {
+        method: 'token',
+        uid: decoded.uid,
+        email: String(decoded.email || ''),
+        phone: String(decoded.phone_number || ''),
+      };
+      return next();
+    }
+  } catch (e) {
+    logger.warn('⛔ jeton Firebase invalide', {
+      path: req.path,
+      ip: clientIp(req),
+      error: (e && (e.code || e.message)) || 'verify error',
+    });
+  }
+
+  logger.warn('⛔ accès non authentifié', { path: req.path, ip: clientIp(req) });
   return res
     .status(401)
-    .json({ error: 'Accès non autorisé (clé API manquante ou invalide)' });
+    .json({ error: 'Accès non autorisé (jeton Firebase ou clé API requis)' });
 }
 
 // Enregistrement AVANT toutes les routes (le CORS/OPTIONS ci-dessus reste
 // prioritaire pour que les preflight navigateur ne soient pas bloqués).
-app.use(requireApiKey);
+app.use(requireAuth);
 
 // 🔗 Lien public de téléchargement de l'application : redirige vers l'URL
 // courante de l'APK / de la boutique (variable APP_DOWNLOAD_URL) — le lien
@@ -319,7 +401,10 @@ app.post(
   async (req, res) => {
   const { reference, user_id, plan_id, amount, currency, payment_method } =
     req.body || {};
-  if (!reference || !user_id || !plan_id) {
+  // 🔒 uid de l'acteur : si authentifié par jeton Firebase, c'est le uid du
+  // jeton (jamais celui du body) — anti-impersonation.
+  const uid = actorUid(req, user_id);
+  if (!reference || !uid || !plan_id) {
     return res.status(400).json({ error: 'reference/user_id/plan_id requis' });
   }
   try {
@@ -328,7 +413,7 @@ app.post(
       .doc(reference)
       .set({
         reference,
-        user_id,
+        user_id: uid,
         plan_id,
         amount: amount || 0,
         currency: currency || 'XAF',
@@ -661,6 +746,24 @@ app.get('/enkap/order', async (req, res) => {
 // pas le public).
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// 🆕 Métadonnées de version de l'application (pour la fonction « mise à
+// jour » du client) — PUBLIC et minimal : numéro de la dernière version,
+// lien de téléchargement et notes de version facultatives. L'app compare
+// cette version à celle qu'elle a installée pour proposer la mise à jour.
+// Variables attendues (Vercel) : APP_LATEST_VERSION (ex. "1.2.3"),
+// APP_UPDATE_URL (défaut : APP_DOWNLOAD_URL → /download) et APP_UPDATE_NOTES.
+app.get('/app/version', (req, res) => {
+  res.json({
+    version: String(process.env.APP_LATEST_VERSION || '').trim(),
+    downloadUrl:
+      String(process.env.APP_UPDATE_URL || '').trim() ||
+      String(process.env.APP_DOWNLOAD_URL || '').trim() ||
+      `${PUBLIC_BASE_URL()}/download`,
+    notes: String(process.env.APP_UPDATE_NOTES || '').trim(),
+    updatedAt: String(process.env.APP_UPDATE_AT || '').trim(),
+  });
+});
+
 // ============================================================
 //  ENVOI D'EMAIL (SMTP côté serveur)
 //
@@ -760,7 +863,9 @@ app.post(
   async (req, res) => {
     try {
       const { userId, amount, reference, description } = req.body || {};
-      if (!userId || !reference) {
+      // 🔒 uid de l'acteur : jeton vérifié (jamais le body) sinon ancienne clé.
+      const uid = actorUid(req, userId);
+      if (!uid || !reference) {
         return res.status(400).json({ error: 'userId/reference requis' });
       }
       const amt = Number(amount);
@@ -799,14 +904,14 @@ app.post(
       }
 
       // 3) Crédit atomique + journalisation.
-      const walletRef = db.collection('wallets').doc(userId);
+      const walletRef = db.collection('wallets').doc(uid);
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(walletRef);
         const current = (snap.data() && snap.data().balance) || 0;
         tx.set(
           walletRef,
           {
-            userId,
+            userId: uid,
             balance: (Number(current) || 0) + amt,
             currency: 'XAF',
             updatedAt: serverTimestamp(),
@@ -815,7 +920,7 @@ app.post(
         );
       });
       await db.collection('wallet_transactions').add({
-        userId,
+        userId: uid,
         type: 'credit',
         amount: amt,
         currency: 'XAF',
@@ -850,8 +955,10 @@ app.post(
   async (req, res) => {
     try {
       const { userId, templateIds, reference } = req.body || {};
+      // 🔒 uid de l'acteur : jeton vérifié (jamais le body) sinon ancienne clé.
+      const uid = actorUid(req, userId);
       if (
-        !userId ||
+        !uid ||
         !Array.isArray(templateIds) ||
         templateIds.length === 0 ||
         templateIds.length > 50
@@ -897,13 +1004,13 @@ app.post(
         }
       }
 
-      // Déblocage idempotent : ajoute l'userId à `purchasedBy`.
+      // Déblocage idempotent : ajoute l'uid à `purchasedBy`.
       let unlocked = 0;
       for (const t of templates) {
         const pb = Array.isArray(t.data.purchasedBy) ? t.data.purchasedBy : [];
-        if (!pb.includes(userId)) {
+        if (!pb.includes(uid)) {
           await db.collection('templates').doc(t.id).update({
-            purchasedBy: [...pb, userId],
+            purchasedBy: [...pb, uid],
             updatedAt: serverTimestamp(),
           });
           unlocked++;
@@ -1117,8 +1224,11 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'team' }),
   async (req, res) => {
     try {
-      const { action, teamId, userId, email, role, requestedBy, invitationId } =
+      const { action, teamId, userId, email, role, requestedBy: bodyRequestedBy, invitationId } =
         req.body || {};
+      // 🔒 L'acteur est TOUJOURS l'uid du jeton vérifié quand présent (jamais
+      // le body — anti-impersonation). Repli body pour les anciens clients clé API.
+      const requestedBy = actorUid(req, bodyRequestedBy);
       if (!action || !requestedBy) {
         return res.status(400).json({ error: 'action/requestedBy requis' });
       }
@@ -1836,7 +1946,9 @@ const LANDING_BOTTOM = `
 </div></body></html>`;
 
 app.get('/', (req, res) => {
-  res.status(200).type('html').send(LANDING_TOP + LANDING_BOTTOM);
+  // 🎨 Vitrine publique — design dans server/landing.js (refonte soft,
+  // lumière qui suit la souris, moyens de paiement Orange Money/MTN/Carte).
+  res.status(200).type('html').send(renderLanding());
 });
 
 // ============================================================

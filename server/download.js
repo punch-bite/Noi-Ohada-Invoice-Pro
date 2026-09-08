@@ -10,6 +10,7 @@ const express = require('express');
 const { initializeApp, getApps, getApp, cert } = require('firebase-admin/app');
 const { getStorage } = require('firebase-admin/storage');
 const logger = require('./logger');
+const { CSS: LANDING_CSS } = require('./landing');
 
 // ── Icônes monochromes (SVG inline, style line-icons) ────────────────────────
 // stroke=currentColor : héritent de la couleur du texte parent.
@@ -147,6 +148,120 @@ function formatSize(bytes) {
 }
 
 function renderDownloadPage(user, builds) {
+  const iosUrl = builds.ios && builds.ios.url && builds.ios.url !== '#' ? builds.ios.url : '#';
+  const androidUrl = builds.android && builds.android.url && builds.android.url !== '#' ? builds.android.url : '#';
+  const iosReady = iosUrl !== '#';
+  const androidReady = androidUrl !== '#';
+  const androidName = builds.android ? String(builds.android.name || '') : '';
+  const androidMeta = builds.android
+    ? (formatSize(Number(builds.android.size) || 0) + ' · APK')
+    : 'Aucune version publiée';
+  const webUrl = 'https://app.noi-ohada-invoice-pro.com';
+  const year = new Date().getFullYear();
+  const extra = `
+.dwrap{max-width:920px;margin:0 auto;padding:0 22px;position:relative;z-index:2}
+.dhero{text-align:center;padding:52px 0 16px}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:38px auto 0}
+.dcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:26px 24px;display:flex;flex-direction:column;gap:15px;align-items:flex-start;transition:.25s}
+.dcard:hover{transform:translateY(-3px);background:var(--panel2);border-color:rgba(255,255,255,.14)}
+.dcard .di{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:rgba(139,124,255,.10);border:1px solid rgba(139,124,255,.16);color:var(--acc2)}
+.dcard .di svg{width:23px;height:23px}
+.dcard h3{font-weight:600;font-size:16px;letter-spacing:-.01em}
+.dcard .dsub{color:var(--mut);font-size:13px;line-height:1.6;min-height:44px}
+.dcard .meta{display:inline-flex;align-items:center;gap:7px;color:var(--faint);font-size:12px}
+.dcard .meta svg{width:14px;height:14px;color:var(--gold)}
+.dcard .btn{width:100%;justify-content:center}
+a.btn.dis{opacity:.5;pointer-events:none}
+.dtrust{display:flex;flex-wrap:wrap;justify-content:center;gap:26px;margin-top:40px;color:var(--faint);font-size:12.5px}
+.dtrust span{display:inline-flex;align-items:center;gap:7px}
+.dtrust svg{width:15px;height:15px;color:var(--gold)}
+@media(max-width:760px){.dgrid{grid-template-columns:1fr}}
+`;
+  return `<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="/favicon.png">
+<title>Noi OHADA — Téléchargement</title>
+<style>${LANDING_CSS}${extra}</style>
+</head><body>
+<div class="bg"><div class="halo h1"></div><div class="halo h2"></div><div class="halo h3"></div></div>
+<div class="aura" aria-hidden="true"></div>
+
+<div class="dwrap">
+  <header>
+    <a class="brand" href="/"><span class="logo"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
+    <nav class="hnav">
+      <a class="btn small ghost" href="/">← Accueil</a>
+    </nav>
+  </header>
+
+  <section class="dhero">
+    <span class="eyebrow"><span class="dot"></span> Téléchargement</span>
+    <h1 class="st" style="font-size:clamp(1.7rem,4vw,2.4rem)">Obtenez <span style="background:linear-gradient(100deg,#c3b6ff,#8b7cff 60%,#e6c886 130%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Noi OHADA</span></h1>
+    <p class="sts">Installez l'application sur votre téléphone ou utilisez la version web — sans Play Store requis.</p>
+  </section>
+
+  <div class="dgrid">
+    <div class="dcard">
+      <span class="di">${ICONS.android}</span>
+      <h3>Android</h3>
+      <p class="dsub">${androidReady ? 'Dernière version prête à installer. Autorisez simplement l\'installation depuis des sources inconnues.' : 'La version Android sera disponible ici dès sa publication.'}</p>
+      <span class="meta">${ICONS.check ? ICONS.check : ''}${androidMeta}</span>
+      ${androidReady
+        ? `<a class="btn primary" href="${androidUrl}" download>${ICONS.download} Télécharger l'APK</a>`
+        : `<a class="btn primary dis" aria-disabled="true">${ICONS.clock} Indisponible</a>`}
+    </div>
+    <div class="dcard">
+      <span class="di">${ICONS.apple}</span>
+      <h3>iPhone</h3>
+      <p class="dsub">${iosReady ? 'Dernière version prête à installer sur votre iPhone.' : 'La version iPhone arrive bientôt.'}</p>
+      <span class="meta">${ICONS.check ? ICONS.check : ''}${builds.ios ? formatSize(Number(builds.ios.size) || 0) + ' · IPA' : 'Bientôt disponible'}</span>
+      ${iosReady
+        ? `<a class="btn primary" href="${iosUrl}" download>${ICONS.download} Télécharger l'IPA</a>`
+        : `<a class="btn primary dis" aria-disabled="true">${ICONS.clock} Bientôt</a>`}
+    </div>
+    <div class="dcard">
+      <span class="di">${ICONS.globe}</span>
+      <h3>Version web</h3>
+      <p class="dsub">Accessible depuis n'importe quel navigateur, aucune installation. Vos données restent synchronisées.</p>
+      <span class="meta">${ICONS.check ? ICONS.check : ''}PWA · En ligne</span>
+      <a class="btn ghost" href="${webUrl}" target="_blank" rel="noopener">${ICONS.globe} Ouvrir la version web</a>
+    </div>
+  </div>
+
+  <div class="dtrust">
+    <span>${ICONS.check ? ICONS.check : ''} Fichier signé</span>
+    <span>${ICONS.check ? ICONS.check : ''} Mises à jour faciles</span>
+    <span>${ICONS.check ? ICONS.check : ''} Support réactif</span>
+  </div>
+
+  <footer style="margin-top:52px">
+    <div class="flinks">
+      <a href="/">Accueil</a>
+      <a href="${webUrl}" target="_blank" rel="noopener">Version web</a>
+      <a href="mailto:support@noi-ohada-invoice-pro.com">Support</a>
+    </div>
+    <div class="fcopy">© ${year} Noi OHADA Invoice Pro — Tous droits réservés.</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var r = document.documentElement;
+  function track(e) {
+    r.style.setProperty('--mx', (e.clientX || window.innerWidth / 2) + 'px');
+    r.style.setProperty('--my', (e.clientY || window.innerHeight / 2) + 'px');
+  }
+  window.addEventListener('pointermove', track, { passive: true });
+  track({ clientX: window.innerWidth * 0.5, clientY: window.innerHeight * 0.34 });
+})();
+</script>
+</body></html>`;
+}
+
+function renderDownloadPageLegacy(user, builds) {
   const iosUrl = builds.ios?.url || '#';
   const androidUrl = builds.android?.url || '#';
   const iosReady = !!builds.ios && iosUrl !== '#';
@@ -310,6 +425,21 @@ app.get('/api/builds', async (req, res) => {
   catch (e) { return res.status(401).json({ error: 'Token invalide' }); }
   const builds = await getBuilds();
   res.json({ ok: true, builds });
+});
+
+/// 🎯 LIEN DIRECT STABLE vers le dernier APK Android — idéal à partager
+/// (WhatsApp, e-mail, QR…) et à utiliser comme APP_UPDATE_URL. PUBLIC :
+/// redirige (302) vers l'URL actuelle du build Android (URL signée régénérée
+/// à chaque requête → le lien ne « périme » jamais).
+app.get('/app/latest.apk', async (req, res) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  if (!checkRateLimit(ip, 40, 60000)) return res.status(429).json({ error: 'Trop de tentatives' });
+  if (!firebaseApp) return res.status(503).json({ error: 'Service non disponible' });
+  const builds = await getBuilds();
+  if (!builds.android || !builds.android.url || builds.android.url === '#') {
+    return res.status(404).json({ error: 'Aucune version Android publiée pour le moment.' });
+  }
+  res.redirect(302, builds.android.url);
 });
 
 app.get('/health', (req, res) => {

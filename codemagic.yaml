@@ -115,3 +115,51 @@ workflows:
         notify:
           success: true
           failure: true
+
+  ios:
+    name: Build iOS (IPA Ad Hoc — iPhone test)
+    environment:
+      vars:
+        FLUTTER_VERSION: 3.41.9
+        # Même serveur que Android : proxy ENKAP, emails, abonnements…
+        API_BASE_URL: "https://server-xi-two-23.vercel.app"
+      flutter: stable
+    scripts:
+      - name: Signing iOS (automatique CodeMagic)
+        script: |
+          # La signature iOS est gérée par CodeMagic (« iOS code signing »
+          # réglé sur Automatic dans l'application). Prérequis :
+          #   1) un compte Apple Developer (programme $99/an)
+          #   2) CodeMagic → App settings → iOS code signing → Automatic,
+          #      connecté à votre compte Apple Developer (Apple API Key)
+          # Aucun secret (certificats/provisioning) n'est embarqué ici.
+          echo "Prêt pour le build iOS."
+      - name: Installer les dépendances
+        script: |
+          flutter pub get
+      - name: Générer les fichiers de build (Build Runner)
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Analyse statique
+        script: |
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+      - name: Builder l'IPA (release, export ad hoc pour testeurs)
+        script: |
+          flutter build ipa --release \
+            --dart-define="API_BASE_URL=$API_BASE_URL" \
+            --dart-define="API_SECRET_KEY=$API_SECRET_KEY" \
+            --export-method=ad-hoc \
+            --obfuscate \
+            --split-debug-info=build/symbols/ios
+    artifacts:
+      - build/ios/ipa/*.ipa
+      # Symboles de désobfuscation (crashs) à conserver
+      - build/symbols/**
+
+    publishing:
+      email:
+        recipients:
+          - nixmmobilier@gmail.com
+        notify:
+          success: true
+          failure: true

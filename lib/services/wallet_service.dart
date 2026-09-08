@@ -50,7 +50,7 @@ class WalletService {
       final resp = await http
           .post(
             Uri.parse('$apiBase/wallet/credit'),
-            headers: ConfigService.serverHeaders(),
+            headers: await ConfigService.apiHeaders(),
             body: jsonEncode({
               'userId': userId,
               'amount': amount,

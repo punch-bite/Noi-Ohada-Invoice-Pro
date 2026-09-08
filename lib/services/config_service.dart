@@ -12,6 +12,7 @@
 //
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'env_loader.dart';
 
 class ConfigService {
@@ -187,7 +188,21 @@ class ConfigService {
   /// 🔐 Clé secrète des endpoints serveur (Vercel) — injectée au build via
   /// `--dart-define=API_SECRET_KEY=...` (elle ne vit jamais en clair dans
   /// l'APK). Envoyée dans l'entête `x-api-key` de chaque appel API.
-  static String get apiSecretKey => _env('API_SECRET_KEY');
+  ///
+  /// 🔧 Normalisation défensive : la valeur est souvent copiée depuis un
+  /// `.env` (où elle est entre guillemets `"…"`) ou depuis un gestionnaire
+  /// de variables. On retire les espaces externes et les guillemets
+  /// englobants pour garantir que la clé envoyée est STRICTEMENT identique à
+  /// celle configurée côté Vercel (sinon → 401 « clé API manquante/invalide »).
+  static String get apiSecretKey {
+    final raw = _env('API_SECRET_KEY').trim();
+    if (raw.length >= 2 &&
+        ((raw.startsWith('"') && raw.endsWith('"')) ||
+            (raw.startsWith("'") && raw.endsWith("'")))) {
+      return raw.substring(1, raw.length - 1).trim();
+    }
+    return raw;
+  }
 
   /// 🔗 Lien public de téléchargement de l'application — pointe par défaut
   /// sur la route `/download` du serveur, qui redirige vers l'APK/boutique
@@ -197,8 +212,8 @@ class ConfigService {
       _env('APP_DOWNLOAD_URL', def: '$_defaultApiBaseUrl/download');
 
   /// Entêtes standards des appels API serveur (Vercel) : JSON + clé d'API.
-  /// Utilisez CETTE méthode partout où vous appelez l'API — le serveur
-  /// renvoie 401 sans `x-api-key` valide quand API_SECRET_KEY est définie.
+  /// ⚠️ Héritage (transition) : n'utilise QUE l'ancienne clé `x-api-key`.
+  /// Préférez [apiHeaders] qui envoie le jeton Firebase (plus sûr).
   static Map<String, String> serverHeaders() {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -206,6 +221,42 @@ class ConfigService {
     };
     final key = apiSecretKey.trim();
     if (key.isNotEmpty) headers['x-api-key'] = key;
+    return headers;
+  }
+
+  /// Entêtes authentifiés des appels API serveur (Vercel) — MÉTHODE
+  /// RECOMMANDÉE. Envoie le jeton d'identité Firebase de l'utilisateur
+  /// connecté (`Authorization: Bearer <idToken>`) : le serveur le vérifie et
+  /// en déduit le uid — aucun secret partagé dans l'APK.
+  ///
+  /// Repli (transition) : si personne n'est connecté (ou Firebase indispo),
+  /// on envoie l'ancienne clé `x-api-key` quand elle est compilée dans
+  /// l'APK — le serveur l'accepte encore temporairement.
+  ///
+  /// 🔒 Ne lève JAMAIS : sans utilisateur ni clé, on renvoie les entêtes
+  /// JSON seuls (le serveur répondra 401 → l'app gère l'erreur).
+  static Future<Map<String, String>> apiHeaders() async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    String? token;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Jeton d'identité : mis en cache ~1 h par Firebase puis renouvelé
+        // silencieusement. Appel réseau seulement près de l'expiration.
+        token = await user.getIdToken();
+      }
+    } catch (_) {
+      token = null; // Firebase non initialisé / hors-ligne / utilisateur absent
+    }
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    } else {
+      final key = apiSecretKey;
+      if (key.isNotEmpty) headers['x-api-key'] = key;
+    }
     return headers;
   }
   static String get supportEmail => _get('SUPPORT_EMAIL');

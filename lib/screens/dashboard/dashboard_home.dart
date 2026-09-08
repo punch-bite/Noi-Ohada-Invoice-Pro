@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/update_service.dart';
 import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../models/financial_stats.dart';
@@ -33,6 +34,17 @@ class _DashboardHomeState extends State<DashboardHome> {
   void initState() {
     super.initState();
     _loadData();
+    _maybeCheckForUpdate();
+  }
+
+  /// 🚀 Détection automatique de mise à jour : attend quelques secondes pour
+  /// ne pas couper l'affichage initial, et ne propose la mise à jour qu'une
+  /// seule fois par session (UpdateService._autoPrompted).
+  Future<void> _maybeCheckForUpdate() async {
+    if (UpdateService.hasAutoPrompted) return;
+    await Future<void>.delayed(const Duration(seconds: 4));
+    if (!mounted) return;
+    await UpdateService.checkAndPrompt(context, manual: false);
   }
 
   Future<void> _loadData() async {

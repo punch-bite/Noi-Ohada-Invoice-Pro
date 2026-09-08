@@ -7,6 +7,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../models/user.dart';
 import '../../services/theme_service.dart';
+import '../../services/update_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -243,6 +244,16 @@ class SettingsScreen extends StatelessWidget {
                     textColor,
                     subTextColor,
                   ),
+                  isDark: isDark,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                ),
+                _SettingsDivider(isDark: isDark),
+                _SettingsTile(
+                  icon: Icons.system_update_alt,
+                  title: 'Vérifier les mises à jour',
+                  subtitle: 'Compare avec la dernière version publiée',
+                  onTap: () => UpdateService.checkAndPrompt(context, manual: true),
                   isDark: isDark,
                   textColor: textColor,
                   subTextColor: subTextColor,

@@ -55,7 +55,7 @@ class TemplateService {
       final resp = await http
           .post(
             Uri.parse('$apiBase/template/purchase'),
-            headers: ConfigService.serverHeaders(),
+            headers: await ConfigService.apiHeaders(),
             body: jsonEncode({
               'userId': userId,
               'templateIds': templateIds,

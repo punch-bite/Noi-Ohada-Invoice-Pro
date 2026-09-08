@@ -114,7 +114,7 @@ class MailService {
       final resp = await http
           .post(
             Uri.parse('$apiBase/email/send'),
-            headers: ConfigService.serverHeaders(),
+            headers: await ConfigService.apiHeaders(),
             body: jsonEncode({
               'to': to,
               'subject': subject,

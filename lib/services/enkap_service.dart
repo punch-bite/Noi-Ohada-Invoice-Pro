@@ -195,12 +195,12 @@ class EnkapService {
     try {
       if (_useServerProxy) {
         // Web/mobile : relais par notre serveur (qui détient les secrets
-        // ENKAP). On envoie `x-api-key` (ConfigService.serverHeaders) : le
-        // serveur renvoie 401 sans cette clé quand API_SECRET_KEY est définie.
+        // ENKAP). Authentification par jeton Firebase (Bearer) — voir
+        // ConfigService.apiHeaders.
         final resp = await _client
             .post(
               Uri.parse('$_serverBase/enkap/order'),
-              headers: ConfigService.serverHeaders(),
+              headers: await ConfigService.apiHeaders(),
               body: json.encode(payload),
             )
             .timeout(const Duration(seconds: 20));
@@ -271,7 +271,7 @@ class EnkapService {
         await _client
             .post(
               Uri.parse('$_serverBase/enkap/order/setup'),
-              headers: ConfigService.serverHeaders(),
+              headers: await ConfigService.apiHeaders(),
               body: json.encode({
                 'returnUrl': returnUrl,
                 'notificationUrl': notificationUrl,
@@ -312,7 +312,7 @@ class EnkapService {
         final uri = Uri.parse('$_serverBase/enkap/order/status')
             .replace(queryParameters: params);
         final resp = await _client
-            .get(uri, headers: ConfigService.serverHeaders())
+            .get(uri, headers: await ConfigService.apiHeaders())
             .timeout(const Duration(seconds: 15));
         final data = _decode(resp);
         return data['status'] ?? '';
@@ -345,7 +345,7 @@ class EnkapService {
         final uri = Uri.parse('$_serverBase/enkap/order')
             .replace(queryParameters: params);
         final resp = await _client
-            .get(uri, headers: ConfigService.serverHeaders())
+            .get(uri, headers: await ConfigService.apiHeaders())
             .timeout(const Duration(seconds: 15));
         return _decode(resp);
       }
@@ -383,7 +383,7 @@ class EnkapService {
       await _client
           .post(
             Uri.parse('$apiBase/enkap/register'),
-            headers: ConfigService.serverHeaders(),
+            headers: await ConfigService.apiHeaders(),
             body: json.encode({
               'reference': reference,
               'user_id': userId,

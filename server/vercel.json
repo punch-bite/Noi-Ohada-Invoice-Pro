@@ -19,6 +19,10 @@
       "dest": "download.js"
     },
     {
+      "src": "/app/latest\\.apk",
+      "dest": "download.js"
+    },
+    {
       "src": "/api/builds",
       "dest": "download.js"
     },

@@ -9,6 +9,15 @@
 
 		<key>NSFaceIDUsageDescription</key>
 		<string>Cette application utilise Face ID ou le Touch ID pour déverrouiller l'accès à vos données de facturation de manière sécurisée.</string>
+
+		<key>NSCameraUsageDescription</key>
+		<string>Cette application utilise l'appareil photo pour joindre des photos à vos factures, clients et produits.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Cette application accède à vos photos pour les joindre à vos factures, clients et produits.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Cette application peut enregistrer des photos dans votre bibliothèque.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Cette application utilise le micro pour les vidéos jointes à vos documents.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
