@@ -77,12 +77,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
               children: [
                 if (_pendingInvites > 0)
                   _invitationsBanner(context, theme),
-                if (!hasTeamAccess)
+                // 🔓 Un membre gratuit qui a DÉJÀ adhéré à une équipe peut
+                // communiquer dans le groupe : on ne lui affiche donc la carte
+                // « premium » que s'il n'a AUCUNE équipe (utile uniquement
+                // pour l'inciter à créer / rejoindre).
+                if (!hasTeamAccess && _teams.isEmpty)
                   _premiumLockCard(context, theme),
                 if (_teams.isEmpty)
                   _emptyState(context, theme, hasTeamAccess)
                 else
-                  ..._teams.map((t) => _teamCard(t, theme)),
+                  ..._teams.map((t) => _teamCard(context, t, theme)),
               ],
             ),
     );
@@ -160,12 +164,13 @@ class _TeamsScreenState extends State<TeamsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Équipe premium',
+                  'La création d\'équipe est premium',
                   style: TextStyle(fontWeight: FontWeight.bold, color: theme.textColor),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Passez à un plan payant pour créer et gérer vos équipes.',
+                  'Passez à un plan payant pour créer et gérer vos équipes. '
+                  'Vous pouvez déjà rejoindre un groupe et discuter gratuitement.',
                   style: TextStyle(fontSize: 12, color: theme.subTextColor),
                 ),
               ],
@@ -185,7 +190,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 
-  Widget _teamCard(Team team, ThemeProvider theme) {
+  Widget _teamCard(BuildContext context, Team team, ThemeProvider theme) {
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
       onTap: () => context.push('/teams/${team.id}'),
@@ -219,6 +224,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
               ],
             ),
           ),
+          // 💬 Accès direct au chat — ouvert à TOUS les membres, même en
+          // mode gratuit (la création reste premium, la communication non).
+          IconButton(
+            icon: Icon(Icons.chat_bubble_rounded, size: 22, color: theme.primaryColor),
+            tooltip: 'Ouvrir la discussion',
+            onPressed: () => context.push(
+              '/teams/chat',
+              extra: {'teamId': team.id, 'teamName': team.name},
+            ),
+          ),
           Icon(Icons.chevron_right, color: theme.subTextColor),
         ],
       ),
@@ -247,8 +262,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
               const SizedBox(height: 8),
               Text(
                 hasTeamAccess
-                    ? 'Créez votre première équipe pour collaborer.'
-                    : 'Créez vos équipes avec un abonnement premium.',
+                    ? 'Créez votre première équipe pour collaborer et discuter.'
+                    : 'Passez au plan premium pour créer vos équipes. '
+                        'Vous pouvez rejoindre un groupe et discuter gratuitement.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: theme.subTextColor, fontSize: 13),
               ),

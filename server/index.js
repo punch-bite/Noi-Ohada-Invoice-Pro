@@ -32,6 +32,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('./logger');
 const { renderLanding } = require('./landing');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -287,36 +288,104 @@ function clientIp(req) {
 //
 //  Nouvelle méthode (plus sûre) : l'app envoie le jeton d'identité Firebase
 //  de l'utilisateur connecté (`Authorization: Bearer <idToken>`). Le serveur
-//  le VÉRIFIE cryptographiquement (getAuth().verifyIdToken) et en déduit le
-//  `uid` — plus aucun secret partagé embarqué dans l'APK, et un utilisateur
-//  ne peut PAS agir pour un autre (le serveur ignore le userId du body).
+//  le VÉRIFIE cryptographiquement et en déduit le `uid` — plus aucun secret
+//  partagé embarqué dans l'APK, et un utilisateur ne peut PAS agir pour un
+//  autre (le serveur ignore le userId du body).
 //
 //  Transition (double authentification) : l'ancienne `x-api-key` reste
 //  acceptée tant qu'elle est configurée (API_SECRET_KEY) pour ne pas casser
 //  les APK déjà distribués. On la retirera plus tard.
 //
-//  `getAuth` est chargé paresseusement : le sous-module firebase-admin/auth
-//  tire des dépendances ESM ; require(esm) est supporté (Node ≥ 22.12), mais
-//  un lazy-load évite de faire échouer TOUT le module au démarrage.
+//  ⚠️ On n'utilise PAS `firebase-admin/auth` ici : ce sous-module dépend de
+//  paquets ESM (`jose`) qui font échouer `require()` selon le runtime Node
+//  de Vercel → TOUT jeton Bearer valide renvoyait 401. On vérifie donc le
+//  jeton nous-mêmes (standard, 100 % CJS) :
+//    • iss = https://securetoken.google.com/<projectId>
+//    • aud = <projectId>
+//    • signature RS256 validée contre les certificats publics Google
+//      (récupérés puis mis en cache ~45 min).
 // ============================================================
-let _authModule = null;
-function loadAuth() {
-  if (!_authModule) {
-    _authModule = require('firebase-admin/auth');
+const FIREBASE_PROJECT_ID =
+  (process.env.FIREBASE_PROJECT_ID || '').trim() || 'facture-ohada';
+const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+const FIREBASE_CERTS_URL =
+  'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+
+let _certCache = { keys: null, expiresAt: 0 };
+
+async function _getCertKeys() {
+  const now = Date.now();
+  if (_certCache.keys && _certCache.expiresAt > now) return _certCache.keys;
+  const res = await fetch(FIREBASE_CERTS_URL);
+  if (!res.ok) {
+    throw new Error(`Certificats Google indisponibles (${res.status})`);
   }
-  const g = (_authModule && (_authModule.getAuth || _authModule.default?.getAuth));
-  if (typeof g !== 'function') throw new Error('getAuth indisponible');
-  return g;
+  const data = await res.json();
+  // Les clés sont valables ~1 h (cache-control Google) ; on rafraîchit à
+  // 45 min par sécurité.
+  _certCache = { keys: data, expiresAt: now + 45 * 60 * 1000 };
+  return data;
 }
 
-/// Vérifie `Authorization: Bearer <idToken>` → renvoie le décodage (uid…)
-/// ou null si absent/invalide. Ne lève qu'en cas d'erreur d'infra.
+/// Vérifie un jeton d'identité Firebase → payload décodé (uid…) ou lève.
+/// Retente une fois si la signature échoue (rotation de clés Google) : on
+/// vide le cache des certificats et on re-fetch, au cas où le kid du jeton
+/// n'était pas encore propagé au moment du premier essai.
+async function verifyFirebaseIdToken(token) {
+  const decoded = jwt.decode(token, { complete: true });
+  if (!decoded || !decoded.header || !decoded.payload) {
+    throw new Error('Jeton Firebase malformé');
+  }
+  const { header, payload } = decoded;
+  if (payload.iss !== FIREBASE_ISSUER) {
+    throw new Error(`Émetteur invalide (${payload.iss})`);
+  }
+  if (payload.aud !== FIREBASE_PROJECT_ID) {
+    throw new Error(`Audience invalide (${payload.aud})`);
+  }
+
+  const verifyWith = async (keys, kid) => {
+    const pem = keys[kid];
+    if (!pem) return null; // kid absent -> à propager via retry
+    return jwt.verify(token, pem, {
+      algorithms: ['RS256'],
+      issuer: FIREBASE_ISSUER,
+      audience: FIREBASE_PROJECT_ID,
+    });
+  };
+
+  // 1er essai avec les clés en cache/chargées.
+  try {
+    const keys = await _getCertKeys();
+    const verified = await verifyWith(keys, header.kid);
+    if (verified) return verified;
+  } catch (_) {
+    // on retente ci-dessous avec des clés rafraîchies
+  }
+
+  // 2e essai : force le rechargement des certificats (rotation en cours).
+  _certCache = { keys: null, expiresAt: 0 };
+  const keys = await _getCertKeys();
+  const verified = await verifyWith(keys, header.kid);
+  if (!verified) throw new Error('Clé de signature introuvable');
+  return verified;
+}
+
+/// Vérifie `Authorization: Bearer <idToken>` → renvoie un objet normalisé
+/// `{ uid, email, phone_number }` (le payload Firebase expose `user_id`, pas
+/// `uid` ; on retient aussi `sub` en repli) ou null si absent/invalide.
 async function verifyFirebaseToken(req) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
-  return loadAuth()().verifyIdToken(token);
+  const decoded = await verifyFirebaseIdToken(token);
+  if (!decoded) return null;
+  return {
+    uid: String(decoded.user_id || decoded.sub || decoded.uid || ''),
+    email: decoded.email,
+    phoneNumber: decoded.phone_number,
+  };
 }
 
 /// uid de l'acteur authentifié. Si l'appel vient d'un JETON vérifié, on
@@ -349,7 +418,7 @@ async function requireAuth(req, res, next) {
         method: 'token',
         uid: decoded.uid,
         email: String(decoded.email || ''),
-        phone: String(decoded.phone_number || ''),
+        phone: String(decoded.phoneNumber || ''),
       };
       return next();
     }
@@ -382,6 +451,19 @@ app.get('/download', (req, res) => {
       .json({ error: 'Lien de téléchargement non configuré (APP_DOWNLOAD_URL)' });
   }
   return res.redirect(302, target);
+});
+
+// 🚧 SONDE TEMPORAIRE (diagnostic jeton Firebase sur Vercel) — À SUPPRIMER.
+// Protégée par requireAuth : elle ne répond 200 que si le `Bearer <idToken>`
+// est accepté. Renvoie le uid/email décodés pour vérifier le fallback manuel.
+app.get('/__token_probe__', (req, res) => {
+  const a = req.auth || {};
+  res.json({
+    ok: a.method === 'token',
+    method: a.method,
+    uid: a.uid,
+    email: a.email,
+  });
 });
 
 // ============================================================
@@ -1976,6 +2058,6 @@ module.exports = app;
 if (require.main === module) {
   app.listen(PORT, () => {
     logger.info(`🚀 Serveur prêt sur le port ${PORT}`);
-    logger.info(`Webhook secret configuré : ${getWebhookSecret() ? 'oui' : 'NON (⚠️)'}`);
+    logger.info(`Webhook secret configuré : ${String(process.env.NOCHPAY_WEBHOOK_SECRET || '').trim() ? 'oui' : 'NON (⚠️)'}`);
   });
 }
