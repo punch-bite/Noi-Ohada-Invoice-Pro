@@ -234,6 +234,12 @@ a.btn.dis{opacity:.5;pointer-events:none}
 .dtrust{display:flex;flex-wrap:wrap;justify-content:center;gap:26px;margin-top:40px;color:var(--faint);font-size:12.5px}
 .dtrust span{display:inline-flex;align-items:center;gap:7px}
 .dtrust svg{width:15px;height:15px;color:var(--gold)}
+.dnote{margin-top:24px;padding:16px 18px;background:rgba(139,124,255,.07);border:1px solid var(--line);border-radius:var(--r);text-align:left}
+.dnote strong{display:block;font-size:13px;margin-bottom:8px;color:var(--acc2)}
+.dnote ol{margin:0;padding-left:18px;color:var(--mut);font-size:12.5px;line-height:1.75}
+.dnote ol li{margin-bottom:4px}
+.dnote code{background:rgba(0,0,0,.25);padding:1px 6px;border-radius:6px;font-size:11.5px}
+.dnote .warn{margin-top:10px;font-size:11.5px;color:var(--faint)}
 @media(max-width:760px){.dgrid{grid-template-columns:1fr}}
 `;
   return `<!DOCTYPE html>
@@ -274,11 +280,11 @@ a.btn.dis{opacity:.5;pointer-events:none}
     </div>
     <div class="dcard">
       <span class="di">${ICONS.apple}</span>
-      <h3>iPhone</h3>
-      <p class="dsub">${iosReady ? 'Dernière version prête à installer sur votre iPhone.' : 'La version iPhone arrive bientôt.'}</p>
-      <span class="meta">${ICONS.check ? ICONS.check : ''}${builds.ios ? formatSize(Number(builds.ios.size) || 0) + ' · IPA' : 'Bientôt disponible'}</span>
+      <h3>iPhone <span style="font-weight:400;color:var(--faint);font-size:12px">· sideload</span></h3>
+      <p class="dsub">${iosReady ? 'Installation gratuite via AltStore ou Sideloadly — aucun compte développeur requis.' : 'La version iPhone arrive bientôt.'}</p>
+      <span class="meta">${ICONS.check ? ICONS.check : ''}${builds.ios ? formatSize(Number(builds.ios.size) || 0) + ' · ZIP sideload' : 'Bientôt disponible'}</span>
       ${iosReady
-        ? `<a class="btn primary" href="${iosUrl}" download>${ICONS.download} Télécharger l'IPA</a>`
+        ? `<a class="btn primary" href="${iosUrl}" download>${ICONS.download} Télécharger le ZIP</a>`
         : `<a class="btn primary dis" aria-disabled="true">${ICONS.clock} Bientôt</a>`}
     </div>
     <div class="dcard">
@@ -288,6 +294,16 @@ a.btn.dis{opacity:.5;pointer-events:none}
       <span class="meta">${ICONS.check ? ICONS.check : ''}PWA · En ligne</span>
       <a class="btn ghost" href="${webUrl}" target="_blank" rel="noopener">${ICONS.globe} Ouvrir la version web</a>
     </div>
+  </div>
+
+  <div class="dnote">
+    <strong>💡 Installer sur iPhone — gratuit, sans compte développeur</strong>
+    <ol>
+      <li>Téléchargez le fichier <code>ios-release.zip</code> ci-dessus puis décompressez-le.</li>
+      <li>Installez <b>AltStore</b> ou <b>Sideloadly</b> sur votre Mac/PC, et branchez votre iPhone.</li>
+      <li>Glissez le dossier <code>Payload/Runner.app</code> dans l'outil, puis validez avec votre Apple ID gratuit.</li>
+    </ol>
+    <div class="warn">⏳ Compte gratuit : 3 apps max, à résigner tous les 7 jours. Pour une installation permanente, passez par TestFlight ou l'App Store.</div>
   </div>
 
   <div class="dtrust">
