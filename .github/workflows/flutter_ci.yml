@@ -119,7 +119,8 @@ jobs:
   build-ios:
     name: Build iOS
     needs: analyze
-    runs-on: macos-14
+    # macOS 15 = Xcode 16+ requis par firebase-ios-sdk 12 (Swift 'sending').
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
