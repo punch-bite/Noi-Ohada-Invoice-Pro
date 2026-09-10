@@ -24,6 +24,13 @@
   },
   "homepage": "https://github.com/punch-bite/Noi-Ohada-Invoice-Pro#readme",
   "dependencies": {
-    "firebase-admin": "^14.2.0"
+    "firebase-admin": "^14.2.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^6.9.14"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.0"
   }
 }

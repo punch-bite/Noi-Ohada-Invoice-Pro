@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": "server/public/**" }
+    },
+    {
+      "src": "server/download.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/download", "dest": "server/download.js" },
+    { "src": "/app/latest\\.apk", "dest": "server/download.js" },
+    { "src": "/api/builds", "dest": "server/download.js" },
+    { "src": "/(.*)", "dest": "server/index.js" }
+  ]
+}
