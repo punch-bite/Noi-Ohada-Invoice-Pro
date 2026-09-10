@@ -12,6 +12,7 @@ import 'package:noi_ohada_invoice_pro/services/hive_service.dart';
 import 'package:noi_ohada_invoice_pro/services/logger_service.dart';
 import 'package:noi_ohada_invoice_pro/services/config_service.dart';
 import 'package:noi_ohada_invoice_pro/widgets/glass_widgets.dart';
+import 'package:noi_ohada_invoice_pro/widgets/logo_image.dart';
 
 import 'helpers/fake_firebase.dart';
 
@@ -174,9 +175,9 @@ void main() {
 
     await tester.pumpAndSettle();
 
-        // Vérifier le logo (icône)
-    expect(find.byIcon(Icons.receipt_long_rounded), findsOneWidget);
-    
+        // Vérifier le logo (image de marque)
+    expect(find.byType(LogoImage), findsOneWidget);
+
     // Vérifier le nom de l'application
     expect(find.text('OHADA Invoice Pro'), findsOneWidget);
     expect(find.text('Facturation conforme SYSCOHADA'), findsOneWidget);
