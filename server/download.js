@@ -138,7 +138,7 @@ async function getGitHubBuilds() {
       return a ? { name: a.name, size: a.size, updated: release.published_at, url: a.browser_download_url } : null;
     };
     out.android = find('.apk');
-    out.ios = find('.ipa') || find('.zip');
+    out.ios = find('.ipa') || find('ios-release.zip');
     if (out.android || out.ios) {
       logger.info(`Release GitHub "${release.tag_name}": ` +
         (out.android ? 'APK ' + out.android.name : '') +
