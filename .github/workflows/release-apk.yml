@@ -50,10 +50,22 @@ jobs:
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-36" || sdkmanager "platforms;android-36"
           sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-37" || sdkmanager "platforms;android-37"
-          # NDK requis par build.gradle.kts (ndkVersion 28.2.13676358)
+          # NDK requis par build.gradle.kts (ndkVersion 28.2.13676358).
+          # ⚠️ Si le NDK présent est corrompu (pas de source.properties — erreur
+          # CXX1101), on le SUPPRIME avant réinstallation, sinon sdkmanager
+          # considère le paquet « déjà installé » et ne répare rien.
           if ! [ -d "$ANDROID_HOME/ndk/28.2.13676358" ] || ! [ -f "$ANDROID_HOME/ndk/28.2.13676358/source.properties" ]; then
+            echo "🧹 Nettoyage du NDK corrompu/absent..."
+            rm -rf "$ANDROID_HOME/ndk/28.2.13676358"
             echo "📥 Installation du NDK 28.2.13676358..."
+            yes | sdkmanager --uninstall "ndk;28.2.13676358" >/dev/null 2>&1 || true
             yes | sdkmanager "ndk;28.2.13676358"
+          fi
+          # Garde-fou : échouer tôt avec un message clair si le NDK est toujours invalide.
+          if ! [ -f "$ANDROID_HOME/ndk/28.2.13676358/source.properties" ]; then
+            echo "❌ NDK 28.2.13676358 invalide après installation (source.properties manquant)."
+            ls -la "$ANDROID_HOME/ndk/" || true
+            exit 1
           fi
           echo "NDK installé :"
           ls "$ANDROID_HOME/ndk/" 2>/dev/null
