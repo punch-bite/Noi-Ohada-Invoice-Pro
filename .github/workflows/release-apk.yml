@@ -179,7 +179,7 @@ jobs:
               echo "- cpp        : $(grep -cE 'Undefined|undefined method|no member named|is not a member' "$LOG" || true)"
               echo '```'
               echo ""
-              echo '_Le log complet est joint en artefact `build-logs-diagnostic` (étape ci-dessous). La racine du problème est souvent dans les 5-15 dernières lignes d'erreur ci-dessus._'
+              echo '_Le log complet est joint en artefact `build-logs-diagnostic` (etape ci-dessous). La racine du probleme est generalement visible dans les premieres lignes ci-dessus._'
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
