@@ -109,11 +109,11 @@ jobs:
           channel: stable
           cache: true
 
-      - name: 🔧 Régénération des fichiers de plateforme iOS manquants
-        run: flutter create --platforms=ios --project-name noi_ohada_invoice_pro .
-
       - name: 📦 Dépendances
         run: flutter pub get
+
+      - name: 🔧 Régénération des fichiers de plateforme iOS manquants
+        run: flutter create --platforms=ios --org com.noi --project-name noi_ohada_invoice_pro .
 
       - name: 🍎 Compilation iOS (release, sans signature)
         run: flutter build ios --release --no-codesign
