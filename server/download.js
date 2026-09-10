@@ -95,6 +95,65 @@ async function resolveWorkingBucket() {
 }
 
 async function getBuilds() {
+  // Source 1 (préférée) : la dernière GitHub Release publique du dépôt.
+  // Les assets sont hébergés sur le CDN de GitHub (public pour un dépôt public).
+  const gh = await getGitHubBuilds();
+
+  // Source 2 (fallback) : Firebase Storage (bucket `builds/`).
+  const fb = await getFirebaseBuilds();
+
+  // Priorité GitHub, au champ près.
+  return {
+    ios: gh.ios || fb.ios,
+    android: gh.android || fb.android,
+    web: gh.web || fb.web,
+  };
+}
+
+const GH_REPO = process.env.GITHUB_REPO || 'punch-bite/Noi-Ohada-Invoice-Pro';
+const GH_LATEST_URL = `https://api.github.com/repos/${GH_REPO}/releases/latest`;
+
+// Récupère la dernière release publique et expose l'URL de téléchargement
+// des assets (.apk, .aab — ici .apk). Aucun token requis (dépôt public).
+// Cache en mémoire 5 min pour ne pas saturer le rate-limit GitHub (60 req/h).
+let _ghCache = null;
+let _ghCacheAt = 0;
+const GH_CACHE_TTL = 5 * 60 * 1000;
+
+async function getGitHubBuilds() {
+  const out = { ios: null, android: null, web: null };
+  if (_ghCache && Date.now() - _ghCacheAt < GH_CACHE_TTL) return _ghCache;
+  try {
+    const res = await fetch(GH_LATEST_URL, {
+      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'noi-ohada-download' },
+    });
+    if (!res.ok) {
+      logger.warn(`GitHub releases/latest HTTP ${res.status} — fallback Storage`);
+      return out;
+    }
+    const release = await res.json();
+    const assets = (release.assets || []).filter((a) => a.size > 0);
+    const find = (ext) => {
+      const a = assets.find((x) => x.name.toLowerCase().endsWith(ext));
+      return a ? { name: a.name, size: a.size, updated: release.published_at, url: a.browser_download_url } : null;
+    };
+    out.android = find('.apk');
+    out.ios = find('.ipa') || find('.zip');
+    if (out.android || out.ios) {
+      logger.info(`Release GitHub "${release.tag_name}": ` +
+        (out.android ? 'APK ' + out.android.name : '') +
+        (out.ios ? ' IPA/zip' : ''));
+    }
+    _ghCache = out;
+    _ghCacheAt = Date.now();
+  } catch (e) {
+    logger.warn('Erreur lecture GitHub Release:', { error: e.message });
+  }
+  return out;
+}
+
+// (ancienne source) — lecture des builds depuis Firebase Storage.
+async function getFirebaseBuilds() {
   try {
     const bucket = await resolveWorkingBucket();
     if (!bucket) {
