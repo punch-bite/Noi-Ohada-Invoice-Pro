@@ -1,4 +1,4 @@
-name: Build & Publish Android Release
+name: Release — APK + AAB + iOS → GitHub Release (tags v*)
 
 # =============================================================
 # Build l'APK + l'AAB signés (keystore de production) et publie
