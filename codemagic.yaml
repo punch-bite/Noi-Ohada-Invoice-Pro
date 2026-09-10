@@ -17,14 +17,9 @@ workflows:
         # SMTP_HOST/PORT/USERNAME/PASSWORD/FROM_EMAIL côté Vercel.
         API_BASE_URL: "https://server-xi-two-23.vercel.app"
       flutter: stable
-    # 🔁 Sync GitHub : le build se déclenche automatiquement à chaque push
-    # de tag v* (ex. v1.0.1) sur le dépôt (webhook Codemagic → GitHub).
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*"
-          include: true
+    # ℹ️ Les releases APK/AAB par TAG sont gérées par GITHUB ACTIONS
+    # (.github/workflows/release-apk.yml). Ce workflow Codemagic est
+    # conservé pour des builds MANUELS depuis l'UI Codemagic uniquement.
     scripts:
       - name: Décoder le Keystore JKS
         script: |
@@ -117,40 +112,6 @@ workflows:
       - build/symbols/**
 
     publishing:
-      # 🎯 Publication automatique sur la GitHub Release du tag.
-      # draft:false / prerelease:false est OBLIGATOIRE : la page /download du
-      # serveur Vercel interroge l'API `releases/latest`, qui ignore les
-      # drafts et les prereleases. C'est CE publish qui alimente le bouton
-      # Android de https://server-xi-two-23.vercel.app/download
-      github_releases:
-        repository: punch-bite/Noi-Ohada-Invoice-Pro
-        tag: $CM_TAG
-        release_name: "Noi OHADA Invoice Pro – Release $CM_TAG"
-        description: |
-          ## 📱 Noi OHADA Invoice Pro ($CM_TAG)
-
-          ### 📦 Contenu
-          - **APK** (installation directe sur Android) — signature de prod
-          - **AAB** (bundle à soumettre au Play Store)
-          - **Symboles** de désobfuscation (facultatif, pour lire les crashs)
-
-          ### 🛠️ Installation (testeurs)
-          1. Télécharger le fichier `.apk`
-          2. L'ouvrir sur un appareil Android (autoriser « sources inconnues »)
-          3. Les données restent accessibles via le compte
-
-          ---
-          *Généré automatiquement par Codemagic.*
-        draft: false
-        prerelease: false
-        artifact_paths:
-          - "build/app/outputs/flutter-apk/*.apk"
-          - "build/app/outputs/bundle/release/*.aab"
-          - "build/symbols/**"
-        credentials:
-          username: $GITHUB_USERNAME
-          personal_access_token: $GITHUB_TOKEN
-
       email:
         recipients:
           - nixmmobilier@gmail.com

@@ -1,4 +1,10 @@
-# Release Android via CODEMAGIC → GitHub Releases → bouton /download
+# Release Android → GitHub Releases → bouton /download
+
+> ⚠️ **MISE À JOUR** : la publication des releases APK/AAB par TAG est
+> revenue sur **GITHUB ACTIONS** (`.github/workflows/release-apk.yml`,
+> déclenché par `git push` d'un tag `v*`). Codemagic est retourné en
+> **manuel uniquement** (aucun trigger automatique). Ce document reste
+> valable pour un usage Codemagic manuel.
 
 > Cette note décrit la chaîne **automatique** mise en place
 > (Codemagic en sync avec GitHub).
