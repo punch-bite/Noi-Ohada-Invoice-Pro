@@ -445,7 +445,7 @@ padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:600;margin-
 <div class="card"><div class="info"><div class="icon">${ICONS.globe}</div><div>
 <div class="bld">Web <span class="badge">PWA</span></div>
 <div class="meta">Accessible en ligne</div>
-</div></div><a href="https://app.noi-ohada-invoice-pro.com" class="btn" target="_blank">${ICONS.globe} Ouvrir</a></div>
+</div></div><a href="${process.env.WEB_APP_URL || 'https://noi-ohada-web.vercel.app'}" class="btn" target="_blank">${ICONS.globe} Ouvrir</a></div>
 <div class="ft"><p>Besoin d'aide ? <a href="mailto:support@noi-ohada-invoice-pro.com">Support</a></p>
 <p style="margin-top:.4rem">© ${new Date().getFullYear()} Noi OHADA Invoice Pro</p></div>
 </div></body></html>`;

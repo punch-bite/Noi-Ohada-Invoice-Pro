@@ -33,8 +33,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: "Build & publish release"
+  build-android:
+    name: "Build APK + AAB (release)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +100,7 @@ jobs:
             echo "platforms    : $(ls "$ANDROID_HOME/platforms/" 2>/dev/null | tr '\n' ' ' || echo aucun)"
             echo "build-tools  : $(ls "$ANDROID_HOME/build-tools/" 2>/dev/null | tr '\n' ' ' || echo aucun)"
             echo "java         : $(java -version 2>&1 | head -1 || echo n/a)"
+            echo "gradle wrapper : $(grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null | tr -d ' ' || echo n/a)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -194,7 +195,14 @@ jobs:
               echo "- cpp        : $(grep -cE 'Undefined|undefined method|no member named|is not a member' "$LOG" || true)"
               echo '```'
               echo ""
-              echo '_Le log complet est joint en artefact `build-logs-diagnostic` (etape ci-dessous). La racine du probleme est generalement visible dans les premieres lignes ci-dessus._'
+              echo '<details><summary>📜 80 dernières lignes du log brut</summary>'
+              echo ""
+              echo '```'
+              tail -n 80 "$LOG" || true
+              echo '```'
+              echo '</details>'
+              echo ""
+              echo '_Le log complet est joint en artefact `logs-android-diagnostic` (etape ci-dessous). La racine du probleme est generalement visible dans les premieres lignes ci-dessus._'
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -243,29 +251,102 @@ jobs:
           fi
           echo "### ✅ Build AAB OK" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: 📤 Upload artefact Android (APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+
+      - name: 📤 Upload artefact Android (AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: 📤 Upload artefact Android (symboles)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-symbols
+          path: build/symbols/**
+
       # ---------------- Logs de build (artefact, même en cas d'échec) ----
       - name: 📦 Upload des logs de build (diagnostic)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-diagnostic
+          name: logs-android-diagnostic
           path: |
             /tmp/apk_build.log
             /tmp/aab_build.log
           if-no-files-found: warn
           retention-days: 14
 
-      - name: ✅ Vérifier la signature
-        run: |
-          ls -la build/app/outputs/flutter-apk/
-          echo "---"
-          # `file` et `apksigner` sont parfois indisponibles ; on ne bloque pas
-          # la publication si la vérification échoue.
-          (command -v apksigner >/dev/null 2>&1 && \
-            $ANDROID_HOME/build-tools/*/apksigner verify --print-certs \
-            build/app/outputs/flutter-apk/*.apk) || echo "Vérification de signature non exécutée"
+  # ------------------------------------------------------------
+  # iOS — même tag → même release (zip sideload, sans signature)
+  # ------------------------------------------------------------
+  build-ios:
+    name: "Build iOS (no codesign)"
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
 
-      # ---------------- Publication ----------------
+      - name: ☕ Flutter 3.41.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.9
+          channel: stable
+          cache: true
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🍎 Build iOS (release, sans signature)
+        run: flutter build ios --release --no-codesign
+
+      - name: 📦 Empaqueter Runner.app en .zip (sideload)
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -R Runner.app Payload/
+          zip -qry ios-release.zip Payload
+
+      - name: 📤 Upload artefact iOS
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: build/ios/iphoneos/ios-release.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # ------------------------------------------------------------
+  # Publication — UNE release pour les 3 boutons de /download :
+  #   Android → *.apk   |   iOS → *.zip   |   (Web → lien app)
+  # ------------------------------------------------------------
+  publish:
+    name: "Publier la GitHub Release"
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Télécharger les artefacts des 2 builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{android-apk,android-aab,android-symbols,ios-release}"
+          merge-multiple: true
+          path: dist
+
+      - name: 📋 Contenu à publier
+        run: ls -laR dist || true
+
+      - name: ✅ Vérifier la signature APK (best effort)
+        run: |
+          # `apksigner` est parfois indisponible ; on ne bloque pas la
+          # publication si la vérification échoue.
+          (command -v apksigner >/dev/null 2>&1 && \
+            $ANDROID_HOME/build-tools/*/apksigner verify --print-certs dist/*.apk) \
+            || echo "Vérification de signature non exécutée"
+
       - name: 📦 Créer la GitHub Release + artefacts
         uses: softprops/action-gh-release@v2
         with:
@@ -279,21 +360,20 @@ jobs:
             > validation de l'accès Google Play Console.
 
             ### 📦 Contenu
-            - **APK** (installation directe sur Android) — signature de prod
+            - **APK Android** (installation directe) — signature de prod
             - **AAB** (bundle à soumettre au Play Store)
-            - **Symboles** de désobfuscation (facultatif, pour lire les crashs)
+            - **iOS** (.zip sideload, sans signature App Store)
+            - **Symboles** de désobfuscation (pour lire les crashs)
 
-            ### 🛠️ Installation (testeurs)
-            1. Télécharger le fichier `.apk`
-            2. L'ouvrir sur un appareil Android (autoriser « sources inconnues »)
-            3. L'application s'installe ; les données restent accessibles via le compte
+            ### 🛠️ Installation
+            - **Android** : télécharger le `.apk`, l'ouvrir sur le téléphone
+              (autoriser « sources inconnues »).
+            - **iOS** : décompresser le `.zip` puis installer `Payload/Runner.app`
+              via AltStore/Sideloadly (compte Apple Developer requis).
 
             ---
             *Généré automatiquement par GitHub Actions.*
-          files: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
-            build/symbols/**
+          files: dist/**
           # ⚠️ draft/prerelease = false : la page /download (server/download.js)
           # interroge l'API `releases/latest`, qui IGNORE les drafts et les
           # prereleases. Pour que le bouton Android soit relié à l'APK, la
