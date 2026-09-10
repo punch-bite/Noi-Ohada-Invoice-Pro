@@ -215,7 +215,7 @@ function renderDownloadPage(user, builds) {
   const androidMeta = builds.android
     ? (formatSize(Number(builds.android.size) || 0) + ' · APK')
     : 'Aucune version publiée';
-  const webUrl = 'https://app.noi-ohada-invoice-pro.com';
+  const webUrl = process.env.WEB_APP_URL || 'https://noi-ohada-web.vercel.app';
   const year = new Date().getFullYear();
   const extra = `
 .dwrap{max-width:920px;margin:0 auto;padding:0 22px;position:relative;z-index:2}
