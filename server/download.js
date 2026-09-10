@@ -239,6 +239,7 @@ a.btn.dis{opacity:.5;pointer-events:none}
 .dnote ol{margin:0;padding-left:18px;color:var(--mut);font-size:12.5px;line-height:1.75}
 .dnote ol li{margin-bottom:4px}
 .dnote code{background:rgba(0,0,0,.25);padding:1px 6px;border-radius:6px;font-size:11.5px}
+.dnote p{margin:0 0 10px;color:var(--mut);font-size:12.5px;line-height:1.6}
 .dnote .warn{margin-top:10px;font-size:11.5px;color:var(--faint)}
 @media(max-width:760px){.dgrid{grid-template-columns:1fr}}
 `;
@@ -297,13 +298,25 @@ a.btn.dis{opacity:.5;pointer-events:none}
   </div>
 
   <div class="dnote">
-    <strong>💡 Installer sur iPhone — gratuit, sans compte développeur</strong>
+    <strong>💡 Méthode 1 — AltStore / Sideloadly (ordinateur requis à chaque (ré)installation)</strong>
     <ol>
       <li>Téléchargez le fichier <code>ios-release.zip</code> ci-dessus puis décompressez-le.</li>
       <li>Installez <b>AltStore</b> ou <b>Sideloadly</b> sur votre Mac/PC, et branchez votre iPhone.</li>
       <li>Glissez le dossier <code>Payload/Runner.app</code> dans l'outil, puis validez avec votre Apple ID gratuit.</li>
     </ol>
-    <div class="warn">⏳ Compte gratuit : 3 apps max, à résigner tous les 7 jours. Pour une installation permanente, passez par TestFlight ou l'App Store.</div>
+    <div class="warn">⏳ Compte gratuit : 3 apps max, à résigner tous les 7 jours.</div>
+  </div>
+
+  <div class="dnote">
+    <strong>📲 Méthode 2 — SideStore (renouvellement automatique, sans ordinateur après la 1re fois)</strong>
+    <p>SideStore signe et renouvelle l'app <b>directement sur l'iPhone</b> — aucun ordinateur nécessaire après la configuration initiale.</p>
+    <ol>
+      <li>Une seule fois (sur ordi) : installez <b>SideStore</b> via AltServer avec votre Apple ID.</li>
+      <li>Sur l'iPhone : ouvrez SideStore → activez <b>Anisette</b> et le <b>VPN WireGuard</b> qu'il configure.</li>
+      <li>Téléchargez <code>ios-release.zip</code>, renommez-le en <code>NoiOHADA.ipa</code>, puis « Ouvrir dans SideStore ».</li>
+      <li>SideStore installe l'app et la <b>renouvelle automatiquement tous les 7 jours</b>.</li>
+    </ol>
+    <div class="warn">💡 Pour une installation permanente sans contrainte, TestFlight / l'App Store restent la voie officielle (compte développeur requis).</div>
   </div>
 
   <div class="dtrust">
