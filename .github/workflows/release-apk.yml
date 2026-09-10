@@ -38,16 +38,25 @@ jobs:
       - uses: actions/checkout@v4
 
       # ---------------- Préparation Android SDK ----------------
-      # Le plugin `path_provider` exige l'API 37 (cf. commit CodeMagic).
-      # On s'assure que les platforms demandées sont installées.
-      - name: 🔧 Vérifier/installer les platforms Android (36 & 37)
+      # build.gradle.kts exige : platforms 36, NDK 28.2.13676358, API 37.
+      # Sur les runners ubuntu-latest, le NDK n'est pas toujours installé →
+      # l'erreur « NDK ... did not have a source.properties file » (build échoue).
+      - name: 🔧 Vérifier/installer platforms Android & NDK
         run: |
           # Localiser `sdkmanager` (pas toujours dans le PATH sur les runners GitHub)
           if ! command -v sdkmanager >/dev/null 2>&1; then
             export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH"
           fi
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-36" || sdkmanager "platforms;android-36"
           sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-37" || sdkmanager "platforms;android-37"
+          # NDK requis par build.gradle.kts (ndkVersion 28.2.13676358)
+          if ! [ -d "$ANDROID_HOME/ndk/28.2.13676358" ] || ! [ -f "$ANDROID_HOME/ndk/28.2.13676358/source.properties" ]; then
+            echo "📥 Installation du NDK 28.2.13676358..."
+            yes | sdkmanager "ndk;28.2.13676358"
+          fi
+          echo "NDK installé :"
+          ls "$ANDROID_HOME/ndk/" 2>/dev/null
           # Symlink API 37 si seulement "android-37.0" est installé (runner CodeMagic)
           if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
             ln -sf "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
