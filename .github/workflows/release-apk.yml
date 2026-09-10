@@ -16,10 +16,12 @@ name: Build & Publish Android Release
 # lu depuis github secrets et jamais commité (déjà ignoré par .gitignore).
 # =============================================================
 
+# Les releases par TAG sont désormais générées par CODEMAGIC
+# (cf. codemagic.yaml → workflows.release → publishing.github_releases).
+# Ce workflow est conservé en SECOURS, déclenchable uniquement à la main
+# (« Run workflow ») ; il ne s'exécute plus sur les tags afin d'éviter de
+# créer deux releases concurrentes pour le même tag (conflit d'assets).
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
