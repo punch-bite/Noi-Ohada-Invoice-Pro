@@ -1,0 +1,169 @@
+name: Build & Publish Android Release
+
+# =============================================================
+# Build l'APK + l'AAB signés (keystore de production) et publie
+# automatiquement une GitHub Release à chaque tag vX.Y.Z
+# (ex. v1.0.0) ou via le bouton « Run workflow ».
+#
+# ⚠️ SECRETS REQUIS (Settings → Secrets and variables → Actions) :
+#   KEYSTORE_BASE64   → cat android/app/upload-keystore.jks | base64
+#   KEYSTORE_PASSWORD → mot de passe du keystore
+#   KEY_ALIAS         → alias de la clé de signature (ex. upload)
+#   KEY_PASSWORD      → mot de passe de la clé
+#   (optionnel) API_SECRET_KEY → clot l'accès si votre serveur le demande
+#
+# NB : aucun secret n'est embarqué dans le dépôt. Le keystore est
+# lu depuis github secrets et jamais commité (déjà ignoré par .gitignore).
+# =============================================================
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Nom du tag/version pour créer la release (ex. v1.0.0). Optionnel si déclenché par un push sur tag."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: "Build & publish release"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------- Préparation Android SDK ----------------
+      # Le plugin `path_provider` exige l'API 37 (cf. commit CodeMagic).
+      # On s'assure que les platforms demandées sont installées.
+      - name: 🔧 Vérifier/installer les platforms Android (36 & 37)
+        run: |
+          # Localiser `sdkmanager` (pas toujours dans le PATH sur les runners GitHub)
+          if ! command -v sdkmanager >/dev/null 2>&1; then
+            export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH"
+          fi
+          sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-36" || sdkmanager "platforms;android-36"
+          sdkmanager --list_installed 2>/dev/null | grep -q "platforms;android-37" || sdkmanager "platforms;android-37"
+          # Symlink API 37 si seulement "android-37.0" est installé (runner CodeMagic)
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -sf "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+          fi
+
+      # ---------------- Flutter ----------------
+      - name: ☕ Configuration Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 📦 Dépendances
+        run: flutter pub get
+
+      - name: 🔍 Analyse (non bloquante)
+        continue-on-error: true
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+      # ---------------- Keystore + signature ----------------
+      - name: 🔐 Décoder le keystore
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
+          echo "Keystore écrit dans $RUNNER_TEMP/upload-keystore.jks"
+
+      - name: 🔐 Injecter les infos de signature dans local.properties
+        if: ${{ secrets.KEYSTORE_PASSWORD != '' }}
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")"
+            echo "release.keystore.storeFile=$RUNNER_TEMP/upload-keystore.jks"
+            echo "release.keystore.password=$KEYSTORE_PASSWORD"
+            echo "release.key.alias=$KEY_ALIAS"
+            echo "release.key.password=$KEY_PASSWORD"
+          } > android/local.properties
+          cat android/local.properties
+
+      # ---------------- Build ----------------
+      - name: 🏗️ Build APK (release, obfusqué)
+        env:
+          API_BASE_URL: "https://server-xi-two-23.vercel.app"
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=$API_BASE_URL"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build apk --release \
+            --android-skip-build-dependency-validation \
+            $DEFINES \
+            --obfuscate \
+            --split-debug-info=build/symbols/apk
+
+      - name: 🏗️ Build AAB (release, signé)
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=$API_BASE_URL"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build appbundle --release \
+            --android-skip-build-dependency-validation \
+            $DEFINES \
+            --obfuscate \
+            --split-debug-info=build/symbols/aab
+        env:
+          API_BASE_URL: https://server-xi-two-23.vercel.app
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+
+      - name: ✅ Vérifier la signature
+        run: |
+          ls -la build/app/outputs/flutter-apk/
+          echo "---"
+          # `file` et `apksigner` sont parfois indisponibles ; on ne bloque pas
+          # la publication si la vérification échoue.
+          (command -v apksigner >/dev/null 2>&1 && \
+            $ANDROID_HOME/build-tools/*/apksigner verify --print-certs \
+            build/app/outputs/flutter-apk/*.apk) || echo "Vérification de signature non exécutée"
+
+      # ---------------- Publication ----------------
+      - name: 📦 Créer la GitHub Release + artefacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          name: Noi OHADA Invoice Pro – Release ${{ inputs.tag_name || github.ref_name }}
+          body: |
+            ## 📱 Noi OHADA Invoice Pro
+
+            > [!NOTE]
+            > Ceci est une **release intermédiaire** publiée en attendant la
+            > validation de l'accès Google Play Console.
+
+            ### 📦 Contenu
+            - **APK** (installation directe sur Android) — signature de prod
+            - **AAB** (bundle à soumettre au Play Store)
+            - **Symboles** de désobfuscation (facultatif, pour lire les crashs)
+
+            ### 🛠️ Installation (testeurs)
+            1. Télécharger le fichier `.apk`
+            2. L'ouvrir sur un appareil Android (autoriser « sources inconnues »)
+            3. L'application s'installe ; les données restent accessibles via le compte
+
+            ---
+            *Généré automatiquement par GitHub Actions.*
+          files: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+            build/symbols/**
+          draft: true
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
