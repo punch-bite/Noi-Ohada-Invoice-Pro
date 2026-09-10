@@ -72,6 +72,22 @@ jobs:
       - name: 📦 Dépendances
         run: flutter pub get
 
+      # ---------------- Environnement (aide au diagnostic) ----------------
+      # Placé juste après l'installation Flutter : disponible même si un des
+      # builds échoue ensuite (pour relire les versions dans le step summary).
+      - name: 🧰 Snapshot de l'environnement de build
+        run: |
+          {
+            echo "### 🧰 Environnement de build"
+            echo '```'
+            echo "flutter : $(flutter --version 2>/dev/null | head -1 || echo n/a)"
+            echo "NDK installés : $(ls "$ANDROID_HOME/ndk/" 2>/dev/null | tr '\n' ' ' || echo aucun)"
+            echo "platforms    : $(ls "$ANDROID_HOME/platforms/" 2>/dev/null | tr '\n' ' ' || echo aucun)"
+            echo "build-tools  : $(ls "$ANDROID_HOME/build-tools/" 2>/dev/null | tr '\n' ' ' || echo aucun)"
+            echo "java         : $(java -version 2>&1 | head -1 || echo n/a)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: 🔍 Analyse (non bloquante)
         continue-on-error: true
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
@@ -120,42 +136,109 @@ jobs:
           API_BASE_URL: "https://server-xi-two-23.vercel.app"
           API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
         run: |
+          set -o pipefail
+          LOG=/tmp/apk_build.log
           DEFINES="--dart-define=API_BASE_URL=$API_BASE_URL"
           if [ -n "$API_SECRET_KEY" ]; then
             DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
           fi
-          flutter build apk --release \
+          if ! flutter build apk --release \
             --android-skip-build-dependency-validation \
             $DEFINES \
             --obfuscate \
             --split-debug-info=build/symbols/apk \
-            2>&1 | tee /tmp/apk_build.log
-          APK_STATUS=${PIPESTATUS[0]}
-          if [ "$APK_STATUS" -ne 0 ]; then
+            2>&1 | tee "$LOG"; then
             {
-              echo "## ❌ Échec du build APK (exit $APK_STATUS)"
+              echo "## ❌ Échec du build APK"
               echo ""
+              echo "### 🧭 Candidats les plus probables"
+              echo ""
+              # On cherche en priorité la 1re « Failure/Error » et son contexte.
               echo '```'
-              grep -E "FAILURE|What went wrong|Caused by:|error:|Error:|ndk|cMake|ndkVersion|source.properties|.*failed" /tmp/apk_build.log | tail -60
+              grep -nE "What went wrong|Caused by:|FAILURE: Build failed|Exception" "$LOG" | head -8 || true
               echo '```'
+              echo ""
+              echo "### 📋 Extrait de l'erreur (avec contexte)"
+              echo '```'
+              # -> première ligne d'erreur + 3 lignes avant/après pour le contexte
+              line=$(grep -nE "What went wrong|Caused by:|error:|Error:|FAILURE|ndk|NDK|cMake|cmake|source.properties|failed" "$LOG" \
+                | head -1 | cut -d: -f1)
+              if [ -n "$line" ] && [ "$line" -gt 0 ] 2>/dev/null; then
+                start=$((line - 3)); [ "$start" -lt 1 ] && start=1
+                sed -n "${start},$((line + 20))p" "$LOG"
+              else
+                grep -E "error:|Error:|What went wrong|Caused by:|.*failed" "$LOG" | tail -40 || true
+              fi
+              echo '```'
+              echo ""
+              echo "### 🏷️ Catégories d'erreurs détectées"
+              echo '```'
+              echo "- erreurs    : $(grep -cE 'Error:|error:' "$LOG" || true)"
+              echo "- gradle     : $(grep -cE 'What went wrong|FAILURE' "$LOG" || true)"
+              echo "- ndk/cmake  : $(grep -cE 'ndk|NDK|cMake|cmake|source.properties' "$LOG" || true)"
+              echo "- cpp        : $(grep -cE 'Undefined|undefined method|no member named|is not a member' "$LOG" || true)"
+              echo '```'
+              echo ""
+              echo '_Le log complet est joint en artefact `build-logs-diagnostic` (étape ci-dessous). La racine du problème est souvent dans les 5-15 dernières lignes d'erreur ci-dessus._'
             } >> "$GITHUB_STEP_SUMMARY"
-            exit "$APK_STATUS"
+            exit 1
           fi
+          echo "### ✅ Build APK OK" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🏗️ Build AAB (release, signé)
+        env:
+          API_BASE_URL: https://server-xi-two-23.vercel.app
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
         run: |
+          set -o pipefail
+          LOG=/tmp/aab_build.log
           DEFINES="--dart-define=API_BASE_URL=$API_BASE_URL"
           if [ -n "$API_SECRET_KEY" ]; then
             DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
           fi
-          flutter build appbundle --release \
+          if ! flutter build appbundle --release \
             --android-skip-build-dependency-validation \
             $DEFINES \
             --obfuscate \
-            --split-debug-info=build/symbols/aab
-        env:
-          API_BASE_URL: https://server-xi-two-23.vercel.app
-          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+            --split-debug-info=build/symbols/aab \
+            2>&1 | tee "$LOG"; then
+            {
+              echo "## ❌ Échec du build AAB"
+              echo ""
+              echo "### 🧭 Candidats les plus probables"
+              echo '```'
+              grep -nE "What went wrong|Caused by:|FAILURE: Build failed|Exception" "$LOG" | head -8 || true
+              echo '```'
+              echo ""
+              echo "### 📋 Extrait de l'erreur (avec contexte)"
+              echo '```'
+              line=$(grep -nE "error:|Error:|What went wrong|Caused by:|.*failed" "$LOG" \
+                | head -1 | cut -d: -f1)
+              if [ -n "$line" ] && [ "$line" -gt 0 ] 2>/dev/null; then
+                start=$((line - 3)); [ "$start" -lt 1 ] && start=1
+                sed -n "${start},$((line + 20))p" "$LOG"
+              else
+                grep -E "error:|Error:|What went wrong|Caused by:|.*failed" "$LOG" | tail -40 || true
+              fi
+              echo '```'
+              echo ""
+              echo '_Le log complet est joint en artefact `build-logs-diagnostic` (étape ci-dessous)._'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "### ✅ Build AAB OK" >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------- Logs de build (artefact, même en cas d'échec) ----
+      - name: 📦 Upload des logs de build (diagnostic)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-diagnostic
+          path: |
+            /tmp/apk_build.log
+            /tmp/aab_build.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: ✅ Vérifier la signature
         run: |
