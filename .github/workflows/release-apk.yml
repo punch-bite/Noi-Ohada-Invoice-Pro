@@ -279,7 +279,11 @@ jobs:
             build/app/outputs/flutter-apk/*.apk
             build/app/outputs/bundle/release/*.aab
             build/symbols/**
-          draft: true
-          prerelease: true
+          # ⚠️ draft/prerelease = false : la page /download (server/download.js)
+          # interroge l'API `releases/latest`, qui IGNORE les drafts et les
+          # prereleases. Pour que le bouton Android soit relié à l'APK, la
+          # release doit être publiée officiellement.
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
