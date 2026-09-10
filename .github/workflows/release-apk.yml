@@ -128,7 +128,19 @@ jobs:
             --android-skip-build-dependency-validation \
             $DEFINES \
             --obfuscate \
-            --split-debug-info=build/symbols/apk
+            --split-debug-info=build/symbols/apk \
+            2>&1 | tee /tmp/apk_build.log
+          APK_STATUS=${PIPESTATUS[0]}
+          if [ "$APK_STATUS" -ne 0 ]; then
+            {
+              echo "## ❌ Échec du build APK (exit $APK_STATUS)"
+              echo ""
+              echo '```'
+              grep -E "FAILURE|What went wrong|Caused by:|error:|Error:|ndk|cMake|ndkVersion|source.properties|.*failed" /tmp/apk_build.log | tail -60
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$APK_STATUS"
+          fi
 
       - name: 🏗️ Build AAB (release, signé)
         run: |
