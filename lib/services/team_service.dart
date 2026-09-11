@@ -117,6 +117,7 @@ class TeamService {
     String? userId,
     String? email,
     String? role,
+    String? permission,
     String? invitationId,
     required String requestedBy,
   }) async {
@@ -136,6 +137,7 @@ class TeamService {
               'userId': userId,
               'email': email,
               'role': role,
+              'permission': permission,
               'invitationId': invitationId,
               'requestedBy': requestedBy,
             }),
@@ -256,6 +258,13 @@ class TeamService {
             await _db.collection('team_invitations').doc(invitationId).update({
               'status': 'accepted',
             });
+            // 🔓 Le membre qui adhère reçoit l'accès aux fichiers DÉJÀ
+            // partagés de l'équipe, en lecture/écriture selon son rôle.
+            await syncMemberSharedAccess(
+              teamId: teamId,
+              userId: requestedBy,
+              role: data['role']?.toString(),
+            );
             return;
           }
         }
@@ -449,6 +458,11 @@ class TeamService {
       sharedAt: DateTime.now(),
       resourceType: resourceType,
       resourceName: resourceName,
+      // 🔑 Membres autorisés à MODIFIER : ceux du partage si celui-ci est
+      // accordé en écriture (les autres restent en lecture seule).
+      writeUsers: permissionLevel == 'write'
+          ? List<String>.from(sharedWith)
+          : const <String>[],
     );
 
     await _db
@@ -456,12 +470,14 @@ class TeamService {
         .doc(sharedInvoice.id)
         .set(sharedInvoice.toMap());
 
-    // Marque la ressource pour que les membres puissent la lire.
+    // Marque la ressource pour que les membres puissent la lire (et
+    // l'écrire si le partage est en écriture).
     await _markResourceShared(
       resourceType,
       resourceId,
       sharedWith,
       teamId,
+      canWrite: permissionLevel == 'write',
     );
 
     // Notifications @mention aux destinataires.
@@ -472,6 +488,7 @@ class TeamService {
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       resourceId: resourceId,
+      canWrite: permissionLevel == 'write',
     );
 
     await LoggerService.info(
@@ -509,12 +526,16 @@ class TeamService {
   /// Met à jour le document ressource (invoices/products/clients) avec les
   /// listes `sharedWithUsers` / `sharedTeams` pour que les règles Firestore
   /// autorisent la lecture par les membres.
+  /// Si [canWrite] est vrai, maintient EN PLUS `editableByUsers` /
+  /// `editableTeams` → les membres concernés obtiennent l'ÉCRITURE
+  /// (cf. firestore.rules : canWriteSharedResource()).
   Future<void> _markResourceShared(
     String resourceType,
     String resourceId,
     List<String> userIds,
-    String teamId,
-  ) async {
+    String teamId, {
+    bool canWrite = false,
+  }) async {
     final collection = _collectionFor(resourceType);
     if (collection.isEmpty) return;
     try {
@@ -526,13 +547,68 @@ class TeamService {
         ..addAll(userIds);
       final teams = Set<String>.from(data['sharedTeams'] ?? const [])
         ..add(teamId);
-      await ref.update({
+      final updates = <String, dynamic>{
         'sharedWithUsers': users.toList(),
         'sharedTeams': teams.toList(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (canWrite) {
+        final writers = Set<String>.from(data['editableByUsers'] ?? const [])
+          ..addAll(userIds);
+        final writerTeams = Set<String>.from(data['editableTeams'] ?? const [])
+          ..add(teamId);
+        updates['editableByUsers'] = writers.toList();
+        updates['editableTeams'] = writerTeams.toList();
+      }
+      await ref.update(updates);
     } catch (e) {
       debugPrint('⚠️ _markResourceShared: $e');
+    }
+  }
+
+  /// 🔐 Fixe le droit d'accès imposé aux MEMBRES sur les fichiers partagés
+  /// ('read' | 'write'). Passe par le serveur (SDK admin) qui met aussi à jour
+  /// `teams.memberPermission` ET répercute le droit sur les membres déjà
+  /// présents. Renvoie le nombre de membres mis à jour.
+  Future<int> setMemberPermissionPolicy({
+    required String teamId,
+    required String permission,
+    required String requestedBy,
+  }) async {
+    final result = await _manageMember(
+      action: 'set-policy',
+      teamId: teamId,
+      permission: permission == 'write' ? 'write' : 'read',
+      requestedBy: requestedBy,
+    );
+    return (result['updated'] as num?)?.toInt() ?? 0;
+  }
+
+  /// 🔓 (Re)accorde à [userId] l'accès aux fichiers DÉJÀ PARTAGÉS de l'équipe,
+  /// en LECTURE ou ÉCRITURE selon le RÔLE imposé aux membres
+  /// (`Team.memberPermission` / `Team.adminPermission`).
+  ///
+  /// Appelé juste après l'ADHÉSION d'un nouveau membre. Best-effort : un échec
+  /// ne remet pas en cause l'adhésion (le serveur applique déjà les droits à
+  /// l'acceptation de l'invitation).
+  Future<bool> syncMemberSharedAccess({
+    required String teamId,
+    required String userId,
+    String? role,
+  }) async {
+    if (teamId.isEmpty || userId.isEmpty) return false;
+    try {
+      await _manageMember(
+        action: 'sync-access',
+        teamId: teamId,
+        userId: userId,
+        role: role,
+        requestedBy: userId,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ syncMemberSharedAccess: $e');
+      return false;
     }
   }
 
@@ -544,11 +620,13 @@ class TeamService {
     required String sharedBy,
     required List<String> sharedWith,
     required String resourceId,
+    bool canWrite = false,
   }) async {
     final sharerName = await _userDisplayName(sharedBy);
     final team = await getTeam(teamId);
     final teamName = team?.name ?? 'votre équipe';
     final label = _resourceLabel(resourceType);
+    final access = canWrite ? 'en lecture/écriture ✍️' : 'en lecture seule 👁️';
 
     for (final uid in sharedWith) {
       if (uid.isEmpty || uid == sharedBy) continue;
@@ -557,8 +635,8 @@ class TeamService {
         createdBy: sharedBy,
         notification: AppNotification(
           title: '🔗 Donnée partagée avec vous',
-          body:
-              '$sharerName vous a partagé « $resourceName » ($label) dans $teamName.',
+          body: '$sharerName vous a partagé « $resourceName » ($label) '
+              '$access dans $teamName.',
           type: NotificationType.team_shared.toString(),
           referenceId: resourceId,
           referenceType: resourceType,
@@ -567,6 +645,7 @@ class TeamService {
             'resourceType': resourceType,
             'sharedBy': sharedBy,
             'sharedByName': sharerName,
+            'canWrite': canWrite,
           },
         ),
       );
@@ -720,6 +799,8 @@ class TeamService {
         try {
           await _db.collection(collection).doc(resourceId).update({
             'sharedWithUsers': FieldValue.arrayRemove(users),
+            // 🔒 Retire aussi le droit d'ÉCRITURE accordé par le partage.
+            'editableByUsers': FieldValue.arrayRemove(users),
           });
         } catch (_) {
           // Doc introuvable / déjà nettoyé : le partage est déjà désactivé.

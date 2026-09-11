@@ -406,6 +406,9 @@ class StitchA4InvoicePreview extends StatelessWidget {
     return data.isDevis ? 'DEVIS' : 'FACTURE';
   }
  
+  /// Sous-titre personnalisé (`invoice_subtitle`) — optionnel.
+  String get _customSubtitle => _cpString('invoice_subtitle');
+
   /// Texte légal personnalisé (`custom_legal_text`) s'il a été saisi,
   /// sinon vide → on utilise le texte par défaut du modèle/client.
   String get _customLegalText => _cpString('custom_legal_text');
@@ -419,6 +422,22 @@ class StitchA4InvoicePreview extends StatelessWidget {
     return override.isNotEmpty ? override : 'Signature';
   }
  
+  /// 🖊️ IMAGE DE SIGNATURE de l'émetteur (`signature_image`, base64 PNG).
+  ///
+  /// Rendu au-dessus de la ligne de signature dans l'aperçu A4 : la signature
+  /// dessinée/téléversée dans l'atelier doit FIGURER sur la facture.
+  /// Retourne null si aucune signature n'a été enregistrée dans le modèle.
+  Uint8List? get _signatureImageBytes {
+    final raw = _cpString('signature_image');
+    if (raw.isEmpty) return null;
+    try {
+      final bytes = base64Decode(raw);
+      return bytes.isEmpty ? null : bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Affichage du tampon « PAYÉ » (personnalisation ou défaut = facture payée).
   bool get _effectiveShowPaidStamp =>
       _cpBool('show_paid_stamp', showPaidStamp);
@@ -493,15 +512,39 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ));
         if (!isLast) children.add(SizedBox(width: 10 * k));
       } else if (key == 'invoice_title') {
-        children.add(Text(
-          _customTitle,
-          style: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 26 * k,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.4,
-            color: onAccent,
-          ),
+        children.add(Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _customTitle,
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 26 * k,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.4,
+                color: onAccent,
+              ),
+            ),
+            // 🏷️ Sous-titre personnalisé (atelier), s'il a été saisi.
+            if (_customSubtitle.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: 2 * k),
+                child: Text(
+                  _customSubtitle,
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'WorkSans',
+                    fontSize: 11 * k,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: onAccent.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
         ));
       }
     }
@@ -1103,7 +1146,20 @@ class StitchA4InvoicePreview extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // 🖊️ Signature de l'émetteur, apposée AU-DESSUS de la ligne.
+                  if (_signatureImageBytes != null) ...[
+                    Image.memory(
+                      _signatureImageBytes!,
+                      width: 130 * k,
+                      height: 52 * k,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.bottomRight,
+                      gaplessPlayback: true,
+                    ),
+                    SizedBox(height: 2 * k),
+                  ],
                   Container(
                       width: 120 * k,
                       height: 1,

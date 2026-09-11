@@ -48,6 +48,10 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   bool _streamError = false;
   String _senderName = 'Moi';
   List<String> _memberIds = const [];
+  // 🔑 Propriétaire de l'équipe (auteur des messages marqués « Propriétaire »).
+  String _ownerId = '';
+  String _ownerName = '';
+  List<String> _adminIds = const [];
 
   String get _currentUserId =>
       context.read<AppAuthProvider>().user?.id ?? '';
@@ -94,12 +98,21 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
       final team = await TeamService().getTeam(widget.teamId);
       if (!mounted || team == null) return;
       setState(() {
+        _ownerId = team.ownerId;
+        _adminIds = List<String>.from(team.adminIds);
         _memberIds = <String>{
           team.ownerId,
           ...team.adminIds,
           ...team.memberIds,
         }.toList();
       });
+      // 🔑 Nom du propriétaire (badge « Propriétaire » sur ses messages).
+      if (team.ownerId.isNotEmpty) {
+        final ownerName = await _displayNameOf(team.ownerId);
+        if (mounted && ownerName.isNotEmpty) {
+          setState(() => _ownerName = ownerName);
+        }
+      }
     } catch (_) {
       // Ignoré : les notifications seront simplement limitées.
     }
@@ -107,6 +120,21 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
 
   /// 1) Affiche IMMÉDIATEMENT l'historique local (Hive) — même hors connexion.
   /// 2) Branche ensuite le flux temps réel Firestore (qui re-cache tout).
+  /// Nom lisible d'un utilisateur (best-effort) — sert au badge « Propriétaire ».
+  Future<String> _displayNameOf(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = doc.data() ?? const {};
+      return (data['displayName'] ?? data['name'] ?? data['email'] ?? '')
+          .toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _loadCacheThenStream() async {
     final cached = await _chatService.getCachedMessages(widget.teamId);
     if (!mounted) return;
@@ -148,6 +176,9 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
         senderName: _senderName,
         text: text,
         memberIds: _memberIds,
+        // 🔑 Estampille le propriétaire du message (celui de l'équipe).
+        ownerId: _ownerId,
+        ownerName: _ownerName,
       );
       _scrollToBottom();
       _inputFocus.requestFocus();
@@ -186,6 +217,13 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   String _membersLabel() {
     final count = _memberIds.length;
     return count <= 1 ? 'Vous êtes seul' : '$count membres';
+  }
+
+  /// Sous-titre de l'en-tête : nombre de membres + propriétaire de l'équipe.
+  String _headerSubtitle() {
+    if (_streamError) return 'Hors ligne · historique local';
+    final members = _membersLabel();
+    return _ownerName.isEmpty ? members : '$members · 👑 $_ownerName';
   }
 
   // ===== UI =====
@@ -245,7 +283,7 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                         child: Text(
                           _streamError
                               ? 'Hors ligne · historique local'
-                              : _membersLabel(),
+                              : _headerSubtitle(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: subTextColor, fontSize: 11),
@@ -429,13 +467,19 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
             if (!mine)
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  message.senderName,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: theme.primaryColor,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      message.senderName,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: theme.primaryColor,
+                      ),
+                    ),
+                    ..._authorBadges(message, theme),
+                  ],
                 ),
               ),
             Text(
@@ -460,6 +504,33 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
         ),
       ),
     );
+  }
+
+  /// 🔑 Badges d'identité ajoutés à chaque message envoyé sur le chat :
+  /// « Propriétaire » (propriétaire de l'équipe) ou « Admin ».
+  List<Widget> _authorBadges(TeamMessage message, ThemeProvider theme) {
+    final ownerId = message.ownerId.isNotEmpty ? message.ownerId : _ownerId;
+    final isOwner = ownerId.isNotEmpty && message.senderId == ownerId;
+    final isAdmin = !isOwner && _adminIds.contains(message.senderId);
+    if (!isOwner && !isAdmin) return const [];
+    return [
+      const SizedBox(width: 6),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: theme.primaryColor.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          isOwner ? 'Propriétaire' : 'Admin',
+          style: TextStyle(
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+            color: theme.primaryColor,
+          ),
+        ),
+      ),
+    ];
   }
 
   String _formatTime(DateTime date) {

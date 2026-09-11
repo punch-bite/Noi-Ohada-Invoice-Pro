@@ -37,6 +37,11 @@ class SharedInvoice {
   final String resourceType;
   final String resourceName;
 
+  /// 🔑 Membres disposant du droit d'ÉCRITURE sur ce partage (sous-ensemble de
+  /// [sharedWith]). Rempli à l'adhésion d'un membre dont le rôle autorise
+  /// l'écriture (cf. Team.memberPermission / Team.adminPermission).
+  final List<String> writeUsers;
+
   SharedInvoice({
     String? id,
     required this.invoiceId,
@@ -49,7 +54,17 @@ class SharedInvoice {
     this.isActive = true,
     this.resourceType = 'invoice',
     this.resourceName = '',
+    this.writeUsers = const [],
   })  : id = id ?? const Uuid().v4();
+
+  /// Vrai si [userId] peut MODIFIER la ressource partagée.
+  /// • partage globalement en écriture (`permissionLevel == 'write'`), ou
+  /// • membre explicitement listé dans [writeUsers] (rôle autorisant l'écriture).
+  bool canWrite(String userId) =>
+      permissionLevel == 'write' || writeUsers.contains(userId);
+
+  /// Vrai si [userId] a au moins la LECTURE (destinataire du partage).
+  bool canRead(String userId) => sharedWith.contains(userId);
 
   Map<String, dynamic> toMap() {
     return {
@@ -64,6 +79,7 @@ class SharedInvoice {
       'isActive': isActive,
       'resourceType': resourceType,
       'resourceName': resourceName,
+      'writeUsers': writeUsers,
     };
   }
 
@@ -80,6 +96,7 @@ class SharedInvoice {
       isActive: map['isActive'] ?? true,
       resourceType: map['resourceType'] ?? 'invoice',
       resourceName: map['resourceName'] ?? '',
+      writeUsers: List<String>.from(map['writeUsers'] ?? const []),
     );
   }
 

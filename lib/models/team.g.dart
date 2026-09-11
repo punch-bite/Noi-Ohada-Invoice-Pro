@@ -27,13 +27,15 @@ class TeamAdapter extends TypeAdapter<Team> {
       createdAt: fields[7] as DateTime?,
       updatedAt: fields[8] as DateTime?,
       isActive: fields[9] as bool,
+      memberPermission: fields[10] as String? ?? 'read',
+      adminPermission: fields[11] as String? ?? 'write',
     );
   }
 
   @override
   void write(BinaryWriter writer, Team obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +55,11 @@ class TeamAdapter extends TypeAdapter<Team> {
       ..writeByte(8)
       ..write(obj.updatedAt)
       ..writeByte(9)
-      ..write(obj.isActive);
+      ..write(obj.isActive)
+      ..writeByte(10)
+      ..write(obj.memberPermission)
+      ..writeByte(11)
+      ..write(obj.adminPermission);
   }
 
   @override

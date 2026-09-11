@@ -36,6 +36,18 @@ class Team {
   @HiveField(9)
   final bool isActive;
 
+  /// 🔑 POLITIQUE D'ACCÈS AUX FICHIERS PARTAGÉS, PAR RÔLE.
+  /// - [memberPermission] : droit accordé aux MEMBRES simples
+  ///   (`'read'` = lecture seule, `'write'` = lecture/écriture).
+  /// - [adminPermission] : droit accordé aux ADMINISTRATEURS (et au
+  ///   propriétaire) — par défaut `'write'`.
+  /// Tout membre qui ADHÈRE à l'équipe reçoit ces droits sur les ressources
+  /// déjà partagées (factures / produits / clients).
+  @HiveField(10)
+  final String memberPermission;
+  @HiveField(11)
+  final String adminPermission;
+
   Team({
     String? id,
     required this.name,
@@ -47,6 +59,8 @@ class Team {
     DateTime? createdAt,
     this.updatedAt,
     this.isActive = true,
+    this.memberPermission = 'read',
+    this.adminPermission = 'write',
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -62,6 +76,8 @@ class Team {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
+      'memberPermission': memberPermission,
+      'adminPermission': adminPermission,
     };
   }
 
@@ -77,6 +93,8 @@ class Team {
       createdAt: _parseDateTime(map['createdAt']),
       updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
       isActive: map['isActive'] ?? true,
+      memberPermission: normalizePermission(map['memberPermission'], fallback: 'read'),
+      adminPermission: normalizePermission(map['adminPermission'], fallback: 'write'),
     );
   }
 
@@ -92,6 +110,29 @@ class Team {
   bool isAdmin(String userId) => adminIds.contains(userId);
   bool isMember(String userId) => memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
 
+  /// Normalise une valeur de permission ('read' | 'write').
+  static String normalizePermission(String? value, {String fallback = 'read'}) {
+    final v = (value ?? '').trim().toLowerCase();
+    if (v == 'write' || v == 'read') return v;
+    return fallback;
+  }
+
+  /// 🔑 Droit d'accès de [userId] aux FICHIERS PARTAGÉS de l'équipe,
+  /// déduit de son RÔLE (propriétaire/admin → [adminPermission],
+  /// membre simple → [memberPermission]).
+  String permissionFor(String userId) {
+    if (isOwnerOf(userId) || isAdmin(userId)) return adminPermission;
+    return memberPermission;
+  }
+
+  /// Vrai si [userId] peut MODIFIER les fichiers partagés de l'équipe.
+  bool canWriteShared(String userId) => permissionFor(userId) == 'write';
+
+  /// Vrai si [userId] peut au moins LIRE les fichiers partagés de l'équipe.
+  /// Les membres y ont toujours accès en lecture (le partage est explicite).
+  bool canReadShared(String userId) =>
+      isMember(userId) || memberPermission == 'read';
+
   Team copyWith({
     String? name,
     String? description,
@@ -99,6 +140,8 @@ class Team {
     List<String>? adminIds,
     String? logoPath,
     bool? isActive,
+    String? memberPermission,
+    String? adminPermission,
   }) {
     return Team(
       id: id,
@@ -111,6 +154,10 @@ class Team {
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
+      memberPermission:
+          normalizePermission(memberPermission, fallback: this.memberPermission),
+      adminPermission:
+          normalizePermission(adminPermission, fallback: this.adminPermission),
     );
   }
 }

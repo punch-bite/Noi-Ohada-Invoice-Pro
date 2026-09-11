@@ -14,6 +14,7 @@ import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/signature_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../models/invoice_settings.dart';
 import '../../widgets/template_background_palette.dart';
@@ -183,6 +184,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   String _clientName = 'Client Exemple SARL';
   final String _clientAddress = 'N° RCCM: CM-DOU-2024-B123\nDouala, Cameroun';
   String _invoiceTitleText = 'FACTURE';
+  // 🏷️ Sous-titre personnalisé (ex. « Devoir », « Reçu de paiement »…).
+  String _invoiceSubtitle = '';
+
+  // 🖊️ IMAGE DE SIGNATURE (PNG) apposée sur la facture, au-dessus de la ligne
+  // de signature. Dessinée via SignaturePadDialog, ou téléversée depuis la
+  // galerie. Stockée en base64 dans `positions['signature_image']` → reprise
+  // automatiquement par l'aperçu ET le PDF.
+  Uint8List? _signatureImageBytes;
 
   final List<String> _categories = const [
     'Recommandé', 'Simple', 'Classique', 'Professionnel',
@@ -286,6 +295,15 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     final company = await _db.getCompany();
     final custom = await TemplateCustomService.loadCustom(widget.template.id);
     final templates = InvoiceTemplate.getDefaultTemplates();
+    // 🖊️ Signature dessinée par l'utilisateur (SignatureService) : utilisée en
+    // repli si le modèle n'embarque pas déjà sa propre image de signature.
+    // Chargée AVANT setState (contexte asynchrone hors closure).
+    Uint8List? storedSignature;
+    try {
+      storedSignature = await SignatureService().loadSignatureBytes();
+    } catch (_) {
+      storedSignature = null;
+    }
     if (!mounted) return;
     setState(() {
       _company = company;
@@ -381,6 +399,26 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         }
         if (custom.positions['invoice_title_text'] != null) {
           _invoiceTitleText = custom.positions['invoice_title_text'] as String;
+        }
+        if (custom.positions['invoice_subtitle'] != null) {
+          _invoiceSubtitle = custom.positions['invoice_subtitle'] as String;
+        }
+        if (custom.positions['signature_image'] != null) {
+          try {
+            _signatureImageBytes = base64Decode(
+                custom.positions['signature_image'] as String);
+          } catch (_) {
+            _signatureImageBytes = null;
+          }
+        }
+        if (_signatureImageBytes == null ||
+            _signatureImageBytes!.isEmpty) {
+          // 🖊️ À défaut d'image enregistrée dans le modèle, on reprend la
+          // signature dessinée par l'utilisateur (SignatureService) pour
+          // qu'elle figure d'emblée sur la facture.
+          if (storedSignature != null && storedSignature.isNotEmpty) {
+            _signatureImageBytes = storedSignature;
+          }
         }
         if (custom.positions['show_paid_stamp'] != null) {
           _showPaidStamp = custom.positions['show_paid_stamp'] as bool;
@@ -597,6 +635,12 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['company_name'] = _companyName;
     updatedPositions['client_name'] = _clientName;
     updatedPositions['invoice_title_text'] = _invoiceTitleText;
+    updatedPositions['invoice_subtitle'] = _invoiceSubtitle;
+    // 🖊️ La signature (image) est embarquée dans la personnalisation afin
+    // d'être rendue à l'identique dans l'aperçu A4 et le PDF imprimé.
+    if (_signatureImageBytes != null && _signatureImageBytes!.isNotEmpty) {
+      updatedPositions['signature_image'] = base64Encode(_signatureImageBytes!);
+    }
     if (_customLogoBytes != null) {
       updatedPositions['custom_logo_base64'] = base64Encode(_customLogoBytes!);
     }
@@ -754,6 +798,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       _draggingKey = null;
       _dragOverKey = null;
       _dragOverSection = null;
+    });
+    _saveConfig();
+  }
+
+  /// ⬆️⬇️ Déplace la section [s] de [delta] positions (−1 = vers le haut,
+  /// +1 = vers le bas). L'ordre des sections est ensuite propagé à l'aperçu
+  /// et au PDF via `blocks_sections` (sauvegarde automatique).
+  void _moveSection(int s, int delta) {
+    final target = s + delta;
+    if (target < 0 || target >= _sectionsLayout.length) return;
+    setState(() {
+      final section = _sectionsLayout.removeAt(s);
+      _sectionsLayout.insert(target, section);
     });
     _saveConfig();
   }
@@ -1454,6 +1511,20 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   letterSpacing: -0.5,
                   shadows: [Shadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4)],
                 )),
+            if (_invoiceSubtitle.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(_invoiceSubtitle.trim(),
+                    textAlign: TextAlign.right,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w600,
+                      fontSize: (_customFontSize * 0.7).clamp(7.5, 11.0),
+                      letterSpacing: 0.6,
+                    )),
+              ),
             if (_qrPosition == 'header' && _workingTemplate.showPaymentQR)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -1629,6 +1700,30 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       'Section ${s + 1} · ${_sectionsLayout[s].length}/$_maxPerSection colonnes',
                       style: TextStyle(fontSize: 7.5, color: _outline)),
                 ),
+              // ⬆️⬇️ Déplacement vertical de la SECTION (haut/bas). Masqué
+              // pendant un drag de bloc pour ne pas gêner la prévisualisation.
+              if (_draggingKey == null && _sectionsLayout.length > 1)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('Section ${s + 1}',
+                        style: TextStyle(fontSize: 7.5, color: _outline)),
+                    const SizedBox(width: 4),
+                    _SectionMoveButton(
+                      icon: Icons.keyboard_arrow_up,
+                      enabled: s > 0,
+                      onTap: () => _moveSection(s, -1),
+                      color: _outline,
+                    ),
+                    _SectionMoveButton(
+                      icon: Icons.keyboard_arrow_down,
+                      enabled: s < _sectionsLayout.length - 1,
+                      onTap: () => _moveSection(s, 1),
+                      color: _outline,
+                    ),
+                  ]),
+                ),
+              const SizedBox(height: 2),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2496,6 +2591,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         _toolItem(Icons.palette_outlined, 'Couleur', 'couleur', _showColorPickerSheet),
         _toolItem(Icons.image_outlined, 'Logo', 'logo', _showLogoSettingsSheet),
         _toolItem(Icons.text_fields_outlined, 'Taille police', 'police', _showFontSizeSheet),
+        _toolItem(Icons.notes_outlined, 'Textes', 'textes', _showTextsSheet),
         _toolItem(Icons.format_align_left, 'Alignement', 'alignement', _showAlignmentSheet),
         _toolItem(Icons.texture_outlined, 'Ombres & Zoom', 'ombres', _showShadowSheet),
         _toolItem(Icons.draw_outlined, 'Signature', 'signature', _showSignatureSheet, badge: _showSignatureLine),
@@ -2553,6 +2649,143 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   // ── Éditeur rapide d'un bloc (tap sur un bloc du corps) ───────────────────
+
+  // ── 📝 Outil « Textes » : titre, sous-titre et libellés personnalisés ─────
+
+  void _showTextsSheet() {
+    setState(() => _activeTool = 'textes');
+    final titleCtrl = TextEditingController(text: _invoiceTitleText);
+    final subtitleCtrl = TextEditingController(text: _invoiceSubtitle);
+    final companyCtrl = TextEditingController(text: _companyName);
+    final clientCtrl = TextEditingController(text: _clientName);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20, right: 20, top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.notes, color: _primary, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Textes de la facture',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5)),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Text('TITRE (ex. FACTURE, DEVIS…)',
+                style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold,
+                    color: _onSurfaceVariant, letterSpacing: 0.6)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: titleCtrl,
+              textCapitalization: TextCapitalization.characters,
+              style: TextStyle(fontSize: 13.5, color: _onSurface),
+              decoration: _textsInputDecoration('FACTURE'),
+            ),
+            const SizedBox(height: 12),
+            Text('SOUS-TITRE (optionnel, sous le titre)',
+                style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold,
+                    color: _onSurfaceVariant, letterSpacing: 0.6)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: subtitleCtrl,
+              style: TextStyle(fontSize: 13.5, color: _onSurface),
+              decoration: _textsInputDecoration('Ex. Traite sur 30 jours'),
+            ),
+            const SizedBox(height: 12),
+            Text('NOM SOCIÉTÉ (aperçu d\'exemple)',
+                style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold,
+                    color: _onSurfaceVariant, letterSpacing: 0.6)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: companyCtrl,
+              style: TextStyle(fontSize: 13.5, color: _onSurface),
+              decoration: _textsInputDecoration('Nom de votre société'),
+            ),
+            const SizedBox(height: 12),
+            Text('NOM CLIENT (aperçu d\'exemple)',
+                style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold,
+                    color: _onSurfaceVariant, letterSpacing: 0.6)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: clientCtrl,
+              style: TextStyle(fontSize: 13.5, color: _onSurface),
+              decoration: _textsInputDecoration('Nom du client'),
+            ),
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text('Annuler', style: TextStyle(color: _onSurfaceVariant)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _invoiceTitleText =
+                        titleCtrl.text.trim().isNotEmpty
+                            ? titleCtrl.text.trim()
+                            : 'FACTURE';
+                    _invoiceSubtitle = subtitleCtrl.text.trim();
+                    _companyName = companyCtrl.text.trim().isNotEmpty
+                        ? companyCtrl.text.trim()
+                        : _companyName;
+                    _clientName = clientCtrl.text.trim().isNotEmpty
+                        ? clientCtrl.text.trim()
+                        : _clientName;
+                  });
+                  Navigator.of(ctx).pop();
+                  _saveConfig(showFeedback: true);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Appliquer',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _textsInputDecoration(String hint) {
+    return InputDecoration(
+      isDense: true,
+      hintText: hint,
+      hintStyle: TextStyle(fontSize: 13, color: _onSurfaceVariant),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: _outline),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: _primary, width: 1.4),
+      ),
+    );
+  }
 
   String _blockTitle(String key) {
     if (key == _emptyColumnKey) return 'Colonne vide';
@@ -3454,6 +3687,37 @@ class _GlassButton extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ⬆️⬇️ Petit bouton de déplacement vertical d'une section (flèches).
+class _SectionMoveButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _SectionMoveButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = enabled ? color : color.withValues(alpha: 0.35);
+    return Tooltip(
+      message: icon == Icons.keyboard_arrow_up ? 'Monter la section' : 'Descendre la section',
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          child: Icon(icon, size: 15, color: c),
         ),
       ),
     );

@@ -12,6 +12,7 @@
 //     mentions légales, image de fond, modèles premium.
 // ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -28,6 +29,7 @@ import '../../services/printing_service.dart';
 import '../../services/template_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_custom_service.dart';
+import '../../services/signature_service.dart';
 import '../../services/settings_service.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_settings.dart';
@@ -142,6 +144,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   /// Applique les personnalisations locales (positions drag & drop / mapping /
   /// arrière-plan) d'un modèle et met à jour l'aperçu.
+  ///
+  /// 🔐 L'écran de détail applique EXACTEMENT les mêmes paramètres que l'atelier
+  /// de personnalisation (workspace) : positions, mapping, visibilité des
+  /// blocs, fond, mention légale, en-tête… stockés par `TemplateCustomService`.
   Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
     final custom = await TemplateCustomService.loadCustom(template.id);
     final applied = template.copyWith(
@@ -149,13 +155,30 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       mapping: {...template.mapping, ...custom.mapping},
     );
 
+    // 🖊️ SIGNATURE DE L'ÉMETTEUR : la signature émise (dessinée dans
+    // « Configurer la signature » puis persistée par `SignatureService`) doit
+    // FIGURER sur la facture. On l'injecte dans les positions si le modèle n'a
+    // pas déjà sa propre image de signature (`signature_image`).
+    final positions = Map<String, dynamic>.from(custom.positions);
+    if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
+      try {
+        final signatureBytes =
+            await SignatureService().loadSignatureBytes();
+        if (signatureBytes != null && signatureBytes.isNotEmpty) {
+          positions['signature_image'] = base64Encode(signatureBytes);
+        }
+      } catch (_) {
+        // Signature illisible : la facture reste imprimable sans image.
+      }
+    }
+
     // 🧩 Layout drag & drop : `fromMap` réinjecte les éléments manquants
     // depuis le layout par défaut (compat ascendante).
-    _layoutConfig = custom.positions.isNotEmpty
-        ? InvoiceLayoutConfig.fromMap(custom.positions)
+    _layoutConfig = positions.isNotEmpty
+        ? InvoiceLayoutConfig.fromMap(positions)
         : InvoiceLayoutConfig.defaultLayout();
     _backgroundSettings = custom.background;
-    _customPositions = custom.positions;
+    _customPositions = positions;
     _previewBackground = decodeBackgroundImage(custom.background.fileData);
 
     if (!custom.background.hasCustomImage &&

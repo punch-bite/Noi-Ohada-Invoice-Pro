@@ -201,6 +201,16 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
               // ===== Statistiques de partage =====
               _buildShareStats(isDark, textColor, subTextColor),
+              const SizedBox(height: 16),
+
+              // ===== 🔐 Droit d'accès des membres aux fichiers partagés =====
+              _buildAccessPolicyCard(
+                isDark,
+                textColor,
+                subTextColor,
+                primaryColor,
+                canManage: isOwner || isAdmin,
+              ),
               const SizedBox(height: 24),
 
               // ===== Liste des membres =====
@@ -268,6 +278,168 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               icon: const Icon(Icons.ios_share_rounded),
               label: const Text('Partager', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
+    );
+  }
+
+  // ===== 🔐 DROIT D'ACCÈS DES MEMBRES AUX FICHIERS PARTAGÉS =====
+  //
+  // L'équipe choisit le droit imposé à ses MEMBRES sur les ressources déjà
+  // partagées (factures / produits / clients) : lecture seule ou
+  // lecture/écriture. Un membre qui ADHÈRE reçoit ce droit automatiquement
+  // (cf. serveur /team/manage-member → sync-access).
+  Widget _buildAccessPolicyCard(
+    bool isDark,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor, {
+    required bool canManage,
+  }) {
+    final memberPermission = _team!.memberPermission; // 'read' | 'write'
+    final canWrite = memberPermission == 'write';
+    final accent = canWrite ? Colors.green : Colors.blueGrey;
+
+    return GlassCard(
+      borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 18, color: textColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Accès des membres aux fichiers partagés',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Droit accordé aux membres de l\'équipe sur les factures, '
+            'produits et clients partagés.',
+            style: TextStyle(fontSize: 12, color: subTextColor),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _permissionChip(
+                label: '👁️ Lecture seule',
+                selected: !canWrite,
+                enabled: canManage,
+                color: Colors.blueGrey,
+                onTap: () => _setMemberPermission('read'),
+              ),
+              _permissionChip(
+                label: '✍️ Lecture + écriture',
+                selected: canWrite,
+                enabled: canManage,
+                color: Colors.green,
+                onTap: () => _setMemberPermission('write'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.verified_user_outlined, size: 14, color: accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  canWrite
+                      ? 'Les membres peuvent modifier les fichiers partagés '
+                          '(ajout, édition, suppression).'
+                      : 'Les membres peuvent uniquement consulter les fichiers '
+                          'partagés. Propriétaire et admins conservent l\'écriture.',
+                  style: TextStyle(fontSize: 11, color: subTextColor),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Puce sélectionnable du droit d'accès (désactivée si non gestionnaire).
+  Widget _permissionChip({
+    required String label,
+    required bool selected,
+    required bool enabled,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ChoiceChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: selected,
+      onSelected: enabled ? (_) => onTap() : null,
+      selectedColor: color.withValues(alpha: 0.18),
+      labelStyle: TextStyle(
+        color: selected ? color : null,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: selected ? color : Colors.grey.withValues(alpha: 0.4),
+      ),
+      showCheckmark: false,
+    );
+  }
+
+  /// Persiste la politique d'accès des membres puis la répercute sur les
+  /// membres DÉJÀ présents (via le serveur : SDK admin). En cas d'échec
+  /// serveur, on retombe sur une écriture Firestore directe (le droit
+  /// s'appliquera alors aux prochains partages / adhésions).
+  Future<void> _setMemberPermission(String permission) async {
+    if (_team == null || _team!.memberPermission == permission) return;
+    final previous = _team!.memberPermission;
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    setState(() => _team = _team!.copyWith(memberPermission: permission));
+    var synced = 0;
+    try {
+      synced = await _teamService.setMemberPermissionPolicy(
+        teamId: _team!.id,
+        permission: permission,
+        requestedBy: uid,
+      );
+    } catch (e) {
+      try {
+        await _teamService.updateTeam(_team!);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _team = _team!.copyWith(memberPermission: previous));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Impossible d\'enregistrer le droit d\'accès : '
+              '${TeamService.prettyError(e)}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          permission == 'write'
+              ? 'Les membres peuvent maintenant MODIFIER les fichiers partagés ✍️'
+                  '${synced > 0 ? ' ($synced membre(s) mis à jour)' : ''}'
+              : 'Les membres sont maintenant en LECTURE SEULE 👁️'
+                  '${synced > 0 ? ' ($synced membre(s) mis à jour)' : ''}',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -475,6 +647,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         'Partagé par ${_displayName(s.sharedBy)}',
                         style: TextStyle(color: subTextColor, fontSize: 11),
                       ),
+                      const SizedBox(height: 4),
+                      _accessBadge(s),
                     ],
                   ),
                 ),
@@ -488,6 +662,30 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 🔑 Badge du droit d'accès dont DISPOSE l'utilisateur courant sur ce
+  /// partage : « Lecture seule » ou « Lecture + écriture » (selon son rôle et
+  /// la politique de l'équipe, matérialisée dans `SharedInvoice.writeUsers`).
+  Widget _accessBadge(SharedInvoice share) {
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    final canWrite = share.canWrite(uid) || _team!.canWriteShared(uid);
+    final color = canWrite ? Colors.green : Colors.blueGrey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        canWrite ? '✍️ Lecture + écriture' : '👁️ Lecture seule',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 

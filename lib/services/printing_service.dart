@@ -845,7 +845,9 @@ class PrintingService {
           final title = (t != null && t.trim().isNotEmpty)
               ? t.trim()
               : (invoice.isDevis ? 'DEVIS' : 'FACTURE');
-          final children = <pw.Widget>[
+          // 🏷️ Sous-titre personnalisé (atelier « Textes »), optionnel.
+          final subtitle = customPositions['invoice_subtitle'] as String? ?? '';
+          final titleChildren = <pw.Widget>[
             pw.Text(
               title,
               textAlign: pw.TextAlign.right,
@@ -855,7 +857,23 @@ class PrintingService {
                 color: primary,
               ),
             ),
+            if (subtitle.trim().isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 2),
+                child: pw.Text(
+                  subtitle.trim(),
+                  textAlign: pw.TextAlign.right,
+                  maxLines: 2,
+                  style: pw.TextStyle(
+                    fontSize: fs + 1,
+                    fontWeight: pw.FontWeight.bold,
+                    color: sub,
+                  ),
+                ),
+              ),
           ];
+          // ✅ Utilise bien le titre + son éventuel sous-titre personnalisé.
+          final children = <pw.Widget>[...titleChildren];
           // QR dans l'en-tête (si choisi dans l'atelier).
           final qrPos = customPositions['qr_position'] as String?;
           if ((qrPos == 'header') && template.showPaymentQR) {
@@ -1235,11 +1253,20 @@ class PrintingService {
           ),
         );
       case LayoutElement.signature:
+        // 🖊️ La SIGNATURE ÉMISE pour la facture (image base64 enregistrée
+        // dans la personnalisation `signature_image`) doit FIGURER sur le PDF.
         final showSignature =
             (customPositions['show_signature_line'] as bool?) ?? true;
+        // Le tampon « PAYÉ » n'est apposé que si la facture est effectivement
+        // réglée, sauf personnalisation explicite de l'atelier.
+        final invoicePaid = invoice.status == 'paid';
         final showPaidStamp =
-            (customPositions['show_paid_stamp'] as bool?) ?? true;
+            (customPositions['show_paid_stamp'] as bool?) ?? invoicePaid;
         final stampText = (customPositions['stamp_text'] as String?) ?? 'PAYÉ';
+        final signatoryTitle =
+            (customPositions['signatory_title'] as String?)?.trim();
+        final signatureImage = _decodeBase64Image(
+            customPositions['signature_image'] as String?);
         return pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -1271,6 +1298,12 @@ class PrintingService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  // 🖊️ Signature de l'émetteur, apposée AU-DESSUS de la ligne.
+                  if (signatureImage != null) ...[
+                    pw.Image(signatureImage,
+                        width: 130, height: 52, fit: pw.BoxFit.contain),
+                    pw.SizedBox(height: 2),
+                  ],
                   pw.Container(
                     width: 120,
                     height: 1,
@@ -1278,7 +1311,9 @@ class PrintingService {
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
-                    'Signature & Cachet',
+                    (signatoryTitle == null || signatoryTitle.isEmpty)
+                        ? 'Signature & Cachet'
+                        : signatoryTitle,
                     style: pw.TextStyle(fontSize: fs - 2, color: sub),
                   ),
                 ],
@@ -2258,5 +2293,18 @@ class PrintingService {
       color.blue,
       opacity,
     );
+  }
+
+  /// 🖊️ Décode une image base64 (signature / logo personnalisé) en
+  /// `pw.MemoryImage` pour l'impression PDF. Retourne null si vide/invalide.
+  static pw.MemoryImage? _decodeBase64Image(String? base64Data) {
+    if (base64Data == null || base64Data.isEmpty) return null;
+    try {
+      final bytes = base64Decode(base64Data);
+      if (bytes.isEmpty) return null;
+      return pw.MemoryImage(Uint8List.fromList(bytes));
+    } catch (_) {
+      return null;
+    }
   }
 }
