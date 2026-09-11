@@ -221,10 +221,9 @@ class PrintingService {
     Map<String, bool>? workspaceVisibility;
     final wsSections = positions['blocks_sections'];
     if (wsSections is List && wsSections.isNotEmpty) {
-      workspaceSections = [
-        for (final s in wsSections)
-          if (s is List) List<String>.from(s.whereType<String>()) else <String>[],
-      ];
+      // 🧩 `decodeSections` gère la forme plate (presets / Firestore) ET la
+      // forme imbriquée (JSON de l'atelier).
+      workspaceSections = InvoiceTemplate.decodeSections(wsSections);
       final wsVis = positions['block_visibility'];
       if (wsVis is Map) {
         workspaceVisibility = <String, bool>{};

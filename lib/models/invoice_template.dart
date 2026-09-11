@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
+import 'invoice_layout.dart';
+
 part 'invoice_template.g.dart';
 
 @HiveType(typeId: 6)
@@ -96,7 +98,75 @@ class InvoiceTemplate {
   /// Dernière version du design système des modèles prédéfinis.
   static const int kRoyalDesignVersion = 2;
 
-    // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
+  /// 🧩 Décide si les `positions` d'un modèle « default_* » DÉJÀ stocké en
+  /// base doivent être complétées par celles du preset (backfill).
+  ///
+  /// Les modèles historiques (design v2) ont été semés avec `positions` vides
+  /// (`const {}`) : aucune section, aucun texte → la facture retombait sur le
+  /// layout fixe et les 8 designs paraissaient identiques. Ce garde-fou
+  /// permet à l'initialiseur de rattraper ces documents SANS écraser le reste
+  /// (couleurs, polices, mapping, personnalisation admin).
+  ///
+  /// Règles :
+  ///   • version antérieure à [kRoyalDesignVersion] → la mise à jour complète
+  ///     du modèle s'en charge déjà (donc pas de backfill ici) ;
+  ///   • `positions` absentes, nulles ou vides → backfill nécessaire ;
+  ///   • `positions` déjà renseignées → on n'y touche pas.
+  static bool presetPositionsNeedBackfill({
+    required Map<String, dynamic>? storedPositions,
+    required int storedVersion,
+  }) {
+    if (storedVersion < kRoyalDesignVersion) return false;
+    return storedPositions == null || storedPositions.isEmpty;
+  }
+
+  // ============================================================
+  //  🧩 ENCODAGE DES SECTIONS DE BLOCS (compatible Firestore)
+  // ============================================================
+
+  /// 🔗 Séparateur des blocs d'une même section dans l'encodage PLAT de
+  /// `blocks_sections`.
+  static const String kSectionSeparator = '|';
+
+  /// 🧱 Encode des sections (`List<List<String>>`) en une liste PLATE de
+  /// chaînes : `['billing_info|invoice_meta', 'items_table', ...]`.
+  ///
+  /// Firestore refuse les **tableaux imbriqués** (`Nested arrays are not
+  /// supported`) : un preset contenant `List<List<String>>` ne peut donc pas
+  /// être écrit tel quel dans un document. L'atelier, lui, stocke ses
+  /// sections dans SharedPreferences sous forme JSON (imbrication permise) —
+  /// [decodeSections] accepte les DEUX formes.
+  static List<String> encodeSections(List<List<String>> sections) => [
+        for (final section in sections) section.join(kSectionSeparator),
+      ];
+
+  /// 🧩 Décode `blocks_sections` en sections, en acceptant :
+  ///   • la forme plate compatible Firestore (`List<String>`, séparateur
+  ///     [kSectionSeparator]) — utilisée par les presets ;
+  ///   • la forme imbriquée historique (`List<List<String>>`) écrite par
+  ///     l'atelier via SharedPreferences/JSON.
+  ///
+  /// Toute autre valeur (absente, type inattendu) donne une liste vide.
+  static List<List<String>> decodeSections(Object? raw) {
+    if (raw is! List) return const <List<String>>[];
+    final sections = <List<String>>[];
+    for (final entry in raw) {
+      if (entry is List) {
+        sections.add(entry.whereType<String>().toList());
+      } else if (entry is String) {
+        sections.add(
+          entry
+              .split(kSectionSeparator)
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
+        );
+      }
+    }
+    return sections;
+  }
+
+  // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
   static const List<String> availableVariables = [
     'invoice_number',
     'issue_date',
@@ -180,9 +250,11 @@ class InvoiceTemplate {
       id: doc.id,
       name: data['name'] ?? '',
       description: data['description'] ?? '',
-      primaryColor: Color((data['primaryColor'] as num?)?.toInt() ?? 0xFF1976D2),
+      primaryColor:
+          Color((data['primaryColor'] as num?)?.toInt() ?? 0xFF1976D2),
       textColor: Color((data['textColor'] as num?)?.toInt() ?? 0xFF000000),
-      backgroundColor: Color((data['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
+      backgroundColor:
+          Color((data['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
       showLogo: data['showLogo'] ?? true,
       showTaxDetails: data['showTaxDetails'] ?? true,
       showPaymentTerms: data['showPaymentTerms'] ?? true,
@@ -194,7 +266,8 @@ class InvoiceTemplate {
       showBorder: data['showBorder'] ?? true,
       createdBy: data['createdBy'],
       isActive: data['isActive'] ?? true,
-      createdAt: data['createdAt'] != null ? _parseDateTime(data['createdAt']) : null,
+      createdAt:
+          data['createdAt'] != null ? _parseDateTime(data['createdAt']) : null,
       price: (data['price'] as num?)?.toDouble() ?? 0,
       paid: data['paid'] ?? false,
       purchasedBy: List<String>.from(data['purchasedBy'] ?? const []),
@@ -209,14 +282,16 @@ class InvoiceTemplate {
   }
 
   // Constructeur depuis Map (Firestore)
-  factory InvoiceTemplate.fromMap(Map<String, dynamic> map, {String? documentId}) {
+  factory InvoiceTemplate.fromMap(Map<String, dynamic> map,
+      {String? documentId}) {
     return InvoiceTemplate(
       id: documentId ?? map['id'] ?? '',
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       primaryColor: Color((map['primaryColor'] as num?)?.toInt() ?? 0xFF1976D2),
       textColor: Color((map['textColor'] as num?)?.toInt() ?? 0xFF000000),
-      backgroundColor: Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
+      backgroundColor:
+          Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
       showLogo: map['showLogo'] ?? true,
       showTaxDetails: map['showTaxDetails'] ?? true,
       showPaymentTerms: map['showPaymentTerms'] ?? true,
@@ -228,7 +303,8 @@ class InvoiceTemplate {
       showBorder: map['showBorder'] ?? true,
       createdBy: map['createdBy'],
       isActive: map['isActive'] ?? true,
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : null,
+      createdAt:
+          map['createdAt'] != null ? _parseDateTime(map['createdAt']) : null,
       price: (map['price'] as num?)?.toDouble() ?? 0,
       paid: map['paid'] ?? false,
       purchasedBy: List<String>.from(map['purchasedBy'] ?? const []),
@@ -275,19 +351,115 @@ class InvoiceTemplate {
     };
   }
 
-    /// 💎 Modèles prédéfinis « Royal Ledger » — édition raffinée (design v2).
+  /// 💎 Modèles prédéfinis « Royal Ledger » — édition raffinée (design v2).
   /// 8 designs signature, cohérents avec les maquettes améthyste/or :
   ///   • papiers à fonds sobres et élégants (perle, champagne, encre bleutée)
   ///   • accents profonds (améthyste, violet royal, saphir, émeraude, or)
   ///   • éditions premium « Nuit Royale » & « Obsidienne » sur fond sombre.
   /// Chaque modèle est STOCKÉ en base (Firestore, par l'initialiseur) pour
   /// être modifiable par l'ADMIN, et reste personnalisable drag & drop.
+  /// 🧩 Configuration « positions » complète et prête à imprimer pour un
+  /// modèle prédéfini.
+  ///
+  /// Reproduit EXACTEMENT le schéma écrit par l'ATELIER de personnalisation
+  /// (`template_workspace_screen._saveConfig`) afin que l'aperçu A4
+  /// (`stitch_a4_invoice_preview`) ET le PDF (`printing_service`) exploitent
+  /// dès la première ouverture :
+  ///   • l'ordre des sections du corps et la visibilité des blocs
+  ///     (`blocks_sections`, `blocks_order`, `block_visibility`) ;
+  ///   • l'ordre, la largeur et l'alignement des éléments d'en-tête
+  ///     (`header_elements_order`, `header_widths`, `header_alignments`) ;
+  ///   • les textes libres (`invoice_title_text`, `invoice_subtitle`,
+  ///     `custom_legal_text`, `signatory_title`, `stamp_text`) ;
+  ///   • les options d'impression (`qr_position`, `show_paid_stamp`,
+  ///     `show_signature_line`).
+  ///
+  /// Aucune donnée n'est laissée implicite : le modèle est donc « complet »
+  /// (sections, textes, méta, pied de page) sans passer par l'atelier.
+  static Map<String, dynamic> _presetPositions({
+    required String invoiceTitle,
+    String invoiceSubtitle = '',
+    bool showQr = false,
+    bool showSignatureLine = true,
+    String signatoryTitle = 'Direction Générale',
+    bool showPaidStamp = true,
+    String stampText = 'PAYÉ',
+    String legalText =
+        'Paiement sous 30 jours net. Pénalités de retard applicables selon '
+            'normes SYSCOHADA.',
+    // Ordre des éléments d'en-tête (schemas identiques à l'atelier).
+    List<String> headerOrder = const ['logo', 'company_info', 'invoice_title'],
+    Map<String, double> headerWidths = const {'company_info': 2.0},
+    Map<String, String> headerAlignments = const {
+      'logo': 'left',
+      'company_info': 'left',
+      'invoice_title': 'right',
+    },
+  }) {
+    // 4 sections empilées, 1 à 3 blocs côte à côte (comme le défaut atelier).
+    // `qr_block` reste inoffensif tant que `qr_position != 'standalone'` :
+    // le QR est alors rendu DANS le bloc « Totaux ».
+    final sections = <List<String>>[
+      const ['billing_info', 'invoice_meta'],
+      const ['items_table'],
+      const ['totals'],
+      [
+        'legal_mentions',
+        'signature_block',
+        if (showQr) 'qr_block',
+      ],
+    ];
+    return <String, dynamic>{
+      // Base identique à celle produite par l'atelier
+      // (`InvoiceLayoutConfig.toMap`) : évite toute clé manquante quand le
+      // modèle est ouvert puis re-sauvegardé depuis l'écran de personnalisation.
+      ...InvoiceLayoutConfig.defaultLayout().toMap(),
+      // ⚠️ Forme PLATE obligatoire : Firestore rejette les tableaux imbriqués
+      // (`blocks_sections` reste donc `List<String>`, sections séparées par
+      // `kSectionSeparator`). L'atelier relit les deux formes via
+      // `InvoiceTemplate.decodeSections`.
+      'blocks_sections': encodeSections(sections),
+      // Compat : ordre à plat (anciens lecteurs / exports).
+      'blocks_order': [for (final s in sections) ...s],
+      'block_visibility': <String, bool>{
+        'billing_info': true,
+        'invoice_meta': true,
+        'items_table': true,
+        'totals': true,
+        'legal_mentions': true,
+        'signature_block': showSignatureLine,
+        'qr_block': showQr,
+      },
+      'block_alignment': const <String, String>{
+        'billing_info': 'left',
+        'invoice_meta': 'right',
+        'items_table': 'left',
+        'totals': 'right',
+        'legal_mentions': 'left',
+        'signature_block': 'center',
+        'qr_block': 'center',
+      },
+      'header_elements_order': List<String>.from(headerOrder),
+      'header_widths': Map<String, double>.from(headerWidths),
+      'header_alignments': Map<String, String>.from(headerAlignments),
+      'invoice_title_text': invoiceTitle,
+      'invoice_subtitle': invoiceSubtitle,
+      'custom_legal_text': legalText,
+      'signatory_title': signatoryTitle,
+      'stamp_text': stampText,
+      'show_paid_stamp': showPaidStamp,
+      'show_signature_line': showSignatureLine,
+      'qr_position': 'totals',
+    };
+  }
+
   static List<InvoiceTemplate> getDefaultTemplates() {
     return [
       InvoiceTemplate(
         id: 'default_1',
         name: 'Améthyste',
-        description: 'Classique raffiné aux tons améthyste — conforme SYSCOHADA',
+        description:
+            'Classique raffiné aux tons améthyste — conforme SYSCOHADA',
         primaryColor: const Color.fromARGB(76, 48, 5, 70),
         textColor: const Color(0xFF1E1A1F),
         backgroundColor: const Color(0xFFFFF7FC),
@@ -302,6 +474,10 @@ class InvoiceTemplate {
         price: 0,
         rating: 4.5,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          signatoryTitle: 'Direction Générale',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_2',
@@ -320,6 +496,11 @@ class InvoiceTemplate {
         price: 0,
         rating: 4.0,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Document commercial',
+          signatoryTitle: 'Service Commercial',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_3',
@@ -338,6 +519,11 @@ class InvoiceTemplate {
         price: 0,
         rating: 4.8,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Prestige & Excellence',
+          signatoryTitle: 'La Direction',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_4',
@@ -357,11 +543,17 @@ class InvoiceTemplate {
         price: 500,
         rating: 5.0,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Édition Premium',
+          signatoryTitle: 'Direction Générale',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_5',
         name: 'Saphir Corporate',
-        description: 'Autorité et confiance — design institutionnel bleu saphir',
+        description:
+            'Autorité et confiance — design institutionnel bleu saphir',
         primaryColor: const Color(0xFF1E3A8A),
         textColor: const Color(0xFF1E1A1F),
         backgroundColor: const Color(0xFFEFF6FF),
@@ -375,6 +567,11 @@ class InvoiceTemplate {
         price: 1000,
         rating: 4.3,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Société & Institution',
+          signatoryTitle: 'La Direction Générale',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_6',
@@ -394,6 +591,12 @@ class InvoiceTemplate {
         price: 0,
         rating: 4.6,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Paiement par QR sécurisé',
+          showQr: true,
+          signatoryTitle: 'Service Comptabilité',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_7',
@@ -413,6 +616,12 @@ class InvoiceTemplate {
         price: 500,
         rating: 4.7,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Paiement par QR sécurisé',
+          showQr: true,
+          signatoryTitle: 'Direction Financière',
+        ),
       ),
       InvoiceTemplate(
         id: 'default_8',
@@ -432,6 +641,11 @@ class InvoiceTemplate {
         price: 1000,
         rating: 4.9,
         designVersion: 2,
+        positions: _presetPositions(
+          invoiceTitle: 'FACTURE',
+          invoiceSubtitle: 'Édition Signature',
+          signatoryTitle: 'Direction Générale',
+        ),
       ),
     ];
   }

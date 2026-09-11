@@ -318,11 +318,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           _headerElements = List<String>.from(custom.positions['header_elements_order']);
         }
         if (custom.positions['blocks_sections'] is List) {
-          final raw = custom.positions['blocks_sections'] as List;
-          _sectionsLayout = [
-            for (final s in raw)
-              if (s is List) List<String>.from(s.whereType<String>()) else <String>[],
-          ];
+          // 🧩 Accepte la forme plate (Firestore / presets) ET la forme
+          // imbriquée (JSON de l'atelier) — cf. `InvoiceTemplate.decodeSections`.
+          final decoded =
+              InvoiceTemplate.decodeSections(custom.positions['blocks_sections']);
+          if (decoded.isNotEmpty) _sectionsLayout = decoded;
         } else if (custom.positions['blocks_layout'] is List) {
           // Migration : anciennes colonnes pleine page → une section par colonne.
           _sectionsLayout = [

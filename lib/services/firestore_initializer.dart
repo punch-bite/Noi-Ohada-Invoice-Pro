@@ -12,7 +12,8 @@ class FirestoreInitializer {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        debugPrint('ℹ️ Utilisateur non authentifié, initialisation Firestore ignorée.');
+        debugPrint(
+            'ℹ️ Utilisateur non authentifié, initialisation Firestore ignorée.');
         return;
       }
 
@@ -20,7 +21,8 @@ class FirestoreInitializer {
       final isAdmin = idTokenResult.claims?['admin'] == true;
 
       if (!isAdmin) {
-        debugPrint('ℹ️ Utilisateur non admin, création des collections par défaut ignorée.');
+        debugPrint(
+            'ℹ️ Utilisateur non admin, création des collections par défaut ignorée.');
         return;
       }
 
@@ -28,8 +30,10 @@ class FirestoreInitializer {
       _ensurePlans().catchError((e) => debugPrint('⚠️ Erreur plans: $e'));
       _ensureCompany().catchError((e) => debugPrint('⚠️ Erreur company: $e'));
       _ensureSettings().catchError((e) => debugPrint('⚠️ Erreur settings: $e'));
-      _ensureTemplates().catchError((e) => debugPrint('⚠️ Erreur templates: $e'));
-      _ensureLogsPlaceholder().catchError((e) => debugPrint('⚠️ Erreur logs: $e'));
+      _ensureTemplates()
+          .catchError((e) => debugPrint('⚠️ Erreur templates: $e'));
+      _ensureLogsPlaceholder()
+          .catchError((e) => debugPrint('⚠️ Erreur logs: $e'));
 
       debugPrint('✅ Firestore initialisé (non bloquant)');
     } catch (e) {
@@ -141,13 +145,39 @@ class FirestoreInitializer {
         // Création (absent) OU mise à jour vers le nouveau design.
         final int currentVersion =
             (current?['designVersion'] as num?)?.toInt() ?? 1;
+
+        // 🧩 Backfill : les modèles « default_* » déjà en design v2 ont été
+        // semés avec des `positions` vides → on complète UNIQUEMENT les
+        // positions depuis le preset (sections, textes, options d'impression)
+        // sans écraser le reste du document (couleurs, polices, mapping).
+        final storedPositions = current?['positions'];
+        if (current != null &&
+            template.positions.isNotEmpty &&
+            InvoiceTemplate.presetPositionsNeedBackfill(
+              storedPositions: storedPositions is Map
+                  ? Map<String, dynamic>.from(storedPositions)
+                  : null,
+              storedVersion: currentVersion,
+            )) {
+          batch.set(
+            ref,
+            <String, dynamic>{
+              'positions': template.positions,
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+          pending++;
+          continue;
+        }
+
         final needsUpdate = current == null ||
             currentVersion < InvoiceTemplate.kRoyalDesignVersion;
 
         if (needsUpdate) {
           final map = template.toMap()
-            ..['createdAt'] = current?['createdAt'] ??
-                FieldValue.serverTimestamp()
+            ..['createdAt'] =
+                current?['createdAt'] ?? FieldValue.serverTimestamp()
             ..['updatedAt'] = FieldValue.serverTimestamp();
           batch.set(ref, map, SetOptions(merge: true));
           pending++;
@@ -156,7 +186,8 @@ class FirestoreInitializer {
 
       if (pending > 0) {
         await batch.commit();
-        debugPrint('✅ $pending modèle(s) par défaut stocké(s) en base (design v2)');
+        debugPrint(
+            '✅ $pending modèle(s) par défaut stocké(s) en base (design v2)');
       } else {
         debugPrint('✅ Les ${defaults.length} modèles par défaut sont à jour');
       }
