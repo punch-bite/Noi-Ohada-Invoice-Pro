@@ -39,7 +39,8 @@ class RelanceService {
       case RelanceChannel.email:
         return _sendEmail(client, subject, message);
       case RelanceChannel.whatsapp:
-        return _launch('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+        return _launch(
+            'https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
       case RelanceChannel.sms:
         return _launch('sms:$phone?body=${Uri.encodeComponent(message)}');
       case RelanceChannel.toast:
@@ -81,36 +82,51 @@ class RelanceService {
 
   // ===== MESSAGES PRÉDÉFINIS =====
 
-  /// Message de relance pour une facture impayée.
+  /// Message de relance pour une facture impayée (texte brut — WhatsApp/SMS).
   String buildInvoiceReminder(Invoice invoice, String clientName) {
+    final days = DateTime.now().difference(invoice.dueDate).inDays;
     return 'Bonjour $clientName,\n\n'
-        'Nous vous rappelons que la facture ${invoice.invoiceNumber} '
+        'Sauf erreur de notre part, la facture ${invoice.invoiceNumber} '
         'd\'un montant de ${invoice.totalAmount.toStringAsFixed(0)} FCFA '
-        'est arrivée à échéance le ${_fmt(invoice.dueDate)}.\n\n'
-        'Merci de procéder au règlement.\n'
-        '— OHADA Invoice Pro';
+        'est arrivée à échéance le ${_fmt(invoice.dueDate)}'
+        '${days > 0 ? ' (soit $days jour${days > 1 ? 's' : ''} de retard)' : ''}.\n\n'
+        'Si le règlement est déjà parti, merci de nous transmettre la '
+        'référence du paiement pour mettre votre facture à jour.\n\n'
+        'Bien à vous,\n'
+        '— Noi OHADA Invoice Pro';
   }
 
-  /// Message d'annonce d'un nouveau produit en stock.
+  /// Message d'annonce d'un nouveau produit en stock (texte brut).
   String buildNewProductMessage(Product product) {
-    return '🆕 Nouveau produit disponible : ${product.name}\n'
-        'Prix : ${product.price.toStringAsFixed(0)} FCFA\n\n'
-        'Rendez-vous vite pour le découvrir ! — OHADA Invoice Pro';
+    return '🆕 Nouveauté disponible\n'
+        '${product.name} — ${product.price.toStringAsFixed(0)} FCFA\n\n'
+        'Découvrez-le en priorité : les stocks partent vite.\n\n'
+        '— Noi OHADA Invoice Pro';
   }
 
   // ===== HELPERS =====
 
-  bool _sendEmail(Client client, String subject, String message) {
+  /// 📣 Enveloppe le message dans la coque de marque professionnelle :
+  /// l'e-mail de relance ressort au même design que les autres e-mails
+  /// de l'application (bandeau, carte, footer).
+  Future<bool> _sendEmail(Client client, String subject, String message,
+      {String? title}) async {
     final email = client.email;
     if (email.isEmpty) return false;
-    // MailService.sendHtmlEmail est statique.
-    MailService.sendHtmlEmail(
+    final html = MailService.getRelanceTemplate(
+      clientName: client.name,
+      title: (title != null && title.trim().isNotEmpty)
+          ? title.trim()
+          : subject.trim(),
+      messageHtml: message.replaceAll('\n', '<br/>'),
+    );
+    // 🔄 Attend l'envoi réel : l'ancien code retournait true sans savoir si
+    // l'e-mail était parti (succès fantôme dans le rapport de relance).
+    return MailService.sendHtmlEmail(
       to: email,
       subject: subject,
-      htmlBody: '<p style="font-family:sans-serif">'
-          '${message.replaceAll('\n', '<br/>')}</p>',
+      htmlBody: html,
     );
-    return true;
   }
 
   Future<bool> _launch(String url) async {

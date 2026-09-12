@@ -326,17 +326,27 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
       );
-      // TODO: Uploader le PDF (Firebase Storage…) pour obtenir un lien public.
-      const pdfLink = '#';
+      // 🧾 Le PDF est JOINT à l'e-mail (plus de lien mort « # ») : le client
+      // reçoit réellement sa facture, au design personnalisé de l'aperçu.
       final htmlBody = MailService.getInvoiceTemplate(
         _client!.name,
         _invoice!.invoiceNumber,
-        pdfLink,
+        '', // pas de lien de téléchargement : la facture est en pièce jointe
+        companyName: _company!.name,
+        amount: _invoice!.totalAmount,
+        dueDate: _fmtDate(_invoice!.dueDate),
       );
       final sent = await MailService.sendHtmlEmail(
         to: _client!.email,
-        subject: 'Facture ${_invoice!.invoiceNumber}',
+        subject: 'Votre facture ${_invoice!.invoiceNumber} — ${_company!.name}',
         htmlBody: htmlBody,
+        attachments: [
+          EmailAttachment(
+            filename: 'facture_${_invoice!.invoiceNumber}.pdf',
+            bytes: pdfData,
+            contentType: 'application/pdf',
+          ),
+        ],
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -354,6 +364,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
     }
   }
+
+  /// Date lisible « JJ/MM/AAAA » pour le récap de l'e-mail.
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   Future<void> _showShareDialog() async {
     if (_invoice == null) return;

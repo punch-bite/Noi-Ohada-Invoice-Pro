@@ -141,7 +141,9 @@ async function activateSubscription({
 //  MIDDLEWARE (SÉCURISÉ)
 // ============================================================
 app.disable('x-powered-by');
-app.use(express.json({ limit: '100kb' }));
+// 📎 16 Mo : les e-mails avec pièces jointes (PDF de facture en base64,
+// 3 × 5 Mo max contrôlés dans /email/send) dépassent les 100 Ko par défaut.
+app.use(express.json({ limit: '16mb' }));
 
 // ====== En-têtes de sécurité (protection navigateur) ======
 app.use((req, res, next) => {
@@ -863,9 +865,43 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 15, keyPrefix: 'email' }),
   async (req, res) => {
     try {
-      const { to, subject, body, html, cc, bcc } = req.body || {};
+      const { to, subject, body, html, cc, bcc, attachments } = req.body || {};
       if (!to || (!body && !html)) {
         return res.status(400).json({ error: 'to et (body|html) requis' });
+      }
+
+      // 📎 Pieces jointes (base64) — ex. le PDF de la facture genere par l'app.
+      // Bornes : 3 pièces max, 5 Mo chacune (payload serveless borné).
+      const files = [];
+      if (Array.isArray(attachments)) {
+        if (attachments.length > 3) {
+          return res
+            .status(400)
+            .json({ error: 'Trop de pièces jointes (3 max)' });
+        }
+        for (const a of attachments) {
+          const filename = String((a && a.filename) || '').trim();
+          const base64 = String((a && a.base64) || '').trim();
+          if (!filename || !base64) continue; // pièce invalide : ignorée
+          if (filename.length > 150 || /[\\/\r\n]/.test(filename)) {
+            return res
+              .status(400)
+              .json({ error: 'Nom de pièce jointe invalide' });
+          }
+          if (base64.length > 7_000_000) { // ~5 Mo une fois décodé
+            return res
+              .status(400)
+              .json({ error: 'Pièce jointe trop volumineuse (5 Mo max)' });
+          }
+          files.push({
+            filename,
+            content: base64,
+            encoding: 'base64',
+            contentType:
+              String((a && a.contentType) || '').trim() ||
+              'application/octet-stream',
+          });
+        }
       }
 
       // 🔒 Validation stricte : emails valides, tailles bornées, pas
@@ -917,6 +953,8 @@ app.post(
         subject: subjectStr,
         text: html ? undefined : bodyStr,
         html: html ? bodyStr : undefined,
+        // 📎 Pièces jointes (facture PDF…).
+        attachments: files.length > 0 ? files : undefined,
       });
 
       res.json({ ok: true });
