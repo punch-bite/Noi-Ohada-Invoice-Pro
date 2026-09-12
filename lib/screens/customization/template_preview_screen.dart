@@ -40,6 +40,15 @@ class TemplatePreviewScreen extends StatefulWidget {
 
 class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   late InvoiceLayoutConfig _layoutConfig;
+
+  /// 🧩 Positions EFFECTIVES affichées par l'aperçu.
+  ///
+  /// Priorité identique à l'impression (`PrintingService`) : personnalisation
+  /// locale de l'utilisateur (`TemplateCustomService`) puis positions
+  /// embarquées dans le modèle (presets « Royal Ledger »). Sans ce repli,
+  /// l'aperçu d'un modèle fraîchement installé montrerait l'ancien layout fixe
+  /// (ni titre/sous-titre, ni sections personnalisées).
+  Map<String, dynamic> _positions = const <String, dynamic>{};
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
   // 🎨 Modèle EFFECTIF (paramètres globaux appliqués au modèle).
@@ -93,9 +102,17 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     if (!mounted) return;
     // 1️⃣ Affichage IMMÉDIAT avec le modèle brut (ne jamais bloquer l'aperçu
     // sur le chargement des paramètres globaux).
+    // 🧩 Positions EFFECTIVES : personnalisation locale de l'utilisateur si
+    // elle existe, sinon celles embarquées dans le modèle (presets). Même
+    // priorité que l'impression, l'écran de détail et l'atelier.
+    final positions = InvoiceTemplate.effectivePositions(
+      customPositions: custom.positions,
+      templatePositions: widget.template.positions,
+    );
     setState(() {
-      if (custom.positions.isNotEmpty) {
-        _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
+      _positions = positions;
+      if (positions.isNotEmpty) {
+        _layoutConfig = InvoiceLayoutConfig.fromMap(positions);
       }
       _backgroundSettings = custom.background;
       _isLoading = false;
@@ -212,7 +229,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                           child: Transform.scale(
                             scale: _zoom,
                             alignment: Alignment.topCenter,
-                             child: StitchA4InvoicePreview(
+                            child: StitchA4InvoicePreview(
                               data: StitchPreviewData.sample(),
                               accentColor: _effectiveTemplate.primaryColor,
                               pageColor: _effectiveTemplate.backgroundColor,
@@ -225,6 +242,9 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                               fontFamily: _effectiveTemplate.fontFamily,
                               fontScale: _effectiveTemplate.fontSize / 12,
                               layoutConfig: _layoutConfig,
+                              // 🧩 Textes / sections issus du preset ou de la
+                              // personnalisation locale (WYSIWYG avec le PDF).
+                              customPositions: _positions,
                               backgroundSettings: _backgroundSettings,
                               backgroundImage: bgImage,
                               // Tampon « PAYÉ » — démonstration maquette.

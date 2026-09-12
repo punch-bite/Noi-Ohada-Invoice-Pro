@@ -213,9 +213,10 @@ void main() {
 
   test('QR : bloc projeté uniquement si le modèle active le QR', () {
     for (final t in templates) {
-      final flat = InvoiceTemplate.decodeSections(t.positions['blocks_sections'])
-          .expand((s) => s)
-          .toList();
+      final flat =
+          InvoiceTemplate.decodeSections(t.positions['blocks_sections'])
+              .expand((s) => s)
+              .toList();
       final hasQrBlock = flat.contains('qr_block');
       expect(hasQrBlock, t.showPaymentQR,
           reason: '${t.id} : incohérence entre qr_block ($hasQrBlock) et '
@@ -260,6 +261,160 @@ void main() {
       expect(roundTrip.positions.length, t.positions.length,
           reason: '${t.id} : clés perdues au round-trip');
     }
+  });
+
+  group('positions effectives (priorité personnalisation > modèle)', () {
+    test('la personnalisation locale est prioritaire', () {
+      final result = InvoiceTemplate.effectivePositions(
+        customPositions: const {'invoice_title_text': 'MA FACTURE'},
+        templatePositions: const {'invoice_title_text': 'PRESET'},
+      );
+      expect(result['invoice_title_text'], 'MA FACTURE');
+    });
+
+    test('repli sur les positions du modèle si aucune personnalisation', () {
+      final result = InvoiceTemplate.effectivePositions(
+        customPositions: const {},
+        templatePositions: const {'invoice_title_text': 'PRESET'},
+      );
+      expect(result['invoice_title_text'], 'PRESET');
+    });
+
+    test('le repli sur chaque preset produit un layout exploitable', () {
+      for (final t in templates) {
+        final effective = InvoiceTemplate.effectivePositions(
+          customPositions: const {},
+          templatePositions: t.positions,
+        );
+        expect(effective, isNotEmpty, reason: '${t.id} : repli vide');
+        expect(
+          InvoiceTemplate.decodeSections(effective['blocks_sections']),
+          isNotEmpty,
+          reason: '${t.id} : aucune section après repli',
+        );
+      }
+    });
+  });
+
+  test('les 8 modèles produisent des rendus VISIBLEMENT distincts', () {
+    final signatures = <String>{};
+    for (final t in templates) {
+      final p = t.positions;
+      final signature = [
+        p['invoice_title_text'],
+        p['invoice_subtitle'],
+        p['signatory_title'],
+        (p['blocks_sections'] as List).join(';'),
+        (p['header_elements_order'] as List).join(','),
+      ].join('|');
+      expect(signatures.add(signature), isTrue,
+          reason: '${t.id} : rendu identique à un autre modèle ($signature)');
+    }
+    expect(signatures, hasLength(8));
+  });
+
+  group('encodage des sections (contrainte Firestore)', () {
+    test('encodeSections produit une liste PLATE de chaînes', () {
+      final encoded = InvoiceTemplate.encodeSections(const [
+        ['billing_info', 'invoice_meta'],
+        ['items_table'],
+        ['totals', 'qr_block'],
+      ]);
+      expect(encoded, const [
+        'billing_info|invoice_meta',
+        'items_table',
+        'totals|qr_block',
+      ]);
+      for (final entry in encoded) {
+        expect(entry, isA<String>());
+      }
+    });
+
+    test('decodeSections reconstruit la forme plate (Firestore/presets)', () {
+      expect(
+        InvoiceTemplate.decodeSections(const [
+          'billing_info|invoice_meta',
+          'items_table',
+        ]),
+        const [
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+        ],
+      );
+    });
+
+    test('decodeSections accepte la forme imbriquée (atelier / JSON)', () {
+      expect(
+        InvoiceTemplate.decodeSections(const [
+          ['billing_info', 'invoice_meta'],
+          <String>[],
+          ['totals'],
+        ]),
+        const [
+          ['billing_info', 'invoice_meta'],
+          <String>[],
+          ['totals'],
+        ],
+      );
+    });
+
+    test('decodeSections tolère les valeurs inattendues', () {
+      expect(InvoiceTemplate.decodeSections(null), isEmpty);
+      expect(InvoiceTemplate.decodeSections('billing_info'), isEmpty);
+      expect(InvoiceTemplate.decodeSections(const [42]), isEmpty);
+      // Séparateurs redondants et espaces parasites ignorés.
+      expect(
+        InvoiceTemplate.decodeSections(
+            const [' billing_info | | invoice_meta ']),
+        const [
+          ['billing_info', 'invoice_meta'],
+        ],
+      );
+    });
+
+    test('les 8 presets font un aller-retour encode → decode fidèle', () {
+      for (final t in templates) {
+        final sections =
+            InvoiceTemplate.decodeSections(t.positions['blocks_sections']);
+        expect(
+          InvoiceTemplate.encodeSections(sections),
+          t.positions['blocks_sections'],
+          reason: '${t.id} : encodage non réversible',
+        );
+      }
+    });
+  });
+
+  group('compatibilité d\'écriture Firestore', () {
+    /// 🔍 Parcourt une valeur et échoue si elle contient un **tableau
+    /// imbriqué** : `batch.set` lèverait alors
+    /// « Nested arrays are not supported ».
+    void expectFirestoreSafe(Object? value, String path) {
+      if (value is List) {
+        for (var i = 0; i < value.length; i++) {
+          expect(value[i], isNot(isA<List>()),
+              reason: 'Firestore refuse « $path[$i] » (tableau imbriqué)');
+          expectFirestoreSafe(value[i], '$path[$i]');
+        }
+      } else if (value is Map) {
+        value.forEach((k, v) => expectFirestoreSafe(v, '$path.$k'));
+      }
+    }
+
+    test('toMap() de chaque preset est écrivable dans Firestore', () {
+      for (final t in templates) {
+        expectFirestoreSafe(t.toMap(), t.id);
+      }
+    });
+
+    test('les sections restent des chaînes (jamais de sous-listes)', () {
+      for (final t in templates) {
+        for (final entry in t.positions['blocks_sections'] as List) {
+          expect(entry, isA<String>(),
+              reason: '${t.id} : élément « $entry » non textuel');
+        }
+      }
+    });
   });
 
   group('backfill des positions en base (modèles historiques)', () {

@@ -293,7 +293,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
 
   Future<void> _loadData() async {
     final company = await _db.getCompany();
-    final custom = await TemplateCustomService.loadCustom(widget.template.id);
+    final loaded = await TemplateCustomService.loadCustom(widget.template.id);
+    // 🧩 Positions de BASE : personnalisation locale si elle existe, sinon
+    // celles embarquées dans le modèle (presets « Royal Ledger »). L'atelier
+    // s'ouvre ainsi DIRECTEMENT sur le design du modèle choisi (textes,
+    // sections à réordonner, visibilité) au lieu du layout fixe historique.
+    final custom = (
+      positions: InvoiceTemplate.effectivePositions(
+        customPositions: loaded.positions,
+        templatePositions: widget.template.positions,
+      ),
+      mapping: loaded.mapping,
+      background: loaded.background,
+    );
     final templates = InvoiceTemplate.getDefaultTemplates();
     // 🖊️ Signature dessinée par l'utilisateur (SignatureService) : utilisée en
     // repli si le modèle n'embarque pas déjà sa propre image de signature.

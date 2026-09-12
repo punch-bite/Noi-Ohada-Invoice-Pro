@@ -70,7 +70,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Uint8List? _previewBackground;
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
- 
+
   /// 📐 Positions drag & drop du modèle actif (ordre des sections en-tête /
   /// body / pied, visibilité des blocs, textes personnalisés, taille du logo…).
   /// Transmises à l'aperçu pour être WYSIWYG avec l'impression PDF.
@@ -150,8 +150,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   /// blocs, fond, mention légale, en-tête… stockés par `TemplateCustomService`.
   Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
     final custom = await TemplateCustomService.loadCustom(template.id);
+    // 🧩 Positions de BASE : personnalisation locale si elle existe, sinon
+    // celles embarquées dans le modèle (presets « Royal Ledger »). Sans ce
+    // repli, `copyWith(positions: {})` effacerait le design du modèle choisi et
+    // la facture (aperçu + PDF) retomberait sur le layout fixe historique.
+    final basePositions = InvoiceTemplate.effectivePositions(
+      customPositions: custom.positions,
+      templatePositions: template.positions,
+    );
     final applied = template.copyWith(
-      positions: custom.positions,
+      positions: basePositions,
       mapping: {...template.mapping, ...custom.mapping},
     );
 
@@ -159,11 +167,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     // « Configurer la signature » puis persistée par `SignatureService`) doit
     // FIGURER sur la facture. On l'injecte dans les positions si le modèle n'a
     // pas déjà sa propre image de signature (`signature_image`).
-    final positions = Map<String, dynamic>.from(custom.positions);
+    final positions = Map<String, dynamic>.from(basePositions);
     if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
       try {
-        final signatureBytes =
-            await SignatureService().loadSignatureBytes();
+        final signatureBytes = await SignatureService().loadSignatureBytes();
         if (signatureBytes != null && signatureBytes.isNotEmpty) {
           positions['signature_image'] = base64Encode(signatureBytes);
         }
@@ -835,8 +842,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             child: Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 10),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: c.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(10),
@@ -987,8 +993,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.20)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
               ),
               child: Icon(icon, size: 22, color: c.inverseOnSurface),
             ),
@@ -1074,8 +1079,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       builder: (sheetCtx) => Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF151722) : Colors.white,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: SafeArea(
           child: Column(
@@ -1247,8 +1251,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF151722) : Colors.white,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

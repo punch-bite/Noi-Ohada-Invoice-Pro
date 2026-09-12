@@ -131,9 +131,9 @@ class InvoiceTemplate {
   /// 🧱 Encode des sections (`List<List<String>>`) en une liste PLATE de
   /// chaînes : `['billing_info|invoice_meta', 'items_table', ...]`.
   ///
-  /// Firestore refuse les **tableaux imbriqués** (`Nested arrays are not
-  /// supported`) : un preset contenant `List<List<String>>` ne peut donc pas
-  /// être écrit tel quel dans un document. L'atelier, lui, stocke ses
+  /// Firestore rejette les **tableaux imbriqués** (« Nested arrays are not
+  /// supported ») : un preset contenant `List<List<String>>` ne pourrait donc
+  /// pas être écrit tel quel dans un document. L'atelier, lui, stocke ses
   /// sections dans SharedPreferences sous forme JSON (imbrication permise) —
   /// [decodeSections] accepte les DEUX formes.
   static List<String> encodeSections(List<List<String>> sections) => [
@@ -165,6 +165,26 @@ class InvoiceTemplate {
     }
     return sections;
   }
+
+  /// 🧩 **Positions effectives** d'un modèle.
+  ///
+  /// Règle de priorité unique de l'application (identique dans l'atelier,
+  /// l'aperçu, l'écran de détail et l'impression) :
+  ///
+  ///   1. la personnalisation locale de l'utilisateur si elle existe ;
+  ///   2. sinon les positions **embarquées dans le modèle** (presets
+  ///      « Royal Ledger »).
+  ///
+  /// Sans ce repli, un modèle choisi mais pas encore personnalisé perdrait son
+  /// design (textes, sections, visibilité) et la facture retomberait sur le
+  /// layout fixe historique.
+  static Map<String, dynamic> effectivePositions({
+    required Map<String, dynamic> customPositions,
+    required Map<String, dynamic> templatePositions,
+  }) =>
+      customPositions.isNotEmpty
+          ? customPositions
+          : Map<String, dynamic>.from(templatePositions);
 
   // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
   static const List<String> availableVariables = [
