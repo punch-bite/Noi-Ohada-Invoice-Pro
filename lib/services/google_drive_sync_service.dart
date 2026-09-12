@@ -73,17 +73,30 @@ class GoogleDriveSyncService {
   // (OAuth Web Client ID) est fourni. On le passe donc AUSSI sur mobile quand
   // il est configuré (même clé que le web). Sans lui, `_getAccessToken()`
   // renvoie null → l'upload Drive échoue avec 401 « Connexion requise ».
-  GoogleSignIn _signIn() => GoogleSignIn(
-        // clientId (web) requis pour le scope Drive sur navigateur. Sur
-        // mobile, google-sign_in utilise google-services.json / Info.plist.
-        clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
-        serverClientId: kIsWeb
-            ? null
-            : (ConfigService.firebaseWebClientId.isNotEmpty
-                ? ConfigService.firebaseWebClientId
-                : null),
-        scopes: [_driveScope],
-      );
+  // ⚠️ INSTANCE UNIQUE : `GoogleSignIn()` doit être créé UNE seule fois —
+  // chaque `GoogleSignIn(...)` construit un état de session SÉPARÉ. L'ancien
+  // code en recréait une à CHAQUE appel : la session restaurée par
+  // `restoreSilentSession` vivait dans une instance, puis `_getAccessToken`
+  // utilisait une AUTRE instance (sans session) → « Connexion Google
+  // requise » / popup de consentement à chaque synchronisation → la sync
+  // Drive échouait même après connexion. Une instance unique garantit que
+  // le compte, les scopes (drive.file) et le token partagent le même état.
+  GoogleSignIn? _googleSignIn;
+
+  GoogleSignIn _signIn() {
+    if (_googleSignIn != null) return _googleSignIn!;
+    return _googleSignIn = GoogleSignIn(
+      // clientId (web) requis pour le scope Drive sur navigateur. Sur
+      // mobile, google-sign_in utilise google-services.json / Info.plist.
+      clientId: kIsWeb ? ConfigService.firebaseWebClientId : null,
+      serverClientId: kIsWeb
+          ? null
+          : (ConfigService.firebaseWebClientId.isNotEmpty
+              ? ConfigService.firebaseWebClientId
+              : null),
+      scopes: [_driveScope],
+    );
+  }
 
   /// Connecte le compte Google (ou renvoie celui déjà connecté).
   Future<GoogleSignInAccount?> signInWithGoogle() async {
@@ -132,11 +145,36 @@ class GoogleDriveSyncService {
   /// 🔄 Restaure d'abord la session (silencieux) : après un redémarrage de
   /// l'app, `GoogleSignIn.currentUser` est null et l'ancien code renvoyait
   /// null → « Connexion Google requise » à chaque sync.
+  ///
+  /// 🧹 Si le token est absent (consentement du scope drive.file non
+  /// encore accordé / cache de token invalide), on vide le cache
+  /// d'authentification et on restaure silencieusement — c'est le flux
+  /// recommandé par google_sign_in pour les scopes additionnels.
   Future<String?> _getAccessToken() async {
     final account = await ensureSignedIn();
     if (account == null) return null;
-    final auth = await account.authentication;
-    return auth.accessToken;
+
+    var token = (await account.authentication).accessToken;
+    if (token != null && token.isNotEmpty) return token;
+
+    // 🧹 Cache de token périmé/absent → on le vide (sur le compte) puis on
+    // retente une restauration silencieuse (redemande le scope drive.file
+    // sans popup si le consentement a déjà été donné).
+    try {
+      try {
+        await account.clearAuthCache();
+      } catch (_) {
+        // Pas de token à vider : pas grave, on continue.
+      }
+      final restored = await _signIn().signInSilently();
+      if (restored != null) {
+        token = (await restored.authentication).accessToken;
+        if (token != null && token.isNotEmpty) return token;
+      }
+    } catch (e) {
+      debugPrint('ℹ️ revalidation du token Drive échouée : $e');
+    }
+    return token;
   }
 
   // ===== GÉNÉRATION DU BACKUP JSON =====
@@ -163,7 +201,8 @@ class GoogleDriveSyncService {
   // ===== API GOOGLE DRIVE (REST) =====
   Future<String?> _getOrCreateFolder(String token) async {
     final query = Uri.parse('$_driveApi/files').replace(queryParameters: {
-      'q': "name='OHADA Invoice Pro' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+      'q':
+          "name='OHADA Invoice Pro' and mimeType='application/vnd.google-apps.folder' and trashed=false",
       'fields': 'files(id,name)',
       'spaces': 'drive',
     });
@@ -202,7 +241,15 @@ class GoogleDriveSyncService {
   /// Téléverse le backup JSON dans le dossier "OHADA Invoice Pro" de Drive.
   Future<String> uploadBackupToDrive() async {
     final token = await _getAccessToken();
-    if (token == null) throw Exception('Connexion Google requise');
+    if (token == null || token.isEmpty) {
+      throw Exception(
+        'Connexion Google requise (jeton Drive indisponible). '
+        'Reconnectez votre compte Google depuis l\'écran de sauvegarde — '
+        'si le problème persiste, vérifiez que le Client ID Web Firebase '
+        '(--dart-define=FIREBASE_WEB_CLIENT_ID) et l\'empreinte SHA-1 '
+        'Android sont bien déclarés dans la console Firebase.',
+      );
+    }
 
     final folderId = await _getOrCreateFolder(token);
     if (folderId == null) {
