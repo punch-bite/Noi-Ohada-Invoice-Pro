@@ -590,67 +590,69 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   }
 
   // ── Barre de saisie ─────────────────────────────────────────────────────
+  // 💬 Style « soft & minimaliste » : aucune bordure — le champ est une
+  // simple surface teintée proportionnelle à son conteneur, alignée au
+  // bouton d'envoi, avec des coins en pilule.
   Widget _buildInputBar(ThemeProvider theme, bool isDark) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF151722).withValues(alpha: 0.97)
-            : Colors.white.withValues(alpha: 0.96),
-        border: Border(
-          top: BorderSide(
-            color: theme.primaryColor.withValues(alpha: 0.08),
-          ),
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      color: isDark ? const Color(0xFF151722) : Colors.white,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
-              constraints: const BoxConstraints(minHeight: 44, maxHeight: 120),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              // 👉 SANS bordure : juste une surface douce, très légèrement
+              // teintée, qui s'adapte à la hauteur du texte (1 à 4 lignes).
               decoration: BoxDecoration(
                 color:
-                    theme.primaryColor.withValues(alpha: isDark ? 0.10 : 0.06),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: theme.primaryColor.withValues(alpha: 0.18),
-                ),
+                    theme.primaryColor.withValues(alpha: isDark ? 0.08 : 0.05),
+                borderRadius: BorderRadius.circular(24),
               ),
-              child: TextField(
-                controller: _inputController,
-                focusNode: _inputFocus,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-                style: TextStyle(fontSize: 13.5, color: theme.textColor),
-                decoration: InputDecoration(
-                  hintText: 'Écrivez un message…',
-                  hintStyle: TextStyle(fontSize: 13, color: theme.subTextColor),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextField(
+                  controller: _inputController,
+                  focusNode: _inputFocus,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  style: TextStyle(fontSize: 13.5, color: theme.textColor),
+                  decoration: InputDecoration(
+                    hintText: 'Écrivez un message…',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: theme.subTextColor.withValues(alpha: 0.8),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    // Padding vertical symétrique → le texte reste centré
+                    // quelle que soit la hauteur prise par le champ.
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           AnimatedContainer(
             duration: const Duration(milliseconds: 160),
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [theme.primaryColor, theme.gradientEndColor],
               ),
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
+              // Ombre douce, discrète — le bouton reste minimaliste.
               boxShadow: [
                 BoxShadow(
-                  color: theme.primaryColor.withValues(alpha: 0.35),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+                  color: theme.primaryColor.withValues(alpha: 0.22),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
