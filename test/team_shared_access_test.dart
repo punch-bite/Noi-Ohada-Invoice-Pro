@@ -134,6 +134,28 @@ void main() {
     });
   });
 
+  group('Team · titre de rôle (badge du chat)', () {
+    test(
+        'le propriétaire et les administrateurs sont « Propriétaire du groupe »',
+        () {
+      final team = buildTeam();
+      expect(team.roleTitleFor('owner'), Team.ownerTitle);
+      expect(team.roleTitleFor('admin1'), Team.ownerTitle);
+      expect(Team.ownerTitle, 'Propriétaire du groupe');
+    });
+
+    test('un membre simple est « Membre »', () {
+      final team = buildTeam();
+      expect(team.roleTitleFor('member1'), Team.memberTitle);
+      expect(Team.memberTitle, 'Membre');
+    });
+
+    test('un utilisateur inconnu (hors équipe) est « Membre »', () {
+      final team = buildTeam();
+      expect(team.roleTitleFor('stranger'), Team.memberTitle);
+    });
+  });
+
   group('TeamMessage · propriétaire du message', () {
     test('le propriétaire estampillé est conservé (sérialisation)', () {
       final message = TeamMessage(

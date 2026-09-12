@@ -91,10 +91,13 @@ class Team {
       adminIds: List<String>.from(map['adminIds'] ?? []),
       logoPath: map['logoPath'],
       createdAt: _parseDateTime(map['createdAt']),
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      updatedAt:
+          map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
       isActive: map['isActive'] ?? true,
-      memberPermission: normalizePermission(map['memberPermission'], fallback: 'read'),
-      adminPermission: normalizePermission(map['adminPermission'], fallback: 'write'),
+      memberPermission:
+          normalizePermission(map['memberPermission'], fallback: 'read'),
+      adminPermission:
+          normalizePermission(map['adminPermission'], fallback: 'write'),
     );
   }
 
@@ -108,7 +111,18 @@ class Team {
 
   bool isOwnerOf(String userId) => ownerId == userId;
   bool isAdmin(String userId) => adminIds.contains(userId);
-  bool isMember(String userId) => memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
+  bool isMember(String userId) =>
+      memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
+
+  // 👑 TITRES DE RÔLE affichés dans la messagerie d'équipe.
+  static const String ownerTitle = 'Propriétaire du groupe';
+  static const String memberTitle = 'Membre';
+
+  /// 👑 Titre de [userId] : « Propriétaire du groupe » pour le propriétaire
+  /// et les administrateurs de l'équipe, « Membre » pour les autres.
+  /// Un utilisateur inconnu (hors équipe) est considéré comme simple membre.
+  String roleTitleFor(String userId) =>
+      isOwnerOf(userId) || isAdmin(userId) ? ownerTitle : memberTitle;
 
   /// Normalise une valeur de permission ('read' | 'write').
   static String normalizePermission(String? value, {String fallback = 'read'}) {
@@ -154,8 +168,8 @@ class Team {
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
-      memberPermission:
-          normalizePermission(memberPermission, fallback: this.memberPermission),
+      memberPermission: normalizePermission(memberPermission,
+          fallback: this.memberPermission),
       adminPermission:
           normalizePermission(adminPermission, fallback: this.adminPermission),
     );

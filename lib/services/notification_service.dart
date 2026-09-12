@@ -211,25 +211,17 @@ class NotificationService extends ChangeNotifier {
     ));
   }
 
-  /// Notification lors du paiement réussi d'une facture
-  Future<void> notifyInvoicePaid(String invoiceNumber) async {
-    await notify(
-      type: 'payment_success',
-      title: 'Facture payée',
-      body: 'La facture n°$invoiceNumber a été réglée avec succès.',
-      refId: invoiceNumber,
-      refType: 'invoice',
-    );
-  }
-
-  /// Notification lors de la réception d'un montant
-  Future<void> notifyPaymentReceived(double amount) async {
-    await notify(
-      type: 'payment_received',
-      title: 'Paiement reçu',
-      body: 'Un paiement de ${amount.toStringAsFixed(0)} FCFA a été reçu.',
-      refId: amount.toString(),
-      refType: 'wallet',
+  /// Notification lors du paiement réussi d'une facture.
+  ///
+  /// 🔔 UNE SEULE notification par paiement (titre « Facture payée » +
+  /// montant dans le corps). L'ancienne double notification —
+  /// `notifyInvoicePaid` + `notifyPaymentReceived` — multipliait les
+  /// alertes et affichait des chiffres trompeurs : « Paiement reçu »
+  /// apparaissait même pour un paiement CASH (validation manuelle) qui ne
+  /// crédite JAMAIS le portefeuille en ligne.
+  Future<void> notifyInvoicePaid(String invoiceNumber, {double? amount}) async {
+    await addNotification(
+      AppNotification.createInvoicePaid(invoiceNumber, amount: amount),
     );
   }
 }

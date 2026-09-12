@@ -37,11 +37,20 @@ class WalletService {
   /// auprès d'E-nkap que la commande est bien CONFIRMÉE avant de créditer
   /// (le client ne peut plus s'auto-créditer un solde arbitraire).
   /// Appelé après la confirmation d'un paiement en ligne (ENKAP).
+  ///
+  /// 🧮 [dedupKey] — clé de DÉDUPLICATION STABLE (ex. `invoice:<id>`) :
+  /// la référence ENKAP change à chaque tentative de paiement, elle ne
+  /// protège donc PAS contre les doubles crédits. Cette clé, elle, est
+  /// identique pour toutes les tentatives d'une même facture → le serveur
+  /// crédite UNE SEULE fois, même si plusieurs ordres ENKAP sont confirmés
+  /// (requêtes répétitives, réessais) → les chiffres du portefeuille ne
+  /// sont plus gonflés.
   Future<bool> credit({
     required String userId,
     required double amount,
     required String reference,
     required String description,
+    String? dedupKey,
   }) async {
     if (userId.isEmpty || amount <= 0) return false;
     final apiBase = ConfigService.apiBaseUrl.trim();
@@ -56,13 +65,14 @@ class WalletService {
               'amount': amount,
               'reference': reference,
               'description': description,
+              if (dedupKey != null && dedupKey.trim().isNotEmpty)
+                'dedupKey': dedupKey.trim(),
             }),
           )
           .timeout(const Duration(seconds: 25));
       final ok = resp.statusCode == 200;
       if (!ok) {
-        debugPrint(
-            '⚠️ credit wallet serveur: ${resp.statusCode} ${resp.body}');
+        debugPrint('⚠️ credit wallet serveur: ${resp.statusCode} ${resp.body}');
       }
       return ok;
     } catch (e) {
@@ -144,10 +154,8 @@ class WalletService {
       if (status != null && status.isNotEmpty) {
         query = query.where('status', isEqualTo: status);
       }
-      final snap = await query
-          .orderBy('createdAt', descending: true)
-          .limit(200)
-          .get();
+      final snap =
+          await query.orderBy('createdAt', descending: true).limit(200).get();
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
     } catch (e) {
       debugPrint('⚠️ getAllWithdrawals: $e');
@@ -204,7 +212,8 @@ class WalletService {
           'amount': amount,
           'currency': 'XAF',
           'reference': withdrawalId,
-          'description': 'Retrait vers ${phone.isEmpty ? 'Mobile Money' : phone}',
+          'description':
+              'Retrait vers ${phone.isEmpty ? 'Mobile Money' : phone}',
           'createdAt': FieldValue.serverTimestamp(),
         });
       }

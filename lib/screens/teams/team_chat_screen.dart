@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/team.dart';
 import '../../models/team_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -53,8 +54,7 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   String _ownerName = '';
   List<String> _adminIds = const [];
 
-  String get _currentUserId =>
-      context.read<AppAuthProvider>().user?.id ?? '';
+  String get _currentUserId => context.read<AppAuthProvider>().user?.id ?? '';
 
   @override
   void initState() {
@@ -78,18 +78,14 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
     final uid = _currentUserId;
     if (uid.isEmpty) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? const {};
       if (!mounted) return;
       setState(() {
-        _senderName = (data['displayName'] ??
-                data['name'] ??
-                data['email'] ??
-                'Moi')
-            .toString();
+        _senderName =
+            (data['displayName'] ?? data['name'] ?? data['email'] ?? 'Moi')
+                .toString();
       });
     } catch (_) {
       // Fallback silencieux : « Moi ».
@@ -123,10 +119,8 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   /// Nom lisible d'un utilisateur (best-effort) — sert au badge « Propriétaire ».
   Future<String> _displayNameOf(String uid) async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? const {};
       return (data['displayName'] ?? data['name'] ?? data['email'] ?? '')
           .toString();
@@ -395,7 +389,13 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
 
   Widget _dayDivider(DateTime date, ThemeProvider theme) {
     const days = [
-      'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi',
+      'Samedi',
+      'Dimanche',
     ];
     final label =
         '${days[date.weekday - 1]} ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
@@ -445,7 +445,9 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: mine ? null : (isDark ? const Color(0xFF23263A) : const Color(0xFFF0F1F7)),
+          color: mine
+              ? null
+              : (isDark ? const Color(0xFF23263A) : const Color(0xFFF0F1F7)),
           borderRadius: radius,
           border: mine
               ? null
@@ -464,24 +466,32 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
           crossAxisAlignment:
               mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (!mine)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
+            // 👤 Nom de l'auteur + TITRE de rôle sur CHAQUE message
+            // (y compris les siens) : « Propriétaire du groupe » pour les
+            // gestionnaires, « Membre » pour les autres.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
                       message.senderName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
-                        color: theme.primaryColor,
+                        color: mine
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : theme.primaryColor,
                       ),
                     ),
-                    ..._authorBadges(message, theme),
-                  ],
-                ),
+                  ),
+                  ..._authorBadges(message, theme),
+                ],
               ),
+            ),
             Text(
               message.text,
               style: TextStyle(
@@ -506,27 +516,42 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
     );
   }
 
-  /// 🔑 Badges d'identité ajoutés à chaque message envoyé sur le chat :
-  /// « Propriétaire » (propriétaire de l'équipe) ou « Admin ».
+  /// 👑 TITRE DE RÔLE affiché à côté du nom de l'auteur sur chaque message :
+  /// « Propriétaire du groupe » pour le propriétaire et les administrateurs
+  /// de l'équipe, « Membre » pour les autres.
+  ///
+  /// Source de vérité : les rôles RÉELS de l'équipe (`ownerId` / `adminIds`
+  /// chargés depuis Firestore). En repli (équipe pas encore chargée / hors
+  /// ligne), on retombe sur l'estampille du message (`ownerId` envoyé avec
+  /// le message) — jamais de titre fantaisiste.
   List<Widget> _authorBadges(TeamMessage message, ThemeProvider theme) {
-    final ownerId = message.ownerId.isNotEmpty ? message.ownerId : _ownerId;
-    final isOwner = ownerId.isNotEmpty && message.senderId == ownerId;
-    final isAdmin = !isOwner && _adminIds.contains(message.senderId);
-    if (!isOwner && !isAdmin) return const [];
+    final ownerId = _ownerId.isNotEmpty ? _ownerId : message.ownerId;
+    final isManager = (ownerId.isNotEmpty && message.senderId == ownerId) ||
+        _adminIds.contains(message.senderId);
+    final title = isManager ? Team.ownerTitle : Team.memberTitle;
+    final mine = message.senderId == _currentUserId;
     return [
       const SizedBox(width: 6),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration: BoxDecoration(
-          color: theme.primaryColor.withValues(alpha: 0.15),
+          color: isManager
+              ? theme.primaryColor.withValues(alpha: 0.15)
+              : (mine
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : theme.primaryColor.withValues(alpha: 0.06)),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
-          isOwner ? 'Propriétaire' : 'Admin',
+          title,
           style: TextStyle(
             fontSize: 8.5,
             fontWeight: FontWeight.w800,
-            color: theme.primaryColor,
+            color: isManager
+                ? theme.primaryColor
+                : (mine
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : theme.subTextColor),
           ),
         ),
       ),
@@ -586,7 +611,8 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
               constraints: const BoxConstraints(minHeight: 44, maxHeight: 120),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: theme.primaryColor.withValues(alpha: isDark ? 0.10 : 0.06),
+                color:
+                    theme.primaryColor.withValues(alpha: isDark ? 0.10 : 0.06),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: theme.primaryColor.withValues(alpha: 0.18),
@@ -602,12 +628,10 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                 style: TextStyle(fontSize: 13.5, color: theme.textColor),
                 decoration: InputDecoration(
                   hintText: 'Écrivez un message…',
-                  hintStyle:
-                      TextStyle(fontSize: 13, color: theme.subTextColor),
+                  hintStyle: TextStyle(fontSize: 13, color: theme.subTextColor),
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),

@@ -14,7 +14,7 @@ import '../../../models/invoice_status.dart';
 
 class PaymentBottomSheet extends StatefulWidget {
   final VoidCallback onPaymentComplete;
-  
+
   const PaymentBottomSheet({
     super.key,
     required this.onPaymentComplete,
@@ -76,7 +76,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     // On exclut uniquement les factures déjà payées ou annulées.
     final payable = allInvoices
         .where(
-          (inv) => !InvoiceStatus.fromValue(inv.status).isPaid &&
+          (inv) =>
+              !InvoiceStatus.fromValue(inv.status).isPaid &&
               !InvoiceStatus.fromValue(inv.status).isCancelled,
         )
         .toList();
@@ -196,19 +197,29 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   }
 
   /// Marque la facture comme payée après confirmation ENKAP.
+  ///
+  /// 🔔 UNE seule notification (titre + montant dans le corps) — plus de
+  /// double « Facture payée » / « Paiement reçu » qui gonflait les alertes.
   Future<void> _markInvoicePaid(Invoice invoice) async {
     final updated = invoice.copyWith(
       status: InvoiceStatus.paid.value,
       isSynced: false,
     );
     await _db.updateInvoice(updated);
-    await _notificationService.notifyInvoicePaid(invoice.invoiceNumber);
-    await _notificationService.notifyPaymentReceived(invoice.totalAmount);
+    await _notificationService.notifyInvoicePaid(
+      invoice.invoiceNumber,
+      amount: invoice.totalAmount,
+    );
   }
 
   /// 💰 Crédite le portefeuille marchand après un paiement en ligne confirmé.
   /// L'argent est encaissé sur le compte ENKAP de la plateforme ; le
   /// portefeuille interne crédite le marchand du montant de la facture.
+  ///
+  /// 🧮 La référence ENKAP varie à chaque tentative → on passe une clé de
+  /// déduplication STABLE (`invoice:<id>`) : même si l'utilisateur retente
+  /// le paiement (nouvel ordre ENKAP confirmé pour la MÊME facture), le
+  /// serveur ne crédite qu'UNE fois → le solde n'est jamais gonflé.
   Future<void> _creditWallet(Invoice invoice, String reference) async {
     final auth = context.read<AppAuthProvider>();
     final uid = auth.user?.id ?? '';
@@ -218,6 +229,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       amount: invoice.totalAmount,
       reference: reference,
       description: 'Paiement facture ${invoice.invoiceNumber}',
+      dedupKey: 'invoice:${invoice.id}',
     );
   }
 
@@ -320,8 +332,15 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       isSynced: false,
     );
     await _db.updateInvoice(updatedInvoice);
-    await _notificationService.notifyInvoicePaid(invoice.invoiceNumber);
-    await _notificationService.notifyPaymentReceived(invoice.totalAmount);
+    // 🔔 Une seule notification par paiement (montant inclus dans le corps) :
+    // la validation CASH ne crédite pas le portefeuille en ligne, on n'annonce
+    // donc JAMAIS de « paiement reçu » qui fausserait les chiffres du solde.
+    if (nextStatus == InvoiceStatus.paid.value) {
+      await _notificationService.notifyInvoicePaid(
+        invoice.invoiceNumber,
+        amount: invoice.totalAmount,
+      );
+    }
 
     if (!mounted) return;
     setState(() => _isProcessing = false);
@@ -403,7 +422,6 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
             if (_isLoading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
@@ -441,9 +459,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                         decoration: BoxDecoration(
                           color: isDark ? Colors.grey[900] : Colors.grey[50],
                           border: Border.all(
-                            color: isDark
-                                ? Colors.grey[800]!
-                                : Colors.grey[200]!,
+                            color:
+                                isDark ? Colors.grey[800]! : Colors.grey[200]!,
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -509,7 +526,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                           ],
                         ),
                       ),
-                        const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
                       // Moyen de paiement
                       Text(
@@ -638,8 +655,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                             _selectedMethod == 'cash'
                                 ? 'Validation manuelle — cash reçu'
                                 : 'Paiement sécurisé via E-nkap',
-                            style: TextStyle(
-                                fontSize: 12, color: subTextColor),
+                            style: TextStyle(fontSize: 12, color: subTextColor),
                           ),
                         ],
                       ),
@@ -669,8 +685,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
               children: [
                 CircleAvatar(
                   radius: 14,
-                  backgroundColor:
-                      isReached ? status.color : Colors.grey.withValues(alpha: 0.2),
+                  backgroundColor: isReached
+                      ? status.color
+                      : Colors.grey.withValues(alpha: 0.2),
                   child: Icon(
                     idx < currentIndex ? Icons.check : Icons.circle,
                     size: idx < currentIndex ? 16 : 10,
@@ -683,8 +700,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                   style: TextStyle(
                     fontSize: 9,
                     color: isReached ? status.color : Colors.grey,
-                    fontWeight:
-                        isReached ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isReached ? FontWeight.w600 : FontWeight.normal,
                   ),
                   textAlign: TextAlign.center,
                 ),

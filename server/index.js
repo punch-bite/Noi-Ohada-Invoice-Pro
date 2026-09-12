@@ -944,7 +944,7 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'wallet' }),
   async (req, res) => {
     try {
-      const { userId, amount, reference, description } = req.body || {};
+      const { userId, amount, reference, description, dedupKey } = req.body || {};
       // 🔒 uid de l'acteur : jeton vérifié (jamais le body) sinon ancienne clé.
       const uid = actorUid(req, userId);
       if (!uid || !reference) {
@@ -954,6 +954,12 @@ app.post(
       if (!Number.isFinite(amt) || amt <= 0 || amt > 100000000) {
         return res.status(400).json({ error: 'Montant invalide' });
       }
+      // 🧮 Clé de déduplication STABLE (ex. `invoice:<id>`) : la référence
+      // ENKAP change à chaque tentative de paiement, elle seule ne protège
+      // donc PAS des doubles crédits. La dedupKey, elle, est identique pour
+      // toutes les tentatives d'une même facture.
+      const dedup =
+        typeof dedupKey === 'string' && dedupKey.trim() ? dedupKey.trim() : '';
 
       // 1) Vérifie auprès d'E-nkap que la commande est confirmée.
       let status = '';
@@ -971,16 +977,27 @@ app.post(
           .json({ error: `Paiement non confirmé par ENKAP (${status || 'inconnu'})` });
       }
 
-      // 2) Idempotence : pas de double crédit pour la même référence
-      //    (requête mono-champ `reference` = auto-indexée).
-      const existing = await db
+      // 2) Idempotence : pas de double crédit —
+      //    • par référence ENKAP (requête mono-champ `reference` = auto-indexée) ;
+      //    • ET par facture (`dedupKey` mono-champ = auto-indexée) : deux
+      //      ordres ENKAP confirmés pour la MÊME facture (réessais /
+      //      requêtes répétitives) ne créditent qu'UNE seule fois → les
+      //      chiffres du portefeuille ne sont pas gonflés.
+      const byRef = await db
         .collection('wallet_transactions')
         .where('reference', '==', reference)
         .limit(1)
         .get();
-      if (!existing.empty) {
-        const existingType = existing.docs[0].data().type;
-        if (existingType === 'credit') {
+      if (!byRef.empty && byRef.docs[0].data().type === 'credit') {
+        return res.json({ ok: true, alreadyCredited: true });
+      }
+      if (dedup) {
+        const byDedup = await db
+          .collection('wallet_transactions')
+          .where('dedupKey', '==', dedup)
+          .limit(1)
+          .get();
+        if (!byDedup.empty && byDedup.docs[0].data().type === 'credit') {
           return res.json({ ok: true, alreadyCredited: true });
         }
       }
@@ -1007,6 +1024,7 @@ app.post(
         amount: amt,
         currency: 'XAF',
         reference,
+        dedupKey: dedup || null,
         description: String(description || 'Encaissement en ligne'),
         createdAt: serverTimestamp(),
       });
