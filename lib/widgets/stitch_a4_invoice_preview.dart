@@ -28,6 +28,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/invoice_layout.dart';
+import '../models/invoice_template.dart';
 import '../services/template_custom_service.dart';
 import '../theme/royal_ledger.dart';
 import 'template_background_palette.dart';
@@ -227,10 +228,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
   /// Retourne un texte d'une personnalisation sauvegardée (vide si absent).
   String _cpString(String key) =>
       (customPositions[key] as String? ?? '').trim();
- 
-  /// Retourne une liste d'ordre (ex. ordre des éléments d'en-tête).
-  List<String> _cpStrings(String key) =>
-      (customPositions[key] as List?)?.whereType<String>().toList() ?? const [];
 
   String get _bodyFont =>
       (fontFamily == 'Manrope' || fontFamily == 'WorkSans')
@@ -447,19 +444,11 @@ class StitchA4InvoicePreview extends StatelessWidget {
       _cpBool('show_signature_line', _vis(LayoutElement.signature));
  
   /// Enfants de la Row d'en-tête, réordonnés selon `header_elements_order`
-  /// (par défaut : logo → company_info → invoice_title) — identique au PDF.
+  /// et filtrés par `header_visibility` (par défaut : logo → company_info →
+  /// invoice_title) — identique au PDF.
   List<Widget> _buildHeaderRowChildren(Color onAccent, double k) {
-    final order = _cpStrings('header_elements_order');
-    const defaults = ['logo', 'company_info', 'invoice_title'];
-    const known = {'logo', 'company_info', 'invoice_title'};
-    final seen = <String>{};
-    final resolved = <String>[];
-    for (final e in order) {
-      if (known.contains(e) && seen.add(e)) resolved.add(e);
-    }
-    for (final e in defaults) {
-      if (seen.add(e)) resolved.add(e);
-    }
+    // 🧩 Ordre + visibilité : même règle que le PDF et l'atelier.
+    final resolved = InvoiceTemplate.visibleHeaderElements(customPositions);
  
     final children = <Widget>[];
     for (var i = 0; i < resolved.length; i++) {

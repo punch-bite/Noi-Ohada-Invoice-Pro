@@ -186,6 +186,62 @@ class InvoiceTemplate {
           ? customPositions
           : Map<String, dynamic>.from(templatePositions);
 
+  // 🧩 EN-TÊTE : éléments déplaçables (ordre + visibilité + largeur…).
+
+  /// Éléments d'en-tête connus, dans leur ordre par défaut.
+  static const List<String> headerElements = [
+    'logo',
+    'company_info',
+    'invoice_title',
+  ];
+
+  /// 🧩 Ordre EFFECTIF des éléments d'en-tête : ordre personnalisé de l'atelier
+  /// (`header_elements_order`) restreint aux éléments connus et dédoublonné,
+  /// puis complété par les éléments manquants dans l'ordre par défaut.
+  ///
+  /// Toute valeur inattendue (absente, type inconnu, clé étrangère) est ignorée
+  /// sans jamais casser l'aperçu ni le PDF.
+  static List<String> resolveHeaderOrder(Object? rawOrder) {
+    final order = <String>[];
+    if (rawOrder is List) {
+      for (final element in rawOrder) {
+        if (element is String &&
+            headerElements.contains(element) &&
+            !order.contains(element)) {
+          order.add(element);
+        }
+      }
+    }
+    for (final element in headerElements) {
+      if (!order.contains(element)) order.add(element);
+    }
+    return order;
+  }
+
+  /// 👁️ Visibilité d'un élément d'en-tête (`header_visibility`, défaut :
+  /// visible). Absence de la clé ou type inattendu → visible, pour ne jamais
+  /// masquer un élément par accident.
+  static bool isHeaderElementVisible(
+    Map<String, dynamic> positions,
+    String key,
+  ) {
+    final map = positions['header_visibility'];
+    if (map is Map) {
+      final value = map[key];
+      if (value is bool) return value;
+    }
+    return true;
+  }
+
+  /// 🧩 Éléments d'en-tête à RENDRE : ordre effectif ∩ visibilité.
+  ///
+  /// Consommé par l'aperçu A4 **et** le PDF afin qu'ils restent WYSIWYG avec
+  /// les options choisies dans l'atelier.
+  static List<String> visibleHeaderElements(Map<String, dynamic> positions) =>
+      resolveHeaderOrder(positions['header_elements_order'])
+          .where((key) => isHeaderElementVisible(positions, key))
+          .toList();
+
   // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
   static const List<String> availableVariables = [
     'invoice_number',

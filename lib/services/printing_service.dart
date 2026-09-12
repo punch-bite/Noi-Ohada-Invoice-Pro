@@ -749,20 +749,9 @@ class PrintingService {
     required PdfColor sub,
   }) {
     final primary = _getPdfColor(template.primaryColor);
-    const defaults = ['logo', 'company_info', 'invoice_title'];
-    final rawOrder = (customPositions['header_elements_order'] as List?)
-            ?.whereType<String>()
-            .toList() ??
-        const <String>[];
-    const known = {'logo', 'company_info', 'invoice_title'};
-    final order = <String>[];
-    for (final e in rawOrder) {
-      if (known.contains(e) && !order.contains(e)) order.add(e);
-    }
-    for (final e in defaults) {
-      if (!order.contains(e)) order.add(e);
-    }
-    if (order.isEmpty) order.addAll(defaults);
+    // 🧩 Ordre + visibilité (`header_visibility`) : même règle que l'aperçu A4
+    // et l'atelier — un élément masqué libère sa colonne.
+    final order = InvoiceTemplate.visibleHeaderElements(customPositions);
 
     // ↔️ Largeurs pondérées (header_widths) : company_info = 2 par défaut.
     double hweight(String k) {

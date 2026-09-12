@@ -77,6 +77,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
 
   TextAlign _headerAlignOf(String key) =>
       _headerAlign[key] ?? (key == 'invoice_title' ? TextAlign.right : TextAlign.left);
+
+  // 👁️ VISIBILITÉ des variables d'en-tête (logo / infos société / titre).
+  // Un élément masqué garde sa place et son ordre (donc réactivable d'un tap
+  // dans l'atelier) mais disparaît de l'aperçu A4 et du PDF.
+  final Map<String, bool> _headerVisibility = {};
+
+  bool _headerVisibleOf(String key) => _headerVisibility[key] ?? true;
   String? _draggingHeaderKey;
   String? _dragOverHeaderKey;
   String? _selectedHeaderKey;
@@ -391,6 +398,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             }
           });
         }
+        if (custom.positions['header_visibility'] is Map) {
+          (custom.positions['header_visibility'] as Map).forEach((k, v) {
+            if (v is bool) _headerVisibility[k.toString()] = v;
+          });
+        }
         if (custom.positions['qr_position'] != null) {
           _qrPosition = custom.positions['qr_position'] as String;
         }
@@ -627,6 +639,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['header_widths'] = Map<String, double>.from(_headerWidth);
     updatedPositions['header_alignments'] =
         _headerAlign.map((k, v) => MapEntry(k, v.name));
+    // 👁️ Visibilité des variables d'en-tête (logo / infos société / titre).
+    updatedPositions['header_visibility'] =
+        Map<String, bool>.from(_headerVisibility);
     updatedPositions['blocks_sections'] = _sectionsLayout;
     // Compat : ordre à plat (d'éventuels anciens lecteurs / exports).
     updatedPositions['blocks_order'] =
@@ -1167,7 +1182,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     flex: _headerFlexOf(key),
                     child: Align(
                       alignment: _wa(_headerAlignOf(key)),
-                      child: _buildDraggableHeaderElement(key),
+                      // 🖐️ Un élément masqué reste affiché (estompé) afin de
+                      // pouvoir être réactivé d'un tap : seul le rendu final
+                      // (aperçu propre + PDF) l'omet.
+                      child: Opacity(
+                        opacity: _headerVisibleOf(key) ? 1.0 : 0.35,
+                        child: _buildDraggableHeaderElement(key),
+                      ),
                     ),
                   ),
               ],
@@ -1192,16 +1213,18 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             for (final key in _headerElements)
-              Expanded(
-                flex: _headerFlexOf(key),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Align(
-                    alignment: _wa(_headerAlignOf(key)),
-                    child: _buildHeaderElementContent(key),
+              // 👁️ Aperçu PROPRE : un élément masqué libère sa colonne.
+              if (_headerVisibleOf(key))
+                Expanded(
+                  flex: _headerFlexOf(key),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Align(
+                      alignment: _wa(_headerAlignOf(key)),
+                      child: _buildHeaderElementContent(key),
+                    ),
                   ),
                 ),
-              ),
           ],
         ),
       ]),
@@ -1318,6 +1341,27 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 ),
               ]),
               const SizedBox(height: 4),
+              // 👁️ Visibilité de CETTE variable d'en-tête : décochée, elle
+              // disparaît de l'aperçu A4 et du PDF sans quitter l'ordre.
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('Afficher cet élément',
+                    style: TextStyle(fontSize: 13.5)),
+                subtitle: Text(
+                  _headerVisibleOf(key)
+                      ? 'Visible sur la facture'
+                      : 'Masqué (l\'espace est libéré pour les autres)',
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
+                ),
+                value: _headerVisibleOf(key),
+                activeThumbColor: _primary,
+                onChanged: (val) {
+                  setSS(() => _headerVisibility[key] = val);
+                  setState(() => _headerVisibility[key] = val);
+                  _saveConfig();
+                },
+              ),
               // 🔠 Alignement de la colonne.
               Row(children: [
                 const Text('Alignement :',

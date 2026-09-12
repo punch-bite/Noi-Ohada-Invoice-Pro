@@ -296,6 +296,132 @@ void main() {
     });
   });
 
+  group("visibilité des variables d'en-tête (logo / société / titre)", () {
+    test("ordre par défaut quand aucune personnalisation n'existe", () {
+      // `header_elements_order` absent ou vide → ordre de référence complet.
+      expect(InvoiceTemplate.resolveHeaderOrder(null),
+          InvoiceTemplate.headerElements);
+      expect(InvoiceTemplate.resolveHeaderOrder(const []),
+          InvoiceTemplate.headerElements);
+    });
+
+    test('ordre personnalisé respecté ; clés inconnues et doublons ignorés',
+        () {
+      expect(
+        InvoiceTemplate.resolveHeaderOrder(const [
+          'invoice_title',
+          'logo',
+          'logo', // doublon → ignoré
+          'element_inconnu', // clé étrangère → ignorée
+          42, // type inattendu → ignoré
+        ]),
+        // Les manquants sont complétés dans l'ordre par défaut.
+        const ['invoice_title', 'logo', 'company_info'],
+      );
+    });
+
+    test('un élément est VISIBLE par défaut (jamais masqué par accident)', () {
+      expect(InvoiceTemplate.isHeaderElementVisible(const {}, 'logo'), isTrue);
+      expect(
+        InvoiceTemplate.isHeaderElementVisible(
+            const {'header_visibility': <String, dynamic>{}}, 'logo'),
+        isTrue,
+      );
+      // Type inattendu (map non-map, valeur non-bool) → repli sur « visible ».
+      expect(
+        InvoiceTemplate.isHeaderElementVisible(
+            const {'header_visibility': 'nope'}, 'logo'),
+        isTrue,
+      );
+      expect(
+        InvoiceTemplate.isHeaderElementVisible(const {
+          'header_visibility': <String, dynamic>{'logo': 'non'}
+        }, 'logo'),
+        isTrue,
+      );
+    });
+
+    test('un élément décoché est masqué', () {
+      expect(
+        InvoiceTemplate.isHeaderElementVisible(const {
+          'header_visibility': <String, dynamic>{'logo': false}
+        }, 'logo'),
+        isFalse,
+      );
+    });
+
+    test('visibleHeaderElements = ordre effectif ∩ visibilité', () {
+      final visible = InvoiceTemplate.visibleHeaderElements(const {
+        'header_elements_order': ['invoice_title', 'logo', 'company_info'],
+        'header_visibility': <String, dynamic>{'logo': false},
+      });
+      // Le logo masqué disparaît, l'ordre personnalisé des autres est conservé.
+      expect(visible, const ['invoice_title', 'company_info']);
+    });
+
+    test("tout masquer donne une liste vide (en-tête nu, sans erreur)", () {
+      expect(
+        InvoiceTemplate.visibleHeaderElements(const {
+          'header_visibility': <String, dynamic>{
+            'logo': false,
+            'company_info': false,
+            'invoice_title': false,
+          },
+        }),
+        isEmpty,
+      );
+    });
+
+    test('les 8 modèles restent compatibles : en-tête complet par défaut', () {
+      for (final t in templates) {
+        expect(
+          InvoiceTemplate.visibleHeaderElements(t.positions),
+          hasLength(InvoiceTemplate.headerElements.length),
+          reason: "${t.id} : un élément d'en-tête est masqué par défaut",
+        );
+      }
+    });
+  });
+
+  test("PDF : en-tête masqué retiré sans casser l'impression", () async {
+    // Aucune variable d'en-tête visible : la rangée d'en-tête devient vide.
+    // Régression possible → `Row` vide / division par zéro des poids.
+    final positions = Map<String, dynamic>.from(templates.first.positions);
+    positions['header_visibility'] = <String, dynamic>{
+      'logo': false,
+      'company_info': false,
+      'invoice_title': false,
+    };
+
+    final bytes = await PrintingService.generateInvoicePdf(
+      invoice: _invoice(),
+      client: _client(),
+      company: _company(),
+      template: templates.first,
+      customPositions: positions,
+      customMapping: templates.first.mapping,
+    );
+
+    expect(bytes, isNotEmpty);
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
+
+  test("PDF : masquer une seule variable d'en-tête est accepté", () async {
+    final positions = Map<String, dynamic>.from(templates.first.positions);
+    positions['header_visibility'] = <String, dynamic>{'company_info': false};
+
+    final bytes = await PrintingService.generateInvoicePdf(
+      invoice: _invoice(),
+      client: _client(),
+      company: _company(),
+      template: templates.first,
+      customPositions: positions,
+      customMapping: templates.first.mapping,
+    );
+
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
+
   test('les 8 modèles produisent des rendus VISIBLEMENT distincts', () {
     final signatures = <String>{};
     for (final t in templates) {
