@@ -6,6 +6,7 @@ import 'package:noi_ohada_invoice_pro/screens/teams/create_team_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_detail_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_invitations_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/teams/team_chat_screen.dart';
+import 'package:noi_ohada_invoice_pro/screens/webview/webview_screen.dart';
 import 'package:provider/provider.dart';
 
 // Modèles
@@ -184,6 +185,26 @@ class AppRouter {
       GoRoute(
         path: '/teams/invitations',
         builder: (context, state) => const TeamInvitationsScreen(),
+      ),
+      // 🌐 WebView pleine page — contenu web avec repli maîtrisé
+      // (url + title passés en `extra` : {'url': ..., 'title': ...}).
+      GoRoute(
+        path: '/webview',
+        builder: (context, state) {
+          final extra = state.extra;
+          final query = state.uri.queryParameters;
+          final url = (extra is Map<String, dynamic>
+                  ? extra['url']?.toString()
+                  : null) ??
+              query['url'] ??
+              'https://noiconcept.com';
+          final title = (extra is Map<String, dynamic>
+                  ? extra['title']?.toString()
+                  : null) ??
+              query['title'] ??
+              'Navigation';
+          return WebViewScreen(url: url, title: title);
+        },
       ),
       // 💬 Messagerie d'équipe (temps réel + historique local Hive)
       GoRoute(
@@ -446,7 +467,7 @@ class AppRouter {
         path: '/dashboard/analytics',
         builder: (context, state) => const AnalyticsScreen(),
       ),
-            GoRoute(
+      GoRoute(
         path: '/dashboard/settings',
         builder: (context, state) => const SettingsScreen(),
       ),
