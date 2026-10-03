@@ -132,6 +132,44 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   /// Poids d'un bloc (0.3 → 3.0) ; 1.0 par défaut (colonne égale).
   double _widthOf(String key) => (_blockWidth[key] ?? 1.0).clamp(0.3, 3.0);
 
+  // 👤 TYPO PAR COLONNE : chaque colonne de personnalisation peut choisir
+  // sa POLICE et sa TAILLE (facteur appliqué sur la taille du modèle).
+  // • `block_fonts` : nom de famille Flutter ('WorkSans' | 'Manrope' |
+  //   'Roboto') — vide = police du modèle.
+  // • `block_font_scales` : facteur 0.6 → 1.8 (1.0 = taille du modèle).
+  final Map<String, String> _blockFonts = {};
+  final Map<String, double> _blockFontScales = {};
+
+  /// Facteur de taille de la colonne [key] (borné 0.6 → 1.8, défaut 1.0).
+  double _blockFontScaleOf(String key) =>
+      (_blockFontScales[key] ?? 1.0).clamp(0.6, 1.8);
+
+  /// 👤 Enveloppe le contenu d'une colonne avec la TYPO choisie :
+  ///   • POLICE via `DefaultTextStyle` — les Text sans famille explicite
+  ///     l'héritent (c'est le cas de tous les blocs de l'atelier) ;
+  ///   • TAILLE via le `textScaler` de `MediaQuery` — appliqué à TOUT le
+  ///     texte du bloc, quel que soit son style.
+  /// Ne rien faire quand la colonne utilise les réglages du modèle.
+  Widget _wrapBlockTypo(String key, Widget child) {
+    var wrapped = child;
+    final font = _blockFonts[key];
+    if (font != null && font.isNotEmpty) {
+      wrapped = DefaultTextStyle(
+        style: TextStyle(fontFamily: font, fontSize: _customFontSize),
+        child: wrapped,
+      );
+    }
+    final scale = _blockFontScaleOf(key);
+    if (scale != 1.0) {
+      final mq = MediaQuery.of(context);
+      wrapped = MediaQuery(
+        data: mq.copyWith(textScaler: TextScaler.linear(scale)),
+        child: wrapped,
+      );
+    }
+    return wrapped;
+  }
+
   /// Flex int pour `Expanded` (proportionnel au poids).
   int _flexOf(String key) => (_widthOf(key) * 10).round().clamp(3, 30);
 
@@ -383,6 +421,20 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         if (custom.positions['block_text_colors'] is Map) {
           (custom.positions['block_text_colors'] as Map).forEach((k, v) {
             if (v is num) _blockText[k.toString()] = v.toInt();
+          });
+        }
+        // 👤 Typo par colonne : police + facteur de taille.
+        if (custom.positions['block_fonts'] is Map) {
+          (custom.positions['block_fonts'] as Map).forEach((k, v) {
+            if (v is String && v.isNotEmpty) _blockFonts[k.toString()] = v;
+          });
+        }
+        if (custom.positions['block_font_scales'] is Map) {
+          (custom.positions['block_font_scales'] as Map).forEach((k, v) {
+            if (v is num) {
+              _blockFontScales[k.toString()] =
+                  (v.toDouble()).clamp(0.6, 1.8);
+            }
           });
         }
         if (custom.positions['header_widths'] is Map) {
@@ -652,6 +704,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['block_widths'] = Map<String, double>.from(_blockWidth);
     updatedPositions['block_bg_colors'] = Map<String, int>.from(_blockBg);
     updatedPositions['block_text_colors'] = Map<String, int>.from(_blockText);
+    // 👤 Typo par colonne : police + facteur de taille.
+    updatedPositions['block_fonts'] = Map<String, String>.from(_blockFonts);
+    updatedPositions['block_font_scales'] =
+        Map<String, double>.from(_blockFontScales);
     updatedPositions['qr_position'] = _qrPosition;
     updatedPositions['custom_legal_text'] = _customLegalText;
     updatedPositions['stamp_text'] = _stampText;
@@ -1642,8 +1698,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         if (!_isBlockVisible(key)) continue;
         final block =
             _invoiceBlocks.firstWhere((b) => b.key == key, orElse: () => _invoiceBlocks.first);
+        // 👤 Typo de la colonne appliquée aussi à l'aperçu propre.
         inRow.add(Expanded(
-            flex: _flexOf(key), child: _tintBlock(key, block.builder(_alignOf(key)))));
+            flex: _flexOf(key),
+            child: _wrapBlockTypo(
+              key,
+              _tintBlock(key, block.builder(_alignOf(key))),
+            )));
       }
       if (inRow.isNotEmpty) {
         cells.add(Padding(
@@ -2006,12 +2067,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               setState(() => _selectedBlockKey = block.key);
               _showElementEditorSheet(block.key);
             },
-            child: _wrapBlock(
-              block,
-              block.builder(align),
-              isDragOver,
-              isBeingDragged: isDragging,
-              isSelected: isSelected,
+            // 👤 La typo choisie pour CETTE colonne (police + taille) est
+            // appliquée au contenu du bloc, WYSIWYG avec l'aperçu et le PDF.
+            child: _wrapBlockTypo(
+              block.key,
+              _wrapBlock(
+                block,
+                block.builder(align),
+                isDragOver,
+                isBeingDragged: isDragging,
+                isSelected: isSelected,
+              ),
             ),
           ),
         );
@@ -2439,31 +2505,30 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// 🏷️ Tampon FIXE : calque positionné AU-DESSUS de tous les éléments de la
-  /// facture (dernier enfant du Stack). IgnorePointer → il ne bloque ni le
-  /// drag & drop des blocs, ni les taps.
+  /// 🏷️ Tampon FIXE, CENTRÉ : calque ABSOLU au-dessus de tous les éléments
+  /// de la facture (dernier enfant du Stack, au milieu de la page).
+  /// IgnorePointer → il ne bloque ni le drag & drop des blocs, ni les taps.
   Widget _buildPaidStamp() {
-    return Positioned(
-      top: 150,
-      left: 40,
-      right: 40,
+    return Positioned.fill(
       child: IgnorePointer(
-        child: Transform.rotate(
-          angle: -0.22,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.all(color: _stampColor, width: 3.5),
-              borderRadius: BorderRadius.circular(8),
-              color: _stampColor.withValues(alpha: 0.08),
+        child: Center(
+          child: Transform.rotate(
+            angle: -0.22,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: _stampColor, width: 3.5),
+                borderRadius: BorderRadius.circular(8),
+                color: _stampColor.withValues(alpha: 0.08),
+              ),
+              child: Text(_stampText,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: _stampColor,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4)),
             ),
-            child: Text(_stampText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: _stampColor,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4)),
           ),
         ),
       ),
@@ -2899,6 +2964,75 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     },
                   ),
                 const SizedBox(height: 4),
+                // 👤 TYPO DE LA COLONNE : police + taille modifiables.
+                Row(children: [
+                  const Text('Police :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _blockFonts[key] ?? '',
+                      isDense: true,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(ctx).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600),
+                      items: const [
+                        DropdownMenuItem(
+                            value: '', child: Text('Défaut (modèle)')),
+                        DropdownMenuItem(
+                            value: 'WorkSans', child: Text('Work Sans')),
+                        DropdownMenuItem(
+                            value: 'Manrope', child: Text('Manrope')),
+                        DropdownMenuItem(
+                            value: 'Roboto', child: Text('Roboto')),
+                      ],
+                      onChanged: (val) {
+                        final font = (val == null || val.isEmpty) ? '' : val;
+                        setSS(() {
+                          if (font.isEmpty) {
+                            _blockFonts.remove(key);
+                          } else {
+                            _blockFonts[key] = font;
+                          }
+                        });
+                        setState(() {
+                          if (font.isEmpty) {
+                            _blockFonts.remove(key);
+                          } else {
+                            _blockFonts[key] = font;
+                          }
+                        });
+                        _saveConfig();
+                      },
+                    ),
+                  ),
+                ]),
+                Row(children: [
+                  const Text('Taille :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('${(_blockFontScaleOf(key) * 100).round()}%',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: _primary,
+                          fontWeight: FontWeight.bold)),
+                ]),
+                Slider(
+                  value: _blockFontScaleOf(key),
+                  min: 0.6,
+                  max: 1.8,
+                  divisions: 12,
+                  activeColor: _primary,
+                  label: '${(_blockFontScaleOf(key) * 100).round()}%',
+                  onChanged: (val) {
+                    setSS(() => _blockFontScales[key] = val);
+                    setState(() => _blockFontScales[key] = val);
+                    _saveConfig();
+                  },
+                ),
                 Row(children: [
                   const Text('Alignement :',
                       style: TextStyle(

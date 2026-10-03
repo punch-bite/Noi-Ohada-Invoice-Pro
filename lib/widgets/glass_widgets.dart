@@ -7,9 +7,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Arrière-plan dégradé indigo → violet utilisé par les écrans premium.
-/// Le dégradé occupe TOUT l'écran (media), y compris derrière la barre
-/// d'état et la barre de navigation système.
+/// Arrière-plan discret partagé par les écrans qui utilisent GlassScaffold.
 class GlassScaffold extends StatelessWidget {
   final Widget body;
   final PreferredSizeWidget? appBar;
@@ -33,41 +31,23 @@ class GlassScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final s = startColor ??
-        (isDark ? const Color(0xFF0B0D17) : const Color(0xFFEDE9FE));
+        (isDark ? const Color(0xFF111916) : const Color(0xFFF4F6F2));
     final e = endColor ??
-        (isDark ? const Color(0xFF1E2433) : const Color(0xFFFDF2F8));
+        (isDark ? const Color(0xFF17211C) : const Color(0xFFEAF0EA));
 
     // Fond plein écran (dégradé + halos) placé DERRIÈRE le Scaffold.
     final background = Stack(
       fit: StackFit.expand,
       children: [
-        // Dégradé de fond
-        DecoratedBox(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeInOutCubic,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [s, e],
             ),
-          ),
-        ),
-        // Halos lumineux décoratifs pour l'effet "glass"
-        Positioned(
-          top: -80,
-          right: -60,
-          child: _GlowOrb(
-            color: (isDark ? const Color(0xFF7C6CF0) : const Color(0xFF818CF8))
-                .withValues(alpha: 0.35),
-            size: 220,
-          ),
-        ),
-        Positioned(
-          bottom: -100,
-          left: -70,
-          child: _GlowOrb(
-            color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
-                .withValues(alpha: 0.3),
-            size: 240,
           ),
         ),
       ],
@@ -110,27 +90,6 @@ class GlassScaffold extends StatelessWidget {
   }
 }
 
-/// Orb lumineux décoratif.
-class _GlowOrb extends StatelessWidget {
-  final Color color;
-  final double size;
-  const _GlowOrb({required this.color, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, color.withValues(alpha: 0)],
-        ),
-      ),
-    );
-  }
-}
-
 /// Carte en verre dépoli avec halo et bordure subtile.
 class GlassCard extends StatelessWidget {
   final Widget child;
@@ -158,7 +117,7 @@ class GlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
-    final radius = borderRadius ?? BorderRadius.circular(20);
+    final radius = borderRadius ?? BorderRadius.circular(14);
 
     final cardGradient = gradient ??
         LinearGradient(
@@ -166,18 +125,18 @@ class GlassCard extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: isDark
               ? [
-                  scheme.surface.withValues(alpha: 0.55),
-                  scheme.surface.withValues(alpha: 0.3),
+                  scheme.surface.withValues(alpha: 0.96),
+                  scheme.surface.withValues(alpha: 0.9),
                 ]
               : [
-                  Colors.white.withValues(alpha: 0.75),
-                  Colors.white.withValues(alpha: 0.4),
+                  scheme.surface,
+                  scheme.surface.withValues(alpha: 0.94),
                 ],
         );
 
     Widget card = AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
@@ -185,15 +144,15 @@ class GlassCard extends StatelessWidget {
         borderRadius: radius,
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.5),
-          width: 0.6,
+              ? Colors.white.withValues(alpha: 0.07)
+              : scheme.outlineVariant.withValues(alpha: 0.7),
+          width: 0.8,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.025),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -201,24 +160,6 @@ class GlassCard extends StatelessWidget {
         borderRadius: radius,
         child: Stack(
           children: [
-            // Liseré lumineux en haut pour l'effet "reflet"
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0),
-                      Colors.white.withValues(alpha: 0.6),
-                      Colors.white.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             child,
           ],
         ),
@@ -226,16 +167,21 @@ class GlassCard extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: card,
+      return Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: card,
+        ),
       );
     }
     return card;
   }
 }
 
-/// Bouton avec dégradé indigo → violet, ombre douce et brillance.
+/// Bouton principal à dégradé botanique, avec retour tactile Material.
 class GradientButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
@@ -261,11 +207,12 @@ class GradientButton extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = gradientColors ??
         (isDark
-            ? const [Color(0xFF7C6CF0), Color(0xFF9A7BFF)]
-            : const [Color(0xFF4338CA), Color(0xFF7C3AED)]);
+            ? const [Color(0xFF3B8B73), Color(0xFF176B58)]
+            : const [Color(0xFF23806A), Color(0xFF176B58)]);
 
     Widget content = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
       height: height,
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -273,12 +220,12 @@ class GradientButton extends StatelessWidget {
           end: Alignment.centerRight,
           colors: colors,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(11),
         boxShadow: [
           BoxShadow(
             color: colors.last.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -286,7 +233,7 @@ class GradientButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: loading ? null : onPressed,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(11),
           child: Center(
             child: loading
                 ? const SizedBox(
@@ -307,7 +254,7 @@ class GradientButton extends StatelessWidget {
                       Text(
                         label,
                         style: const TextStyle(
-                          fontFamily: 'Roboto',
+                          fontFamily: 'WorkSans',
                           color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,

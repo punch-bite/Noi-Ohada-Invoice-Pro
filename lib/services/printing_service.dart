@@ -729,7 +729,51 @@ class PrintingService {
             ),
           ),
         ),
+        // 🏷️ Tampon « PAYÉ » : calque ABSOLU, FIXE, CENTRÉ sur la page
+        // (au-dessus de tous les blocs — identique à l'atelier et à l'aperçu).
+        if (_buildStampOverlayPdf(invoice, customPositions, fs) != null)
+          _buildStampOverlayPdf(invoice, customPositions, fs)!,
       ],
+    );
+  }
+
+  /// 🏷️ Calque PDF du tampon (centré, absolu) — null si le tampon est
+  /// désactivé (ou non pertinent : facture non payée sans option forcée).
+  static pw.Widget? _buildStampOverlayPdf(
+    Invoice invoice,
+    Map<String, dynamic> customPositions,
+    double fs,
+  ) {
+    // Le tampon n'est apposé que si la facture est réglée, sauf
+    // personnalisation explicite de l'atelier.
+    final invoicePaid = invoice.status == 'paid';
+    final showPaidStamp =
+        (customPositions['show_paid_stamp'] as bool?) ?? invoicePaid;
+    if (!showPaidStamp) return null;
+    final stampText = (customPositions['stamp_text'] as String?) ?? 'PAYÉ';
+    return pw.Positioned.fill(
+      child: pw.Center(
+        child: pw.Transform.rotate(
+          angle: -0.15,
+          child: pw.Container(
+            padding:
+                const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(
+                  color: _getPdfColor(const Color(0xFFBAAB6D)), width: 2),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Text(
+              stampText,
+              style: pw.TextStyle(
+                fontSize: fs + 6,
+                fontWeight: pw.FontWeight.bold,
+                color: _getPdfColor(const Color(0xFFBAAB6D)),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -935,6 +979,17 @@ class PrintingService {
 
     final totalW = keys.fold<double>(0, (a, k) => a + weight(k));
     final availW = keys.isEmpty ? 0.0 : contentW - gap * (keys.length - 1);
+
+    // 👤 Taille de police PAR COLONNE (`block_font_scales`, 0.6 → 1.8,
+    // 1.0 = taille du modèle) — appliquée à tout le texte du bloc.
+    double fontScale(String k) {
+      final m = customPositions['block_font_scales'];
+      if (m is Map) {
+        final v = m[k];
+        if (v is num) return v.toDouble().clamp(0.6, 1.8);
+      }
+      return 1.0;
+    }
 
     // 🎨 Couleurs personnalisées par bloc (fond + texte) sauvegardées dans
     // l'atelier (`block_bg_colors` / `block_text_colors`).
@@ -1243,72 +1298,40 @@ class PrintingService {
       case LayoutElement.signature:
         // 🖊️ La SIGNATURE ÉMISE pour la facture (image base64 enregistrée
         // dans la personnalisation `signature_image`) doit FIGURER sur le PDF.
+        // NB : le tampon « PAYÉ » n'est PAS ici — c'est un calque ABSOLU
+        // centré sur la page (cf. `_buildStampOverlayPdf`).
         final showSignature =
             (customPositions['show_signature_line'] as bool?) ?? true;
-        // Le tampon « PAYÉ » n'est apposé que si la facture est effectivement
-        // réglée, sauf personnalisation explicite de l'atelier.
-        final invoicePaid = invoice.status == 'paid';
-        final showPaidStamp =
-            (customPositions['show_paid_stamp'] as bool?) ?? invoicePaid;
-        final stampText = (customPositions['stamp_text'] as String?) ?? 'PAYÉ';
         final signatoryTitle =
             (customPositions['signatory_title'] as String?)?.trim();
         final signatureImage = _decodeBase64Image(
             customPositions['signature_image'] as String?);
-        return pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            if (showPaidStamp)
-              pw.Transform.rotate(
-                angle: -0.15,
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(
-                        color: _getPdfColor(const Color(0xFFBAAB6D)), width: 2),
-                    borderRadius: pw.BorderRadius.circular(6),
-                  ),
-                  child: pw.Text(
-                    stampText,
-                    style: pw.TextStyle(
-                      fontSize: fs,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _getPdfColor(const Color(0xFFBAAB6D)),
-                    ),
-                  ),
-                ),
-              )
-            else
-              pw.SizedBox(),
-            if (showSignature)
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  // 🖊️ Signature de l'émetteur, apposée AU-DESSUS de la ligne.
-                  if (signatureImage != null) ...[
-                    pw.Image(signatureImage,
-                        width: 130, height: 52, fit: pw.BoxFit.contain),
-                    pw.SizedBox(height: 2),
-                  ],
-                  pw.Container(
-                    width: 120,
-                    height: 1,
-                    color: _withOpacity(text, 0.4),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    (signatoryTitle == null || signatoryTitle.isEmpty)
-                        ? 'Signature & Cachet'
-                        : signatoryTitle,
-                    style: pw.TextStyle(fontSize: fs - 2, color: sub),
-                  ),
-                ],
-              )
-            else
-              pw.SizedBox(),
-          ],
+        if (!showSignature) return pw.SizedBox();
+        return pw.Align(
+          alignment: pw.Alignment.bottomLeft,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // 🖊️ Signature de l'émetteur, apposée AU-DESSUS de la ligne.
+              if (signatureImage != null) ...[
+                pw.Image(signatureImage,
+                    width: 130, height: 52, fit: pw.BoxFit.contain),
+                pw.SizedBox(height: 2),
+              ],
+              pw.Container(
+                width: 120,
+                height: 1,
+                color: _withOpacity(text, 0.4),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                (signatoryTitle == null || signatoryTitle.isEmpty)
+                    ? 'Signature & Cachet'
+                    : signatoryTitle,
+                style: pw.TextStyle(fontSize: fs - 2, color: sub),
+              ),
+            ],
+          ),
         );
       default:
         return pw.SizedBox();

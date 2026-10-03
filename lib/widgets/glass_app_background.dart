@@ -1,10 +1,8 @@
 // lib/widgets/glass_app_background.dart
 //
-// 🖼️ Fond "glass" GLOBAL appliqué à toute l'application (dans MaterialApp.builder).
-// Le dégradé indigo/violet + halos couvrent tout l'écran, DERRIÈRE les écrans.
-// Chaque écran devient ainsi "verre dépoli" si son Scaffold est transparent.
+// Fond global discret. Les changements de thème sont interpolés pour garder
+// une transition douce sans ajouter de décor qui concurrence le contenu.
 //
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class GlassAppBackground extends StatelessWidget {
@@ -15,72 +13,45 @@ class GlassAppBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final start = isDark ? const Color(0xFF0B0D17) : const Color(0xFFEDE9FE);
-    final end = isDark ? const Color(0xFF1E2433) : const Color(0xFFFDF2F8);
+    final start = isDark ? const Color(0xFF111916) : const Color(0xFFF4F6F2);
+    final end = isDark ? const Color(0xFF17211C) : const Color(0xFFEAF0EA);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Dégradé de fond (couvre tout l'écran)
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [start, end],
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeInOutCubic,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [start, end],
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 420),
+                curve: Curves.easeInOutCubic,
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(180),
+                  ),
+                  color: (isDark
+                          ? const Color(0xFF83C8AC)
+                          : const Color(0xFF176B58))
+                      .withValues(alpha: isDark ? 0.035 : 0.025),
+                ),
               ),
             ),
           ),
-        ),
-        // Halos lumineux doux (effet glass)
-        Positioned(
-          top: -100,
-          right: -80,
-          child: _Glow(
-            color: (isDark ? const Color(0xFF7C6CF0) : const Color(0xFF818CF8))
-                .withValues(alpha: 0.22),
-            size: 280,
-          ),
-        ),
-        Positioned(
-          bottom: -120,
-          left: -90,
-          child: _Glow(
-            color: (isDark ? const Color(0xFF9A7BFF) : const Color(0xFFF9A8D4))
-                .withValues(alpha: 0.18),
-            size: 320,
-          ),
-        ),
-        // Légère atténuation pour la lisibilité
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 0.5, sigmaY: 0.5),
-            child: const SizedBox.shrink(),
-          ),
-        ),
-        child,
-      ],
-    );
-  }
-}
-
-
-class _Glow extends StatelessWidget {
-  final Color color;
-  final double size;
-  const _Glow({required this.color, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color, color.withValues(alpha: 0)],
-        ),
+          child,
+        ],
       ),
     );
   }

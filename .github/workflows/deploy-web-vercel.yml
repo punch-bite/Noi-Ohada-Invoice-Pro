@@ -1,0 +1,72 @@
+name: Deploy Web PWA to Vercel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-web-production
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build Flutter Web and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.9
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build installable web app
+        run: flutter build web --release --base-href=/ --dart-define=API_BASE_URL=https://server-xi-two-23.vercel.app
+
+      - name: Prepare Vercel Build Output
+        run: |
+          mkdir -p .vercel/output/static
+          cp -R build/web/. .vercel/output/static/
+          cat > .vercel/output/config.json <<'JSON'
+          {
+            "version": 3,
+            "routes": [
+              { "handle": "filesystem" },
+              { "src": "/(.*)", "dest": "/index.html" }
+            ]
+          }
+          JSON
+
+      - name: Deploy production to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_mKahFlpvoBYNTHr0reDF3k7X
+          VERCEL_PROJECT_ID: prj_hqiekjcRDixyFdkLJck9CWlW7pBf
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "GitHub secret VERCEL_TOKEN is required" >&2
+            exit 1
+          fi
+          deploy_output=$(npx vercel deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" 2>&1) || {
+            echo "$deploy_output"
+            exit 1
+          }
+          echo "$deploy_output"
+          deployment_url=$(printf '%s\n' "$deploy_output" | sed -nE 's/.*Production[[:space:]]+(https:\/\/[^[:space:]]+).*/\1/p' | head -n 1)
+          if [ -z "$deployment_url" ]; then
+            echo "Could not find the generated Vercel production URL" >&2
+            exit 1
+          fi
+          npx vercel alias set "$deployment_url" noi-ohada-pwa.vercel.app --scope punch-bites-projects --token="$VERCEL_TOKEN"
+          npx vercel alias rm noi-ohada-web-punch-bites-projects.vercel.app --yes --scope punch-bites-projects --token="$VERCEL_TOKEN" || true

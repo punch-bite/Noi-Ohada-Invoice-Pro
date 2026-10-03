@@ -472,18 +472,19 @@ class InvoiceTemplate {
       'invoice_title': 'right',
     },
   }) {
-    // 4 sections empilées, 1 à 3 blocs côte à côte (comme le défaut atelier).
-    // `qr_block` reste inoffensif tant que `qr_position != 'standalone'` :
-    // le QR est alors rendu DANS le bloc « Totaux ».
+    // 🧱 Sections des presets — règles de mise en page demandées :
+    //   • le QR Code est DANS SA PROPRE SECTION juste SOUS « Totaux » ;
+    //   • les mentions légales sont SEULES dans leur section ;
+    //   • la signature est SEULE dans sa section.
+    // (Le tampon « PAYÉ » n'est pas une section : c'est un calque fixe
+    // centré au-dessus de tout — cf. rendu atelier / aperçu / PDF.)
     final sections = <List<String>>[
       const ['billing_info', 'invoice_meta'],
       const ['items_table'],
       const ['totals'],
-      [
-        'legal_mentions',
-        'signature_block',
-        if (showQr) 'qr_block',
-      ],
+      if (showQr) const ['qr_block'],
+      const ['legal_mentions'],
+      if (showSignatureLine) const ['signature_block'],
     ];
     return <String, dynamic>{
       // Base identique à celle produite par l'atelier
@@ -525,7 +526,9 @@ class InvoiceTemplate {
       'stamp_text': stampText,
       'show_paid_stamp': showPaidStamp,
       'show_signature_line': showSignatureLine,
-      'qr_position': 'totals',
+      // 🧱 QR sous « Totaux » : le bloc `qr_block` autonome est dans SA
+      // section juste après `totals` (pas intégré au bloc Totaux).
+      'qr_position': 'standalone',
     };
   }
 

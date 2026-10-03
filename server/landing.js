@@ -152,7 +152,7 @@ function renderLanding() {
     <p class="lead">Créez des factures et devis élégants en quelques secondes, suivez vos stocks — en ligne comme hors connexion.</p>
     <div class="cta">
       <a class="btn primary" href="/download">${ICON.down} Télécharger l'application</a>
-      <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">${ICON.globe} Version web</a>
+      <a class="btn ghost" href="https://noi-ohada-pwa.vercel.app" target="_blank" rel="noopener">${ICON.globe} Version web</a>
     </div>
     <div class="trust">
       <span>${ICON.check} Conforme OHADA</span>

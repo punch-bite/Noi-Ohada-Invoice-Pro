@@ -104,7 +104,7 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
     await _writeLog('⚠️ Configuration: $e');
   }
 
-    // ===== BASE DE DONNÉES (FIRESTORE = source de vérité) =====
+  // ===== BASE DE DONNÉES (FIRESTORE = source de vérité) =====
   // NB : toute la donnée métier (clients, produits, factures, entreprise…)
   // vit désormais dans Firestore via DatabaseService. Hive n'est conservé
   // que pour le cache interne de certains services auxiliaires.
@@ -256,7 +256,8 @@ class MyApp extends StatelessWidget {
         Provider<StockService>.value(value: stockService),
         // 🛒 Panier de modèles de factures (singleton) — requis par la
         // boutique et le checkout (`context.watch<TemplateCart>()`).
-        ChangeNotifierProvider<TemplateCart>.value(value: TemplateCart.instance),
+        ChangeNotifierProvider<TemplateCart>.value(
+            value: TemplateCart.instance),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -268,6 +269,8 @@ class MyApp extends StatelessWidget {
               scaffoldMessengerKey: appScaffoldMessengerKey,
               theme: ThemeService.getLightTheme(),
               darkTheme: ThemeService.getDarkTheme(),
+              themeAnimationDuration: const Duration(milliseconds: 320),
+              themeAnimationCurve: Curves.easeInOutCubic,
               themeMode: _getThemeMode(themeProvider.currentTheme),
               routerConfig: AppRouter.router,
               builder: (context, child) {
