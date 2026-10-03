@@ -274,22 +274,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
               ],
             ),
           ),
-          const SizedBox(width: 9),
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'Conforme aux normes OHADA & SYSCOHADA',
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                  color: s.kicker,
-                ),
-              ),
-            ),
-          ),
+          
         ],
       ),
     );

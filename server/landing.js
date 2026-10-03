@@ -139,7 +139,7 @@ function renderLanding() {
 
 <div class="wrap">
   <header>
-    <a class="brand" href="/"><span class="logo text-decoration-none"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
+    <a class="brand text-decoration-none" href="/"><img src="/logo.png" alt="Noi OHADA Invoice Pro"><span class="logo text-decoration-none">Noi OHADA</span></a>
     <nav class="hnav">
       <a href="#fonctionnalites">Fonctionnalités</a>
       <a class="btn small primary" href="/download">${ICON.down} Télécharger</a>
