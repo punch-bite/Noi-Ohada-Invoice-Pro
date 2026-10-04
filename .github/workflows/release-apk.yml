@@ -1,11 +1,12 @@
-name: Release — APK + AAB + iOS → GitHub Release (continu + tags v*)
+name: Release — Web (Vercel) + APK + AAB + iOS → GitHub Release (continu + tags v*)
 
 # =============================================================
-# Build l'APK + l'AAB signés (keystore de production) et publie
-# automatiquement une GitHub Release :
+# Workflow UNIQUE : Web + Android + iOS.
 #   • à chaque push sur main → release roulante « latest »
 #     (APK + AAB + iOS + Web, page /download toujours à jour)
+#     + déploiement direct de la PWA sur Vercel (Projet A).
 #   • à chaque tag vX.Y.Z (ex. v1.0.0) → release versionnée
+#     + déploiement Vercel aussi (même PWA).
 #   • via le bouton « Run workflow » (input tag_name optionnel).
 #
 # ⚠️ SECRETS REQUIS (Settings → Secrets and variables → Actions) :
@@ -13,6 +14,10 @@ name: Release — APK + AAB + iOS → GitHub Release (continu + tags v*)
 #   KEYSTORE_PASSWORD → mot de passe du keystore
 #   KEY_ALIAS         → alias de la clé de signature (ex. upload)
 #   KEY_PASSWORD      → mot de passe de la clé
+#   VERCEL_TOKEN      → Vercel → Account Settings → Tokens → Create,
+#                       avec accès au projet PWA (Projet A).
+#                       Puis GitHub → Settings → Secrets and variables
+#                       → Actions → New repository secret (nom : VERCEL_TOKEN).
 #   (optionnel) API_SECRET_KEY → clot l'accès si votre serveur le demande
 #
 # NB : aucun secret n'est embarqué dans le dépôt. Le keystore est
@@ -49,6 +54,12 @@ env:
   API_BASE_URL: https://server-xi-two-23.vercel.app
   # Tag roulant mis à jour à chaque push sur main (page /download → latest).
   ROLLING_TAG: latest
+  # Projet A — PWA Flutter (déploiement Vercel dans le job build-web).
+  # Projet B — API Node (server/) : déploiement Git auto Vercel séparé,
+  # avec Root Directory = server.
+  PWA_URL: noi-ohada-pwa.vercel.app
+  VERCEL_ORG_ID: team_mKahFlpvoBYNTHr0reDF3k7X
+  VERCEL_PROJECT_ID: prj_hqiekjcRDixyFdkLJck9CWlW7pBf
 
 jobs:
   # ------------------------------------------------------------
@@ -377,9 +388,12 @@ jobs:
 
   # ------------------------------------------------------------
   # Web — même tag → même release (archive de la PWA)
+  # + déploiement DIRECT de la PWA sur Vercel (Projet A).
+  # Un seul job = un seul `flutter build web` pour les 2 sorties
+  # (web-release.zip + Vercel), pas de double build.
   # ------------------------------------------------------------
   build-web:
-    name: "Build Web (PWA)"
+    name: "Build Web (PWA) + Deploy Vercel"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -402,10 +416,13 @@ jobs:
           if [ -n "$API_SECRET_KEY" ]; then
             DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
           fi
-          flutter build web --release $DEFINES
+          flutter build web --release --base-href=/ $DEFINES
 
       - name: 📦 Archiver build/web en web-release.zip
         run: |
+          # web/vercel.json est copié par Flutter dans build/web/ : on le
+          # retire de l'archive (sinon /vercel.json public dans le zip).
+          rm -f build/web/vercel.json
           cd build/web
           zip -qry ../web-release.zip .
 
@@ -416,6 +433,92 @@ jobs:
           path: build/web-release.zip
           if-no-files-found: error
           retention-days: 14
+
+      # ---------- Déploiement Vercel (réutilise le même build/web) ----------
+      - name: 🔍 Pré-contrôle Vercel
+        id: vercel-check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "vercel_enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## ⚠️ Déploiement Vercel ignoré — secret VERCEL_TOKEN absent"
+              echo ""
+              echo "Le build Web + \`web-release.zip\` sont OK, seule la mise en"
+              echo "ligne sur https://${{ env.PWA_URL }} est sautée."
+              echo ""
+              echo "### 🔧 Corriger (2 min)"
+              echo "1. Vercel → Account Settings → Tokens → Create Token."
+              echo "2. GitHub → Settings → Secrets and variables → Actions"
+              echo "   → New repository secret → nom \`VERCEL_TOKEN\`."
+              echo "3. Relancer : Actions → ce run → Re-run jobs → build-web."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "vercel_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "✅ VERCEL_TOKEN présent — déploiement activé."
+          fi
+
+      - name: 📁 Préparer le Build Output Vercel
+        if: steps.vercel-check.outputs.vercel_enabled == 'true'
+        run: |
+          mkdir -p .vercel/output/static
+          cp -R build/web/. .vercel/output/static/
+          cat > .vercel/output/config.json <<'JSON'
+          {
+            "version": 3,
+            "routes": [
+              { "handle": "filesystem" },
+              { "src": "/(.*)", "dest": "/index.html" }
+            ]
+          }
+          JSON
+
+      - name: 🚀 Déployer la PWA sur Vercel (production)
+        if: steps.vercel-check.outputs.vercel_enabled == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+        run: |
+          # Le vercel.json racine route /(.*) vers server/index.js (Projet B).
+          # Avec --prebuilt il ne doit PAS partir avec la PWA : on l'écarte
+          # le temps du deploy puis on le restaure (trap = même en échec).
+          if [ -f vercel.json ]; then
+            mv vercel.json /tmp/vercel.root.json.bak
+            trap 'mv /tmp/vercel.root.json.bak vercel.json' EXIT
+          fi
+          set +e
+          OUT_FILE="$(mktemp)"
+          npx vercel@latest deploy --prebuilt --prod --yes \
+            --token="$VERCEL_TOKEN" >"$OUT_FILE" 2>&1
+          CODE=$?
+          cat "$OUT_FILE"
+          if [ $CODE -ne 0 ]; then
+            {
+              echo "## ❌ Échec du déploiement Vercel"
+              echo ""
+              echo '```'
+              tail -30 "$OUT_FILE"
+              echo '```'
+              echo ""
+              echo "### 🔧 Causes probables"
+              echo "- **Token invalide/révoqué** (Unauthorized/Invalid token)"
+              echo "  → recréer le token Vercel + MAJ le secret GitHub."
+              echo "- **Mauvais projet** (Project not found) → vérifier IDs :"
+              echo "  \`VERCEL_PROJECT_ID=${{ env.VERCEL_PROJECT_ID }}\`,"
+              echo "  \`VERCEL_ORG_ID=${{ env.VERCEL_ORG_ID }}\`."
+              echo "- **Token sans accès au projet** → créer le token dans le"
+              echo "  bon compte/équipe Vercel."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit $CODE
+          fi
+          DEPLOY_URL="$(grep -oE 'https://[^[:space:]]*\.vercel\.app' "$OUT_FILE" | head -n 1)"
+          {
+            echo "### ✅ PWA déployée sur Vercel"
+            echo "- Production : ${DEPLOY_URL:-voir log ci-dessus}"
+            echo "- Alias : https://${{ env.PWA_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ------------------------------------------------------------
   # Publication — UNE release pour les 3 plateformes :
