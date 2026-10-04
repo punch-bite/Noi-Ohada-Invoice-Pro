@@ -1,9 +1,12 @@
-name: Release — APK + AAB + iOS → GitHub Release (tags v*)
+name: Release — APK + AAB + iOS → GitHub Release (continu + tags v*)
 
 # =============================================================
 # Build l'APK + l'AAB signés (keystore de production) et publie
-# automatiquement une GitHub Release à chaque tag vX.Y.Z
-# (ex. v1.0.0) ou via le bouton « Run workflow ».
+# automatiquement une GitHub Release :
+#   • à chaque push sur main → release roulante « latest »
+#     (APK + AAB + iOS + Web, page /download toujours à jour)
+#   • à chaque tag vX.Y.Z (ex. v1.0.0) → release versionnée
+#   • via le bouton « Run workflow » (input tag_name optionnel).
 #
 # ⚠️ SECRETS REQUIS (Settings → Secrets and variables → Actions) :
 #   KEYSTORE_BASE64   → cat android/app/upload-keystore.jks | base64
@@ -20,6 +23,8 @@ name: Release — APK + AAB + iOS → GitHub Release (tags v*)
 # (Codemagic est retourné en usage manuel uniquement — cf. codemagic.yaml).
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -32,7 +37,47 @@ on:
 permissions:
   contents: write
 
+# ⚠️ Le job publish force-pousse le tag roulant « latest ».
+# Sans concurrence, 2 push rapprochés = 2 runs qui déplacent le tag
+# en parallèle → assets mélangés entre 2 commits. On sérialise.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # Même serveur que le Web (Projet B) : proxy ENKAP, emails, abonnements…
+  API_BASE_URL: https://server-xi-two-23.vercel.app
+  # Tag roulant mis à jour à chaque push sur main (page /download → latest).
+  ROLLING_TAG: latest
+
 jobs:
+  # ------------------------------------------------------------
+  # Résout le tag cible : « latest » sur push main, tag versionné
+  # sur push de tag v* ou input manuel. Évite les doublons de
+  # logique dans le job publish.
+  # ------------------------------------------------------------
+  resolve-tag:
+    name: "Résoudre le tag de release"
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+      is_rolling: ${{ steps.tag.outputs.is_rolling }}
+    steps:
+      - name: 🏷️ Déterminer le tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            echo "tag_name=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag_name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_name=${{ env.ROLLING_TAG }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
   build-android:
     name: "Build APK + AAB (release)"
     runs-on: ubuntu-latest
@@ -306,7 +351,14 @@ jobs:
         run: flutter create --platforms=ios --org com.noi --project-name noi_ohada_invoice_pro .
 
       - name: 🍎 Build iOS (release, sans signature)
-        run: flutter build ios --release --no-codesign
+        env:
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build ios --release --no-codesign $DEFINES
 
       - name: 📦 Empaqueter Runner.app en .zip (sideload)
         run: |
@@ -343,7 +395,14 @@ jobs:
         run: flutter pub get
 
       - name: 🌐 Build web (release)
-        run: flutter build web --release --dart-define=API_BASE_URL=https://server-xi-two-23.vercel.app
+        env:
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build web --release $DEFINES
 
       - name: 📦 Archiver build/web en web-release.zip
         run: |
@@ -361,12 +420,28 @@ jobs:
   # ------------------------------------------------------------
   # Publication — UNE release pour les 3 plateformes :
   #   Android → *.apk  |  iOS → ios-release.zip  |  Web → web-release.zip
+  #   • push sur main → release roulante « latest » (mise à jour,
+  #     marquée latest, page /download toujours à jour)
+  #   • push de tag v* / manuel → release versionnée
   # ------------------------------------------------------------
   publish:
     name: "Publier la GitHub Release"
-    needs: [build-android, build-ios, build-web]
+    needs: [resolve-tag, build-android, build-ios, build-web]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ (Re)positionner le tag roulant sur ce commit
+        if: needs.resolve-tag.outputs.is_rolling == 'true'
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+
       - name: ⬇️ Télécharger les artefacts des 3 builds
         uses: actions/download-artifact@v4
         with:
@@ -388,8 +463,8 @@ jobs:
       - name: 📦 Créer la GitHub Release + artefacts
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag_name || github.ref_name }}
-          name: Noi OHADA Invoice Pro – Release ${{ inputs.tag_name || github.ref_name }}
+          tag_name: ${{ needs.resolve-tag.outputs.tag_name }}
+          name: ${{ needs.resolve-tag.outputs.is_rolling == 'true' && 'Noi OHADA Invoice Pro – Build continu (latest)' || format('Noi OHADA Invoice Pro – Release {0}', needs.resolve-tag.outputs.tag_name) }}
           body: |
             ## 📱 Noi OHADA Invoice Pro
 
@@ -412,6 +487,7 @@ jobs:
 
             ---
             *Généré automatiquement par GitHub Actions.*
+            Commit : ${{ github.sha }}
           files: dist/**
           # ⚠️ draft/prerelease = false : la page /download (server/download.js)
           # interroge l'API `releases/latest`, qui IGNORE les drafts et les
@@ -419,5 +495,9 @@ jobs:
           # release doit être publiée officiellement.
           draft: false
           prerelease: false
+          # La release roulante « latest » doit rester LA latest (sinon les
+          # tags v* plus anciens la remplaceraient comme latest).
+          # is_rolling vaut déjà 'true'/'false', format accepté tel quel.
+          make_latest: ${{ needs.resolve-tag.outputs.is_rolling }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
