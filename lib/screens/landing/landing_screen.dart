@@ -310,13 +310,13 @@ class _LandingScreenState extends State<LandingScreen>
   //  Slide 0 — Héros
   // ======================================================================
   Widget _buildHero(_Palette p) {
-    const heroTitle = 'La facturation OHADA,\nsimple & puissante.';
+    const heroTitle = 'La facturation,\nsimple & puissante.';
     final lines = heroTitle.split('\n');
 
     return _slideScaffold(
       p,
       children: [
-        _eyebrow(p, 'Essai gratuit • Sans carte bancaire'),
+        // _eyebrow(p, 'Essai gratuit • Sans carte bancaire'),
         const SizedBox(height: 24),
         Text(
           lines[0],
@@ -361,7 +361,7 @@ class _LandingScreenState extends State<LandingScreen>
           'SYSCOHADA, avec des paiements mobiles intégrés dès le départ.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 15,
+            fontSize: 14,
             height: 1.6,
             color: p.muted,
           ),

@@ -63,8 +63,41 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   String _activeTool = '';
   double _customFontSize = 12.0;
 
+  /// 🪗 Panneau d'outils repliable : replié (true = réduit), il ne reste que
+  /// la poignée + la barre d'outils horizontale, ce qui rend toute sa hauteur
+  /// à l'aperçu A4 sur les petits écrans.
+  bool _panelCollapsed = false;
+
+  // 🖊️ TEXTE LIBRE (bloc de texte statique) : clé interne → contenu saisi.
+  // Chaque texte est un BLOC à part entière : déplaçable entre les colonnes,
+  // plaçable dans l'en-tête, alignable et doté de sa propre typo.
+  final Map<String, String> _customTexts = {};
+  int _textSeq = 0;
+
+  /// 🖊️ Vrai si [key] est un bloc de texte libre (et non un bloc métier).
+  bool _isTextBlock(String key) => _customTexts.containsKey(key);
+
+  /// Libellé d'un bloc de texte libre (extrait du contenu saisi).
+  String _textBlockTitle(String key) {
+    final flat = (_customTexts[key] ?? '').replaceAll('\n', ' ').trim();
+    if (flat.isEmpty) return 'Texte libre';
+    return flat.length > 18 ? '${flat.substring(0, 18)}…' : flat;
+  }
+
   // Header Drag & Drop state
   List<String> _headerElements = ['logo', 'company_info', 'invoice_title'];
+
+  // 🏷️ Textes ajoutés DANS la colonne « Titre » (sous le titre / sous-titre) :
+  // clés de textes libres rendus dans la colonne d'en-tête `invoice_title`,
+  // persistance via `title_extra_keys`.
+  List<String> _titleExtraKeys = [];
+
+  /// 🏷️ Éléments d'en-tête « natifs » (jamais retirés de la liste).
+  static const List<String> _nativeHeaderKeys = [
+    'logo',
+    'company_info',
+    'invoice_title',
+  ];
   // 🔧 Colonnes d'en-tête : largeur (poids) + alignement par élément.
   final Map<String, double> _headerWidth = {};
   final Map<String, TextAlign> _headerAlign = {};
@@ -298,6 +331,16 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           key: 'qr_block', title: 'QR Code de Paiement', builder: _buildQRBlock),
     };
 
+    // 🖊️ Blocs « texte libre » : un bloc par texte créé, traité exactement
+    // comme les blocs métier (déplaçable, alignable, typo par colonne).
+    for (final key in _customTexts.keys) {
+      allBlocks[key] = _InvoiceBlock(
+        key: key,
+        title: _textBlockTitle(key),
+        builder: (align) => _buildStaticTextBlock(key, align),
+      );
+    }
+
     // Définitions de tous les blocs (le tampon, lui, est un calque fixe).
     _invoiceBlocks = allBlocks.values.toList();
 
@@ -326,6 +369,12 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     }
     for (final key in knownKeys) {
       if (seen.contains(key)) continue;
+      // 📌 Un bloc rattaché à l'EN-TÊTE (ou au titre) n'appartient pas au
+      // corps : il ne doit pas être ré-ajouté automatiquement dans une
+      // section (sinon il apparaîtrait en double, corps + en-tête).
+      if (_headerElements.contains(key) || _titleExtraKeys.contains(key)) {
+        continue;
+      }
       if (sections.isEmpty || sections.last.length >= _maxPerSection) {
         sections.add([key]);
       } else {
@@ -512,6 +561,24 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           } catch (_) {}
         }
       }
+      // 🖊️ Textes libres sauvegardés (clé interne → contenu).
+      if (custom.positions['custom_texts'] is Map) {
+        _customTexts.clear();
+        (custom.positions['custom_texts'] as Map).forEach((k, v) {
+          final key = k.toString();
+          if (!key.startsWith('text_')) return;
+          _customTexts[key] = v?.toString() ?? '';
+          final seq = int.tryParse(key.substring('text_'.length));
+          if (seq != null && seq > _textSeq) _textSeq = seq;
+        });
+      }
+      // 🏷️ Textes rattachés à la colonne « Titre » (sous le titre).
+      _titleExtraKeys = custom.positions['title_extra_keys'] is List
+          ? (custom.positions['title_extra_keys'] as List)
+              .whereType<String>()
+              .where((k) => k.startsWith('text_'))
+              .toList()
+          : <String>[];
       _background = custom.background;
       _availableTemplates = templates;
       _initBlocks();
@@ -719,6 +786,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['client_name'] = _clientName;
     updatedPositions['invoice_title_text'] = _invoiceTitleText;
     updatedPositions['invoice_subtitle'] = _invoiceSubtitle;
+    // 🖊️ Textes libres (blocs statiques) — un Map clé interne → contenu.
+    updatedPositions['custom_texts'] =
+        Map<String, String>.from(_customTexts);
+    // 🏷️ Textes rattachés à la colonne « Titre » (sous le titre).
+    updatedPositions['title_extra_keys'] = List<String>.from(_titleExtraKeys);
     // 🖊️ La signature (image) est embarquée dans la personnalisation afin
     // d'être rendue à l'identique dans l'aperçu A4 et le PDF imprimé.
     if (_signatureImageBytes != null && _signatureImageBytes!.isNotEmpty) {
@@ -894,6 +966,240 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     setState(() {
       final section = _sectionsLayout.removeAt(s);
       _sectionsLayout.insert(target, section);
+    });
+    _saveConfig();
+  }
+
+  // ── 🏷️ EN-TÊTE ↔ CORPS : un bloc peut aller dans l'en-tête et revenir ───
+
+  /// 🏷️ Déplace le bloc [key] du corps VERS l'en-tête.
+  ///
+  /// [beforeKey] = élément d'en-tête devant lequel s'insérer (`null` = après
+  /// le dernier, soit « sous le titre » quand le titre est en queue). Le bloc
+  /// conserve sa visibilité, sa largeur et son alignement propres.
+  void _moveBlockToHeader(String key, {String? beforeKey}) {
+    setState(() {
+      // 1️⃣ Retrait du corps (toutes les sections, au cas où).
+      for (final section in _sectionsLayout) {
+        section.remove(key);
+      }
+      _sectionsLayout.removeWhere((s) => s.isEmpty);
+      if (_sectionsLayout.isEmpty) _sectionsLayout.add(<String>[]);
+      // 2️⃣ Insertion dans l'en-tête.
+      _headerElements.remove(key);
+      final idx = beforeKey == null ? -1 : _headerElements.indexOf(beforeKey);
+      if (idx >= 0) {
+        _headerElements.insert(idx, key);
+      } else {
+        _headerElements.add(key);
+      }
+      _headerVisibility.putIfAbsent(key, () => true);
+      _headerWidth.putIfAbsent(key, () => 1.0);
+    });
+    _saveConfig();
+  }
+
+  /// ↩️ Replace un élément d'en-tête DANS le corps.
+  ///
+  /// Les trois variables natives (logo / infos société / titre) ne quittent
+  /// jamais l'en-tête.
+  void _moveHeaderToBody(String key) {
+    if (_nativeHeaderKeys.contains(key)) return;
+    setState(() {
+      _headerElements.remove(key);
+      if (_headerElements.isEmpty) {
+        _headerElements = List<String>.from(_nativeHeaderKeys);
+      }
+      // 3️⃣ Retour dans le corps, dans une section pleine largeur dédiée.
+      if (!_sectionsLayout.any((s) => s.contains(key))) {
+        _sectionsLayout.add(<String>[key]);
+      }
+    });
+    _saveConfig();
+  }
+
+  // ── ➕ AJOUT D'ÉLÉMENTS DANS L'EN-TÊTE ET DANS LE TITRE ──────────────────
+
+  /// 🆕 Feuille « Ajouter un élément dans l'en-tête » : un texte libre (créé
+  /// directement en en-tête) ou n'importe quel bloc du corps (déplacé ici).
+  void _showAddToHeaderSheet() {
+    // Blocs du corps encore présents dans une section (hors colonnes vides,
+    // hors blocs déjà en en-tête ou rattachés au titre).
+    final bodyKeys = _sectionsLayout
+        .expand((s) => s)
+        .where((k) =>
+            k != _emptyColumnKey &&
+            !_headerElements.contains(k) &&
+            !_titleExtraKeys.contains(k))
+        .toList();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.add_to_photos_outlined, color: _primary, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text("Ajouter dans l'en-tête",
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15.5)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              "Ajoutez un texte libre ou déplacez un bloc du corps dans "
+              "l'en-tête (nouvelle colonne, à droite du titre).",
+              style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(Icons.notes_outlined, size: 20, color: _primary),
+              title: const Text('Texte libre',
+                  style:
+                      TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              subtitle: Text("Créer un texte dans l'en-tête",
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant)),
+              trailing: Icon(Icons.chevron_right, size: 20, color: _outline),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addTextToHeader();
+              },
+            ),
+            if (bodyKeys.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Divider(height: 1),
+              const SizedBox(height: 6),
+              const Text("Blocs du corps",
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final key in bodyKeys)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(Icons.drag_indicator,
+                              size: 18, color: _outline),
+                          title: Text(_blockTitle(key),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          trailing: Icon(Icons.vertical_align_top,
+                              size: 18, color: _primary),
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            _moveBlockToHeader(key);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ➕ Crée un texte libre DANS l'en-tête (nouvelle colonne) et ouvre son
+  /// éditeur de contenu.
+  void _addTextToHeader() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      // Rattaché à l'en-tête AVANT `_initBlocks` (sinon ré-ajout au corps).
+      _headerElements.add(key);
+      _headerVisibility.putIfAbsent(key, () => true);
+      _headerWidth.putIfAbsent(key, () => 1.0);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  /// ➕ Crée un texte libre DANS la colonne « Titre » (sous le titre) et
+  /// ouvre son éditeur de contenu.
+  void _addTextUnderTitle() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.right;
+      // Rattaché au titre AVANT `_initBlocks` (sinon ré-ajout au corps).
+      _titleExtraKeys.add(key);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  /// ↩️ Retire un texte du titre et le replace dans le corps.
+  void _removeTextFromTitle(String key) {
+    setState(() {
+      _titleExtraKeys.remove(key);
+      if (!_sectionsLayout.any((s) => s.contains(key))) {
+        _sectionsLayout.add(<String>[key]);
+      }
+    });
+    _saveConfig();
+  }
+
+  // ── 🖊️ TEXTE LIBRE : création / suppression ─────────────────────────────
+
+  /// Crée un nouveau bloc « texte libre » dans une section dédiée puis ouvre
+  /// immédiatement son éditeur de contenu.
+  void _addStaticText() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      _initBlocks();
+      _sectionsLayout.add(<String>[key]);
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  /// Supprime définitivement le bloc de texte libre [key] (corps ET en-tête),
+  /// avec ses réglages de colonne (typo, largeur, couleurs, alignement).
+  void _removeStaticText(String key) {
+    setState(() {
+      _customTexts.remove(key);
+      _blockVisibility.remove(key);
+      _blockAlignment.remove(key);
+      _blockFonts.remove(key);
+      _blockFontScales.remove(key);
+      _blockWidth.remove(key);
+      _blockBg.remove(key);
+      _blockText.remove(key);
+      for (final section in _sectionsLayout) {
+        section.remove(key);
+      }
+      _sectionsLayout.removeWhere((s) => s.isEmpty);
+      if (_sectionsLayout.isEmpty) _sectionsLayout.add(<String>[]);
+      _titleExtraKeys.remove(key);
+      _headerElements.remove(key);
+      _headerVisibility.remove(key);
+      _headerWidth.remove(key);
+      _headerAlign.remove(key);
+      _initBlocks();
     });
     _saveConfig();
   }
@@ -1102,23 +1408,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     icon: Icon(Icons.visibility_outlined, color: _onSurface, size: 20),
                     onPressed: _openQuickPreview,
                   ),
-                  _GlassButton(
-                    onPressed: () => _saveConfig(showFeedback: true),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.save, size: 14, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text(
-                          'ENREGISTRER',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
+                  // 💾 Enregistrement : bouton ICÔNE seul (compact).
+                  Tooltip(
+                    message: 'Enregistrer',
+                    child: _GlassButton(
+                      onPressed: () => _saveConfig(showFeedback: true),
+                      padding: const EdgeInsets.all(7),
+                      child: const Icon(Icons.save, size: 18, color: Colors.white),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1247,6 +1543,27 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       ),
                     ),
                   ),
+                // ➕ AJOUTER un élément dans l'en-tête : texte libre ou bloc
+                // du corps déplacé ici (nouvelle colonne d'en-tête).
+                Tooltip(
+                  message: "Ajouter un élément dans l'en-tête",
+                  child: GestureDetector(
+                    onTap: _showAddToHeaderSheet,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.55)),
+                      ),
+                      child: Icon(Icons.add,
+                          size: 15, color: Colors.white.withValues(alpha: 0.9)),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
@@ -1367,7 +1684,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     final title = switch (key) {
       'logo' => 'Logo',
       'company_info' => 'Infos Société',
-      _ => 'Titre',
+      'invoice_title' => 'Titre',
+      _ => _blockTitle(key),
     };
     showModalBottomSheet(
       context: context,
@@ -1488,6 +1806,101 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   _saveConfig();
                 },
               ),
+              // 🏷️ Colonne « Titre » : gestion des textes ajoutés SOUS le
+              // titre (persists via `title_extra_keys`).
+              if (key == 'invoice_title') ...[
+                const SizedBox(height: 4),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('Éléments sous le titre',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _addTextUnderTitle();
+                    },
+                    icon: Icon(Icons.add, size: 16, color: _primary),
+                    label: Text('Ajouter',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: _primary,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ]),
+                if (_titleExtraKeys.isEmpty)
+                  Text('Aucun élément — ajoutez un texte sous le titre.',
+                      style:
+                          TextStyle(fontSize: 11.5, color: _onSurfaceVariant))
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 170),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final ek in _titleExtraKeys)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              leading: Icon(Icons.notes_outlined,
+                                  size: 17, color: _primary),
+                              title: Text(_textBlockTitle(ek),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600)),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Modifier',
+                                    icon: Icon(Icons.edit_outlined,
+                                        size: 17, color: _primary),
+                                    onPressed: () {
+                                      Navigator.of(ctx).pop();
+                                      _showStaticTextEditorSheet(ek);
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Retirer du titre',
+                                    icon: const Icon(Icons.close,
+                                        size: 17, color: Colors.redAccent),
+                                    onPressed: () {
+                                      _removeTextFromTitle(ek);
+                                      setSS(() {});
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+              // ↩️ Un élément d'en-tête NON natif (bloc ou texte libre déplacé
+              // ici depuis le corps) peut revenir dans le corps.
+              if (!_nativeHeaderKeys.contains(key))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _moveHeaderToBody(key);
+                    },
+                    icon: Icon(Icons.vertical_align_bottom,
+                        size: 16, color: _primary),
+                    label: Text('Replacer dans le corps',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: _primary,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -1642,10 +2055,67 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 padding: const EdgeInsets.only(top: 4),
                 child: _buildQRCodeWidget(mini: true),
               ),
+            // 🏷️ Textes ajoutés DANS le titre (sous le titre / sous-titre) :
+            // rendus en blanc sur le bandeau, alignés à droite comme le titre.
+            for (final ek in _titleExtraKeys)
+              if ((_customTexts[ek] ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    _customTexts[ek]!.trim(),
+                    textAlign: TextAlign.right,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w500,
+                      fontSize: (_customFontSize * 0.7).clamp(7.5, 11.0),
+                      height: 1.25,
+                    ),
+                  ),
+                ),
           ],
         );
 
       default:
+        // 🖊️ Texte libre placé dans l'en-tête : rendu en blanc sur le bandeau.
+        if (_isTextBlock(key)) {
+          final text = _customTexts[key] ?? '';
+          if (text.trim().isEmpty) return const SizedBox.shrink();
+          return Text(
+            text,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            textAlign: _headerAlignOf(key),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: (_customFontSize * 0.8).clamp(7.5, 12.5),
+              height: 1.3,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        }
+        // 🧩 Bloc du CORPS déplacé dans l'en-tête (totaux, QR, mentions…).
+        final moved = _invoiceBlocks.where((b) => b.key == key).toList();
+        if (moved.isNotEmpty) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            ),
+            child: IconTheme(
+              data: IconThemeData(
+                  color: Colors.white.withValues(alpha: 0.8), size: 12),
+              child: DefaultTextStyle(
+                style:
+                    TextStyle(color: Colors.white, fontSize: _customFontSize),
+                child: moved.first.builder(_headerAlignOf(key)),
+              ),
+            ),
+          );
+        }
         return const SizedBox.shrink();
     }
   }
@@ -1674,7 +2144,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           // SECTIONS empilées : chaque section prend toute la largeur et
           // répartit ses blocs (1 à 3) en colonnes SUR SA PROPRE LARGEUR.
           for (var s = 0; s < _sectionsLayout.length; s++) _buildSectionRow(s),
-          if (_draggingKey != null) _buildNewSectionDropZone(),
+          // Zone « nouvelle section » : TOUJOURS visible en bas du corps — un
+          // tap (ou un drop) crée une NOUVELLE rangée de colonnes en dessous.
+          _buildNewSectionDropZone(),
         ],
       ),
     );
@@ -1858,7 +2330,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   /// Zone sous la dernière section : crée une NOUVELLE section pleine
-  /// largeur dédiée au bloc déposé.
+  /// largeur dédiée au bloc déposé — ou, par un simple TAP, une nouvelle
+  /// rangée de colonnes vide (1 colonne, extensible à 3 avec le bouton +).
   Widget _buildNewSectionDropZone() {
     return DragTarget<String>(
       onWillAcceptWithDetails: (d) => true,
@@ -1882,15 +2355,31 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     ? _tertiaryContainer
                     : _surfaceVariant.withValues(alpha: 0.6)),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.add, size: 14, color: _outline),
-            SizedBox(width: 4),
-            Text('Nouvelle section (pleine largeur)',
-                style: TextStyle(fontSize: 9.5, color: _outline)),
-          ]),
+          // 👆 Tap = créer une nouvelle rangée de colonnes en dessous ;
+          // glisser-déposer = y déplacer le bloc en cours de drag.
+          child: InkWell(
+            onTap: _addSectionBelow,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add, size: 14, color: _outline),
+              SizedBox(width: 4),
+              Text(_draggingKey != null
+                  ? 'Nouvelle section (pleine largeur)'
+                  : 'Ajouter une rangée de colonnes en dessous',
+                  style: TextStyle(fontSize: 9.5, color: _outline)),
+            ]),
+          ),
         );
       },
     );
+  }
+
+  /// 🧱 Crée une NOUVELLE section (rangée) en dessous des existantes, avec
+  /// une première colonne vide sur laquelle déposer des blocs — puis
+  /// extensible (bouton +) jusqu'à `_maxPerSection` colonnes.
+  void _addSectionBelow() {
+    setState(() => _sectionsLayout.add(<String>[_emptyColumnKey]));
+    _saveConfig();
   }
 
   /// 🧱 Colonne vide (spacer) : réserve une fraction de la largeur de la
@@ -2154,6 +2643,28 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   // ── Blocs individuels du corps ────────────────────────────────────────────
+
+  /// 🖊️ Bloc « texte libre » : rendu du texte statique saisi par l'utilisateur
+  /// (alignement, couleur et typo de la colonne respectés).
+  Widget _buildStaticTextBlock(String key, TextAlign align) {
+    final text = _customTexts[key] ?? '';
+    final isEmpty = text.trim().isEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text(
+        isEmpty ? 'Texte libre — appuyez pour saisir' : text,
+        textAlign: align,
+        style: TextStyle(
+          fontSize: _customFontSize,
+          height: 1.35,
+          fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+          color: isEmpty
+              ? _onSurfaceVariant.withValues(alpha: 0.6)
+              : (_textColorOf(key) ?? _onSurface),
+        ),
+      ),
+    );
+  }
 
   Widget _buildBillingInfoBlock(TextAlign align) {
     return Padding(
@@ -2573,12 +3084,57 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             ),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _buildCategoryTabs(),
-            _buildTemplateCarousel(),
-            Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
+            _buildPanelHandle(),
+            // 🪗 Replié : onglets + carrousel disparaissent pour rendre toute
+            // la hauteur à l'aperçu A4 (la barre d'outils reste accessible).
+            if (!_panelCollapsed) ...[
+              _buildCategoryTabs(),
+              _buildTemplateCarousel(),
+              Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
+            ],
             _buildToolBar(),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 4),
           ]),
+        ),
+      ),
+    );
+  }
+
+  /// 🪗 Poignée du panneau d'outils : un tap (ou le chevron) replie/déplie les
+  /// onglets et le carrousel de modèles pour libérer la zone d'aperçu.
+  Widget _buildPanelHandle() {
+    return InkWell(
+      onTap: () => setState(() => _panelCollapsed = !_panelCollapsed),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: _outline.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              _panelCollapsed
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: _onSurfaceVariant,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              _panelCollapsed ? 'Afficher les modèles' : 'Masquer les modèles',
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: _onSurfaceVariant),
+            ),
+          ],
         ),
       ),
     );
@@ -2713,6 +3269,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         _toolItem(Icons.image_outlined, 'Logo', 'logo', _showLogoSettingsSheet),
         _toolItem(Icons.text_fields_outlined, 'Taille police', 'police', _showFontSizeSheet),
         _toolItem(Icons.notes_outlined, 'Textes', 'textes', _showTextsSheet),
+        _toolItem(Icons.article_outlined, 'Texte libre', 'texte_libre',
+            _showStaticTextsSheet),
         _toolItem(Icons.format_align_left, 'Alignement', 'alignement', _showAlignmentSheet),
         _toolItem(Icons.texture_outlined, 'Ombres & Zoom', 'ombres', _showShadowSheet),
         _toolItem(Icons.draw_outlined, 'Signature', 'signature', _showSignatureSheet, badge: _showSignatureLine),
@@ -2908,8 +3466,208 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  /// 📝 Outil « Texte libre » : liste des textes statiques (édition rapide,
+  /// ajout, suppression). La mise en forme fine se fait dans l'éditeur du bloc
+  /// (police / taille / alignement / couleurs / largeur).
+  void _showStaticTextsSheet() {
+    setState(() => _activeTool = 'texte_libre');
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.article_outlined, color: _primary, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Texte libre',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15.5)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                'Ajoutez du texte statique (mention, note, congés, remerciement…).',
+                style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              if (_customTexts.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _surfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('Aucun texte libre pour le moment.',
+                      style:
+                          TextStyle(fontSize: 12.5, color: _onSurfaceVariant)),
+                )
+              else
+                ..._customTexts.keys.map((key) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading:
+                          Icon(Icons.notes_outlined, size: 18, color: _primary),
+                      title: Text(_textBlockTitle(key),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        _titleExtraKeys.contains(key)
+                            ? 'Sous le titre (en-tête)'
+                            : _headerElements.contains(key)
+                                ? 'Dans l\'en-tête'
+                                : 'Dans le corps',
+                        style:
+                            TextStyle(fontSize: 11, color: _onSurfaceVariant),
+                      ),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Modifier',
+                          icon: Icon(Icons.edit_outlined,
+                              size: 18, color: _primary),
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _showStaticTextEditorSheet(key);
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Supprimer',
+                          icon: const Icon(Icons.delete_outline,
+                              size: 18, color: Colors.redAccent),
+                          onPressed: () {
+                            _removeStaticText(key);
+                            Navigator.of(ctx).pop();
+                          },
+                        ),
+                      ]),
+                    )),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _addStaticText();
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  label: const Text('Ajouter un texte',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  /// Éditeur du CONTENU d'un texte libre (+ accès à la mise en forme fine du
+  /// bloc : police, taille, alignement, couleurs, largeur, position).
+  void _showStaticTextEditorSheet(String key) {
+    final ctrl = TextEditingController(text: _customTexts[key] ?? '');
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.edit_note, color: _primary, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Contenu du texte',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15.5)),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                maxLines: 4,
+                autofocus: true,
+                decoration:
+                    _textsInputDecoration('Ex. : Merci de votre confiance'),
+                onChanged: (val) {
+                  setSS(() => _customTexts[key] = val);
+                  setState(() => _customTexts[key] = val);
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _customTexts[key] = ctrl.text);
+                      _saveConfig();
+                      Navigator.of(ctx).pop();
+                      _showElementEditorSheet(key);
+                    },
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text('Mise en forme'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      setState(() => _customTexts[key] = ctrl.text);
+                      _saveConfig(showFeedback: true);
+                      Navigator.of(ctx).pop();
+                    },
+                    style: FilledButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white),
+                    child: const Text('Appliquer'),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _blockTitle(String key) {
     if (key == _emptyColumnKey) return 'Colonne vide';
+    // 🖊️ Textes libres : titre = extrait du contenu, même si le bloc n'est
+    // pas encore (re)construit dans `_invoiceBlocks`.
+    if (_isTextBlock(key)) return _textBlockTitle(key);
     for (final b in _invoiceBlocks) {
       if (b.key == key) return b.title;
     }
@@ -2932,7 +3690,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             left: 20, right: 20, top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(
+          child: SingleChildScrollView(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -3078,6 +3837,108 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     padding: EdgeInsets.zero,
                   ),
                 ]),
+                // 📍 POSITION : un bloc du corps peut être déplacé DANS
+                // l'en-tête (avant le logo / après le logo / sous le titre)
+                // et revenir dans le corps à tout moment.
+                const SizedBox(height: 6),
+                // 📍 POSITION : un texte du TITRE peut être replacé dans le
+                // corps à tout moment.
+                if (_titleExtraKeys.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _removeTextFromTitle(key);
+                      },
+                      icon: Icon(Icons.vertical_align_bottom,
+                          size: 16, color: _primary),
+                      label: Text('Replacer dans le corps',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  )
+                else if (!_nativeHeaderKeys.contains(key) &&
+                    _headerElements.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _moveHeaderToBody(key);
+                      },
+                      icon: Icon(Icons.vertical_align_bottom,
+                          size: 16, color: _primary),
+                      label: Text('Replacer dans le corps',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  )
+                else if (!_nativeHeaderKeys.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Déplacer ce bloc vers l\'en-tête',
+                      color: Theme.of(ctx).colorScheme.surface,
+                      onSelected: (val) {
+                        Navigator.of(ctx).pop();
+                        switch (val) {
+                          case 'header_first':
+                            _moveBlockToHeader(key, beforeKey: 'logo');
+                            break;
+                          case 'header_after_logo':
+                            _moveBlockToHeader(key, beforeKey: 'company_info');
+                            break;
+                          default:
+                            _moveBlockToHeader(key);
+                            break;
+                        }
+                      },
+                      itemBuilder: (c) => const [
+                        PopupMenuItem(
+                            value: 'header_first',
+                            child: Text('En-tête — avant le logo')),
+                        PopupMenuItem(
+                            value: 'header_after_logo',
+                            child: Text('En-tête — après le logo')),
+                        PopupMenuItem(
+                            value: 'header_under_title',
+                            child: Text('En-tête — sous le titre')),
+                      ],
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.vertical_align_top,
+                            size: 16, color: _primary),
+                        const SizedBox(width: 4),
+                        Text('Déplacer vers l\'en-tête',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: _primary,
+                                fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                // 🗑️ Un texte libre peut être supprimé depuis son éditeur.
+                if (_isTextBlock(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _removeStaticText(key);
+                      },
+                      icon: const Icon(Icons.delete_outline,
+                          size: 16, color: Colors.redAccent),
+                      label: const Text('Supprimer ce texte',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
                 // 🔧 Largeur de la colonne du bloc (formes personnalisées).
                 const SizedBox(height: 8),
                 Row(children: [
@@ -3188,7 +4049,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ),
                 ],
                 const SizedBox(height: 12),
-              ]),
+              ])),
         ),
       ),
     );
@@ -3473,7 +4334,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Alignement des blocs',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
@@ -3490,11 +4352,63 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 .where((key) => key != _emptyColumnKey)
                 .where(_isBlockVisible)
                 .map((key) => _alignmentRow(key, setSS)),
+            if (_headerElements.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              const Text("Colonnes de l'en-tête",
+                  style:
+                      TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+              const SizedBox(height: 2),
+              for (final key in _headerElements)
+                _headerAlignmentRow(key, setSS),
+            ],
             const SizedBox(height: 10),
-          ]),
+          ])),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  /// Ligne d'alignement d'une colonne d'EN-TÊTE (logo / infos / titre / bloc
+  /// déplacé) — même outil que pour les colonnes du corps.
+  Widget _headerAlignmentRow(String key, void Function(void Function()) setSS) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Expanded(
+          child: Text(key == _emptyColumnKey ? 'Colonne vide' : _blockTitle(key),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
+        SegmentedButton<TextAlign>(
+          segments: const [
+            ButtonSegment(
+                value: TextAlign.left,
+                icon: Icon(Icons.format_align_left, size: 16)),
+            ButtonSegment(
+                value: TextAlign.center,
+                icon: Icon(Icons.format_align_center, size: 16)),
+            ButtonSegment(
+                value: TextAlign.right,
+                icon: Icon(Icons.format_align_right, size: 16)),
+          ],
+          selected: {_headerAlignOf(key)},
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onSelectionChanged: (sel) {
+            setSS(() => _headerAlign[key] = sel.first);
+            setState(() => _headerAlign[key] = sel.first);
+            _saveConfig();
+          },
+        ),
+      ]),
+    );
   }
 
   Widget _alignmentRow(String key, void Function(void Function()) setSS) {
@@ -3845,9 +4759,13 @@ class _GlassButton extends StatelessWidget {
   final VoidCallback onPressed;
   final Widget child;
 
+  /// Padding interne — compact (icône seule) ou large (bouton texte).
+  final EdgeInsetsGeometry padding;
+
   const _GlassButton({
     required this.onPressed,
     required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
   });
 
   @override
@@ -3872,7 +4790,7 @@ class _GlassButton extends StatelessWidget {
             child: InkWell(
               onTap: onPressed,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: padding,
                 child: Center(child: child),
               ),
             ),

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/database_service.dart';
 import '../../models/client.dart';
+import '../../models/invoice.dart';
 import '../../providers/theme_provider.dart';
 
 // Fonction utilitaire partagée pour obtenir la couleur d'un client
@@ -34,6 +35,10 @@ class ClientsScreen extends StatefulWidget {
 class _ClientsScreenState extends State<ClientsScreen> {
   final DatabaseService _db = DatabaseService();
   List<Client> _clients = [];
+  /// 🧾 Factures chargées en même temps que les clients : elles alimentent le
+  /// badge « N factures » avec le nombre RÉEL de factures de chaque client
+  /// (auparavant un nombre aléatoire dérivé du hash de l'id).
+  List<Invoice> _invoices = [];
   bool _isLoading = true;
   final String _searchQuery =
       ''; // Changé en non-final pour permettre les modifications si nécessaire
@@ -47,10 +52,16 @@ class _ClientsScreenState extends State<ClientsScreen> {
   Future<void> _loadClients() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    final clients = await _db.getClients();
+    // 🧾 Clients + factures en parallèle : le badge affiche le vrai nombre de
+    // factures par client (devis et factures confondus, comme la liste).
+    final results = await Future.wait([
+      _db.getClients(),
+      _db.getInvoices(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _clients = clients;
+      _clients = results[0] as List<Client>;
+      _invoices = results[1] as List<Invoice>;
       _isLoading = false;
     });
   }
@@ -266,7 +277,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                '${_getClientDeals(client.id)} factures',
+                '${_invoiceCountOf(client.id)} '
+                '${_invoiceCountOf(client.id) > 1 ? 'factures' : 'facture'}',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -285,9 +297,9 @@ class _ClientsScreenState extends State<ClientsScreen> {
     );
   }
 
-  int _getClientDeals(String clientId) {
-    return clientId.hashCode.abs() % 10 + 5;
-  }
+  /// 🧾 Nombre RÉEL de factures (et devis) rattachées à [clientId].
+  int _invoiceCountOf(String clientId) =>
+      _invoices.where((inv) => inv.clientId == clientId).length;
 
   Widget _buildEmptyState(
     bool isDark,

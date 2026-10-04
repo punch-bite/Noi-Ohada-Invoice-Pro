@@ -261,13 +261,13 @@ class _DashboardHomeState extends State<DashboardHome> {
                 colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
               ),
               borderRadius: BorderRadius.circular(36),
-              boxShadow: [
-                BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              // boxShadow: [
+              //   BoxShadow(
+              //     color: primaryColor.withValues(alpha: 0.3),
+              //     blurRadius: 10,
+              //     offset: const Offset(0, 4),
+              //   ),
+              // ],
             ),
             child: Center(
               child: Text(
@@ -283,7 +283,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 14.0),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,14 +304,15 @@ class _DashboardHomeState extends State<DashboardHome> {
                       softWrap: false,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: textColor,
                       ),
-                      overflow: TextOverflow.ellipsis,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const Spacer(),
+                  const SizedBox(width: 18),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -341,7 +342,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                         Text(
                           planName.toUpperCase(),
                           style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 8,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.5,
                             color: isActive

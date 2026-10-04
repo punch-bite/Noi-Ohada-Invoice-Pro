@@ -165,9 +165,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
                       color: s.faint,
                     ),
                   ),
-                  const SizedBox(height: 26),
-                  _badge(s),
-                  const SizedBox(height: 46),
+                  
+                  const SizedBox(height: 80.0),
                   // Fines amorces de progression (n'apparaissent qu'en
                   // phase d'initialisation réelle).
                   SizedBox(

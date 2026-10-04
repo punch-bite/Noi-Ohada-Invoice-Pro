@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -64,7 +65,16 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   _buildOptionTile(Icons.lock_outline, 'Mot de passe', 'Modifier votre mot de passe', 
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
                   _buildDivider(),
-                  _buildSwitchTile(Icons.fingerprint, 'Biométrie', 'Face ID ou Empreinte', _biometricEnabled, (val) => _handleBiometric(val)),
+                  // 🌐 PWA : `local_auth` n'existe pas sur le web → l'interrupteur
+                  // est remplacé par une information explicite (le PIN reste
+                  // le moyen de verrouillage disponible).
+                  if (kIsWeb)
+                    _buildOptionTile(Icons.fingerprint, 'Biométrie',
+                        'Indisponible sur la version web (PWA) — utilisez le code PIN')
+                  else
+                    _buildSwitchTile(Icons.fingerprint, 'Biométrie',
+                        'Face ID ou Empreinte', _biometricEnabled,
+                        (val) => _handleBiometric(val)),
                   _buildDivider(),
                   _buildSwitchTile(Icons.pin, 'Code PIN', _isPinSet ? 'Activé' : 'Désactivé', _isPinSet, (val) => _showPinDialog(val)),
                 ]),

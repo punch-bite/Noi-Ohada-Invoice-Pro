@@ -255,7 +255,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => context.push('/dashboard/invoices/${invoice.id}'),
+          onTap: () async {
+            await context.push('/dashboard/invoices/${invoice.id}');
+            // 🗑️ Recharge après un retour (suppression de la facture,
+            // paiement, édition…).
+            if (mounted) _loadData();
+          },
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(

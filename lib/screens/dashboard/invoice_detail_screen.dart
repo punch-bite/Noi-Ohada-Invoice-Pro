@@ -30,6 +30,7 @@ import '../../services/template_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../services/signature_service.dart';
+import '../../services/wallet_service.dart';
 import '../../services/settings_service.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_settings.dart';
@@ -813,6 +814,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               case 'picker':
                 _openTemplatePicker();
                 break;
+              case 'delete':
+                _confirmDeleteInvoice();
+                break;
             }
           },
           itemBuilder: (ctx) => [
@@ -824,10 +828,145 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 value: 'team', child: Text('Partager avec l\'équipe')),
             const PopupMenuItem(
                 value: 'picker', child: Text('Changer de modèle')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                  SizedBox(width: 8),
+                  Text('Supprimer',
+                      style: TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           ],
         ),
       ],
     );
+  }
+
+  /// 🗑️ Suppression définitive de la facture (menu « … »).
+  ///
+  /// Deux options proposées dans la boîte de confirmation :
+  ///  • supprimer les RAPPELS liés à la facture ;
+  ///  • supprimer les ENCAISSEMENTS (transactions du portefeuille) créés par
+  ///    son paiement — le solde est diminué en conséquence.
+  Future<void> _confirmDeleteInvoice() async {
+    final invoice = _invoice;
+    if (invoice == null) return;
+
+    bool removeReminders = true;
+    bool removeTransactions = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Supprimer la facture ?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'La facture ${invoice.invoiceNumber} sera définitivement '
+                'supprimée. Cette action est irréversible.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: removeReminders,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Supprimer aussi les rappels liés',
+                  style: TextStyle(fontSize: 13),
+                ),
+                onChanged: (v) => setDlg(() => removeReminders = v ?? false),
+              ),
+              CheckboxListTile(
+                value: removeTransactions,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Supprimer aussi les encaissements liés '
+                  '(transactions du portefeuille)',
+                  style: TextStyle(fontSize: 13),
+                ),
+                onChanged: (v) =>
+                    setDlg(() => removeTransactions = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      // 1) La facture elle-même.
+      await _db.deleteInvoice(invoice.id);
+
+      // 2) Les rappels (relances) rattachés à cette facture.
+      if (removeReminders) {
+        final reminders = await _db.getReminders();
+        for (final r in reminders.where((r) => r.invoiceId == invoice.id)) {
+          await _db.deleteReminder(r.id);
+        }
+      }
+
+      // 3) Les encaissements du portefeuille (annulation du crédit).
+      int removedTx = 0;
+      if (removeTransactions) {
+        final uid = context.read<AppAuthProvider>().user?.id ?? '';
+        removedTx = await WalletService().deleteInvoiceTransactions(
+          userId: uid,
+          invoiceId: invoice.id,
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removedTx > 0
+                ? '✅ Facture supprimée ($removedTx encaissement(s) annulé(s))'
+                : '✅ Facture supprimée',
+          ),
+          backgroundColor: RoyalColors.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur lors de la suppression : $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   /// Papier A4 : widget Stitch partagé, alimenté par la facture réelle et

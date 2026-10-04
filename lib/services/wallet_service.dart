@@ -223,4 +223,109 @@ class WalletService {
       return false;
     }
   }
+
+  // ===== SUPPRESSION DE TRANSACTIONS =====
+
+  /// 🗑️ Supprime une transaction de l'historique en ANNULANT son effet sur le
+  /// solde :
+  ///   • `credit` (encaissement d'une facture) → le solde est diminué du
+  ///     montant (jamais sous 0) ;
+  ///   • `withdrawal` (retrait payé) → le solde est re-crédité.
+  ///
+  /// Seules les transactions appartenant à [userId] sont supprimables.
+  Future<bool> deleteTransaction({
+    required String userId,
+    required String transactionId,
+  }) async {
+    if (userId.isEmpty || transactionId.isEmpty) return false;
+    try {
+      final ref = _db.collection('wallet_transactions').doc(transactionId);
+      final snap = await ref.get();
+      final data = snap.data();
+      if (data == null) return false;
+      if ((data['userId']?.toString() ?? '') != userId) return false;
+
+      final type = (data['type'] ?? 'credit').toString();
+      final amount = (data['amount'] as num?)?.toDouble() ?? 0;
+
+      await ref.delete();
+
+      // 🧾 Inverse l'effet sur le solde.
+      final double delta = type == 'withdrawal' ? amount : -amount;
+      if (amount > 0) {
+        final walletRef = _db.collection('wallets').doc(userId);
+        await _db.runTransaction((tx) async {
+          final ws = await tx.get(walletRef);
+          final current = (ws.data()?['balance'] as num?)?.toDouble() ?? 0;
+          tx.set(
+            walletRef,
+            {
+              'userId': userId,
+              'balance': (current + delta).clamp(0, double.infinity),
+              'currency': 'XAF',
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        });
+      }
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ deleteTransaction: $e');
+      return false;
+    }
+  }
+
+  /// 🧾🗑️ Supprime TOUTES les transactions du portefeuille liées à une facture
+  /// (`dedupKey == 'invoice:<id>'`, clé posée par [credit] lors de l'encaissement
+  /// ENKAP) et annule leur crédit sur le solde.
+  ///
+  /// Utilisé lors de la suppression d'une facture → retourne le nombre de
+  /// transactions supprimées.
+  Future<int> deleteInvoiceTransactions({
+    required String userId,
+    required String invoiceId,
+  }) async {
+    if (userId.isEmpty || invoiceId.isEmpty) return 0;
+    try {
+      final snap = await _db
+          .collection('wallet_transactions')
+          .where('dedupKey', isEqualTo: 'invoice:$invoiceId')
+          .get();
+      if (snap.docs.isEmpty) return 0;
+
+      double totalCredit = 0;
+      int deleted = 0;
+      for (final d in snap.docs) {
+        final data = d.data();
+        if ((data['userId']?.toString() ?? '') != userId) continue;
+        if ((data['type'] ?? 'credit').toString() != 'credit') continue;
+        totalCredit += (data['amount'] as num?)?.toDouble() ?? 0;
+        await d.reference.delete();
+        deleted++;
+      }
+
+      if (totalCredit > 0) {
+        final walletRef = _db.collection('wallets').doc(userId);
+        await _db.runTransaction((tx) async {
+          final ws = await tx.get(walletRef);
+          final current = (ws.data()?['balance'] as num?)?.toDouble() ?? 0;
+          tx.set(
+            walletRef,
+            {
+              'userId': userId,
+              'balance': (current - totalCredit).clamp(0, double.infinity),
+              'currency': 'XAF',
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        });
+      }
+      return deleted;
+    } catch (e) {
+      debugPrint('⚠️ deleteInvoiceTransactions: $e');
+      return 0;
+    }
+  }
 }

@@ -420,12 +420,16 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
               label: 'Éditer',
               onTap: _openWorkspace,
             ),
-          _bottomAction(
-            c,
-            icon: Icons.check_circle_outline_rounded,
-            label: 'Utiliser',
-            onTap: _useThisTemplate,
-          ),
+          // 🚫 Modèle À VENDRE (payant non acquis) : « Utiliser » est masqué —
+          // il n'a de sens qu'après l'achat. Seuls « Panier » / « Commander »
+          // sont alors proposés.
+          if (!showCommerce)
+            _bottomAction(
+              c,
+              icon: Icons.check_circle_outline_rounded,
+              label: 'Utiliser',
+              onTap: _useThisTemplate,
+            ),
           if (showCommerce) ...[
             _bottomAction(
               c,
