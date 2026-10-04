@@ -13,6 +13,14 @@ concurrency:
   group: vercel-web-production
   cancel-in-progress: true
 
+env:
+  # Projet A — PWA Flutter (ce workflow). Projet B — API Node (server/) :
+  # déploiement Git auto Vercel avec Root Directory = server.
+  PWA_URL: noi-ohada-pwa.vercel.app
+  API_BASE_URL: https://server-xi-two-23.vercel.app
+  VERCEL_ORG_ID: team_mKahFlpvoBYNTHr0reDF3k7X
+  VERCEL_PROJECT_ID: prj_hqiekjcRDixyFdkLJck9CWlW7pBf
+
 jobs:
   build-and-deploy:
     name: Build Flutter Web and deploy
@@ -32,10 +40,16 @@ jobs:
         run: flutter pub get
 
       - name: Build installable web app
-        run: flutter build web --release --base-href=/ --dart-define=API_BASE_URL=https://noi-ohada-pwa.vercel.app
+        # ⚠️ API_BASE_URL = le serveur (Projet B), PAS la PWA elle-même.
+        # Pointer la PWA vers elle-même cassait ENKAP / emails / /download.
+        run: flutter build web --release --base-href=/ --dart-define=API_BASE_URL=${{ env.API_BASE_URL }}
 
       - name: Prepare Vercel Build Output
         run: |
+          # web/vercel.json est copié par Flutter dans build/web/ : on le
+          # retire du dossier statique (sinon /vercel.json public + conflit
+          # avec le routage du Projet B).
+          rm -f build/web/vercel.json
           mkdir -p .vercel/output/static
           cp -R build/web/. .vercel/output/static/
           cat > .vercel/output/config.json <<'JSON'
@@ -51,22 +65,33 @@ jobs:
       - name: Deploy production to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: team_mKahFlpvoBYNTHr0reDF3k7X
-          VERCEL_PROJECT_ID: prj_hqiekjcRDixyFdkLJck9CWlW7pBf
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
             echo "GitHub secret VERCEL_TOKEN is required" >&2
             exit 1
           fi
-          deploy_output=$(npx vercel deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" 2>&1) || {
+          # Le vercel.json racine route /(.*) vers server/index.js (Projet B).
+          # Avec --prebuilt il ne doit PAS partir avec la PWA : on l'écarte
+          # le temps du deploy puis on le restaure (trap = même en échec).
+          if [ -f vercel.json ]; then
+            mv vercel.json /tmp/vercel.root.json.bak
+            trap 'mv /tmp/vercel.root.json.bak vercel.json' EXIT
+          fi
+          deploy_output=$(npx vercel@latest deploy --prebuilt --prod --skip-domain --yes --token="$VERCEL_TOKEN" 2>&1) || {
             echo "$deploy_output"
             exit 1
           }
           echo "$deploy_output"
           deployment_url=$(printf '%s\n' "$deploy_output" | sed -nE 's/.*Production[[:space:]]+(https:\/\/[^[:space:]]+).*/\1/p' | head -n 1)
           if [ -z "$deployment_url" ]; then
+            # Fallback : 1ère URL vercel.app trouvée dans la sortie.
+            deployment_url=$(printf '%s\n' "$deploy_output" | grep -oE 'https://[^[:space:]]*\.vercel\.app' | head -n 1)
+          fi
+          if [ -z "$deployment_url" ]; then
             echo "Could not find the generated Vercel production URL" >&2
             exit 1
           fi
-          npx vercel alias set "$deployment_url" noi-ohada-pwa.vercel.app --scope punch-bites-projects --token="$VERCEL_TOKEN"
-          npx vercel alias rm noi-ohada-web-punch-bites-projects.vercel.app --yes --scope punch-bites-projects --token="$VERCEL_TOKEN" || true
+          npx vercel@latest alias set "$deployment_url" "${{ env.PWA_URL }}" --scope punch-bites-projects --token="$VERCEL_TOKEN"
+          npx vercel@latest alias rm noi-ohada-web-punch-bites-projects.vercel.app --yes --scope punch-bites-projects --token="$VERCEL_TOKEN" || true
