@@ -602,8 +602,8 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
         children: [
           Expanded(
             child: Container(
-              constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              // constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
               // 👉 SANS bordure : juste une surface douce, très légèrement
               // teintée, qui s'adapte à la hauteur du texte (1 à 4 lignes).
               decoration: BoxDecoration(
@@ -631,7 +631,7 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                     isDense: true,
                     // Padding vertical symétrique → le texte reste centré
                     // quelle que soit la hauteur prise par le champ.
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
                   ),
                 ),
               ),

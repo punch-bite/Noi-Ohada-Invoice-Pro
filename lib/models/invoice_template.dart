@@ -196,8 +196,9 @@ class InvoiceTemplate {
   ];
 
   /// 🧩 Ordre EFFECTIF des éléments d'en-tête : ordre personnalisé de l'atelier
-  /// (`header_elements_order`) restreint aux éléments connus et dédoublonné,
-  /// puis complété par les éléments manquants dans l'ordre par défaut.
+  /// (`header_elements_order`) restreint aux éléments connus ET aux colonnes
+  /// de texte libre (`text_*` — cf. `_addTextToHeader`), dédoublonné, puis
+  /// complété par les éléments natifs manquants dans l'ordre par défaut.
   ///
   /// Toute valeur inattendue (absente, type inconnu, clé étrangère) est ignorée
   /// sans jamais casser l'aperçu ni le PDF.
@@ -206,8 +207,9 @@ class InvoiceTemplate {
     if (rawOrder is List) {
       for (final element in rawOrder) {
         if (element is String &&
-            headerElements.contains(element) &&
-            !order.contains(element)) {
+            !order.contains(element) &&
+            (headerElements.contains(element) ||
+                element.startsWith('text_'))) {
           order.add(element);
         }
       }
@@ -235,12 +237,22 @@ class InvoiceTemplate {
 
   /// 🧩 Éléments d'en-tête à RENDRE : ordre effectif ∩ visibilité.
   ///
+  /// 🖊️ Une colonne de texte libre (`text_*`) n'existe que si son contenu est
+  /// sauvegardé dans `custom_texts` : une clé orpheline (texte supprimé) est
+  /// écartée pour ne jamais réserver une colonne vide.
+  ///
   /// Consommé par l'aperçu A4 **et** le PDF afin qu'ils restent WYSIWYG avec
   /// les options choisies dans l'atelier.
-  static List<String> visibleHeaderElements(Map<String, dynamic> positions) =>
-      resolveHeaderOrder(positions['header_elements_order'])
-          .where((key) => isHeaderElementVisible(positions, key))
-          .toList();
+  static List<String> visibleHeaderElements(Map<String, dynamic> positions) {
+    final rawTexts = positions['custom_texts'];
+    final texts =
+        rawTexts is Map ? rawTexts.keys.toSet() : const <Object?>{};
+    return resolveHeaderOrder(positions['header_elements_order'])
+        .where((key) =>
+            isHeaderElementVisible(positions, key) &&
+            (!key.startsWith('text_') || texts.contains(key)))
+        .toList();
+  }
 
   // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
   static const List<String> availableVariables = [

@@ -245,7 +245,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ? 'Business'
             : subscription?.planId == 'illimite'
                 ? 'illimite'
-                : 'Gratuit';
+                : 'Free';
     final isActive = subscription?.isActive ?? false;
 
     return Row(
@@ -291,7 +291,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               Text(
                 '👋 Bonjour,',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 14,
                   color: subTextColor,
                 ),
               ),
@@ -299,60 +299,17 @@ class _DashboardHomeState extends State<DashboardHome> {
               Row(
                 children: [
                   Flexible(
-                    child: Text(
-                      user?.displayName ?? 'Utilisateur',
-                      softWrap: false,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                      overflow: TextOverflow.visible,
+                      child: Text(
+                    user?.displayName ?? 'Utilisateur',
+                    softWrap: false,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 18),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? const Color(0xFF4338CA).withValues(alpha: 0.1)
-                          : const Color(0xFFE9B949).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isActive
-                            ? const Color(0xFF4338CA).withValues(alpha: 0.25)
-                            : const Color(0xFFE9B949).withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isActive ? Icons.verified : Icons.star,
-                          size: 13,
-                          color: isActive
-                              ? const Color(0xFF4338CA)
-                              : const Color(0xFFB8860B),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          planName.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: isActive
-                                ? const Color(0xFF4338CA)
-                                : const Color(0xFFB8860B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                    overflow: TextOverflow.visible,
+                  )),
                 ],
               ),
             ],

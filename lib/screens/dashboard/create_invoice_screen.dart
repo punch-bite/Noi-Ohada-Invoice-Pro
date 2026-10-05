@@ -920,12 +920,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           ),
           const SizedBox(height: 8),
           if (_signatureBytes != null) ...[
-            // Aperçu de la signature
+            // Aperçu de la signature — fond TRANSPARENT : la signature est
+            // capturée sans fond blanc, l'aperçu montre donc le rendu réel.
             Container(
               width: double.infinity,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey.shade300),
               ),

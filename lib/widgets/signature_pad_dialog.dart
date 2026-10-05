@@ -96,7 +96,8 @@ class _SignaturePadDialogState extends State<SignaturePadDialog> {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     const size = Size(600, 200);
-    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    // 🧽 PAS de fond blanc : la signature est capturée TRANSPARENTE pour
+    // fusionner proprement sur la facture (papier coloré, thème sombre…).
     final paint = Paint()
       ..color = Colors.black
       ..strokeWidth = 2.5
