@@ -84,6 +84,7 @@ import '../screens/admin/admin_templates_screen.dart';
 import '../screens/admin/admin_withdrawals_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
+import '../screens/teams/team_shared_with_me_screen.dart';
 import '../screens/teams/teams_screen.dart';
 
 class AppRouter {
@@ -225,6 +226,18 @@ class AppRouter {
         builder: (context, state) {
           final id = state.pathParameters['id']!;
           return TeamDetailScreen(teamId: id);
+        },
+      ),
+      GoRoute(
+        path: '/teams/shared-with-me',
+        name: 'team-shared-with-me',
+        builder: (context, state) {
+          final extra = state.extra;
+          String teamId = '';
+          if (extra is Map && extra['teamId'] is String) {
+            teamId = extra['teamId'] as String;
+          }
+          return TeamSharedWithMeScreen(teamId: teamId);
         },
       ),
       // Support

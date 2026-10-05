@@ -1,6 +1,6 @@
 // lib/screens/dashboard/dashboard_screen.dart
 //
-// 🎨 Refonte minimaliste responsive.
+// 🎨 Navigation épurée et fluide.
 //  - Mobile (<600px)   : bottom navigation + drawer
 //  - Tablette/Desktop : NavigationRail latéral + contenu centré
 //
@@ -37,6 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onItemTapped(int index) {
     if (index < 0 || index >= _paths.length) return;
+    if (index == _selectedIndex) return;
+    setState(() => _selectedIndex = index);
     context.go(_paths[index]);
   }
 
@@ -50,7 +52,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.sizeOf(context).width >= AppBreakpoints.tablet;
+    final isDesktop =
+        MediaQuery.sizeOf(context).width >= AppBreakpoints.tablet;
 
     return FutureBuilder<bool>(
       future: _lockCheck,
@@ -66,8 +69,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ===== MOBILE : bottom nav + drawer =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  MOBILE — bottom nav animé + drawer
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildMobileLayout(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDarkMode;
+    final primaryColor = themeProvider.primaryColor;
+    final cardColor = themeProvider.cardColor;
+    final subTextColor = themeProvider.subTextColor;
+    _syncIndexFromRoute(context);
+
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: themeProvider.backgroundColor,
+      drawer: const CustomDrawer(),
+      body: const DashboardHome(),
+      bottomNavigationBar: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: cardColor,
+          border: Border(
+            top: BorderSide(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              width: 1,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            height: 64,
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: _onItemTapped,
+            indicatorColor: primaryColor.withValues(alpha: 0.14),
+            labelBehavior:
+                NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: [
+              _navDestination(
+                icon: Icons.home_outlined,
+                selectedIcon: Icons.home_rounded,
+                label: 'Accueil',
+                primaryColor: primaryColor,
+                subTextColor: subTextColor,
+              ),
+              _navDestination(
+                icon: Icons.people_outline,
+                selectedIcon: Icons.people_rounded,
+                label: 'Clients',
+                primaryColor: primaryColor,
+                subTextColor: subTextColor,
+              ),
+              _navDestination(
+                icon: Icons.receipt_long_outlined,
+                selectedIcon: Icons.receipt_long_rounded,
+                label: 'Factures',
+                primaryColor: primaryColor,
+                subTextColor: subTextColor,
+              ),
+              _navDestination(
+                icon: Icons.trending_up_rounded,
+                selectedIcon: Icons.trending_up_rounded,
+                label: 'Analyses',
+                primaryColor: primaryColor,
+                subTextColor: subTextColor,
+              ),
+              _navDestination(
+                icon: Icons.inventory_2_outlined,
+                selectedIcon: Icons.inventory_2_rounded,
+                label: 'Stock',
+                primaryColor: primaryColor,
+                subTextColor: subTextColor,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  NavigationDestination _navDestination({
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+    required Color primaryColor,
+    required Color subTextColor,
+  }) {
+    return NavigationDestination(
+      icon: Icon(icon, color: subTextColor.withValues(alpha: 0.6)),
+      selectedIcon: Icon(selectedIcon, color: primaryColor),
+      label: label,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  DESKTOP — NavigationRail épuré
+  // ═══════════════════════════════════════════════════════════════════
+  Widget _buildDesktopLayout(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
     final primaryColor = themeProvider.primaryColor;
@@ -77,98 +180,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: themeProvider.backgroundColor,
-      drawer: const CustomDrawer(),
-      body: const DashboardHome(),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: cardColor,
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _onItemTapped,
-        indicatorColor: primaryColor.withValues(alpha: 0.14),
-        destinations: [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined,
-                color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            selectedIcon: Icon(Icons.home, color: primaryColor),
-            label: 'Accueil',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline,
-                color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            selectedIcon: Icon(Icons.people, color: primaryColor),
-            label: 'Clients',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined,
-                color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            selectedIcon: Icon(Icons.receipt_long, color: primaryColor),
-            label: 'Factures',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.trending_up,
-                color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            selectedIcon: Icon(Icons.trending_up, color: primaryColor),
-            label: 'Analyses',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined,
-                color: isDark ? Colors.grey[500] : Colors.grey[400]),
-            selectedIcon: Icon(Icons.inventory_2, color: primaryColor),
-            label: 'Stock',
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ===== DESKTOP : NavigationRail + Drawer =====
-  Widget _buildDesktopLayout(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final primaryColor = themeProvider.primaryColor;
-    _syncIndexFromRoute(context);
-
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: themeProvider.backgroundColor,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: _onItemTapped,
-            labelType: NavigationRailLabelType.all,
-            leading: IconButton(
-              icon: const Icon(Icons.menu),
-              tooltip: 'Menu',
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          Container(
+            decoration: BoxDecoration(
+              color: cardColor,
+              border: Border(
+                right: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.04),
+                  width: 1,
+                ),
+              ),
             ),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: Text('Accueil'),
+            child: NavigationRail(
+              backgroundColor: Colors.transparent,
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              labelType: NavigationRailLabelType.all,
+              indicatorColor: primaryColor.withValues(alpha: 0.14),
+              selectedIconTheme:
+                  IconThemeData(color: primaryColor, size: 24),
+              unselectedIconTheme: IconThemeData(
+                color: themeProvider.subTextColor.withValues(alpha: 0.6),
+                size: 22,
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.people_outline),
-                selectedIcon: Icon(Icons.people),
-                label: Text('Clients'),
+              selectedLabelTextStyle: TextStyle(
+                color: primaryColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 11.5,
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.receipt_long_outlined),
-                selectedIcon: Icon(Icons.receipt_long),
-                label: Text('Factures'),
+              unselectedLabelTextStyle: TextStyle(
+                color: themeProvider.subTextColor,
+                fontWeight: FontWeight.w500,
+                fontSize: 11.5,
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.trending_up),
-                label: Text('Analyses'),
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: IconButton(
+                  icon: Icon(Icons.menu_rounded,
+                      color: themeProvider.textColor),
+                  tooltip: 'Menu',
+                  onPressed: () =>
+                      _scaffoldKey.currentState?.openDrawer(),
+                ),
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.inventory_2_outlined),
-                selectedIcon: Icon(Icons.inventory_2),
-                label: Text('Stock'),
-              ),
-            ],
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: Text('Accueil'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.people_outline),
+                  selectedIcon: Icon(Icons.people_rounded),
+                  label: Text('Clients'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long_rounded),
+                  label: Text('Factures'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.trending_up_rounded),
+                  selectedIcon: Icon(Icons.trending_up_rounded),
+                  label: Text('Analyses'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  selectedIcon: Icon(Icons.inventory_2_rounded),
+                  label: Text('Stock'),
+                ),
+              ],
+            ),
           ),
-          const VerticalDivider(width: 1, thickness: 1),
           const Expanded(child: DashboardHome()),
         ],
       ),
@@ -180,7 +267,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final location = GoRouterState.of(context).uri.path;
     final idx = _paths.indexOf(location);
     if (idx >= 0 && idx != _selectedIndex) {
-      _selectedIndex = idx;
+      // Reporté au prochain frame pour éviter setState pendant build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && idx != _selectedIndex) {
+          setState(() => _selectedIndex = idx);
+        }
+      });
     }
   }
 }

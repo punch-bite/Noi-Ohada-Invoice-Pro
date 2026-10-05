@@ -147,6 +147,24 @@ class Team {
   bool canReadShared(String userId) =>
       isMember(userId) || memberPermission == 'read';
 
+  /// 🔑 Droit EFFECTIF de [userId] sur une ressource partagée.
+  ///
+  /// Combine :
+  ///   • le droit spécifique du partage (`SharedInvoice.canWrite`) ;
+  ///   • le droit global de l'équipe sur les fichiers partagés.
+  ///
+  /// ⚠️ Prend un `dynamic` pour éviter un import circulaire du modèle
+  /// `SharedInvoice` — la classe y répond avec sa méthode `canWrite`.
+  bool canWriteResource(String userId, dynamic share) {
+    if (share == null) return false;
+    try {
+      final canWriteShare = share.canWrite(userId) as bool;
+      return canWriteShare || canWriteShared(userId);
+    } catch (_) {
+      return canWriteShared(userId);
+    }
+  }
+
   Team copyWith({
     String? name,
     String? description,

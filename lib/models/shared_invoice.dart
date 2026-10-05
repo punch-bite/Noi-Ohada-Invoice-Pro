@@ -3,6 +3,7 @@ import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
 part 'shared_invoice.g.dart';
+
 @HiveType(typeId: 23)
 class SharedInvoice {
   @HiveField(0)
@@ -55,7 +56,7 @@ class SharedInvoice {
     this.resourceType = 'invoice',
     this.resourceName = '',
     this.writeUsers = const [],
-  })  : id = id ?? const Uuid().v4();
+  }) : id = id ?? const Uuid().v4();
 
   /// Vrai si [userId] peut MODIFIER la ressource partagée.
   /// • partage globalement en écriture (`permissionLevel == 'write'`), ou
@@ -63,8 +64,10 @@ class SharedInvoice {
   bool canWrite(String userId) =>
       permissionLevel == 'write' || writeUsers.contains(userId);
 
-  /// Vrai si [userId] a au moins la LECTURE (destinataire du partage).
-  bool canRead(String userId) => sharedWith.contains(userId);
+  /// Vrai si [userId] a au moins la LECTURE.
+  /// Un utilisateur inscrit dans [writeUsers] a nécessairement la lecture.
+  bool canRead(String userId) =>
+      sharedWith.contains(userId) || writeUsers.contains(userId);
 
   Map<String, dynamic> toMap() {
     return {
