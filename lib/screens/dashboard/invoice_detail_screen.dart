@@ -1,15 +1,11 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
 //
-// 🎨 Refonte « Détails Facture » — maquette Stitch
-// (design/stitch_refined_billing_interface/aper_u_de_la_facture/) :
-//   • AppBar fixe : retour rond + « Détails Facture »
-//   • Canvas rosé : « SAUVER » (haut droite) + bouton zoom flottant
-//   • PAPIER A4 fidèle à la maquette (`StitchA4InvoicePreview`) alimenté par
-//     la facture réelle et les PARAMÈTRES DE PERSONNALISATION sauvegardés
-//     (couleurs du modèle actif, layout drag & drop, fond image/préréglage)
-//   • Barre basse sombre : « Éditer » + « Personnaliser »
-//   • Toutes les actions sont conservées : PDF/impression, partage, email,
-//     mentions légales, image de fond, modèles premium.
+// 🎨 Refonte « Aperçu Facture » — maquette Stitch
+//   • AppBar minimaliste : retour + « Aperçu » + bouton « sauver »
+//   • Canvas sombre contenant la facture A4 (`StitchA4InvoicePreview`)
+//   • Barre basse sombre : Éditer + Personnaliser (boutons ronds)
+//   • Toutes les actions : PDF/impression, partage, email, mentions légales,
+//     image de fond, modèles premium, suppression.
 // ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
 import 'dart:convert';
@@ -72,19 +68,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
 
-  /// 📐 Positions drag & drop du modèle actif (ordre des sections en-tête /
-  /// body / pied, visibilité des blocs, textes personnalisés, taille du logo…).
-  /// Transmises à l'aperçu pour être WYSIWYG avec l'impression PDF.
+  /// 📐 Positions drag & drop du modèle actif (WYSIWYG avec l'impression PDF).
   Map<String, dynamic> _customPositions = const {};
 
-  // 🧩 Layout drag & drop du modèle actif (blocs / colonnes / ordre) —
-  // partagé avec le workspace et l'impression PDF (WYSIWYG).
+  // 🧩 Layout drag & drop du modèle actif — partagé avec le workspace.
   InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
 
   // 📦 Paramètres de facture (filigrane, couleurs…) — SettingsService.
   InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
 
-  // 🔍 Zoom de l'aperçu papier (bouton flottant de la maquette).
+  // 🔍 Zoom de l'aperçu papier.
   double _zoom = 1.0;
 
   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
@@ -101,27 +94,32 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _loadData() async {
-    // ✅ _isLoading est déjà true à l'init : pas besoin de setState initial.
-    // Pour les rechargements (après paiement), le setState est utile — on le
-    // conditionne à `mounted`.
     if (mounted) setState(() => _isLoading = true);
-    final settings = await SettingsService.instance.loadSettings();
-    final invoice = await _db.getInvoice(widget.invoiceId);
-    if (!mounted) return;
-    Client? client;
-    Company? company;
-    if (invoice != null) {
-      client = await _db.getClient(invoice.clientId);
-      company = await _db.getCompany();
+    try {
+      final settings = await SettingsService.instance.loadSettings();
+      final invoice = await _db.getInvoice(widget.invoiceId);
+      if (!mounted) return;
+      Client? client;
+      Company? company;
+      if (invoice != null) {
+        client = await _db.getClient(invoice.clientId);
+        company = await _db.getCompany();
+      }
+      if (!mounted) return;
+      setState(() {
+        _invoiceSettings = settings;
+        _invoice = invoice;
+        _client = client;
+        _company = company;
+        _isLoading = false;
+      });
+    } catch (e) {
+      assert(() {
+        debugPrint('⚠️ _loadData(invoice_detail): $e');
+        return true;
+      }());
+      if (mounted) setState(() => _isLoading = false);
     }
-    if (!mounted) return;
-    setState(() {
-      _invoiceSettings = settings;
-      _invoice = invoice;
-      _client = client;
-      _company = company;
-      _isLoading = false;
-    });
   }
 
   Future<void> _loadTemplates() async {
@@ -131,7 +129,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     try {
       adminTemplates = await TemplateService().getAllTemplates();
     } catch (e) {
-      // ✅ Trace en debug uniquement — le fallback sur les defaults est voulu.
       assert(() {
         debugPrint('⚠️ _loadTemplates: getAllTemplates a échoué: $e');
         return true;
@@ -163,18 +160,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     setState(() {});
   }
 
-  /// Applique les personnalisations locales (positions drag & drop / mapping /
-  /// arrière-plan) d'un modèle et met à jour l'aperçu.
-  ///
-  /// 🔐 L'écran de détail applique EXACTEMENT les mêmes paramètres que l'atelier
-  /// de personnalisation (workspace) : positions, mapping, visibilité des
-  /// blocs, fond, mention légale, en-tête… stockés par `TemplateCustomService`.
+  /// Applique les personnalisations locales (positions / mapping / fond).
   Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
     final custom = await TemplateCustomService.loadCustom(template.id);
-    // 🧩 Positions de BASE : personnalisation locale si elle existe, sinon
-    // celles embarquées dans le modèle (presets « Royal Ledger »). Sans ce
-    // repli, `copyWith(positions: {})` effacerait le design du modèle choisi et
-    // la facture (aperçu + PDF) retomberait sur le layout fixe historique.
     final basePositions = InvoiceTemplate.effectivePositions(
       customPositions: custom.positions,
       templatePositions: template.positions,
@@ -184,10 +172,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       mapping: {...template.mapping, ...custom.mapping},
     );
 
-    // 🖊️ SIGNATURE DE L'ÉMETTEUR : la signature émise (dessinée dans
-    // « Configurer la signature » puis persistée par `SignatureService`) doit
-    // FIGURER sur la facture. On l'injecte dans les positions si le modèle n'a
-    // pas déjà sa propre image de signature (`signature_image`).
+    // 🖊️ Signature de l'émetteur (repli si le modèle n'en a pas).
     final positions = Map<String, dynamic>.from(basePositions);
     if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
       try {
@@ -200,8 +185,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       }
     }
 
-    // 🧩 Layout drag & drop : `fromMap` réinjecte les éléments manquants
-    // depuis le layout par défaut (compat ascendante).
     _layoutConfig = positions.isNotEmpty
         ? InvoiceLayoutConfig.fromMap(positions)
         : InvoiceLayoutConfig.defaultLayout();
@@ -213,25 +196,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         !custom.background.hasPreset &&
         template.fileData.isNotEmpty &&
         template.fileType != 'pdf') {
-      // Repli : image téléversée directement sur le modèle (admin).
       _previewBackground = decodeBackgroundImage(template.fileData);
     }
-
-    // ✅ Le setState final est géré par `_loadTemplates` (le seul caller).
-    // En interne, on ne déclenche pas de rebuild : évite un double rebuild.
     return applied;
   }
 
-  /// Ouvre le sélecteur plein écran des modèles puis recharge l'actif.
-  /// (La protection premium/paywall est gérée dans `TemplatesScreen`.)
   Future<void> _openTemplatePicker() async {
     await context.push('/templates/select');
     if (mounted) await _loadTemplates();
   }
 
-  /// 👮 La personnalisation de la facture est réservée à l'administrateur
-  /// et au propriétaire du modèle (créateur / acheteur / accès premium /
-  /// modèle gratuit).
   bool _canCustomizeActiveTemplate() {
     final template = _selectedTemplate;
     if (template == null) return false;
@@ -244,7 +218,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Message de restriction (personnalisation non autorisée).
   void _showCustomizationRestricted() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -257,7 +230,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Ouvre l'espace de personnalisation (drag & drop) du modèle actif.
   Future<void> _openWorkspace() async {
     final template = _selectedTemplate;
     if (template == null) {
@@ -272,7 +244,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (mounted) await _loadTemplates();
   }
 
-  // ===== IMPRESSION & PARTAGE (logique conservée) =====
+  // ===== IMPRESSION & PARTAGE =====
   Future<void> _previewAndPrint() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
@@ -282,8 +254,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF imprimé soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
@@ -308,8 +278,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF partagé soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
@@ -342,18 +310,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF envoyé par email soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
       );
-      // 🧾 Le PDF est JOINT à l'e-mail (plus de lien mort « # ») : le client
-      // reçoit réellement sa facture, au design personnalisé de l'aperçu.
       final htmlBody = MailService.getInvoiceTemplate(
         _client!.name,
         _invoice!.invoiceNumber,
-        '', // pas de lien de téléchargement : la facture est en pièce jointe
+        '',
         companyName: _company!.name,
         amount: _invoice!.totalAmount,
         dueDate: _fmtDate(_invoice!.dueDate),
@@ -387,7 +351,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-  /// Date lisible « JJ/MM/AAAA » pour le récap de l'e-mail.
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
       '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
@@ -396,7 +359,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     final teamService = TeamService();
     final auth = context.read<AppAuthProvider>();
-    // ✅ Garde : utilisateur non connecté → impossible de charger les équipes.
     final userId = auth.user?.id;
     if (userId == null || userId.isEmpty) {
       if (!mounted) return;
@@ -430,7 +392,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) {
-        // État du bottom sheet (doit survivre aux rebuilds du builder).
         String? selectedTeamId;
         String permissionLevel = 'read';
         final Set<String> selectedMembers = {};
@@ -502,7 +463,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Corps du bottom sheet « Partager la facture » (état passé par callbacks).
   Widget _shareSheetBody(
     BuildContext sheetCtx,
     void Function(VoidCallback) sheetSetState,
@@ -636,7 +596,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bouton « Partager » du bottom sheet (désactivé si rien de sélectionné).
   Widget _shareButton(
     BuildContext sheetCtx,
     TeamService teamService,
@@ -693,7 +652,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  🎨 UI — Refonte maquette Stitch « Aperçu de la facture »
+  //  🎨 UI — Aperçu Facture (maquette Stitch)
   // ============================================================
 
   @override
@@ -739,7 +698,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => context.pop(),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/invoices');
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: c.primary,
                   foregroundColor: c.onPrimary,
@@ -758,13 +723,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            // Canvas rosé de la maquette contenant le papier A4.
             child: Stack(
               children: [
+                // Canvas scrollable contenant la facture A4.
                 Positioned.fill(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                     child: Center(
                       child: Transform.scale(
                         scale: _zoom,
@@ -774,26 +739,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     ),
                   ),
                 ),
-                // « SAUVER » (haut droite) — enregistre l'aperçu en PDF.
-                Positioned(
-                  top: 6,
-                  right: 20,
-                  child: GestureDetector(
-                    onTap: _previewAndPrint,
-                    child: Text(
-                      'SAUVER',
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.0,
-                        color: c.secondary,
-                      ),
-                    ),
-                  ),
-                ),
-                // Bouton zoom flottant — sous « SAUVER » (maquette).
-                Positioned(top: 44, right: 16, child: _zoomButton(c)),
+                // Bouton zoom flottant (haut droite, sous la barre).
+                Positioned(top: 10, right: 16, child: _zoomButton(c)),
               ],
             ),
           ),
@@ -803,15 +750,17 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// AppBar maquette : retour rond + « Détails Facture » + partage.
+  /// AppBar maquette : retour fin + « Aperçu » + « sauver » à droite.
   PreferredSizeWidget _appBar(RoyalScheme c) {
     return AppBar(
-      backgroundColor: c.surface.withValues(alpha: 0.92),
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      centerTitle: false,
+      scrolledUnderElevation: 0,
+      centerTitle: true,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: c.onSurface),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: c.onSurface, size: 20),
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -821,7 +770,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         },
       ),
       title: Text(
-        'Détails Facture',
+        'Aperçu',
         style: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 19,
@@ -830,15 +779,37 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ),
       ),
       actions: [
-        IconButton(
-          tooltip: 'Partager le PDF',
-          icon: Icon(Icons.ios_share, size: 20, color: c.onSurface),
-          onPressed: _shareInvoice,
+        // « sauver » (texte bleu — action principale de la maquette).
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: TextButton(
+            onPressed: _previewAndPrint,
+            style: TextButton.styleFrom(
+              foregroundColor: c.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 40),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'sauver',
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+                color: c.primary,
+              ),
+            ),
+          ),
         ),
+        // Menu contextuel « … ».
         PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: c.onSurface),
+          icon: Icon(Icons.more_vert, color: c.onSurface, size: 22),
           onSelected: (value) {
             switch (value) {
+              case 'share':
+                _shareInvoice();
+                break;
               case 'pdf':
                 _previewAndPrint();
                 break;
@@ -857,6 +828,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             }
           },
           itemBuilder: (ctx) => [
+            const PopupMenuItem(
+                value: 'share', child: Text('Partager le PDF')),
             const PopupMenuItem(
                 value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
             const PopupMenuItem(
@@ -885,12 +858,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// 🗑️ Suppression définitive de la facture (menu « … »).
-  ///
-  /// Deux options proposées dans la boîte de confirmation :
-  ///  • supprimer les RAPPELS liés à la facture ;
-  ///  • supprimer les ENCAISSEMENTS (transactions du portefeuille) créés par
-  ///    son paiement — le solde est diminué en conséquence.
+  /// 🗑️ Suppression définitive de la facture.
   Future<void> _confirmDeleteInvoice() async {
     final invoice = _invoice;
     if (invoice == null) return;
@@ -961,14 +929,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
-      // ✅ Capture de l'uid AVANT tout await (context.read interdit après
-      // un await si le widget peut être démonté entre-temps).
       final uid = context.read<AppAuthProvider>().user?.id ?? '';
 
-      // 1) La facture elle-même.
       await _db.deleteInvoice(invoice.id);
 
-      // 2) Les rappels (relances) rattachés à cette facture.
       if (removeReminders) {
         final reminders = await _db.getReminders();
         for (final r in reminders.where((r) => r.invoiceId == invoice.id)) {
@@ -976,7 +940,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         }
       }
 
-      // 3) Les encaissements du portefeuille (annulation du crédit).
       int removedTx = 0;
       if (removeTransactions && uid.isNotEmpty) {
         removedTx = await WalletService().deleteInvoiceTransactions(
@@ -997,7 +960,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      context.pop(true);
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/invoices');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1013,8 +980,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   /// les personnalisations sauvegardées du modèle actif.
   Widget _buildInvoicePaper(RoyalScheme c) {
     final template = _selectedTemplate;
-    // 🎨 Template EFFECTIF : les personnalisations globales (couleurs,
-    // police, affichage) sont appliquées au modèle pour l'aperçu.
     final effective = template == null
         ? null
         : SettingsService.applyToTemplate(template, _invoiceSettings);
@@ -1028,14 +993,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     return Column(
       children: [
-        // Bandeau du modèle actif (aperçu maquette « Modèle : X »).
+        // Bandeau du modèle actif (tap = changer de modèle).
         if (template != null) ...[
           GestureDetector(
             onTap: _openTemplatePicker,
             child: Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: c.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(10),
@@ -1067,14 +1032,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       ),
                     ),
                   ),
-                  Text(
-                    'Cliquez pour changer',
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 10.5,
-                      color: c.onSurfaceVariant,
-                    ),
-                  ),
+                  Icon(Icons.swap_horiz_rounded,
+                      size: 16, color: c.onSurfaceVariant),
                 ],
               ),
             ),
@@ -1114,12 +1073,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bouton zoom flottant de la maquette (cercle translucide bordé).
+  /// Bouton zoom flottant (pilule translucide bordée).
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: 0.55),
-        shape: BoxShape.circle,
+        color: c.surface.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.outlineVariant.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
@@ -1136,12 +1095,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 1.6));
           }),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               '${(_zoom * 100).toInt()}%',
               style: TextStyle(
                 fontFamily: 'WorkSans',
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: c.onSurface,
               ),
@@ -1161,41 +1120,46 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       customBorder: const CircleBorder(),
       child: Padding(
         padding: const EdgeInsets.all(7),
-        child: Icon(icon, size: 16, color: c.onSurface),
+        child: Icon(icon, size: 15, color: c.onSurface),
       ),
     );
   }
 
-  /// Action de la barre basse : cercle bordé + libellé (maquette).
+  /// Action de la barre basse : bouton rond + libellé.
   Widget _bottomAction(
     RoyalScheme c, {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    Color? iconColor,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+                color: Colors.white.withValues(alpha: 0.04),
+                border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18), width: 1),
               ),
-              child: Icon(icon, size: 22, color: c.inverseOnSurface),
+              child: Icon(icon,
+                  size: 22, color: iconColor ?? c.inverseOnSurface),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
                 fontFamily: 'WorkSans',
                 fontSize: 13,
+                fontWeight: FontWeight.w500,
                 color: c.inverseOnSurface,
               ),
             ),
@@ -1205,25 +1169,24 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Barre basse sombre (inverseSurface) de la maquette : Éditer + Personnaliser.
+  /// Barre basse sombre : Éditer + Personnaliser.
   Widget _buildBottomBar(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.inverseSurface.withValues(alpha: 0.97),
+        color: c.inverseSurface,
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
       ),
       padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 12,
-        bottom: 12 + MediaQuery.of(context).padding.bottom,
+        left: 16,
+        right: 16,
+        top: 14,
+        bottom: 14 + MediaQuery.of(context).padding.bottom,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // « Éditer » : paiement (si brouillon) sinon édition.
           _bottomAction(
             c,
             icon: Icons.edit_outlined,
@@ -1245,7 +1208,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               }
             },
           ),
-          // « Personnaliser » : palette de fond + outils du modèle actif.
           _bottomAction(
             c,
             icon: Icons.palette_outlined,
@@ -1257,13 +1219,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Recharge la facture après un paiement (statut → payée, tampon visible).
   Future<void> _reloadAfterPayment() async {
     await _loadData();
   }
 
-  /// Menu « Personnaliser » : workspace drag & drop, image de fond,
-  /// mention légale, liste des modèles.
+  /// Menu « Personnaliser » : workspace, image de fond, mention légale, modèles.
   void _openCustomizationMenu() {
     final c = RoyalScheme.of(context);
     showModalBottomSheet(
@@ -1327,7 +1287,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Tuile du menu « Personnaliser ».
   Widget _menuTile(
     RoyalScheme c,
     IconData icon,
@@ -1367,34 +1326,24 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  // ✅ Les wrappers reçoivent désormais le `sheetCtx` explicitement : le pop
-  // cible le bottom sheet (et non l'écran détail) même dans les cas ambigus.
-
-  /// Wrapper menu → workspace (referme le bottom sheet d'abord).
   void _openWorkspaceFromMenu(BuildContext sheetCtx) {
     Navigator.pop(sheetCtx);
     _openWorkspace();
   }
 
-  /// Wrapper menu → palette d'image de fond du modèle actif.
   void _openBackgroundSheetFromMenu(BuildContext sheetCtx) {
     Navigator.pop(sheetCtx);
     _openBackgroundSheet();
   }
 
-  /// Wrapper menu → éditeur de mention légale.
   void _openLegalEditorFromMenu(BuildContext sheetCtx) {
     Navigator.pop(sheetCtx);
     _showLegalEditor();
   }
 
-  /// Ouvre la palette d'image de fond (bottom sheet partagée avec le
-  /// workspace). Persiste à chaque changement.
   Future<void> _openBackgroundSheet() async {
     final template = _selectedTemplate;
     if (template == null || !mounted) return;
-    // 👮 Le fond fait partie des personnalisations réservées à l'admin et
-    // au propriétaire du modèle.
     if (!_canCustomizeActiveTemplate()) {
       _showCustomizationRestricted();
       return;
@@ -1406,8 +1355,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Persiste le fond choisi (préréglage palette ou image galerie) pour le
-  /// modèle actif — sans toucher aux positions / mapping existants.
   Future<void> _persistBackground(TemplateBackgroundSettings next) async {
     final template = _selectedTemplate;
     if (template == null) return;
@@ -1421,7 +1368,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (!mounted) return;
     setState(() {
       _backgroundSettings = next;
-      // ✅ On ne décode l'image QUE si des bytes sont réellement présents.
       final bytes = next.fileData;
       _previewBackground = next.hasCustomImage && bytes.isNotEmpty
           ? decodeBackgroundImage(bytes)
@@ -1429,8 +1375,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     });
   }
 
-  /// 📜 Éditeur « Mention légale & conditions » de la société : texte légal
-  /// (pied de facture), RCCM et N° contribuable — enregistrés dans Company.
+  /// 📜 Éditeur « Mention légale & conditions » — texte légal, RCCM, N° contrib.
   Future<void> _showLegalEditor() async {
     final company = _company;
     if (company == null || !mounted) return;
@@ -1438,87 +1383,91 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final rccmCtrl = TextEditingController(text: company.rccm);
     final taxCtrl = TextEditingController(text: company.taxId);
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF151722) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetCtx) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Mention légale & conditions',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ces informations apparaissent sur toutes vos factures.',
-                style: TextStyle(fontSize: 11.5, color: subTextColor),
-              ),
-              const SizedBox(height: 12),
-              _legalField('Texte légal (mentions, conditions de paiement…)',
-                  legalCtrl, 3),
-              _legalField('RCCM', rccmCtrl, 1),
-              _legalField('N° Contribuable', taxCtrl, 1),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final navigator = Navigator.of(sheetCtx);
-                    final updated = company.copyWith(
-                      legalText: legalCtrl.text.trim(),
-                      rccm: rccmCtrl.text.trim(),
-                      taxId: taxCtrl.text.trim(),
-                    );
-                    await _db.saveCompany(updated);
-                    if (!mounted) return;
-                    setState(() => _company = updated);
-                    navigator.pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Informations légales enregistrées'),
-                        backgroundColor: Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF151722) : Colors.white,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mention légale & conditions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
                   ),
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('Enregistrer'),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  'Ces informations apparaissent sur toutes vos factures.',
+                  style: TextStyle(fontSize: 11.5, color: subTextColor),
+                ),
+                const SizedBox(height: 12),
+                _legalField('Texte légal (mentions, conditions de paiement…)',
+                    legalCtrl, 3),
+                _legalField('RCCM', rccmCtrl, 1),
+                _legalField('N° Contribuable', taxCtrl, 1),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final navigator = Navigator.of(sheetCtx);
+                      final updated = company.copyWith(
+                        legalText: legalCtrl.text.trim(),
+                        rccm: rccmCtrl.text.trim(),
+                        taxId: taxCtrl.text.trim(),
+                      );
+                      await _db.saveCompany(updated);
+                      if (!mounted) return;
+                      setState(() => _company = updated);
+                      navigator.pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Informations légales enregistrées'),
+                          backgroundColor: Colors.green,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Enregistrer'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    legalCtrl.dispose();
-    rccmCtrl.dispose();
-    taxCtrl.dispose();
+      );
+    } finally {
+      // ✅ Dispose garanti même si le sheet se ferme par swipe / tap extérieur.
+      legalCtrl.dispose();
+      rccmCtrl.dispose();
+      taxCtrl.dispose();
+    }
   }
 
-  /// Champ texte compact du formulaire légal.
   Widget _legalField(
       String label, TextEditingController controller, int maxLines) {
     return Padding(
