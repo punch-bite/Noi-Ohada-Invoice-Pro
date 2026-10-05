@@ -101,16 +101,27 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    _invoiceSettings = await SettingsService.instance.loadSettings();
-    _invoice = await _db.getInvoice(widget.invoiceId);
-    if (_invoice != null) {
-      _client = await _db.getClient(_invoice!.clientId);
-      _company = await _db.getCompany();
+    // ✅ _isLoading est déjà true à l'init : pas besoin de setState initial.
+    // Pour les rechargements (après paiement), le setState est utile — on le
+    // conditionne à `mounted`.
+    if (mounted) setState(() => _isLoading = true);
+    final settings = await SettingsService.instance.loadSettings();
+    final invoice = await _db.getInvoice(widget.invoiceId);
+    if (!mounted) return;
+    Client? client;
+    Company? company;
+    if (invoice != null) {
+      client = await _db.getClient(invoice.clientId);
+      company = await _db.getCompany();
     }
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (!mounted) return;
+    setState(() {
+      _invoiceSettings = settings;
+      _invoice = invoice;
+      _client = client;
+      _company = company;
+      _isLoading = false;
+    });
   }
 
   Future<void> _loadTemplates() async {
@@ -119,7 +130,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     List<InvoiceTemplate> adminTemplates = [];
     try {
       adminTemplates = await TemplateService().getAllTemplates();
-    } catch (_) {}
+    } catch (e) {
+      // ✅ Trace en debug uniquement — le fallback sur les defaults est voulu.
+      assert(() {
+        debugPrint('⚠️ _loadTemplates: getAllTemplates a échoué: $e');
+        return true;
+      }());
+    }
+    if (!mounted) return;
     final adminIds = adminTemplates.map((e) => e.id).toSet();
     _templates = [
       ...defaults.where((d) => !adminIds.contains(d.id)),
@@ -137,10 +155,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         orElse: () => _templates.first,
       );
     }
+    if (!mounted) return;
     if (selected != null) {
       _selectedTemplate = await _applyCustomisation(selected);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
   }
 
   /// Applique les personnalisations locales (positions drag & drop / mapping /
@@ -197,7 +217,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       _previewBackground = decodeBackgroundImage(template.fileData);
     }
 
-    if (mounted) setState(() {});
+    // ✅ Le setState final est géré par `_loadTemplates` (le seul caller).
+    // En interne, on ne déclenche pas de rebuild : évite un double rebuild.
     return applied;
   }
 
@@ -375,11 +396,23 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     final teamService = TeamService();
     final auth = context.read<AppAuthProvider>();
-    final teams = await teamService.getUserTeams(auth.user!.id);
+    // ✅ Garde : utilisateur non connecté → impossible de charger les équipes.
+    final userId = auth.user?.id;
+    if (userId == null || userId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vous devez être connecté pour partager.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final teams = await teamService.getUserTeams(userId);
+    if (!mounted) return;
     _cachedTeams = teams;
 
     if (teams.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Vous n\'appartenez à aucune équipe'),
@@ -415,7 +448,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 if (team != null) team.ownerId,
                 ...?team?.adminIds,
                 ...?team?.memberIds,
-              }..remove(auth.user!.id);
+              }..remove(userId);
               selectedMembers.clear();
               sheetSetState(() {
                 memberIds = ids.toList();
@@ -619,12 +652,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         onPressed: selectedTeamId == null || selectedMembers.isEmpty
             ? null
             : () async {
+                final invoiceId = _invoice?.id;
+                final invoiceNumber = _invoice?.invoiceNumber ?? '';
+                final sharedBy = auth.user?.id;
+                if (invoiceId == null || sharedBy == null) return;
                 await teamService.shareResource(
-                  resourceId: _invoice!.id,
+                  resourceId: invoiceId,
                   resourceType: 'invoice',
-                  resourceName: _invoice!.invoiceNumber,
+                  resourceName: invoiceNumber,
                   teamId: selectedTeamId,
-                  sharedBy: auth.user!.id,
+                  sharedBy: sharedBy,
                   sharedWith: selectedMembers.toList(),
                   permissionLevel: permissionLevel,
                 );
@@ -924,6 +961,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     try {
+      // ✅ Capture de l'uid AVANT tout await (context.read interdit après
+      // un await si le widget peut être démonté entre-temps).
+      final uid = context.read<AppAuthProvider>().user?.id ?? '';
+
       // 1) La facture elle-même.
       await _db.deleteInvoice(invoice.id);
 
@@ -937,8 +978,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
       // 3) Les encaissements du portefeuille (annulation du crédit).
       int removedTx = 0;
-      if (removeTransactions) {
-        final uid = context.read<AppAuthProvider>().user?.id ?? '';
+      if (removeTransactions && uid.isNotEmpty) {
         removedTx = await WalletService().deleteInvoiceTransactions(
           userId: uid,
           invoiceId: invoice.id,
@@ -1253,21 +1293,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 Icons.widgets_outlined,
                 'Personnalisation drag & drop',
                 'Blocs, ordre et styles du modèle actif',
-                _openWorkspaceFromMenu,
+                () => _openWorkspaceFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
                 Icons.wallpaper_outlined,
                 'Image de fond & palette',
                 'Image galerie ou préréglage décoratif',
-                _openBackgroundSheetFromMenu,
+                () => _openBackgroundSheetFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
                 Icons.gavel_outlined,
                 'Mention légale & conditions',
                 'Texte légal, RCCM et N° contribuable',
-                _openLegalEditorFromMenu,
+                () => _openLegalEditorFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
@@ -1327,21 +1367,24 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
+  // ✅ Les wrappers reçoivent désormais le `sheetCtx` explicitement : le pop
+  // cible le bottom sheet (et non l'écran détail) même dans les cas ambigus.
+
   /// Wrapper menu → workspace (referme le bottom sheet d'abord).
-  void _openWorkspaceFromMenu() {
-    Navigator.pop(context);
+  void _openWorkspaceFromMenu(BuildContext sheetCtx) {
+    Navigator.pop(sheetCtx);
     _openWorkspace();
   }
 
   /// Wrapper menu → palette d'image de fond du modèle actif.
-  void _openBackgroundSheetFromMenu() {
-    Navigator.pop(context);
+  void _openBackgroundSheetFromMenu(BuildContext sheetCtx) {
+    Navigator.pop(sheetCtx);
     _openBackgroundSheet();
   }
 
   /// Wrapper menu → éditeur de mention légale.
-  void _openLegalEditorFromMenu() {
-    Navigator.pop(context);
+  void _openLegalEditorFromMenu(BuildContext sheetCtx) {
+    Navigator.pop(sheetCtx);
     _showLegalEditor();
   }
 
@@ -1378,8 +1421,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (!mounted) return;
     setState(() {
       _backgroundSettings = next;
-      _previewBackground =
-          next.hasCustomImage ? decodeBackgroundImage(next.fileData) : null;
+      // ✅ On ne décode l'image QUE si des bytes sont réellement présents.
+      final bytes = next.fileData;
+      _previewBackground = next.hasCustomImage && bytes.isNotEmpty
+          ? decodeBackgroundImage(bytes)
+          : null;
     });
   }
 
