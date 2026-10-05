@@ -20,15 +20,21 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
   final int _codeLength = 6;
   late List<TextEditingController> _controllers;
   late List<FocusNode> _focusNodes;
-  
+  late List<FocusNode> _passiveFocusNodes; // ✅ FocusNodes passifs pour le backspace
+
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _controllers = List.generate(_codeLength, (index) => TextEditingController());
+    _controllers =
+        List.generate(_codeLength, (index) => TextEditingController());
     _focusNodes = List.generate(_codeLength, (index) => FocusNode());
+    _passiveFocusNodes = List.generate(
+      _codeLength,
+      (index) => FocusNode(skipTraversal: true),
+    );
   }
 
   @override
@@ -39,19 +45,22 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
     for (var node in _focusNodes) {
       node.dispose();
     }
+    for (var node in _passiveFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
   }
 
-  // Permet de reconstruire le code à partir des 6 champs individuels
+  // Reconstitue le code depuis les 6 champs
   String get _currentCode {
     return _controllers.map((controller) => controller.text).join();
   }
 
-  // Gère la saisie, le passage au champ suivant/précédent et le support du copier-coller
+  // Gère la saisie, le passage au champ suivant/précédent et le copier-coller
   void _onCodeChanged(String value, int index) {
-    // Gestion du copier-coller (si l'utilisateur colle un code de 6 chiffres d'un coup)
+    // Copier-coller d'un code complet
     if (value.length > 1) {
-      final cleanValue = value.replaceAll(RegExp(r'\D'), ''); // Garde uniquement les chiffres
+      final cleanValue = value.replaceAll(RegExp(r'\D'), '');
       if (cleanValue.length >= _codeLength) {
         for (int i = 0; i < _codeLength; i++) {
           _controllers[i].text = cleanValue[i];
@@ -67,12 +76,11 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
         _focusNodes[index + 1].requestFocus();
       } else {
         _focusNodes[index].unfocus();
-        _verifyCode(); // Soumission automatique dès que le dernier chiffre est saisi
+        _verifyCode();
       }
     }
   }
 
-  // Action de vérification du code 2FA
   Future<void> _verifyCode() async {
     final code = _currentCode;
     if (code.length < _codeLength) {
@@ -80,7 +88,6 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
       return;
     }
 
-    // Fermer le clavier virtuel
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -92,20 +99,19 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
     final success = await authProvider.verifyTwoFactorCode(code);
 
     if (!mounted) return;
-    
+
     setState(() => _isLoading = false);
-    
+
     if (success) {
-      context.go('/dashboard'); // Redirection finale !
+      context.go('/dashboard');
     } else {
       setState(() {
         _errorMessage = authProvider.error ?? 'Code de sécurité invalide';
-        _clearCode(); // Réinitialiser l'input pour une nouvelle tentative
+        _clearCode();
       });
     }
   }
 
-  // Réinitialiser les champs en cas d'erreur
   void _clearCode() {
     for (var controller in _controllers) {
       controller.clear();
@@ -113,7 +119,6 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
     _focusNodes[0].requestFocus();
   }
 
-  // Annuler la tentative et revenir au login
   void _onCancel() {
     if (_isLoading) return;
     context.read<AppAuthProvider>().cancelTwoFactorLogin();
@@ -123,7 +128,6 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
     final primary = theme.primaryColor;
     final text = theme.textColor;
     final sub = theme.subTextColor;
@@ -134,8 +138,9 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: text),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
           onPressed: _isLoading ? null : _onCancel,
         ),
       ),
@@ -143,166 +148,168 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                  width: 1,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                                        // Logo de la marque
-                    const LogoImage(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Logo
+                  const Center(
+                    child: LogoImage(
                       path: 'assets/images/splash_logo.png',
-                      width: 68,
-                      height: 68,
-                    ).animate().scale(
-                          begin: const Offset(0.6, 0.6),
-                          end: const Offset(1, 1),
-                          curve: Curves.easeOutBack,
-                        ),
-                    const SizedBox(height: 14),
-                    
-                    Text(
-                      'Double authentification',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: text,
-                        letterSpacing: -0.5,
-                      ),
+                      width: 70,
+                      height: 70,
                     ),
-                    const SizedBox(height: 6),
-                    
-                    Text(
-                      'Saisissez le code de sécurité à $_codeLength chiffres généré par votre application d\'authentification (OTP).',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: sub, 
-                        fontSize: 13, 
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
+                  )
+                      .animate()
+                      .scale(
+                        begin: const Offset(0.6, 0.6),
+                        end: const Offset(1, 1),
+                        curve: Curves.easeOutBack,
                       ),
-                    ),
-                    const SizedBox(height: 28),
+                  const SizedBox(height: 18),
 
-                    // Grille OTP (6 champs de texte alignés horizontalement)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(
-                        _codeLength,
-                        (index) => SizedBox(
-                          width: 42,
-                          height: 52,
-                          child: KeyboardListener(
-                            focusNode: FocusNode(skipTraversal: true), // Focus Node passif
-                            onKeyEvent: (event) {
-                              // Gestion propre du retour arrière si la case est vide
-                              if (event is KeyDownEvent &&
-                                  event.logicalKey == LogicalKeyboardKey.backspace &&
-                                  _controllers[index].text.isEmpty &&
-                                  index > 0) {
-                                _focusNodes[index - 1].requestFocus();
-                                _controllers[index - 1].clear();
-                              }
-                            },
-                            child: TextFormField(
-                              controller: _controllers[index],
-                              focusNode: _focusNodes[index],
-                              enabled: !_isLoading,
-                              autofocus: index == 0,
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              // Permet de coller une chaîne complète dans le premier champ
-                              maxLength: index == 0 ? _codeLength : 1,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: text,
-                              ),
-                              decoration: InputDecoration(
-                                counterText: '', // Masque le compteur par défaut de longueur
-                                filled: true,
-                                fillColor: isDark ? Colors.black26 : Colors.grey[50],
-                                contentPadding: EdgeInsets.zero,
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                                    width: 1,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: primary, width: 2),
-                                ),
-                                disabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: isDark ? Colors.transparent : Colors.grey[100]!,
-                                  ),
-                                ),
-                              ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              onChanged: (v) => _onCodeChanged(v, index),
+                  Text(
+                    'Double authentification',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: text,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  Text(
+                    'Saisissez le code de sécurité à $_codeLength chiffres '
+                    'généré par votre application d\'authentification (OTP).',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: sub,
+                      fontSize: 13,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+
+                  // Grille OTP (6 champs espacés uniformément)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(
+                      _codeLength,
+                      (index) => SizedBox(
+                        width: 46,
+                        height: 56,
+                        child: KeyboardListener(
+                          focusNode: _passiveFocusNodes[index],
+                          onKeyEvent: (event) {
+                            if (event is KeyDownEvent &&
+                                event.logicalKey ==
+                                    LogicalKeyboardKey.backspace &&
+                                _controllers[index].text.isEmpty &&
+                                index > 0) {
+                              _focusNodes[index - 1].requestFocus();
+                              _controllers[index - 1].clear();
+                            }
+                          },
+                          child: TextFormField(
+                            controller: _controllers[index],
+                            focusNode: _focusNodes[index],
+                            enabled: !_isLoading,
+                            autofocus: index == 0,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            maxLength: index == 0 ? _codeLength : 1,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: text,
                             ),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              filled: false,
+                              contentPadding: EdgeInsets.zero,
+                              // Soulignement uniquement (cohérent avec login/register)
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: sub.withValues(alpha: 0.25),
+                                  width: 1,
+                                ),
+                              ),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: primary.withValues(alpha: 0.9),
+                                  width: 1.8,
+                                ),
+                              ),
+                              disabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: sub.withValues(alpha: 0.1),
+                                  width: 1,
+                                ),
+                              ),
+                              errorBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.red.withValues(alpha: 0.7),
+                                  width: 1.2,
+                                ),
+                              ),
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            onChanged: (v) => _onCodeChanged(v, index),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                  ),
+                  const SizedBox(height: 24),
 
-                    // Gestion et affichage stylisé de l'erreur
-                    if (_errorMessage != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                  // Erreur (épurée, sans cadre)
+                  if (_errorMessage != null) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.red[700],
+                          size: 18,
                         ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline_rounded, color: Colors.red[700], size: 20),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: TextStyle(
-                                  color: Colors.red[850], 
-                                  fontSize: 12.5, 
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: 12.5,
+                              height: 1.35,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
-                                        // Bouton de validation manuelle (dégradé indigo → violet)
-                    GradientButton(
-                      label: 'Valider et se connecter',
-                      icon: Icons.verified_user_rounded,
-                      height: 50,
-                      loading: _isLoading,
-                      onPressed: _verifyCode,
-                    ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-                    const SizedBox(height: 20),
+                  // Bouton de validation
+                  GradientButton(
+                    label: 'Valider et se connecter',
+                    icon: Icons.verified_user_rounded,
+                    height: 50,
+                    loading: _isLoading,
+                    onPressed: _verifyCode,
+                  ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+                  const SizedBox(height: 24),
 
-                    // Bouton Annuler
-                    TextButton(
+                  // Annuler
+                  Center(
+                    child: TextButton(
                       onPressed: _isLoading ? null : _onCancel,
                       style: TextButton.styleFrom(
                         foregroundColor: primary,
@@ -311,12 +318,15 @@ class _VerifyTwoFactorScreenState extends State<VerifyTwoFactorScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       child: const Text(
-                        'Retour à l\'écran de connexion', 
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        'Retour à l\'écran de connexion',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

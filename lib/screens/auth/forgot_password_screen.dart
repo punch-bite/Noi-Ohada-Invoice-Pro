@@ -19,7 +19,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _emailFocusNode = FocusNode();
-  
+
   bool _isLoading = false;
   bool _isSent = false;
   String? _errorMessage;
@@ -63,7 +63,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
     } else {
       setState(() {
-        _errorMessage = auth.error ?? 'Impossible d\'envoyer l\'email de réinitialisation.';
+        _errorMessage =
+            auth.error ?? 'Impossible d\'envoyer l\'email de réinitialisation.';
       });
     }
   }
@@ -71,7 +72,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
     final primary = theme.primaryColor;
     final text = theme.textColor;
     final sub = theme.subTextColor;
@@ -83,22 +83,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(24),
-            child: Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-                  width: 1,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-                child: _isSent
-                    ? _buildSuccessView(primary, text, sub)
-                    : _buildFormView(theme, primary, text, sub, isDark),
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: _isSent
+                  ? _buildSuccessView(primary, text, sub)
+                  : _buildFormView(primary, text, sub),
             ),
           ),
         ),
@@ -106,27 +96,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  // Vue du Formulaire de demande
-  Widget _buildFormView(ThemeProvider theme, Color primary, Color text, Color sub, bool isDark) {
+  // ── Vue Formulaire de demande ──
+  Widget _buildFormView(Color primary, Color text, Color sub) {
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-                // Logo de la marque
-        const LogoImage(
-          path: 'assets/images/splash_logo.png',
-          width: 68,
-          height: 68,
-        ).animate().scale(
+        // Logo
+        const Center(
+          child: LogoImage(
+            path: 'assets/images/splash_logo.png',
+            width: 70,
+            height: 70,
+          ),
+        )
+            .animate()
+            .scale(
               begin: const Offset(0.6, 0.6),
               end: const Offset(1, 1),
               curve: Curves.easeOutBack,
             ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         Text(
           'Mot de passe oublié ?',
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 22, 
-            fontWeight: FontWeight.bold, 
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
             color: text,
             letterSpacing: -0.5,
           ),
@@ -135,14 +131,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Text(
           'Entrez votre adresse email pour recevoir un lien de réinitialisation',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: sub, height: 1.35, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 13,
+            color: sub,
+            height: 1.35,
+            fontWeight: FontWeight.w500,
+          ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 40),
 
         Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Champ email épuré
               TextFormField(
                 controller: _emailController,
                 focusNode: _emailFocusNode,
@@ -150,55 +153,96 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => _resetPassword(),
                 enabled: !_isLoading,
-                style: TextStyle(color: text, fontSize: 14),
-                decoration: _inputDecoration(
-                  label: 'Adresse email',
-                  hint: 'exemple@email.com',
-                  icon: Icons.email_outlined,
-                  isDark: isDark,
-                  primary: primary,
-                  sub: sub,
+                style: TextStyle(color: text, fontSize: 14.5),
+                decoration: InputDecoration(
+                  labelText: 'Adresse email',
+                  hintText: 'exemple@email.com',
+                  labelStyle: TextStyle(
+                    color: sub,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  hintStyle: TextStyle(
+                    color: sub.withValues(alpha: 0.5),
+                    fontSize: 14,
+                  ),
+                  prefixIcon:
+                      Icon(Icons.email_outlined, color: primary, size: 20),
+                  filled: false,
+                  border: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: sub.withValues(alpha: 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: sub.withValues(alpha: 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: primary.withValues(alpha: 0.9),
+                      width: 1.6,
+                    ),
+                  ),
+                  errorBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.red.withValues(alpha: 0.7),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedErrorBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.red.withValues(alpha: 0.9),
+                      width: 1.6,
+                    ),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
                 ),
                 validator: (v) {
-                  if (v?.trim().isEmpty == true) return 'Veuillez saisir votre email';
-                  if (!v!.contains('@') || !v.contains('.')) return 'Adresse email non valide';
+                  if (v?.trim().isEmpty == true) {
+                    return 'Veuillez saisir votre email';
+                  }
+                  if (!v!.contains('@') || !v.contains('.')) {
+                    return 'Adresse email non valide';
+                  }
                   return null;
                 },
               ),
-              
-              // Affichage dynamique de l'erreur
+
+              // Erreur (épurée, sans cadre)
               if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline_rounded, color: Colors.red[700], size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: TextStyle(
-                            color: Colors.red[850], 
-                            fontSize: 12.5, 
-                            height: 1.35,
-                            fontWeight: FontWeight.w500,
-                          ),
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.red[700],
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontSize: 12.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-                            // Bouton d'action (dégradé indigo → violet)
+              // Bouton envoyer
               GradientButton(
                 label: 'Envoyer le lien',
                 icon: Icons.send_rounded,
@@ -210,114 +254,99 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
 
-        // Retour en arrière
-        TextButton(
-          onPressed: () => context.go('/auth/login'),
-          style: TextButton.styleFrom(
-            foregroundColor: primary,
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(50, 30),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          child: const Text(
-            'Retour à la connexion', 
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+        // Retour
+        Center(
+          child: TextButton(
+            onPressed: () => context.go('/auth/login'),
+            style: TextButton.styleFrom(
+              foregroundColor: primary,
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(50, 30),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Retour à la connexion',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            ),
           ),
         ),
       ],
     );
   }
 
-  // Vue affichée en cas de succès de l'envoi
+  // ── Vue Succès ──
   Widget _buildSuccessView(Color primary, Color text, Color sub) {
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
+        // Icône succès (sans cadre, cercle discret)
+        Center(
+          child: Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.mark_email_read_outlined,
+              color: Colors.green,
+              size: 34,
+            ),
           ),
-          child: const Icon(Icons.mark_email_read_outlined, color: Colors.green, size: 32),
-        ),
-        const SizedBox(height: 16),
+        ).animate().scale(
+              begin: const Offset(0.6, 0.6),
+              end: const Offset(1, 1),
+              curve: Curves.easeOutBack,
+            ),
+        const SizedBox(height: 20),
         Text(
           'Email envoyé !',
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 22, 
-            fontWeight: FontWeight.bold, 
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
             color: text,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
-          'Un lien de réinitialisation de mot de passe vient de vous être envoyé. Veuillez vérifier votre boîte de réception.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: sub, height: 1.45, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '💡 Le lien expire après 24h. Si vous ne trouvez pas l\'e-mail, vérifiez vos spams ou renvoyez la demande.',
+          'Un lien de réinitialisation de mot de passe vient de vous être envoyé. '
+          'Veuillez vérifier votre boîte de réception.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 11,
-            color: sub.withValues(alpha: 0.7),
-            fontStyle: FontStyle.italic,
+            fontSize: 13.5,
+            color: sub,
+            height: 1.45,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 14),
+        Text(
+          '💡 Le lien expire après 24h. Si vous ne trouvez pas l\'e-mail, '
+          'vérifiez vos spams ou renvoyez la demande.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11.5,
+            color: sub.withValues(alpha: 0.7),
+            fontStyle: FontStyle.italic,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 36),
 
-                GradientButton(
+        // Bouton retour
+        GradientButton(
           label: 'Retour à la connexion',
           icon: Icons.login_rounded,
           height: 50,
           onPressed: () => context.go('/auth/login'),
         ),
       ],
-    );
-  }
-
-  // Génération de la décoration des formulaires
-  InputDecoration _inputDecoration({
-    required String label,
-    required String hint,
-    required IconData icon,
-    required bool isDark,
-    required Color primary,
-    required Color sub,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      labelStyle: TextStyle(color: sub, fontSize: 14),
-      hintStyle: TextStyle(color: sub.withValues(alpha: 0.5), fontSize: 14),
-      prefixIcon: Icon(icon, color: primary, size: 20),
-      filled: true,
-      fillColor: isDark ? Colors.black26 : Colors.grey[50],
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-          width: 1,
-        ),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-          width: 1,
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: primary, width: 1.5),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 }
