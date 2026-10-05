@@ -1,10 +1,14 @@
 // lib/screens/admin/user_detail_screen.dart
+//
+// 👤 Détail utilisateur — épuré : héro gradient, sections, actions iconographiées.
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../../models/user.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/admin_service.dart';
-import '../../models/user.dart';
 
 class UserDetailScreen extends StatefulWidget {
   final String userId;
@@ -29,65 +33,57 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   Future<void> _loadUser() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-
     try {
       final user = await _adminService.getUserById(widget.userId);
-      if (mounted) {
-        setState(() {
-          _user = user;
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _isLoading = false;
+      });
     } catch (e) {
-      debugPrint("Erreur lors de la récupération de l'utilisateur : $e");
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _toggleActive() async {
     if (_user == null || _isUpdating) return;
     setState(() => _isUpdating = true);
-
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _adminService.toggleUserActive(_user!.id, !_user!.isActive);
       await _loadUser();
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
-          content: Text('Erreur lors de la modification du statut : $e'),
+          content: Text('Erreur : $e'),
           backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isUpdating = false);
-      }
+      if (mounted) setState(() => _isUpdating = false);
     }
   }
 
   Future<void> _toggleAdmin() async {
     if (_user == null || _isUpdating) return;
     setState(() => _isUpdating = true);
-
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final newRoles = _user!.isAdmin ? ['user'] : ['user', 'admin'];
       await _adminService.updateUserRoles(_user!.id, newRoles);
       await _loadUser();
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
-          content: Text('Erreur lors de la modification des rôles : $e'),
+          content: Text('Erreur : $e'),
           backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isUpdating = false);
-      }
+      if (mounted) setState(() => _isUpdating = false);
     }
   }
 
@@ -104,16 +100,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: bg,
-        appBar: AppBar(
-          title: const Text('Détail utilisateur'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
-            onPressed: () => context.go('/admin/users'),
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator(color: primary)),
       );
     }
 
@@ -124,39 +111,26 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+            icon: Icon(Icons.arrow_back_ios_new_rounded,
+                color: text, size: 20),
             onPressed: () => context.go('/admin/users'),
           ),
         ),
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline_rounded, size: 60, color: Colors.redAccent),
+                const Icon(Icons.error_outline_rounded,
+                    size: 56, color: Colors.redAccent),
                 const SizedBox(height: 16),
                 Text(
                   'Utilisateur introuvable',
-                  style: TextStyle(color: text, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Le compte utilisateur recherché n\'existe pas ou a été supprimé.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: sub, fontSize: 13),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => context.go('/admin/users'),
-                  icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text('Retourner à la liste'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                  style: TextStyle(
+                      color: text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -170,116 +144,76 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: Text(
-          'Profil Utilisateur',
-          style: TextStyle(color: text, fontSize: 18, fontWeight: FontWeight.bold),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
           onPressed: () => context.go('/admin/users'),
+        ),
+        title: Text(
+          'Profil utilisateur',
+          style: TextStyle(
+            color: text,
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
         ),
         actions: [
           if (_isUpdating)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Center(
                 child: SizedBox(
                   height: 18,
                   width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: primary),
                 ),
               ),
             ),
+          const SizedBox(width: 4),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Entête d'identité (Avatar, Nom, Email)
-            Center(
-              child: Column(
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [primary, primary.withValues(alpha: 0.75)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: primary.withValues(alpha: 0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        )
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'U',
-                        style: const TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    user.displayName,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: text),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    user.email,
-                    style: TextStyle(fontSize: 13, color: sub),
-                  ),
-                  if (user.companyName != null && user.companyName!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: primary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        user.companyName!,
-                        style: TextStyle(fontSize: 11, color: primary, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
+            // Héro
+            _hero(user, primary),
+            const SizedBox(height: 24),
 
-            // Infos Section
+            // Infos
+            _sectionLabel('Informations', sub),
+            const SizedBox(height: 10),
             _infoSection(
-              title: 'Informations de compte',
-              textColor: text,
-              cardColor: card,
+              card: card,
               isDark: isDark,
-              children: [
+              rows: [
                 _infoRow('Email', user.email, text, sub),
-                if (user.phone != null && user.phone!.trim().isNotEmpty)
+                if (user.phone?.trim().isNotEmpty ?? false)
                   _infoRow('Téléphone', user.phone!, text, sub),
-                if (user.companyName != null && user.companyName!.isNotEmpty)
+                if (user.companyName?.trim().isNotEmpty ?? false)
                   _infoRow('Entreprise', user.companyName!, text, sub),
-                if (user.companyAddress != null && user.companyAddress!.isNotEmpty)
+                if (user.companyAddress?.trim().isNotEmpty ?? false)
                   _infoRow('Adresse', user.companyAddress!, text, sub),
-                if (user.taxId != null && user.taxId!.isNotEmpty)
-                  _infoRow('NUI / Identifiant fiscal', user.taxId!, text, sub),
-                _infoRow('Droits d\'accès', user.isAdmin ? 'Administrateur' : 'Utilisateur standard', text, sub),
-                _infoRow('Statut d\'activité', user.isActive ? 'Actif' : 'Désactivé', user.isActive ? Colors.green : Colors.red, sub),
+                if (user.taxId?.trim().isNotEmpty ?? false)
+                  _infoRow('NIF / IFU', user.taxId!, text, sub),
+                _infoRow(
+                  'Droits',
+                  user.isAdmin ? 'Administrateur' : 'Utilisateur standard',
+                  text,
+                  sub,
+                ),
+                _infoRow(
+                  'Statut',
+                  user.isActive ? 'Actif' : 'Désactivé',
+                  user.isActive ? const Color(0xFF10B981) : Colors.redAccent,
+                  sub,
+                ),
                 _infoRow(
                   'Inscrit le',
                   '${user.createdAt.day.toString().padLeft(2, '0')}/${user.createdAt.month.toString().padLeft(2, '0')}/${user.createdAt.year}',
@@ -288,62 +222,73 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
-            // Actions Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                'Actions d\'administration',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: text),
-              ),
-            ),
+            // Actions
+            _sectionLabel('Actions', sub),
             const SizedBox(height: 10),
-            
             _actionTile(
-              icon: user.isActive ? Icons.block_rounded : Icons.check_circle_rounded,
-              title: user.isActive ? 'Désactiver le compte' : 'Activer le compte',
-              color: user.isActive ? Colors.redAccent : Colors.green,
-              cardColor: card,
-              textColor: text,
-              isDark: isDark,
+              icon: user.isActive
+                  ? Icons.block_rounded
+                  : Icons.check_circle_rounded,
+              title: user.isActive
+                  ? 'Désactiver le compte'
+                  : 'Activer le compte',
+              color:
+                  user.isActive ? Colors.redAccent : const Color(0xFF10B981),
               onTap: _toggleActive,
+              card: card,
+              text: text,
+              sub: sub,
+              isDark: isDark,
             ),
             _actionTile(
-              icon: user.isAdmin ? Icons.admin_panel_settings_rounded : Icons.person_add_alt_rounded,
-              title: user.isAdmin ? 'Retirer les droits administrateur' : 'Promouvoir au rôle administrateur',
-              color: user.isAdmin ? Colors.orangeAccent : Colors.purple,
-              cardColor: card,
-              textColor: text,
-              isDark: isDark,
+              icon: user.isAdmin
+                  ? Icons.admin_panel_settings_rounded
+                  : Icons.person_add_alt_rounded,
+              title: user.isAdmin
+                  ? 'Retirer les droits admin'
+                  : 'Promouvoir administrateur',
+              color: user.isAdmin
+                  ? Colors.orangeAccent
+                  : const Color(0xFF8B5CF6),
               onTap: _toggleAdmin,
+              card: card,
+              text: text,
+              sub: sub,
+              isDark: isDark,
             ),
             _actionTile(
               icon: Icons.subscriptions_rounded,
               title: 'Gérer les abonnements',
-              color: Colors.indigoAccent,
-              cardColor: card,
-              textColor: text,
+              color: const Color(0xFF4F46E5),
+              onTap: () =>
+                  context.push('/admin/users/${user.id}/subscriptions'),
+              card: card,
+              text: text,
+              sub: sub,
               isDark: isDark,
-              onTap: () => context.push('/admin/users/${user.id}/subscriptions'),
             ),
             _actionTile(
               icon: Icons.history_rounded,
-              title: 'Consulter l\'historique d\'activité',
-              color: Colors.teal,
-              cardColor: card,
-              textColor: text,
-              isDark: isDark,
+              title: 'Historique d\'activité',
+              color: const Color(0xFF06B6D4),
               onTap: () => context.push('/admin/logs?userId=${user.id}'),
+              card: card,
+              text: text,
+              sub: sub,
+              isDark: isDark,
             ),
             _actionTile(
               icon: Icons.add_circle_outline_rounded,
-              title: 'Ajouter un abonnement manuel',
-              color: Colors.green,
-              cardColor: card,
-              textColor: text,
+              title: 'Ajouter un abonnement',
+              color: const Color(0xFF10B981),
+              onTap: () => context
+                  .push('/admin/users/${user.id}/add-subscription'),
+              card: card,
+              text: text,
+              sub: sub,
               isDark: isDark,
-              onTap: () => context.push('/admin/users/${user.id}/add-subscription'),
             ),
           ],
         ),
@@ -351,60 +296,157 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     );
   }
 
-  Widget _infoSection({
-    required String title, 
-    required List<Widget> children,
-    required Color textColor,
-    required Color cardColor,
-    required bool isDark,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            title,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
-          ),
+  Widget _hero(AppUser user, Color primary) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primary,
+            primary.withValues(alpha: 0.72),
+          ],
         ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-              width: 0.5,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: primary.withValues(alpha: 0.28),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Center(
+              child: Text(
+                user.displayName.isNotEmpty
+                    ? user.displayName[0].toUpperCase()
+                    : 'U',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
-          child: Column(
-            children: children,
+          const SizedBox(height: 14),
+          Text(
+            user.displayName,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            user.email,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 12.5,
+            ),
+          ),
+          if (user.companyName?.isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                user.companyName!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).slideY(
+          begin: -0.1,
+          end: 0,
+          duration: 400.ms,
+          curve: Curves.easeOut,
+        );
+  }
+
+  Widget _sectionLabel(String label, Color sub) {
+    return Text(
+      label.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1,
+        color: sub,
+      ),
     );
   }
 
-  Widget _infoRow(String label, String value, Color valueColor, Color subColor) {
+  Widget _infoSection({
+    required Color card,
+    required bool isDark,
+    required List<Widget> rows,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+        ),
+      ),
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _infoRow(
+      String label, String value, Color valueColor, Color sub) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 110,
+            width: 100,
             child: Text(
-              label, 
-              style: TextStyle(fontSize: 12, color: subColor, fontWeight: FontWeight.w500),
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: sub,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              value, 
-              style: TextStyle(fontSize: 12, color: valueColor, fontWeight: FontWeight.w600),
+              value,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: valueColor,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -416,38 +458,63 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     required IconData icon,
     required String title,
     required Color color,
-    required Color cardColor,
-    required Color textColor,
-    required bool isDark,
     required VoidCallback onTap,
+    required Color card,
+    required Color text,
+    required Color sub,
+    required bool isDark,
   }) {
-    return Card(
-      color: cardColor,
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-          width: 0.5,
-        ),
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.08),
-            shape: BoxShape.circle,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.04),
           ),
-          child: Icon(icon, color: color, size: 20),
         ),
-        title: Text(
-          title,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: color, size: 18),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: text,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded,
+                        color: sub.withValues(alpha: 0.5), size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
-        trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? Colors.grey[600] : Colors.grey[400]),
-        onTap: onTap,
       ),
     );
   }

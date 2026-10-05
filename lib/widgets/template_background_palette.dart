@@ -6,11 +6,17 @@
 //   • l'aperçu d'un modèle (template_preview_screen)
 //   • le détail d'une facture (invoice_detail_screen)
 //
-// Deux sources de fond possibles :
-//   • un PRÉRÉGLAGE décoratif dessiné en code (dégradé + motif) — léger,
-//     sans asset binaire, approximé à l'impression par un dégradé PDF ;
-//   • une IMAGE personnalisée choisie dans la galerie (base64 via
-//     TemplateCustomService — toujours prioritaire sur le préréglage).
+// 🔄 v3 : catalogue MULTI-MODÈLES (24+ presets, 6 familles) avec rendu PDF
+// natif + rendu Flutter équivalent.
+//
+// ⚠️ IMPORTANT : `TemplateBackgroundSettings` N'EST PAS défini ici.
+// La classe vit dans `lib/services/template_custom_service.dart` et est
+// IMPORTÉE. Redéfinir la classe ici provoquerait un conflit de compilation
+// dans tout fichier qui importe les deux modules.
+//
+// Compatibilité totale avec l'ancien code via `typedef BackgroundPreset`.
+//
+// ignore_for_file: deprecated_member_use
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -18,93 +24,329 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:provider/provider.dart';
 
 import '../providers/theme_provider.dart';
-import '../services/template_custom_service.dart';
+// ✅ IMPORT — pas de redéfinition locale.
+import '../services/template_custom_service.dart'
+    show TemplateBackgroundSettings;
 
-/// Un fond de page préréglé (dessiné en code, sans asset binaire).
-class BackgroundPreset {
-  final String id;
-  final String label;
+// ═══════════════════════════════════════════════════════════════════════
+//  FAMILLES
+// ═══════════════════════════════════════════════════════════════════════
 
-  /// Couleurs du dégradé vertical (haut → bas). Réutilisées à l'impression
-  /// pour l'approximation PDF du fond.
-  final List<Color> colors;
+/// 🎨 Familles visuelles de fond.
+enum BackgroundFamily {
+  solid,
+  gradient,
+  pastel,
+  dark,
+  geometric,
+  branded,
+}
 
-  /// Motif superposé : 'none' | 'dots' | 'grid' | 'waves' | 'rings'.
-  final String pattern;
-
-  const BackgroundPreset({
-    required this.id,
-    required this.label,
-    required this.colors,
-    this.pattern = 'none',
-  });
-
-  /// Couleur dominante (milieu du dégradé) — vignettes & motifs.
-  Color get mainColor => colors.length > 1 ? colors[1] : colors.first;
-
-  static const List<BackgroundPreset> presets = [
-    BackgroundPreset(
-      id: 'indigo-nuit',
-      label: 'Indigo nuit',
-      colors: [Color(0xFF1E1B4B), Color(0xFF4338CA), Color(0xFF7C3AED)],
-    ),
-    BackgroundPreset(
-      id: 'violet-douceur',
-      label: 'Violet douceur',
-      colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE), Color(0xFFDDD6FE)],
-    ),
-    BackgroundPreset(
-      id: 'or-elegant',
-      label: 'Or élégant',
-      colors: [Color(0xFFFFFBEB), Color(0xFFFDF0C2), Color(0xFFF5D98B)],
-      pattern: 'rings',
-    ),
-    BackgroundPreset(
-      id: 'marbre',
-      label: 'Marbre',
-      colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F7), Color(0xFFE2E8F0)],
-      pattern: 'waves',
-    ),
-    BackgroundPreset(
-      id: 'points',
-      label: 'Points',
-      colors: [Color(0xFFFFFFFF), Color(0xFFF6F7FB)],
-      pattern: 'dots',
-    ),
-    BackgroundPreset(
-      id: 'grille',
-      label: 'Grille',
-      colors: [Color(0xFFFFFFFF), Color(0xFFF1F5F9)],
-      pattern: 'grid',
-    ),
-    BackgroundPreset(
-      id: 'menthe',
-      label: 'Menthe',
-      colors: [Color(0xFFF0FDF4), Color(0xFFDCFCE7), Color(0xFFBBF7D0)],
-      pattern: 'dots',
-    ),
-    BackgroundPreset(
-      id: 'charbon',
-      label: 'Charbon',
-      colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF334155)],
-      pattern: 'rings',
-    ),
-  ];
-
-  static BackgroundPreset? byId(String id) {
-    for (final preset in presets) {
-      if (preset.id == id) return preset;
+extension BackgroundFamilyLabel on BackgroundFamily {
+  String get label {
+    switch (this) {
+      case BackgroundFamily.solid:
+        return 'Unis';
+      case BackgroundFamily.gradient:
+        return 'Dégradés';
+      case BackgroundFamily.pastel:
+        return 'Pastels';
+      case BackgroundFamily.dark:
+        return 'Sombres';
+      case BackgroundFamily.geometric:
+        return 'Géométriques';
+      case BackgroundFamily.branded:
+        return 'Brandés';
     }
-    return null;
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  MODÈLE DE FOND PRÉDÉFINI
+// ═══════════════════════════════════════════════════════════════════════
+
+/// 🖼️ Modèle de fond prédéfini.
+class MultiBackgroundPreset {
+  final String id;
+  final String label;
+  final BackgroundFamily family;
+  final List<Color> colors;
+  final String pattern;
+  final int patternSeed;
+
+  const MultiBackgroundPreset({
+    required this.id,
+    required this.label,
+    required this.family,
+    required this.colors,
+    this.pattern = 'none',
+    this.patternSeed = 0,
+  });
+
+  Color get mainColor => colors.length > 1 ? colors[1] : colors.first;
+
+  // ─────────────────────────────────────────────────────────────
+  //  CATALOGUE
+  // ─────────────────────────────────────────────────────────────
+  static const List<MultiBackgroundPreset> all = [
+    // ── Unis ────────────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'solid_white',
+      label: 'Blanc',
+      family: BackgroundFamily.solid,
+      colors: [Color(0xFFFFFFFF)],
+    ),
+    MultiBackgroundPreset(
+      id: 'solid_ivory',
+      label: 'Ivoire',
+      family: BackgroundFamily.solid,
+      colors: [Color(0xFFFFFBF2)],
+    ),
+    MultiBackgroundPreset(
+      id: 'solid_lightgray',
+      label: 'Gris clair',
+      family: BackgroundFamily.solid,
+      colors: [Color(0xFFF5F5F5)],
+    ),
+
+    // ── Dégradés ────────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'gradient_blue',
+      label: 'Bleu océan',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFF0F4C81), Color(0xFF6FB3E0)],
+    ),
+    MultiBackgroundPreset(
+      id: 'gradient_teal',
+      label: 'Turquoise',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFF008080), Color(0xFFB2DFDB)],
+    ),
+    MultiBackgroundPreset(
+      id: 'gradient_gold',
+      label: 'Or / Sable',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFFBAAB6D), Color(0xFFFFF8E1)],
+    ),
+    MultiBackgroundPreset(
+      id: 'gradient_purple',
+      label: 'Violet doux',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFF6A4C93), Color(0xFFE8DFF5)],
+    ),
+    MultiBackgroundPreset(
+      id: 'gradient_green',
+      label: 'Vert OHADA',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFF1B5E20), Color(0xFFC8E6C9)],
+    ),
+    MultiBackgroundPreset(
+      id: 'gradient_sunset',
+      label: 'Coucher de soleil',
+      family: BackgroundFamily.gradient,
+      colors: [Color(0xFFE96443), Color(0xFFFFD194)],
+    ),
+
+    // ── Pastel ──────────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'pastel_mint',
+      label: 'Menthe',
+      family: BackgroundFamily.pastel,
+      colors: [Color(0xFFD9F2E6), Color(0xFFF2FBF7)],
+    ),
+    MultiBackgroundPreset(
+      id: 'pastel_rose',
+      label: 'Rose poudré',
+      family: BackgroundFamily.pastel,
+      colors: [Color(0xFFF7D9DE), Color(0xFFFFF7F9)],
+    ),
+    MultiBackgroundPreset(
+      id: 'pastel_lavender',
+      label: 'Lavande',
+      family: BackgroundFamily.pastel,
+      colors: [Color(0xFFE2DAF5), Color(0xFFF7F4FC)],
+    ),
+    MultiBackgroundPreset(
+      id: 'pastel_sand',
+      label: 'Sable',
+      family: BackgroundFamily.pastel,
+      colors: [Color(0xFFF0E6D2), Color(0xFFFBF7F0)],
+    ),
+
+    // ── Sombre ──────────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'dark_charcoal',
+      label: 'Anthracite',
+      family: BackgroundFamily.dark,
+      colors: [Color(0xFF1C1C1C), Color(0xFF2E2E2E)],
+    ),
+    MultiBackgroundPreset(
+      id: 'dark_navy',
+      label: 'Bleu nuit',
+      family: BackgroundFamily.dark,
+      colors: [Color(0xFF0A1A2F), Color(0xFF1C3A5E)],
+      pattern: 'rings',
+    ),
+    MultiBackgroundPreset(
+      id: 'dark_forest',
+      label: 'Forêt',
+      family: BackgroundFamily.dark,
+      colors: [Color(0xFF102A1A), Color(0xFF1E4A2C)],
+    ),
+
+    // ── Géométrique ─────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'geo_diagonal',
+      label: 'Diagonale bicolore',
+      family: BackgroundFamily.geometric,
+      colors: [Color(0xFF0F4C81), Color(0xFFFFFBF2)],
+      patternSeed: 1,
+    ),
+    MultiBackgroundPreset(
+      id: 'geo_stripes',
+      label: 'Rayures douces',
+      family: BackgroundFamily.geometric,
+      colors: [Color(0xFFF2F2F2), Color(0xFFE0E0E0)],
+      pattern: 'grid',
+      patternSeed: 2,
+    ),
+    MultiBackgroundPreset(
+      id: 'geo_blocks',
+      label: 'Blocs',
+      family: BackgroundFamily.geometric,
+      colors: [Color(0xFFEEF4FB), Color(0xFFD6E6F7)],
+      pattern: 'dots',
+      patternSeed: 3,
+    ),
+    MultiBackgroundPreset(
+      id: 'geo_waves',
+      label: 'Vagues',
+      family: BackgroundFamily.geometric,
+      colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F7), Color(0xFFE2E8F0)],
+      pattern: 'waves',
+    ),
+
+    // ── Brandés ─────────────────────────────────────────────
+    MultiBackgroundPreset(
+      id: 'branded_ohada',
+      label: 'OHADA Signature',
+      family: BackgroundFamily.branded,
+      colors: [Color(0xFFBAAB6D), Color(0xFF0F4C81), Color(0xFFFFFBF2)],
+      pattern: 'rings',
+    ),
+    MultiBackgroundPreset(
+      id: 'branded_premium',
+      label: 'Premium Noir / Or',
+      family: BackgroundFamily.branded,
+      colors: [Color(0xFF111111), Color(0xFFBAAB6D)],
+      pattern: 'rings',
+    ),
+    MultiBackgroundPreset(
+      id: 'branded_amethyst',
+      label: 'Améthyste',
+      family: BackgroundFamily.branded,
+      colors: [Color(0xFF1E1B4B), Color(0xFF4338CA), Color(0xFF7C3AED)],
+    ),
+    MultiBackgroundPreset(
+      id: 'branded_emerald',
+      label: 'Émeraude',
+      family: BackgroundFamily.branded,
+      colors: [Color(0xFF064E3B), Color(0xFF059669), Color(0xFFBBF7D0)],
+    ),
+  ];
+
+  // ─────────────────────────────────────────────────────────────
+  //  RECHERCHE
+  // ─────────────────────────────────────────────────────────────
+  static MultiBackgroundPreset? byId(String id) {
+    if (id.isEmpty) return null;
+    for (final p in all) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  static List<MultiBackgroundPreset> ofFamily(BackgroundFamily f) =>
+      all.where((p) => p.family == f).toList();
+
+  static Map<BackgroundFamily, List<MultiBackgroundPreset>>
+      get catalogByFamily => {
+            for (final f in BackgroundFamily.values) f: ofFamily(f),
+          };
+
+  // ─────────────────────────────────────────────────────────────
+  //  RENDU PDF
+  // ─────────────────────────────────────────────────────────────
+  pw.Widget toPdfWidget() {
+    switch (family) {
+      case BackgroundFamily.solid:
+        return pw.Container(
+          decoration: pw.BoxDecoration(color: _pdf(colors.first)),
+        );
+
+      case BackgroundFamily.gradient:
+      case BackgroundFamily.pastel:
+      case BackgroundFamily.dark:
+        return pw.Container(
+          decoration: pw.BoxDecoration(
+            gradient: pw.LinearGradient(
+              begin: pw.Alignment.topLeft,
+              end: pw.Alignment.bottomRight,
+              colors: colors.map(_pdf).toList(),
+            ),
+          ),
+        );
+
+      case BackgroundFamily.geometric:
+        return pw.Container(
+          decoration: pw.BoxDecoration(
+            gradient: pw.LinearGradient(
+              begin: pw.Alignment.topCenter,
+              end: pw.Alignment.bottomCenter,
+              colors: colors.map(_pdf).toList(),
+              stops: const [0.0, 1.0],
+            ),
+          ),
+        );
+
+      case BackgroundFamily.branded:
+        final stops = <double>[
+          for (var i = 0; i < colors.length; i++)
+            i / (colors.length - 1).clamp(1, 10),
+        ];
+        return pw.Container(
+          decoration: pw.BoxDecoration(
+            gradient: pw.LinearGradient(
+              begin: pw.Alignment.topCenter,
+              end: pw.Alignment.bottomCenter,
+              colors: colors.map(_pdf).toList(),
+              stops: stops,
+            ),
+          ),
+        );
+    }
+  }
+
+  List<Color> get pdfColors => colors;
+
+  static PdfColor _pdf(Color c) => PdfColor(c.r, c.g, c.b);
+}
+
+// ─── Compat : ancien nom conservé ──────────────────────────────
+typedef BackgroundPreset = MultiBackgroundPreset;
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PAINTER FLUTTER
+// ═══════════════════════════════════════════════════════════════════════
+
 /// Peint un fond préréglé : dégradé vertical + motif discret superposé.
 class BackgroundPresetPainter extends CustomPainter {
-  final BackgroundPreset preset;
+  final MultiBackgroundPreset preset;
   final double opacity;
 
   BackgroundPresetPainter({required this.preset, this.opacity = 1.0});
@@ -113,7 +355,6 @@ class BackgroundPresetPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
 
-    // 1. Dégradé vertical.
     final gradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -121,7 +362,6 @@ class BackgroundPresetPainter extends CustomPainter {
     ).createShader(rect);
     canvas.drawRect(rect, Paint()..shader = gradient);
 
-    // 2. Motif discret (contrasté selon la luminosité du fond).
     final bool isDarkPreset = preset.mainColor.computeLuminance() < 0.4;
     final Color patternColor =
         (isDarkPreset ? Colors.white : const Color(0xFF4338CA))
@@ -184,15 +424,16 @@ class BackgroundPresetPainter extends CustomPainter {
       oldDelegate.preset.id != preset.id || oldDelegate.opacity != opacity;
 }
 
-/// Couche d'arrière-plan d'une page facture — à poser en PREMIER enfant d'un
-/// Stack (sous le contenu). Rend l'image personnalisée si fournie, sinon le
-/// préréglage de la palette, sinon rien.
+// ═══════════════════════════════════════════════════════════════════════
+//  COUCHE D'ARRIÈRE-PLAN
+// ═══════════════════════════════════════════════════════════════════════
+
 class TemplateBackgroundLayer extends StatelessWidget {
   final String presetId;
   final Uint8List? imageBytes;
   final double opacity;
   final double blur;
-  final String fit; // 'fill' | 'contain'
+  final String fit;
 
   const TemplateBackgroundLayer({
     super.key,
@@ -209,10 +450,6 @@ class TemplateBackgroundLayer extends StatelessWidget {
 
     Widget? child;
     if (imageBytes != null) {
-      // 🖼️ Image de fond : elle occupe TOUJOURS 100 % largeur × 100 % hauteur
-      // de la feuille A4 à la personnalisation (identique à l'impression), quel que
-      // soit le réglage « Remplir / Ajuster ». On force `fill` pour qu'elle
-      // recouvre tout l'arrière-plan, sans bandeau ni lettreboxage.
       Widget image = Image.memory(
         imageBytes!,
         fit: BoxFit.fill,
@@ -226,16 +463,9 @@ class TemplateBackgroundLayer extends StatelessWidget {
           child: image,
         );
       }
-      // 📐 L'image de fond occupe TOUJOURS 100 % de la largeur et 100 % de la
-      // hauteur disponibles (identique à l'impression PDF : Positioned.fill + fill),
-      // quel que soit le contenu du workspace : elle s'étend sur toute la
-      // feuille, sans bandeau ni lettreboxage. Les éléments de facture sont
-      // posés au-dessus, en calque.
-      child = SizedBox.expand(
-        child: image,
-      );
+      child = SizedBox.expand(child: image);
     } else {
-      final preset = BackgroundPreset.byId(presetId);
+      final preset = MultiBackgroundPreset.byId(presetId);
       if (preset != null) {
         child = CustomPaint(
           painter:
@@ -255,20 +485,31 @@ class TemplateBackgroundLayer extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  HELPERS PUBLICS
+// ═══════════════════════════════════════════════════════════════════════
+
 /// Décodage sûr d'une image de fond base64 (null si invalide/vide).
-Uint8List? decodeBackgroundImage(String fileData) {
-  if (fileData.isEmpty) return null;
+Uint8List? decodeBackgroundImage(String? fileData) {
+  if (fileData == null || fileData.isEmpty) return null;
   try {
-    return base64Decode(fileData);
+    var raw = fileData;
+    if (raw.startsWith('data:image')) {
+      final comma = raw.indexOf(',');
+      if (comma == -1) return null;
+      raw = raw.substring(comma + 1);
+    }
+    final bytes = base64Decode(raw);
+    return bytes.isEmpty ? null : bytes;
   } catch (_) {
     return null;
   }
 }
 
-/// 🎨 Bottom sheet « Image de fond » : palette de préréglages + image galerie
-/// + réglages (opacité, flou, ajustement). Partagée par le workspace et le
-/// détail de facture ; [onChanged] est appelé à chaque modification et
-/// persiste côté appelant.
+// ═══════════════════════════════════════════════════════════════════════
+//  BOTTOM SHEET DE RÉGLAGES
+// ═══════════════════════════════════════════════════════════════════════
+
 Future<void> showBackgroundSettingsSheet(
   BuildContext context, {
   required TemplateBackgroundSettings current,
@@ -282,6 +523,7 @@ Future<void> showBackgroundSettingsSheet(
       final theme = Provider.of<ThemeProvider>(sheetCtx);
       final isDark = theme.isDarkMode;
       TemplateBackgroundSettings settings = current;
+      BackgroundFamily? activeFamily = BackgroundFamily.gradient;
       return StatefulBuilder(
         builder: (sheetCtx, setSheet) {
           void update(TemplateBackgroundSettings next) {
@@ -315,6 +557,10 @@ Future<void> showBackgroundSettingsSheet(
               }
             }
           }
+
+          final familyPresets = activeFamily == null
+              ? MultiBackgroundPreset.all
+              : MultiBackgroundPreset.ofFamily(activeFamily!);
 
           return Container(
             constraints: BoxConstraints(
@@ -372,6 +618,34 @@ Future<void> showBackgroundSettingsSheet(
                     ],
                   ),
                   const SizedBox(height: 14),
+                  _sectionLabel('FAMILLE', theme),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _familyChip(
+                          label: 'Toutes',
+                          selected: activeFamily == null,
+                          color: theme.primaryColor,
+                          isDark: isDark,
+                          onTap: () => setSheet(() => activeFamily = null),
+                        ),
+                        for (final f in BackgroundFamily.values)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: _familyChip(
+                              label: f.label,
+                              selected: activeFamily == f,
+                              color: theme.primaryColor,
+                              isDark: isDark,
+                              onTap: () => setSheet(() => activeFamily = f),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   _sectionLabel('PALETTE DE FONDS', theme),
                   const SizedBox(height: 8),
                   GridView.count(
@@ -382,7 +656,7 @@ Future<void> showBackgroundSettingsSheet(
                     crossAxisSpacing: 10,
                     childAspectRatio: 0.72,
                     children: [
-                      for (final preset in BackgroundPreset.presets)
+                      for (final preset in familyPresets)
                         _presetTile(
                           preset,
                           selected: !settings.hasCustomImage &&
@@ -409,8 +683,8 @@ Future<void> showBackgroundSettingsSheet(
                     icon: const Icon(Icons.photo_library_outlined, size: 18),
                     label: const Text(
                       'Depuis la galerie',
-                      style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600),
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -460,6 +734,10 @@ Future<void> showBackgroundSettingsSheet(
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  WIDGETS INTERNES
+// ═══════════════════════════════════════════════════════════════════════
+
 Widget _sectionLabel(String label, ThemeProvider theme) {
   return Text(
     label,
@@ -472,8 +750,44 @@ Widget _sectionLabel(String label, ThemeProvider theme) {
   );
 }
 
+Widget _familyChip({
+  required String label,
+  required bool selected,
+  required Color color,
+  required bool isDark,
+  required VoidCallback onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: selected
+            ? color.withValues(alpha: 0.15)
+            : (isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.04)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color:
+              selected ? color.withValues(alpha: 0.6) : Colors.transparent,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          color:
+              selected ? color : (isDark ? Colors.white70 : Colors.black54),
+        ),
+      ),
+    ),
+  );
+}
+
 Widget _presetTile(
-  BackgroundPreset preset, {
+  MultiBackgroundPreset preset, {
   required bool selected,
   required VoidCallback onTap,
 }) {

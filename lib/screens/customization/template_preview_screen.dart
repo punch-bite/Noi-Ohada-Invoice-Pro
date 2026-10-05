@@ -280,12 +280,13 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     return AppBar(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 0.5,
+      elevation: 0,
       scrolledUnderElevation: 0.5,
       shadowColor: Colors.black.withValues(alpha: 0.06),
       centerTitle: false,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: c.onSurface),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: c.onSurface, size: 20),
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -300,9 +301,10 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontFamily: 'Manrope',
-          fontSize: 18,
+          fontSize: 19,
           fontWeight: FontWeight.w700,
           color: c.onSurface,
+          letterSpacing: -0.3,
         ),
       ),
       bottom: PreferredSize(
@@ -323,23 +325,24 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         ),
       ),
       actions: [
-        // 👮 Personnalisation réservée à l'admin et au propriétaire du modèle.
         if (canCustomize)
           IconButton(
             tooltip: 'Personnaliser (Drag & Drop)',
-            icon: Icon(Icons.tune, color: c.tertiary),
+            icon: Icon(Icons.tune_rounded, color: c.tertiary, size: 22),
             onPressed: _openWorkspace,
           ),
+        const SizedBox(width: 4),
       ],
     );
   }
 
   /// Bouton zoom flottant de la maquette (cercle translucide bordé).
+  /// Bouton zoom flottant (pilule translucide bordée).
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: 0.55),
-        shape: BoxShape.circle,
+        color: c.surface.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.outlineVariant.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
@@ -356,12 +359,12 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
             setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 1.6));
           }),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               '${(_zoom * 100).toInt()}%',
               style: TextStyle(
                 fontFamily: 'WorkSans',
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: c.onSurface,
               ),

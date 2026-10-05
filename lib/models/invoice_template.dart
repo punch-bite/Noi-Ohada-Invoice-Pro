@@ -63,55 +63,19 @@ class InvoiceTemplate {
   @HiveField(17)
   final DateTime? createdAt;
 
-  // 💰 Prix de vente du template (0 = gratuit) et statut payé.
   final double price;
   final bool paid;
   final List<String> purchasedBy;
-
-  // 🗂️ Fichier téléversé (PDF/JPEG/PNG) : type MIME + contenu base64.
-  final String fileType; // 'pdf' | 'jpeg' | 'png'
-  final String fileData; // base64 du fichier
-
-  // 🧩 Mapping : variable de facture → placeholder dans le template.
-  // Ex : {'invoice_number': '{invoice_number}', 'client_name': '{client_name}'}
+  final String fileType;
+  final String fileData;
   final Map<String, String> mapping;
-
-  // 🏷️ Catégorie du modèle (pour la boutique) : classique, moderne, premium…
   final String category;
-
-  // 📐 Positions des éléments (drag & drop) : élément → {x, y, scale, visible}.
-  // Ex : {'header': {'x': 0.5, 'y': 0.12, 'scale': 1.0, 'visible': true}, ...}
-  // Les coordonnées sont RELATIVES (0..1) pour rester proportionnelles à la page.
   final Map<String, dynamic> positions;
-
-  /// ⭐ Note du template (étoiles, 0..5) — affichage boutique.
   final double rating;
-
-  /// 🎨 Version du design prédéfini « Royal Ledger ».
-  ///
-  /// Utilisée par l'initialiseur Firestore pour mettre à jour les modèles
-  /// par défaut vers le nouveau design (v2) SANS écraser les personnalisations
-  /// ultérieures de l'admin (un modèle déjà en base avec `designVersion >= 2`
-  /// n'est plus écrasé).
   final int designVersion;
 
-  /// Dernière version du design système des modèles prédéfinis.
   static const int kRoyalDesignVersion = 2;
 
-  /// 🧩 Décide si les `positions` d'un modèle « default_* » DÉJÀ stocké en
-  /// base doivent être complétées par celles du preset (backfill).
-  ///
-  /// Les modèles historiques (design v2) ont été semés avec `positions` vides
-  /// (`const {}`) : aucune section, aucun texte → la facture retombait sur le
-  /// layout fixe et les 8 designs paraissaient identiques. Ce garde-fou
-  /// permet à l'initialiseur de rattraper ces documents SANS écraser le reste
-  /// (couleurs, polices, mapping, personnalisation admin).
-  ///
-  /// Règles :
-  ///   • version antérieure à [kRoyalDesignVersion] → la mise à jour complète
-  ///     du modèle s'en charge déjà (donc pas de backfill ici) ;
-  ///   • `positions` absentes, nulles ou vides → backfill nécessaire ;
-  ///   • `positions` déjà renseignées → on n'y touche pas.
   static bool presetPositionsNeedBackfill({
     required Map<String, dynamic>? storedPositions,
     required int storedVersion,
@@ -121,32 +85,14 @@ class InvoiceTemplate {
   }
 
   // ============================================================
-  //  🧩 ENCODAGE DES SECTIONS DE BLOCS (compatible Firestore)
+  //  🧩 SECTIONS DE BLOCS (compat Firestore)
   // ============================================================
-
-  /// 🔗 Séparateur des blocs d'une même section dans l'encodage PLAT de
-  /// `blocks_sections`.
   static const String kSectionSeparator = '|';
 
-  /// 🧱 Encode des sections (`List<List<String>>`) en une liste PLATE de
-  /// chaînes : `['billing_info|invoice_meta', 'items_table', ...]`.
-  ///
-  /// Firestore rejette les **tableaux imbriqués** (« Nested arrays are not
-  /// supported ») : un preset contenant `List<List<String>>` ne pourrait donc
-  /// pas être écrit tel quel dans un document. L'atelier, lui, stocke ses
-  /// sections dans SharedPreferences sous forme JSON (imbrication permise) —
-  /// [decodeSections] accepte les DEUX formes.
   static List<String> encodeSections(List<List<String>> sections) => [
         for (final section in sections) section.join(kSectionSeparator),
       ];
 
-  /// 🧩 Décode `blocks_sections` en sections, en acceptant :
-  ///   • la forme plate compatible Firestore (`List<String>`, séparateur
-  ///     [kSectionSeparator]) — utilisée par les presets ;
-  ///   • la forme imbriquée historique (`List<List<String>>`) écrite par
-  ///     l'atelier via SharedPreferences/JSON.
-  ///
-  /// Toute autre valeur (absente, type inattendu) donne une liste vide.
   static List<List<String>> decodeSections(Object? raw) {
     if (raw is! List) return const <List<String>>[];
     final sections = <List<String>>[];
@@ -166,18 +112,7 @@ class InvoiceTemplate {
     return sections;
   }
 
-  /// 🧩 **Positions effectives** d'un modèle.
-  ///
-  /// Règle de priorité unique de l'application (identique dans l'atelier,
-  /// l'aperçu, l'écran de détail et l'impression) :
-  ///
-  ///   1. la personnalisation locale de l'utilisateur si elle existe ;
-  ///   2. sinon les positions **embarquées dans le modèle** (presets
-  ///      « Royal Ledger »).
-  ///
-  /// Sans ce repli, un modèle choisi mais pas encore personnalisé perdrait son
-  /// design (textes, sections, visibilité) et la facture retomberait sur le
-  /// layout fixe historique.
+  /// 🧩 Positions effectives : custom > template.
   static Map<String, dynamic> effectivePositions({
     required Map<String, dynamic> customPositions,
     required Map<String, dynamic> templatePositions,
@@ -186,22 +121,15 @@ class InvoiceTemplate {
           ? customPositions
           : Map<String, dynamic>.from(templatePositions);
 
-  // 🧩 EN-TÊTE : éléments déplaçables (ordre + visibilité + largeur…).
-
-  /// Éléments d'en-tête connus, dans leur ordre par défaut.
+  // ============================================================
+  //  🧩 EN-TÊTE : éléments déplaçables
+  // ============================================================
   static const List<String> headerElements = [
     'logo',
     'company_info',
     'invoice_title',
   ];
 
-  /// 🧩 Ordre EFFECTIF des éléments d'en-tête : ordre personnalisé de l'atelier
-  /// (`header_elements_order`) restreint aux éléments connus ET aux colonnes
-  /// de texte libre (`text_*` — cf. `_addTextToHeader`), dédoublonné, puis
-  /// complété par les éléments natifs manquants dans l'ordre par défaut.
-  ///
-  /// Toute valeur inattendue (absente, type inconnu, clé étrangère) est ignorée
-  /// sans jamais casser l'aperçu ni le PDF.
   static List<String> resolveHeaderOrder(Object? rawOrder) {
     final order = <String>[];
     if (rawOrder is List) {
@@ -220,9 +148,6 @@ class InvoiceTemplate {
     return order;
   }
 
-  /// 👁️ Visibilité d'un élément d'en-tête (`header_visibility`, défaut :
-  /// visible). Absence de la clé ou type inattendu → visible, pour ne jamais
-  /// masquer un élément par accident.
   static bool isHeaderElementVisible(
     Map<String, dynamic> positions,
     String key,
@@ -235,14 +160,6 @@ class InvoiceTemplate {
     return true;
   }
 
-  /// 🧩 Éléments d'en-tête à RENDRE : ordre effectif ∩ visibilité.
-  ///
-  /// 🖊️ Une colonne de texte libre (`text_*`) n'existe que si son contenu est
-  /// sauvegardé dans `custom_texts` : une clé orpheline (texte supprimé) est
-  /// écartée pour ne jamais réserver une colonne vide.
-  ///
-  /// Consommé par l'aperçu A4 **et** le PDF afin qu'ils restent WYSIWYG avec
-  /// les options choisies dans l'atelier.
   static List<String> visibleHeaderElements(Map<String, dynamic> positions) {
     final rawTexts = positions['custom_texts'];
     final texts =
@@ -254,7 +171,9 @@ class InvoiceTemplate {
         .toList();
   }
 
-  // 📋 VARIABLES EXPOSÉES DANS L'UI (toutes les données modifiables).
+  // ============================================================
+  //  📋 VARIABLES / CATÉGORIES
+  // ============================================================
   static const List<String> availableVariables = [
     'invoice_number',
     'issue_date',
@@ -280,7 +199,6 @@ class InvoiceTemplate {
     'currency',
   ];
 
-  // 🏷️ Catégories disponibles dans la boutique.
   static const List<String> categories = [
     'Tous',
     'Classique',
@@ -293,7 +211,6 @@ class InvoiceTemplate {
     'Charbon',
   ];
 
-  // Getters pour les couleurs
   Color get primaryColor => Color(primaryColorValue);
   Color get textColor => Color(textColorValue);
   Color get backgroundColor => Color(backgroundColorValue);
@@ -331,7 +248,6 @@ class InvoiceTemplate {
         textColorValue = textColor?.toARGB32() ?? 0xFF000000,
         backgroundColorValue = backgroundColor?.toARGB32() ?? 0xFFFFFFFF;
 
-  // Constructeur Firestore
   factory InvoiceTemplate.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return InvoiceTemplate(
@@ -369,7 +285,6 @@ class InvoiceTemplate {
     );
   }
 
-  // Constructeur depuis Map (Firestore)
   factory InvoiceTemplate.fromMap(Map<String, dynamic> map,
       {String? documentId}) {
     return InvoiceTemplate(
@@ -439,31 +354,20 @@ class InvoiceTemplate {
     };
   }
 
-  /// 💎 Modèles prédéfinis « Royal Ledger » — édition raffinée (design v2).
-  /// 8 designs signature, cohérents avec les maquettes améthyste/or :
-  ///   • papiers à fonds sobres et élégants (perle, champagne, encre bleutée)
-  ///   • accents profonds (améthyste, violet royal, saphir, émeraude, or)
-  ///   • éditions premium « Nuit Royale » & « Obsidienne » sur fond sombre.
-  /// Chaque modèle est STOCKÉ en base (Firestore, par l'initialiseur) pour
-  /// être modifiable par l'ADMIN, et reste personnalisable drag & drop.
-  /// 🧩 Configuration « positions » complète et prête à imprimer pour un
-  /// modèle prédéfini.
-  ///
-  /// Reproduit EXACTEMENT le schéma écrit par l'ATELIER de personnalisation
-  /// (`template_workspace_screen._saveConfig`) afin que l'aperçu A4
-  /// (`stitch_a4_invoice_preview`) ET le PDF (`printing_service`) exploitent
-  /// dès la première ouverture :
-  ///   • l'ordre des sections du corps et la visibilité des blocs
-  ///     (`blocks_sections`, `blocks_order`, `block_visibility`) ;
-  ///   • l'ordre, la largeur et l'alignement des éléments d'en-tête
-  ///     (`header_elements_order`, `header_widths`, `header_alignments`) ;
-  ///   • les textes libres (`invoice_title_text`, `invoice_subtitle`,
-  ///     `custom_legal_text`, `signatory_title`, `stamp_text`) ;
-  ///   • les options d'impression (`qr_position`, `show_paid_stamp`,
-  ///     `show_signature_line`).
-  ///
-  /// Aucune donnée n'est laissée implicite : le modèle est donc « complet »
-  /// (sections, textes, méta, pied de page) sans passer par l'atelier.
+  // ============================================================
+  //  🧩 CONFIGURATION « positions » d'un modèle prédéfini
+  // ============================================================
+  //
+  // 🔄 v3 : ajout des nouvelles clés exploitées par le `PrintingService` :
+  //   • `page_padding` — marge de page (24 par défaut)
+  //   • `show_watermark` — filigrane ON/OFF
+  //   • `watermark_text` — texte du filigrane
+  //   • `stamp_x/y/rotation/scale/color` — tampon PAYÉ déplaçable
+  //   • `qr_position` — 'standalone' | 'header' | 'footer'
+  //   • `signature_image` — base64 (rempli par SignatureService)
+  //
+  // Le preset reste un « document complet » exploitable directement par
+  // l'aperçu et le PDF, sans passer par l'atelier.
   static Map<String, dynamic> _presetPositions({
     required String invoiceTitle,
     String invoiceSubtitle = '',
@@ -475,7 +379,6 @@ class InvoiceTemplate {
     String legalText =
         'Paiement sous 30 jours net. Pénalités de retard applicables selon '
             'normes SYSCOHADA.',
-    // Ordre des éléments d'en-tête (schemas identiques à l'atelier).
     List<String> headerOrder = const ['logo', 'company_info', 'invoice_title'],
     Map<String, double> headerWidths = const {'company_info': 2.0},
     Map<String, String> headerAlignments = const {
@@ -483,13 +386,17 @@ class InvoiceTemplate {
       'company_info': 'left',
       'invoice_title': 'right',
     },
+    // ✅ Nouveaux paramètres
+    double pagePadding = 24.0,
+    bool showWatermark = false,
+    String watermarkText = 'OHADA Invoice Pro',
+    String qrPosition = 'standalone',
+    int stampColor = 0xFFBAAB6D,
+    double stampX = 0.5,
+    double stampY = 0.5,
+    double stampRotation = -0.15,
+    double stampScale = 1.0,
   }) {
-    // 🧱 Sections des presets — règles de mise en page demandées :
-    //   • le QR Code est DANS SA PROPRE SECTION juste SOUS « Totaux » ;
-    //   • les mentions légales sont SEULES dans leur section ;
-    //   • la signature est SEULE dans sa section.
-    // (Le tampon « PAYÉ » n'est pas une section : c'est un calque fixe
-    // centré au-dessus de tout — cf. rendu atelier / aperçu / PDF.)
     final sections = <List<String>>[
       const ['billing_info', 'invoice_meta'],
       const ['items_table'],
@@ -498,17 +405,11 @@ class InvoiceTemplate {
       const ['legal_mentions'],
       if (showSignatureLine) const ['signature_block'],
     ];
+
     return <String, dynamic>{
-      // Base identique à celle produite par l'atelier
-      // (`InvoiceLayoutConfig.toMap`) : évite toute clé manquante quand le
-      // modèle est ouvert puis re-sauvegardé depuis l'écran de personnalisation.
+      // Base identique à celle produite par l'atelier.
       ...InvoiceLayoutConfig.defaultLayout().toMap(),
-      // ⚠️ Forme PLATE obligatoire : Firestore rejette les tableaux imbriqués
-      // (`blocks_sections` reste donc `List<String>`, sections séparées par
-      // `kSectionSeparator`). L'atelier relit les deux formes via
-      // `InvoiceTemplate.decodeSections`.
       'blocks_sections': encodeSections(sections),
-      // Compat : ordre à plat (anciens lecteurs / exports).
       'blocks_order': [for (final s in sections) ...s],
       'block_visibility': <String, bool>{
         'billing_info': true,
@@ -538,12 +439,22 @@ class InvoiceTemplate {
       'stamp_text': stampText,
       'show_paid_stamp': showPaidStamp,
       'show_signature_line': showSignatureLine,
-      // 🧱 QR sous « Totaux » : le bloc `qr_block` autonome est dans SA
-      // section juste après `totals` (pas intégré au bloc Totaux).
-      'qr_position': 'standalone',
+      'qr_position': qrPosition,
+      // ✅ Nouvelles clés exploitées par le PrintingService.
+      'page_padding': pagePadding,
+      'show_watermark': showWatermark,
+      'watermark_text': watermarkText,
+      'stamp_color': stampColor,
+      'stamp_x': stampX,
+      'stamp_y': stampY,
+      'stamp_rotation': stampRotation,
+      'stamp_scale': stampScale,
     };
   }
 
+  // ============================================================
+  //  MODÈLES PAR DÉFAUT
+  // ============================================================
   static List<InvoiceTemplate> getDefaultTemplates() {
     return [
       InvoiceTemplate(
@@ -638,6 +549,8 @@ class InvoiceTemplate {
           invoiceTitle: 'FACTURE',
           invoiceSubtitle: 'Édition Premium',
           signatoryTitle: 'Direction Générale',
+          showWatermark: true,
+          watermarkText: 'ÉDITION PREMIUM',
         ),
       ),
       InvoiceTemplate(
@@ -687,6 +600,7 @@ class InvoiceTemplate {
           invoiceSubtitle: 'Paiement par QR sécurisé',
           showQr: true,
           signatoryTitle: 'Service Comptabilité',
+          qrPosition: 'standalone',
         ),
       ),
       InvoiceTemplate(
@@ -712,6 +626,7 @@ class InvoiceTemplate {
           invoiceSubtitle: 'Paiement par QR sécurisé',
           showQr: true,
           signatoryTitle: 'Direction Financière',
+          qrPosition: 'footer',
         ),
       ),
       InvoiceTemplate(
@@ -736,18 +651,14 @@ class InvoiceTemplate {
           invoiceTitle: 'FACTURE',
           invoiceSubtitle: 'Édition Signature',
           signatoryTitle: 'Direction Générale',
+          showWatermark: true,
+          watermarkText: 'SIGNATURE',
+          stampColor: 0xFFF3E29F,
         ),
       ),
     ];
   }
 
-  /// 👮 La personnalisation de la facture (atelier drag & drop, fond,
-  /// mapping) est réservée à l'administrateur et au propriétaire du modèle :
-  ///   • administrateur (rôle admin / super-admin) ;
-  ///   • créateur du modèle (`createdBy`) ;
-  ///   • acheteur (`purchasedBy`) ;
-  ///   • abonné premium (`hasPremiumAccess`) ;
-  ///   • modèle gratuit (prix 0 : acquis par tous, comme dans la boutique).
   bool canBeCustomizedBy({
     required String userId,
     required bool isAdmin,

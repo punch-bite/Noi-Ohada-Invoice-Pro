@@ -4,7 +4,7 @@ import 'package:hive/hive.dart';
 
 part 'invoice_settings.g.dart';
 
-@HiveType(typeId: 24) // Unique (5 = Product : collision corrigée, cf. HiveService)
+@HiveType(typeId: 24)
 class InvoiceSettings {
   @HiveField(0)
   final bool showLogo;
@@ -51,7 +51,6 @@ class InvoiceSettings {
   @HiveField(14)
   final String watermarkText;
 
-  // Getters pour les couleurs (converties depuis les valeurs entières)
   Color get primaryColor => Color(primaryColorValue);
   Color get secondaryColor => Color(secondaryColorValue);
   Color get backgroundColor => Color(backgroundColorValue);
@@ -78,16 +77,18 @@ class InvoiceSettings {
         backgroundColorValue = backgroundColor?.toARGB32() ?? 0xFFFFFFFF,
         textColorValue = textColor?.toARGB32() ?? 0xFF1A1A1A;
 
-  // Constructeur pour Firestore
   factory InvoiceSettings.fromFirestore(Map<String, dynamic> map) {
     return InvoiceSettings(
       showLogo: map['showLogo'] ?? true,
       showBorder: map['showBorder'] ?? true,
       showWatermark: map['showWatermark'] ?? false,
       showPaymentQR: map['showPaymentQR'] ?? false,
-      primaryColor: Color((map['primaryColor'] as num?)?.toInt() ?? 0xFF1A237E),
-      secondaryColor: Color((map['secondaryColor'] as num?)?.toInt() ?? 0xFF3949AB),
-      backgroundColor: Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
+      primaryColor:
+          Color((map['primaryColor'] as num?)?.toInt() ?? 0xFF1A237E),
+      secondaryColor:
+          Color((map['secondaryColor'] as num?)?.toInt() ?? 0xFF3949AB),
+      backgroundColor:
+          Color((map['backgroundColor'] as num?)?.toInt() ?? 0xFFFFFFFF),
       textColor: Color((map['textColor'] as num?)?.toInt() ?? 0xFF1A1A1A),
       fontFamily: map['fontFamily'] ?? 'Roboto',
       fontSize: (map['fontSize'] as num?)?.toDouble() ?? 12.0,
@@ -155,6 +156,5 @@ class InvoiceSettings {
     );
   }
 
-  // Instance par défaut (pour initialisation)
   static InvoiceSettings get defaultSettings => InvoiceSettings();
 }
