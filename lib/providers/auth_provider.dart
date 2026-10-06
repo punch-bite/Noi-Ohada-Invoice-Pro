@@ -40,9 +40,10 @@ class AppAuthProvider extends ChangeNotifier {
   }
 
   void _init() {
-    _authStateSubscription = _authService.authStateChanges.listen((firebaseUser) async {
+    _authStateSubscription =
+        _authService.authStateChanges.listen((firebaseUser) async {
       if (firebaseUser != null) {
-                if (!_needsTwoFactor) {
+        if (!_needsTwoFactor) {
           await _loadUserProfile(firebaseUser.uid);
         }
       } else {
@@ -78,7 +79,8 @@ class AppAuthProvider extends ChangeNotifier {
       _user = await _authService.getUserProfile(userId);
       _error = null;
       if (_user != null) {
-        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+        SecurityService.setUserContext(
+            userId: _user!.id, userEmail: _user!.email);
       }
     } catch (e) {
       _error = e.toString();
@@ -108,9 +110,10 @@ class AppAuthProvider extends ChangeNotifier {
         companyName: companyName,
         phone: phone,
       );
-      
+
       if (_user != null) {
-        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+        SecurityService.setUserContext(
+            userId: _user!.id, userEmail: _user!.email);
       }
 
       _isLoading = false;
@@ -128,7 +131,8 @@ class AppAuthProvider extends ChangeNotifier {
         final welcomeHtml = MailService.getWelcomeTemplate(displayName);
         await MailService.sendHtmlEmail(
           to: email,
-          subject: 'Bienvenue sur NOI OHADA Invoice Pro',
+          subject:
+              'Bienvenue sur Noi OHADA Invoice Pro 🎉 Créez votre 1ʳᵉ facture',
           htmlBody: welcomeHtml,
         );
       }
@@ -147,7 +151,7 @@ class AppAuthProvider extends ChangeNotifier {
     _needsTwoFactor = false;
     _pendingUser = null;
     _pendingCredential = null;
-        notifyListeners();
+    notifyListeners();
 
     try {
       final appUser = await _authService.signInWithEmailPassword(
@@ -170,8 +174,9 @@ class AppAuthProvider extends ChangeNotifier {
       }
 
       _user = appUser;
-      SecurityService.setUserContext(userId: appUser.id, userEmail: appUser.email);
-      
+      SecurityService.setUserContext(
+          userId: appUser.id, userEmail: appUser.email);
+
       _isLoading = false;
       notifyListeners();
       notifyRouter();
@@ -204,7 +209,7 @@ class AppAuthProvider extends ChangeNotifier {
     _pendingCredential = null;
     notifyListeners();
 
-        try {
+    try {
       final appUser = await _authService.signInWithGoogle();
 
       // 🔐 La 2FA s'applique aussi à Google Sign-In pour empêcher toute
@@ -222,7 +227,8 @@ class AppAuthProvider extends ChangeNotifier {
       _user = appUser;
 
       if (_user != null) {
-        SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+        SecurityService.setUserContext(
+            userId: _user!.id, userEmail: _user!.email);
       }
 
       _isLoading = false;
@@ -264,14 +270,15 @@ class AppAuthProvider extends ChangeNotifier {
       }
 
       _user = _pendingUser;
-      SecurityService.setUserContext(userId: _user!.id, userEmail: _user!.email);
+      SecurityService.setUserContext(
+          userId: _user!.id, userEmail: _user!.email);
 
       _needsTwoFactor = false;
       _pendingUser = null;
       _pendingCredential = null;
       _error = null;
       _isLoading = false;
-      
+
       notifyListeners();
       notifyRouter();
 
@@ -301,7 +308,7 @@ class AppAuthProvider extends ChangeNotifier {
     notifyRouter();
   }
 
-    Future<void> logout() async {
+  Future<void> logout() async {
     final userId = _user?.id;
     final userEmail = _user?.email;
 
@@ -326,7 +333,7 @@ class AppAuthProvider extends ChangeNotifier {
       debugPrint('⚠️ Erreur purge Hive au logout: $e');
     }
 
-        // ✅ Étape 3 : Réinitialiser l'état de l'auth
+    // ✅ Étape 3 : Réinitialiser l'état de l'auth
     _user = null;
     _needsTwoFactor = false;
     _pendingUser = null;
@@ -359,12 +366,12 @@ class AppAuthProvider extends ChangeNotifier {
 
       final resetHtml = MailService.getResetPasswordTemplate(
         targetName,
-        "https://invoicepro.noiconcept.com/reset-password?email=$email", 
+        "https://invoicepro.noiconcept.com/reset-password?email=$email",
       );
 
       await MailService.sendHtmlEmail(
         to: email.trim(),
-        subject: 'Réinitialisation de votre mot de passe - NOI OHADA Invoice Pro',
+        subject: 'Réinitialisez votre mot de passe — Noi OHADA Invoice Pro',
         htmlBody: resetHtml,
       );
 

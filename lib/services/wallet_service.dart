@@ -37,11 +37,20 @@ class WalletService {
   /// auprès d'E-nkap que la commande est bien CONFIRMÉE avant de créditer
   /// (le client ne peut plus s'auto-créditer un solde arbitraire).
   /// Appelé après la confirmation d'un paiement en ligne (ENKAP).
+  ///
+  /// 🧮 [dedupKey] — clé de DÉDUPLICATION STABLE (ex. `invoice:<id>`) :
+  /// la référence ENKAP change à chaque tentative de paiement, elle ne
+  /// protège donc PAS contre les doubles crédits. Cette clé, elle, est
+  /// identique pour toutes les tentatives d'une même facture → le serveur
+  /// crédite UNE SEULE fois, même si plusieurs ordres ENKAP sont confirmés
+  /// (requêtes répétitives, réessais) → les chiffres du portefeuille ne
+  /// sont plus gonflés.
   Future<bool> credit({
     required String userId,
     required double amount,
     required String reference,
     required String description,
+    String? dedupKey,
   }) async {
     if (userId.isEmpty || amount <= 0) return false;
     final apiBase = ConfigService.apiBaseUrl.trim();
@@ -56,13 +65,14 @@ class WalletService {
               'amount': amount,
               'reference': reference,
               'description': description,
+              if (dedupKey != null && dedupKey.trim().isNotEmpty)
+                'dedupKey': dedupKey.trim(),
             }),
           )
           .timeout(const Duration(seconds: 25));
       final ok = resp.statusCode == 200;
       if (!ok) {
-        debugPrint(
-            '⚠️ credit wallet serveur: ${resp.statusCode} ${resp.body}');
+        debugPrint('⚠️ credit wallet serveur: ${resp.statusCode} ${resp.body}');
       }
       return ok;
     } catch (e) {
@@ -144,10 +154,8 @@ class WalletService {
       if (status != null && status.isNotEmpty) {
         query = query.where('status', isEqualTo: status);
       }
-      final snap = await query
-          .orderBy('createdAt', descending: true)
-          .limit(200)
-          .get();
+      final snap =
+          await query.orderBy('createdAt', descending: true).limit(200).get();
       return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
     } catch (e) {
       debugPrint('⚠️ getAllWithdrawals: $e');
@@ -204,7 +212,8 @@ class WalletService {
           'amount': amount,
           'currency': 'XAF',
           'reference': withdrawalId,
-          'description': 'Retrait vers ${phone.isEmpty ? 'Mobile Money' : phone}',
+          'description':
+              'Retrait vers ${phone.isEmpty ? 'Mobile Money' : phone}',
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
@@ -212,6 +221,111 @@ class WalletService {
     } catch (e) {
       debugPrint('⚠️ setWithdrawalStatus: $e');
       return false;
+    }
+  }
+
+  // ===== SUPPRESSION DE TRANSACTIONS =====
+
+  /// 🗑️ Supprime une transaction de l'historique en ANNULANT son effet sur le
+  /// solde :
+  ///   • `credit` (encaissement d'une facture) → le solde est diminué du
+  ///     montant (jamais sous 0) ;
+  ///   • `withdrawal` (retrait payé) → le solde est re-crédité.
+  ///
+  /// Seules les transactions appartenant à [userId] sont supprimables.
+  Future<bool> deleteTransaction({
+    required String userId,
+    required String transactionId,
+  }) async {
+    if (userId.isEmpty || transactionId.isEmpty) return false;
+    try {
+      final ref = _db.collection('wallet_transactions').doc(transactionId);
+      final snap = await ref.get();
+      final data = snap.data();
+      if (data == null) return false;
+      if ((data['userId']?.toString() ?? '') != userId) return false;
+
+      final type = (data['type'] ?? 'credit').toString();
+      final amount = (data['amount'] as num?)?.toDouble() ?? 0;
+
+      await ref.delete();
+
+      // 🧾 Inverse l'effet sur le solde.
+      final double delta = type == 'withdrawal' ? amount : -amount;
+      if (amount > 0) {
+        final walletRef = _db.collection('wallets').doc(userId);
+        await _db.runTransaction((tx) async {
+          final ws = await tx.get(walletRef);
+          final current = (ws.data()?['balance'] as num?)?.toDouble() ?? 0;
+          tx.set(
+            walletRef,
+            {
+              'userId': userId,
+              'balance': (current + delta).clamp(0, double.infinity),
+              'currency': 'XAF',
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        });
+      }
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ deleteTransaction: $e');
+      return false;
+    }
+  }
+
+  /// 🧾🗑️ Supprime TOUTES les transactions du portefeuille liées à une facture
+  /// (`dedupKey == 'invoice:<id>'`, clé posée par [credit] lors de l'encaissement
+  /// ENKAP) et annule leur crédit sur le solde.
+  ///
+  /// Utilisé lors de la suppression d'une facture → retourne le nombre de
+  /// transactions supprimées.
+  Future<int> deleteInvoiceTransactions({
+    required String userId,
+    required String invoiceId,
+  }) async {
+    if (userId.isEmpty || invoiceId.isEmpty) return 0;
+    try {
+      final snap = await _db
+          .collection('wallet_transactions')
+          .where('dedupKey', isEqualTo: 'invoice:$invoiceId')
+          .get();
+      if (snap.docs.isEmpty) return 0;
+
+      double totalCredit = 0;
+      int deleted = 0;
+      for (final d in snap.docs) {
+        final data = d.data();
+        if ((data['userId']?.toString() ?? '') != userId) continue;
+        if ((data['type'] ?? 'credit').toString() != 'credit') continue;
+        totalCredit += (data['amount'] as num?)?.toDouble() ?? 0;
+        await d.reference.delete();
+        deleted++;
+      }
+
+      if (totalCredit > 0) {
+        final walletRef = _db.collection('wallets').doc(userId);
+        await _db.runTransaction((tx) async {
+          final ws = await tx.get(walletRef);
+          final current = (ws.data()?['balance'] as num?)?.toDouble() ?? 0;
+          tx.set(
+            walletRef,
+            {
+              'userId': userId,
+              'balance': (current - totalCredit).clamp(0, double.infinity),
+              'currency': 'XAF',
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        });
+      }
+      return deleted;
+    } catch (e) {
+      debugPrint('⚠️ deleteInvoiceTransactions: $e');
+      return 0;
     }
   }
 }

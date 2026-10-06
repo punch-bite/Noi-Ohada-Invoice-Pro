@@ -117,6 +117,8 @@ class TeamChatService {
     required String senderName,
     required String text,
     List<String> memberIds = const [],
+    String ownerId = '',
+    String ownerName = '',
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
@@ -133,6 +135,10 @@ class TeamChatService {
       teamId: teamId,
       senderId: senderId,
       senderName: senderName,
+      // 🔑 Propriétaire du message (propriétaire de l'équipe si fourni,
+      // sinon l'expéditeur) — transmis aux autres membres avec le message.
+      ownerId: ownerId.trim().isEmpty ? senderId : ownerId.trim(),
+      ownerName: ownerName.trim().isEmpty ? senderName : ownerName.trim(),
       text: trimmed,
       createdAt: DateTime.now(),
     );

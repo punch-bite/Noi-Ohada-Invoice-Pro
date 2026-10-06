@@ -92,6 +92,8 @@ class TemplateBackgroundSettings {
 }
 
 class TemplateCustomService {
+  static Future<void> _writeQueue = Future<void>.value();
+
   static String _key(String templateId) => 'template_custom_$templateId';
 
   /// Sauvegarde les positions + mapping + arrière-plan d'un modèle.
@@ -102,15 +104,16 @@ class TemplateCustomService {
     TemplateBackgroundSettings? background,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _key(templateId),
-      jsonEncode({
-        'positions': positions,
-        'mapping': mapping,
-        'background': (background ?? const TemplateBackgroundSettings())
-            .toMap(),
-      }),
-    );
+    final encoded = jsonEncode({
+      'positions': positions,
+      'mapping': mapping,
+      'background': (background ?? const TemplateBackgroundSettings()).toMap(),
+    });
+    final write = _writeQueue
+      .catchError((_) {})
+      .then((_) => prefs.setString(_key(templateId), encoded));
+    _writeQueue = write.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    await write;
   }
 
   /// Charge les personnalisations d'un modèle (vides si aucune).

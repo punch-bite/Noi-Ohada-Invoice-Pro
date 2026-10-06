@@ -1,15 +1,23 @@
-name: Release — APK + AAB + iOS → GitHub Release (tags v*)
+name: Release — Web (Vercel) + APK + AAB + iOS → GitHub Release (continu + tags v*)
 
 # =============================================================
-# Build l'APK + l'AAB signés (keystore de production) et publie
-# automatiquement une GitHub Release à chaque tag vX.Y.Z
-# (ex. v1.0.0) ou via le bouton « Run workflow ».
+# Workflow UNIQUE : Web + Android + iOS.
+#   • à chaque push sur main → release roulante « latest »
+#     (APK + AAB + iOS + Web, page /download toujours à jour)
+#     + déploiement direct de la PWA sur Vercel (Projet A).
+#   • à chaque tag vX.Y.Z (ex. v1.0.0) → release versionnée
+#     + déploiement Vercel aussi (même PWA).
+#   • via le bouton « Run workflow » (input tag_name optionnel).
 #
 # ⚠️ SECRETS REQUIS (Settings → Secrets and variables → Actions) :
 #   KEYSTORE_BASE64   → cat android/app/upload-keystore.jks | base64
 #   KEYSTORE_PASSWORD → mot de passe du keystore
 #   KEY_ALIAS         → alias de la clé de signature (ex. upload)
 #   KEY_PASSWORD      → mot de passe de la clé
+#   VERCEL_TOKEN      → Vercel → Account Settings → Tokens → Create,
+#                       avec accès au projet PWA (Projet A).
+#                       Puis GitHub → Settings → Secrets and variables
+#                       → Actions → New repository secret (nom : VERCEL_TOKEN).
 #   (optionnel) API_SECRET_KEY → clot l'accès si votre serveur le demande
 #
 # NB : aucun secret n'est embarqué dans le dépôt. Le keystore est
@@ -20,6 +28,8 @@ name: Release — APK + AAB + iOS → GitHub Release (tags v*)
 # (Codemagic est retourné en usage manuel uniquement — cf. codemagic.yaml).
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -32,7 +42,53 @@ on:
 permissions:
   contents: write
 
+# ⚠️ Le job publish force-pousse le tag roulant « latest ».
+# Sans concurrence, 2 push rapprochés = 2 runs qui déplacent le tag
+# en parallèle → assets mélangés entre 2 commits. On sérialise.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # Même serveur que le Web (Projet B) : proxy ENKAP, emails, abonnements…
+  API_BASE_URL: https://server-xi-two-23.vercel.app
+  # Tag roulant mis à jour à chaque push sur main (page /download → latest).
+  ROLLING_TAG: latest
+  # Projet A — PWA Flutter (déploiement Vercel dans le job build-web).
+  # Projet B — API Node (server/) : déploiement Git auto Vercel séparé,
+  # avec Root Directory = server.
+  PWA_URL: noi-ohada-pwa.vercel.app
+  VERCEL_ORG_ID: team_mKahFlpvoBYNTHr0reDF3k7X
+  VERCEL_PROJECT_ID: prj_hqiekjcRDixyFdkLJck9CWlW7pBf
+
 jobs:
+  # ------------------------------------------------------------
+  # Résout le tag cible : « latest » sur push main, tag versionné
+  # sur push de tag v* ou input manuel. Évite les doublons de
+  # logique dans le job publish.
+  # ------------------------------------------------------------
+  resolve-tag:
+    name: "Résoudre le tag de release"
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+      is_rolling: ${{ steps.tag.outputs.is_rolling }}
+    steps:
+      - name: 🏷️ Déterminer le tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            echo "tag_name=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag_name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_name=${{ env.ROLLING_TAG }}" >> "$GITHUB_OUTPUT"
+            echo "is_rolling=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
   build-android:
     name: "Build APK + AAB (release)"
     runs-on: ubuntu-latest
@@ -116,12 +172,11 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
-            echo "✅ Keystore écrit dans $RUNNER_TEMP/upload-keystore.jks"
-          else
-            echo "⚠️ Secret KEYSTORE_BASE64 absent — build en signature DEBUG (non publiable)."
-          fi
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "Secret KEYSTORE_BASE64 manquant"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
+          test -s "$RUNNER_TEMP/upload-keystore.jks"
+          echo "✅ Keystore release décodé"
 
       - name: 🔐 Injecter les infos de signature dans local.properties
         env:
@@ -129,22 +184,21 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ] && [ -f "$RUNNER_TEMP/upload-keystore.jks" ]; then
-            {
-              echo "sdk.dir=$ANDROID_HOME"
-              echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")"
-              echo "release.keystore.storeFile=$RUNNER_TEMP/upload-keystore.jks"
-              echo "release.keystore.password=$KEYSTORE_PASSWORD"
-              echo "release.key.alias=$KEY_ALIAS"
-              echo "release.key.password=$KEY_PASSWORD"
-            } > android/local.properties
-            echo "✅ local.properties configuré pour signature RELEASE :"
-            # On affiche sans révéler les secrets (chemins + clés uniquement).
-            grep -vE 'password=|key.alias=|key.password=' android/local.properties
-            echo "  (mots de passe et alias masqués)"
-          else
-            echo "⚠️ Signatures incomplètes — le build utilisera la signature DEBUG."
-          fi
+          set -euo pipefail
+          test -n "$KEYSTORE_PASSWORD" || { echo "Secret KEYSTORE_PASSWORD manquant"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Secret KEY_ALIAS manquant"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Secret KEY_PASSWORD manquant"; exit 1; }
+          keytool -list -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")"
+            echo "release.keystore.storeFile=$RUNNER_TEMP/upload-keystore.jks"
+            echo "release.keystore.password=$KEYSTORE_PASSWORD"
+            echo "release.key.alias=$KEY_ALIAS"
+            echo "release.key.password=$KEY_PASSWORD"
+          } > android/local.properties
+          echo "✅ Keystore et alias vérifiés, signature RELEASE configurée"
 
       # ---------------- Build ----------------
       - name: 🏗️ Build APK (release, obfusqué)
@@ -251,6 +305,18 @@ jobs:
           fi
           echo "### ✅ Build AAB OK" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: ✅ Vérifier APK et AAB signés
+        run: |
+          set -euo pipefail
+          APK=$(find build/app/outputs/flutter-apk -name '*.apk' -print -quit)
+          AAB=$(find build/app/outputs/bundle/release -name '*.aab' -print -quit)
+          test -n "$APK"
+          test -n "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          jarsigner -verify "$AAB" | grep -q 'jar verified.'
+          echo "✅ APK et AAB signés et vérifiés"
+
       - name: 📤 Upload artefact Android (APK)
         uses: actions/upload-artifact@v4
         with:
@@ -306,7 +372,14 @@ jobs:
         run: flutter create --platforms=ios --org com.noi --project-name noi_ohada_invoice_pro .
 
       - name: 🍎 Build iOS (release, sans signature)
-        run: flutter build ios --release --no-codesign
+        env:
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build ios --release --no-codesign $DEFINES
 
       - name: 📦 Empaqueter Runner.app en .zip (sideload)
         run: |
@@ -325,9 +398,12 @@ jobs:
 
   # ------------------------------------------------------------
   # Web — même tag → même release (archive de la PWA)
+  # + déploiement DIRECT de la PWA sur Vercel (Projet A).
+  # Un seul job = un seul `flutter build web` pour les 2 sorties
+  # (web-release.zip + Vercel), pas de double build.
   # ------------------------------------------------------------
   build-web:
-    name: "Build Web (PWA)"
+    name: "Build Web (PWA) + Deploy Vercel"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -343,10 +419,20 @@ jobs:
         run: flutter pub get
 
       - name: 🌐 Build web (release)
-        run: flutter build web --release --dart-define=API_BASE_URL=https://server-xi-two-23.vercel.app
+        env:
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+        run: |
+          DEFINES="--dart-define=API_BASE_URL=${{ env.API_BASE_URL }}"
+          if [ -n "$API_SECRET_KEY" ]; then
+            DEFINES="$DEFINES --dart-define=API_SECRET_KEY=$API_SECRET_KEY"
+          fi
+          flutter build web --release --base-href=/ $DEFINES
 
       - name: 📦 Archiver build/web en web-release.zip
         run: |
+          # web/vercel.json est copié par Flutter dans build/web/ : on le
+          # retire de l'archive (sinon /vercel.json public dans le zip).
+          rm -f build/web/vercel.json
           cd build/web
           zip -qry ../web-release.zip .
 
@@ -358,15 +444,117 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # ---------- Déploiement Vercel (réutilise le même build/web) ----------
+      - name: 🔍 Pré-contrôle Vercel
+        id: vercel-check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "vercel_enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## ⚠️ Déploiement Vercel ignoré — secret VERCEL_TOKEN absent"
+              echo ""
+              echo "Le build Web + \`web-release.zip\` sont OK, seule la mise en"
+              echo "ligne sur https://${{ env.PWA_URL }} est sautée."
+              echo ""
+              echo "### 🔧 Corriger (2 min)"
+              echo "1. Vercel → Account Settings → Tokens → Create Token."
+              echo "2. GitHub → Settings → Secrets and variables → Actions"
+              echo "   → New repository secret → nom \`VERCEL_TOKEN\`."
+              echo "3. Relancer : Actions → ce run → Re-run jobs → build-web."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "vercel_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "✅ VERCEL_TOKEN présent — déploiement activé."
+          fi
+
+      - name: 📁 Préparer le Build Output Vercel
+        if: steps.vercel-check.outputs.vercel_enabled == 'true'
+        run: |
+          mkdir -p .vercel/output/static
+          cp -R build/web/. .vercel/output/static/
+          cat > .vercel/output/config.json <<'JSON'
+          {
+            "version": 3,
+            "routes": [
+              { "handle": "filesystem" },
+              { "src": "/(.*)", "dest": "/index.html" }
+            ]
+          }
+          JSON
+
+      - name: 🚀 Déployer la PWA sur Vercel (production)
+        if: steps.vercel-check.outputs.vercel_enabled == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ env.VERCEL_PROJECT_ID }}
+        run: |
+          # Le vercel.json racine route /(.*) vers server/index.js (Projet B).
+          # Avec --prebuilt il ne doit PAS partir avec la PWA : on l'écarte
+          # le temps du deploy puis on le restaure (trap = même en échec).
+          if [ -f vercel.json ]; then
+            mv vercel.json /tmp/vercel.root.json.bak
+            trap 'mv /tmp/vercel.root.json.bak vercel.json' EXIT
+          fi
+          set +e
+          OUT_FILE="$(mktemp)"
+          npx vercel@latest deploy --prebuilt --prod --yes \
+            --token="$VERCEL_TOKEN" >"$OUT_FILE" 2>&1
+          CODE=$?
+          cat "$OUT_FILE"
+          if [ $CODE -ne 0 ]; then
+            {
+              echo "## ❌ Échec du déploiement Vercel"
+              echo ""
+              echo '```'
+              tail -30 "$OUT_FILE"
+              echo '```'
+              echo ""
+              echo "### 🔧 Causes probables"
+              echo "- **Token invalide/révoqué** (Unauthorized/Invalid token)"
+              echo "  → recréer le token Vercel + MAJ le secret GitHub."
+              echo "- **Mauvais projet** (Project not found) → vérifier IDs :"
+              echo "  \`VERCEL_PROJECT_ID=${{ env.VERCEL_PROJECT_ID }}\`,"
+              echo "  \`VERCEL_ORG_ID=${{ env.VERCEL_ORG_ID }}\`."
+              echo "- **Token sans accès au projet** → créer le token dans le"
+              echo "  bon compte/équipe Vercel."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit $CODE
+          fi
+          DEPLOY_URL="$(grep -oE 'https://[^[:space:]]*\.vercel\.app' "$OUT_FILE" | head -n 1)"
+          {
+            echo "### ✅ PWA déployée sur Vercel"
+            echo "- Production : ${DEPLOY_URL:-voir log ci-dessus}"
+            echo "- Alias : https://${{ env.PWA_URL }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ------------------------------------------------------------
   # Publication — UNE release pour les 3 plateformes :
   #   Android → *.apk  |  iOS → ios-release.zip  |  Web → web-release.zip
+  #   • push sur main → release roulante « latest » (mise à jour,
+  #     marquée latest, page /download toujours à jour)
+  #   • push de tag v* / manuel → release versionnée
   # ------------------------------------------------------------
   publish:
     name: "Publier la GitHub Release"
-    needs: [build-android, build-ios, build-web]
+    needs: [resolve-tag, build-android, build-ios, build-web]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ (Re)positionner le tag roulant sur ce commit
+        if: needs.resolve-tag.outputs.is_rolling == 'true'
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+
       - name: ⬇️ Télécharger les artefacts des 3 builds
         uses: actions/download-artifact@v4
         with:
@@ -377,19 +565,11 @@ jobs:
       - name: 📋 Contenu à publier
         run: ls -laR dist || true
 
-      - name: ✅ Vérifier la signature APK (best effort)
-        run: |
-          # `apksigner` est parfois indisponible ; on ne bloque pas la
-          # publication si la vérification échoue.
-          (command -v apksigner >/dev/null 2>&1 && \
-            $ANDROID_HOME/build-tools/*/apksigner verify --print-certs dist/*.apk) \
-            || echo "Vérification de signature non exécutée"
-
       - name: 📦 Créer la GitHub Release + artefacts
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag_name || github.ref_name }}
-          name: Noi OHADA Invoice Pro – Release ${{ inputs.tag_name || github.ref_name }}
+          tag_name: ${{ needs.resolve-tag.outputs.tag_name }}
+          name: ${{ needs.resolve-tag.outputs.is_rolling == 'true' && 'Noi OHADA Invoice Pro – Build continu (latest)' || format('Noi OHADA Invoice Pro – Release {0}', needs.resolve-tag.outputs.tag_name) }}
           body: |
             ## 📱 Noi OHADA Invoice Pro
 
@@ -412,6 +592,7 @@ jobs:
 
             ---
             *Généré automatiquement par GitHub Actions.*
+            Commit : ${{ github.sha }}
           files: dist/**
           # ⚠️ draft/prerelease = false : la page /download (server/download.js)
           # interroge l'API `releases/latest`, qui IGNORE les drafts et les
@@ -419,5 +600,9 @@ jobs:
           # release doit être publiée officiellement.
           draft: false
           prerelease: false
+          # La release roulante « latest » doit rester LA latest (sinon les
+          # tags v* plus anciens la remplaceraient comme latest).
+          # is_rolling vaut déjà 'true'/'false', format accepté tel quel.
+          make_latest: ${{ needs.resolve-tag.outputs.is_rolling }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

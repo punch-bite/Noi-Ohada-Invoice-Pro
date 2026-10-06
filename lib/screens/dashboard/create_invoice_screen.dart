@@ -975,12 +975,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           ),
           const SizedBox(height: 8),
           if (_signatureBytes != null) ...[
-            // AperÃ§u de la signature
+            // Aperçu de la signature
             Container(
               width: double.infinity,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey.shade300),
               ),

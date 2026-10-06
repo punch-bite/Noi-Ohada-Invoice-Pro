@@ -33,11 +33,30 @@ service cloud.firestore {
     }
 
     // Lecture autorisée pour un membre d'équipe ayant reçu un partage.
+<<<<<<< HEAD
     function canReadSharedResource() {
       return isSignedIn()
         && ('sharedWithUsers' in resource.data)
         && (resource.data.sharedWithUsers is list)
+=======
+    // Le partage est matérialisé sur le document (sharedWithUsers) par l'émetteur.
+    // ✅ Défensif : on vérifie l'existence du champ avant d'y accéder.
+    function canReadSharedResource() {
+      return isSignedIn()
+        && ('sharedWithUsers' in resource.data)
+>>>>>>> 1a32955a7a8b8c0eb3b3bfe52a5e66916085ec71
         && (request.auth.uid in resource.data.sharedWithUsers);
+    }
+
+    // ✍️ ÉCRITURE autorisée pour un membre d'équipe à qui le partage a été
+    // accordé EN ÉCRITURE (rôle membre/admin défini par l'équipe). Le droit est
+    // matérialisé sur le document (editableByUsers) par l'émetteur ou par le
+    // serveur à l'adhésion d'un membre (cf. /team/manage-member).
+    // ✅ Défensif : on vérifie l'existence du champ avant d'y accéder.
+    function canWriteSharedResource() {
+      return isSignedIn()
+        && ('editableByUsers' in resource.data)
+        && (request.auth.uid in resource.data.editableByUsers);
     }
 
     // 🔒 Vrai si `uid` est membre (ou propriétaire/admin) de l'équipe `teamId`.
@@ -74,22 +93,22 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /products/{productId} {
       allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /invoices/{invoiceId} {
       allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /suppliers/{id} {
       allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /deliveries/{id} {
       allow read: if isSignedIn() && canReadResource();
@@ -156,7 +175,12 @@ service cloud.firestore {
     }
     match /shared_invoices/{sharedId} {
       allow read: if isSignedIn() && (isAdmin()
+<<<<<<< HEAD
         || ('sharedWith' in resource.data && request.auth.uid in resource.data.sharedWith)
+=======
+        || request.auth.uid in resource.data.sharedWith
+        || request.auth.uid in resource.data.writeUsers
+>>>>>>> 1a32955a7a8b8c0eb3b3bfe52a5e66916085ec71
         || resource.data.sharedBy == request.auth.uid);
       allow create: if isSignedIn()
         && request.resource.data.sharedBy == request.auth.uid
@@ -185,9 +209,25 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if isAdmin() || isTeamMember(teamId, request.auth.uid);
+<<<<<<< HEAD
         allow create: if isSignedIn()
           && isTeamMember(teamId, request.auth.uid)
           && request.resource.data.senderId == request.auth.uid;
+=======
+        // ✍️ Un membre ne peut écrire que SON propre nom (anti-usurpation).
+        // 🔑 Le PROPRIÉTAIRE estampillé sur le message ne peut être que
+        // l'auteur lui-même ou le propriétaire de l'équipe (anti-usurpation
+        // du badge « Propriétaire »).
+        allow create: if isSignedIn()
+          && isTeamMember(teamId, request.auth.uid)
+          && request.resource.data.senderId == request.auth.uid
+          && (!('ownerId' in request.resource.data)
+              || request.resource.data.ownerId == ''
+              || request.resource.data.ownerId == request.auth.uid
+              || request.resource.data.ownerId ==
+                 get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId);
+        // 🛠️ Modification/suppression : admin global OU l'auteur du message.
+>>>>>>> 1a32955a7a8b8c0eb3b3bfe52a5e66916085ec71
         allow update, delete: if isAdmin()
           || (isTeamMember(teamId, request.auth.uid)
               && resource.data.senderId == request.auth.uid);

@@ -78,7 +78,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final textColor = theme.textColor;
     final subTextColor = theme.subTextColor;
     final primaryColor = theme.primaryColor;
-    final bgColor = theme.backgroundColor;
     final userId = auth.user?.id;
 
     if (_isLoading) {
@@ -141,12 +140,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               if (!isOwner)
                 const PopupMenuItem(
                   value: 'leave',
-                  child: Text('Quitter l\'équipe', style: TextStyle(color: Colors.orange)),
+                  child: Text('Quitter l\'équipe',
+                      style: TextStyle(color: Colors.orange)),
                 ),
               if (isOwner)
                 const PopupMenuItem(
                   value: 'delete',
-                  child: Text('Supprimer l\'équipe', style: TextStyle(color: Colors.red)),
+                  child: Text('Supprimer l\'équipe',
+                      style: TextStyle(color: Colors.red)),
                 ),
             ],
             onSelected: (value) {
@@ -201,6 +202,25 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
               // ===== Statistiques de partage =====
               _buildShareStats(isDark, textColor, subTextColor),
+              const SizedBox(height: 16),
+
+              // ===== 🔐 Droit d'accès des membres aux fichiers partagés =====
+              _buildAccessPolicyCard(
+                isDark,
+                textColor,
+                subTextColor,
+                primaryColor,
+                canManage: isOwner || isAdmin,
+              ),
+              const SizedBox(height: 12),
+
+              // ===== 📂 Mes accès personnels =====
+              _buildMyAccessTile(
+                isDark,
+                textColor,
+                subTextColor,
+                primaryColor,
+              ),
               const SizedBox(height: 24),
 
               // ===== Liste des membres =====
@@ -266,8 +286,245 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.ios_share_rounded),
-              label: const Text('Partager', style: TextStyle(fontWeight: FontWeight.w600)),
+              label: const Text('Partager',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
             ),
+    );
+  }
+
+  // ===== 📂 TUILE « MES ACCÈS ÉQUIPE » =====
+  //
+  // Ouvre l'écran `TeamSharedWithMeScreen` qui liste UNIQUEMENT les
+  // ressources auxquelles le membre courant a accès.
+  Widget _buildMyAccessTile(
+    bool isDark,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor,
+  ) {
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    final isPrivileged =
+        _team != null && (_team!.isOwnerOf(uid) || _team!.isAdmin(uid));
+
+    // Comptage LOCAL — pas d'appel Firestore supplémentaire.
+    final accessible = _shares.where((s) {
+      if (isPrivileged) return true;
+      return s.sharedWith.contains(uid) || s.writeUsers.contains(uid);
+    }).toList();
+    final writable = accessible.where((s) {
+      return s.canWrite(uid) || (_team?.canWriteShared(uid) ?? false);
+    }).length;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () async {
+        await context.push(
+          '/teams/shared-with-me',
+          extra: {'teamId': _team!.id},
+        );
+        if (mounted) await _loadData();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[900] : Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: primaryColor.withValues(alpha: 0.25),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.folder_shared_outlined,
+                  color: primaryColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mes accès équipe',
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    accessible.isEmpty
+                        ? 'Aucune ressource partagée pour l\'instant'
+                        : '${accessible.length} ressource${accessible.length > 1 ? 's' : ''} · $writable modifiable${writable > 1 ? 's' : ''}',
+                    style: TextStyle(color: subTextColor, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: subTextColor.withValues(alpha: 0.6)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===== 🔐 DROIT D'ACCÈS DES MEMBRES AUX FICHIERS PARTAGÉS =====
+  Widget _buildAccessPolicyCard(
+    bool isDark,
+    Color textColor,
+    Color subTextColor,
+    Color primaryColor, {
+    required bool canManage,
+  }) {
+    final memberPermission = _team!.memberPermission; // 'read' | 'write'
+    final canWrite = memberPermission == 'write';
+    final accent = canWrite ? Colors.green : Colors.blueGrey;
+
+    return GlassCard(
+      borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 18, color: textColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Accès des membres aux fichiers partagés',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Droit accordé aux membres de l\'équipe sur les factures, '
+            'produits et clients partagés.',
+            style: TextStyle(fontSize: 12, color: subTextColor),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _permissionChip(
+                label: '👁️ Lecture seule',
+                selected: !canWrite,
+                enabled: canManage,
+                color: Colors.blueGrey,
+                onTap: () => _setMemberPermission('read'),
+              ),
+              _permissionChip(
+                label: '✍️ Lecture + écriture',
+                selected: canWrite,
+                enabled: canManage,
+                color: Colors.green,
+                onTap: () => _setMemberPermission('write'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(Icons.verified_user_outlined, size: 14, color: accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  canWrite
+                      ? 'Les membres peuvent modifier les fichiers partagés '
+                          '(ajout, édition, suppression).'
+                      : 'Les membres peuvent uniquement consulter les fichiers '
+                          'partagés. Propriétaire et admins conservent l\'écriture.',
+                  style: TextStyle(fontSize: 11, color: subTextColor),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _permissionChip({
+    required String label,
+    required bool selected,
+    required bool enabled,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ChoiceChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: selected,
+      onSelected: enabled ? (_) => onTap() : null,
+      selectedColor: color.withValues(alpha: 0.18),
+      labelStyle: TextStyle(
+        color: selected ? color : null,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: selected ? color : Colors.grey.withValues(alpha: 0.4),
+      ),
+      showCheckmark: false,
+    );
+  }
+
+  Future<void> _setMemberPermission(String permission) async {
+    if (_team == null || _team!.memberPermission == permission) return;
+    final previous = _team!.memberPermission;
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    setState(() => _team = _team!.copyWith(memberPermission: permission));
+    var synced = 0;
+    try {
+      synced = await _teamService.setMemberPermissionPolicy(
+        teamId: _team!.id,
+        permission: permission,
+        requestedBy: uid,
+      );
+    } catch (e) {
+      try {
+        await _teamService.updateTeam(_team!);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _team = _team!.copyWith(memberPermission: previous));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Impossible d\'enregistrer le droit d\'accès : '
+              '${TeamService.prettyError(e)}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          permission == 'write'
+              ? 'Les membres peuvent maintenant MODIFIER les fichiers partagés ✍️'
+                  '${synced > 0 ? ' ($synced membre(s) mis à jour)' : ''}'
+              : 'Les membres sont maintenant en LECTURE SEULE 👁️'
+                  '${synced > 0 ? ' ($synced membre(s) mis à jour)' : ''}',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -475,6 +732,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         'Partagé par ${_displayName(s.sharedBy)}',
                         style: TextStyle(color: subTextColor, fontSize: 11),
                       ),
+                      const SizedBox(height: 4),
+                      _accessBadge(s),
                     ],
                   ),
                 ),
@@ -488,6 +747,27 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _accessBadge(SharedInvoice share) {
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    final canWrite = share.canWrite(uid) || _team!.canWriteShared(uid);
+    final color = canWrite ? Colors.green : Colors.blueGrey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        canWrite ? '✍️ Lecture + écriture' : '👁️ Lecture seule',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 
@@ -510,7 +790,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final uid = auth.user?.id ?? '';
     if (uid.isEmpty) return;
 
-    // Candidats @mention : tous les membres sauf moi.
     final candidates = <String>{
       _team!.ownerId,
       ..._team!.adminIds,
@@ -542,7 +821,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     String uid,
   ) async {
     if (resourceIds.isEmpty || memberIds.isEmpty) return;
-    // Récupère les noms pour un affichage lisible.
     final names = await _resourceNames(type, resourceIds);
     for (var i = 0; i < resourceIds.length; i++) {
       await _teamService.shareResource(
@@ -700,7 +978,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   children: [
                     if (isOwner)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
                           color: Colors.amber.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
@@ -712,7 +991,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                       ),
                     if (isAdmin && !isOwner)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
                           color: Colors.purple.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
@@ -787,7 +1067,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Future<void> _showAddMemberDialog() async {
     final sub = context.read<SubscriptionProvider>();
-    // 🔒 L'équipe est premium : aucun ajout de membre pour les gratuits.
     if (!sub.hasTeamAccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -962,7 +1241,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         title: const Text('Quitter l\'équipe'),
         content: const Text('Voulez-vous vraiment quitter cette équipe ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -985,9 +1266,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Supprimer l\'équipe'),
-        content: const Text('Cette action est irréversible. Voulez-vous vraiment supprimer cette équipe ?'),
+        content: const Text(
+            'Cette action est irréversible. Voulez-vous vraiment supprimer cette équipe ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -1121,7 +1405,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 12),
 
-          // ===== Type de ressource =====
           Text(
             'Type de donnée',
             style: TextStyle(
@@ -1142,7 +1425,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 12),
 
-          // ===== Ressources =====
           Text(
             'Sélectionnez ${_type == 'invoice' ? 'la facture' : _type == 'product' ? 'le produit' : 'le client'}',
             style: TextStyle(
@@ -1196,7 +1478,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 8),
 
-          // ===== Membres (@mention) =====
           Text(
             'Mentionner (@) les membres',
             style: TextStyle(

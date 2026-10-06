@@ -1,23 +1,13 @@
 // lib/widgets/stitch_a4_invoice_preview.dart
 //
-// 🧾 Aperçu A4 « Aperçu de la facture » — maquette Stitch
-// (design/stitch_refined_billing_interface/aper_u_de_la_facture/)
-//
-// Fidèle à la maquette mobile :
-//   • En-tête coloré à motif de points + dégradé horizontal → logo rond à
-//     initiales, colonne « DE » (société + coordonnées), titre FACTURE/DEVIS
-//   • Section « FACTURÉ À » ↔ récap FACTURE N° / DATE / ÉCHÉANCE / DEVISE
-//   • Tableau des lignes (en-tête teinté, séparateurs fins outline-variant)
-//   • Totaux alignés à droite + bloc plein « MONTANT TOTAL »
-//   • « Termes et conditions » + bande décorative basse
-//   • Tampon « PAYÉ » doré pivoté de -12°
-//
-// Les PARAMÈTRES DE PERSONNALISATION sauvegardés sont appliqués :
-//   • couleurs du modèle (primaryColor / backgroundColor / showBorder /
-//     fontSize de InvoiceTemplate)
-//   • visibilité des blocs du layout drag & drop (InvoiceLayoutConfig)
-//   • fond de page : image personnalisée ou préréglage de la palette
-//     (TemplateBackgroundSettings — opacité / flou / ajustement)
+// 🧾 Aperçu A4 « Aperçu de la facture » — maquette Stitch.
+// 🔄 v4 : WYSIWYG strict avec le PDF.
+//   • `_sanitizeText` local pour un rendu identique au PDF (sans emojis).
+//   • Priorité `custom_logo_base64` > `company.logoPath`.
+//   • Différenciation des styles de pied de page.
+//   • headerStyle  : 'flat' | 'band' | 'bar' | 'dark' | 'zigzag'
+//   • tableStyle   : 'plain' | 'zebra' | 'cards' | 'numbered'
+//   • footerStyle  : 'simple' | 'contact' | 'banner' | 'icons'
 
 import 'dart:convert' show base64Decode;
 import 'dart:io' show File;
@@ -28,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/invoice_layout.dart';
+import '../models/invoice_template.dart';
 import '../services/template_custom_service.dart';
 import '../theme/royal_ledger.dart';
 import 'template_background_palette.dart';
@@ -112,7 +103,6 @@ class StitchPreviewData {
     this.isPaid = false,
   });
 
-  /// Données d'exemple — identiques à la maquette Stitch.
   factory StitchPreviewData.sample() => const StitchPreviewData(
         companyInitials: 'NO!',
         companyName: 'Noi Concept digital',
@@ -127,60 +117,31 @@ class StitchPreviewData {
         isPaid: true,
       );
 
-  /// Montant formaté maquette : `448 400` (séparateur = espace).
   static String money(double value) =>
       NumberFormat('#,##0').format(value).replaceAll(',', ' ');
 
-  /// Montant préfixé du symbole de la maquette : `Fr0`.
   static String amount(double value) => 'Fr${money(value)}';
 }
 
 /// Aperçu A4 de la facture — fidèle à la maquette Stitch, piloté par les
 /// personnalisations sauvegardées du modèle actif.
 class StitchA4InvoicePreview extends StatelessWidget {
-  /// Données de la facture (réelles ou d'exemple).
   final StitchPreviewData data;
-
-  /// 🎨 Couleur d'accent du modèle (primaryColor) — mauve de la maquette
-  /// (`RoyalColors.secondary`) par défaut.
   final Color? accentColor;
-
-  /// 🎨 Couleur de papier du modèle (backgroundColor) — blanc par défaut.
   final Color? pageColor;
-
   final bool showLogo;
   final bool showBorder;
   final bool showTaxDetails;
   final bool showPaymentTerms;
   final bool showPaymentQR;
-
-  /// Police du modèle (corps de texte) : 'WorkSans' | 'Manrope' | autre.
   final String fontFamily;
-
-  /// Échelle typographique du modèle (fontSize / 12).
   final double fontScale;
-
-  /// 🧩 Layout drag & drop : gère la visibilité de chaque bloc.
   final InvoiceLayoutConfig layoutConfig;
-
-  /// 🎨 Réglages de fond sauvegardés (image / préréglage palette).
   final TemplateBackgroundSettings backgroundSettings;
-
-  /// Image de fond décodée (découle de [backgroundSettings]).
   final Uint8List? backgroundImage;
-
-  /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
-    /// Affiche le tampon « PAYÉ » pivoté (factures payées / aperçu maquette).
   final bool showPaidStamp;
-
-  /// 🧧 Texte du filigrane (défaut : vide → pas de filigrane).
   final String watermarkText;
   final bool showWatermark;
-
-  /// 🧩 Personnalisations drag & drop sauvegardées du workspace (positions,
-  /// ordre des sections en-tête/body/pied, textes personnalisés, visibilité,
-  /// taille du logo…). Transmises depuis l'écran de détail pour que l'aperçu
-  /// soit fidèle à l'impression PDF (mêmes textes, ordre, visibilité).
   final Map<String, dynamic> customPositions;
 
   const StitchA4InvoicePreview({
@@ -209,33 +170,141 @@ class StitchA4InvoicePreview extends StatelessWidget {
     styles: {},
   );
 
-  /// Largeur de référence du dessin (échelle interne, rendue par FittedBox).
   static const double _paperWidth = 560;
-
-  /// Hauteur A4 correspondante (ratio 794 × 1123).
   static const double _paperBaseHeight = _paperWidth * 1123 / 794;
 
   bool _vis(LayoutElement element) => layoutConfig.styleOf(element).visible;
-
-  /// Retourne un booléen d'une personnalisation sauvegardée (défaut si absent).
 
   bool _cpBool(String key, bool fallback) {
     final v = customPositions[key];
     return v is bool ? v : fallback;
   }
- 
-  /// Retourne un texte d'une personnalisation sauvegardée (vide si absent).
+
   String _cpString(String key) =>
       (customPositions[key] as String? ?? '').trim();
- 
-  /// Retourne une liste d'ordre (ex. ordre des éléments d'en-tête).
-  List<String> _cpStrings(String key) =>
-      (customPositions[key] as List?)?.whereType<String>().toList() ?? const [];
 
   String get _bodyFont =>
       (fontFamily == 'Manrope' || fontFamily == 'WorkSans')
           ? fontFamily
           : 'WorkSans';
+
+  // 🔤 Retire les emojis pour un rendu identique au PDF.
+  static String _sanitizeText(String input) {
+    if (input.isEmpty) return input;
+    final buffer = StringBuffer();
+    for (final rune in input.runes) {
+      if (_isSafeRune(rune)) buffer.writeCharCode(rune);
+    }
+    return buffer.toString();
+  }
+
+  static bool _isSafeRune(int rune) {
+    if (rune == 0x09 || rune == 0x0A || rune == 0x0D) return true;
+    if (rune >= 0x20 && rune <= 0x7E) return true;
+    if (rune >= 0x00A0 && rune <= 0x024F) return true;
+    if (rune >= 0x2000 && rune <= 0x206F) return true;
+    if (rune >= 0x20A0 && rune <= 0x20CF) return true;
+    if (rune >= 0x2190 && rune <= 0x21FF) return true;
+    if (rune >= 0x25A0 && rune <= 0x25FF) return true;
+    if (rune >= 0x2700 && rune <= 0x27BF) return true;
+    if (rune == 0xFEFF) return false;
+    return false;
+  }
+
+  // ── Styles PRO ─────────────────────────────────────────────
+  String get _headerStyle => _cpString('header_style').isNotEmpty
+      ? _cpString('header_style')
+      : 'flat';
+
+  String get _tableStyle => _cpString('table_style').isNotEmpty
+      ? _cpString('table_style')
+      : 'plain';
+
+  String get _footerStyle => _cpString('footer_style').isNotEmpty
+      ? _cpString('footer_style')
+      : 'simple';
+
+  String get _accentBorder => _cpString('accent_border');
+
+  bool get _showThankYou => _cpBool('show_thank_you', false);
+
+  String get _thankYouText => _sanitizeText(
+        _cpString('thank_you_text').isNotEmpty
+            ? _cpString('thank_you_text')
+            : 'Merci pour votre confiance !',
+      );
+
+  String get _bankName => _sanitizeText(_cpString('bank_name'));
+  String get _bankAccount => _sanitizeText(_cpString('bank_account'));
+
+  // ── Overrides personnalisés ────────────────────────────────
+  String get _customCompanyName {
+    final override = _sanitizeText(_cpString('company_name'));
+    return override.isNotEmpty ? override : _sanitizeText(data.companyName);
+  }
+
+  String get _customClientName {
+    final override = _sanitizeText(_cpString('client_name'));
+    return override.isNotEmpty ? override : _sanitizeText(data.clientName);
+  }
+
+  String get _customTitle {
+    final override = _sanitizeText(_cpString('invoice_title_text'));
+    if (override.isNotEmpty) return override;
+    return data.isDevis ? 'DEVIS' : 'FACTURE';
+  }
+
+  String get _customSubtitle => _sanitizeText(_cpString('invoice_subtitle'));
+
+  String get _customLegalText => _sanitizeText(_cpString('custom_legal_text'));
+
+  String get _customStampText => _sanitizeText(_cpString('stamp_text'));
+
+  String get _customSignatoryTitle {
+    final override = _sanitizeText(_cpString('signatory_title'));
+    return override.isNotEmpty ? override : 'Signature';
+  }
+
+  /// Logo effectif : `custom_logo_base64` prioritaire sur le chemin.
+  Uint8List? get _effectiveLogoBytes {
+    final b64 = _cpString('custom_logo_base64');
+    if (b64.isNotEmpty) {
+      try {
+        final bytes = base64Decode(b64);
+        return bytes.isEmpty ? null : bytes;
+      } catch (_) {
+        // ignore
+      }
+    }
+    final path = data.companyLogoPath;
+    if (path.isEmpty) return null;
+    try {
+      if (path.startsWith('data:image')) {
+        final parts = path.split(',');
+        return base64Decode(parts.length == 2 ? parts[1] : path);
+      }
+      final file = File(path);
+      if (file.existsSync()) return file.readAsBytesSync();
+    } catch (_) {}
+    return null;
+  }
+
+  Uint8List? get _signatureImageBytes {
+    final raw = _cpString('signature_image');
+    if (raw.isEmpty) return null;
+    try {
+      final bytes = base64Decode(raw);
+      return bytes.isEmpty ? null : bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get _effectiveShowPaidStamp =>
+      _cpBool('show_paid_stamp', showPaidStamp);
+
+  bool get _effectiveShowSignature =>
+      _cpBool('show_signature_line', _vis(LayoutElement.signature));
 
   @override
   Widget build(BuildContext context) {
@@ -255,27 +324,33 @@ class StitchA4InvoicePreview extends StatelessWidget {
 
     final double k = fontScale.clamp(0.80, 1.35);
 
-    // Hauteur adaptative : la zone blanche de la maquette absorbe ~4 lignes,
-    // au-delà la page s'allonge pour ne jamais déborder.
-    double extra = 0;
-    if (data.items.length > 4) extra += (data.items.length - 4) * 34 * k;
-    final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
-    final bool signOn = _vis(LayoutElement.signature);
-    final bool legalOn = _vis(LayoutElement.legalMention) &&
-        (data.rccm.isNotEmpty ||
-            data.taxId.isNotEmpty ||
-            data.legalMention.isNotEmpty);
-    if (qrOn) extra += 96 * k;
-    if (signOn) extra += 46 * k;
-    if (legalOn) extra += 30 * k;
+    final double pagePadding =
+        ((customPositions['page_padding'] as num?)?.toDouble() ?? 24.0)
+            .clamp(8.0, 80.0);
+
+    final double stampX =
+        ((customPositions['stamp_x'] as num?)?.toDouble() ?? 0.5)
+            .clamp(0.05, 0.95);
+    final double stampY =
+        ((customPositions['stamp_y'] as num?)?.toDouble() ?? 0.5)
+            .clamp(0.05, 0.95);
+    final double stampRotation =
+        ((customPositions['stamp_rotation'] as num?)?.toDouble() ?? -0.15);
+    final double stampScale =
+        ((customPositions['stamp_scale'] as num?)?.toDouble() ?? 1.0)
+            .clamp(0.5, 3.0);
 
     final bool hasBg = backgroundImage != null || backgroundSettings.hasPreset;
+
+    final double overlayAlpha = hasBg
+        ? (darkPage ? 0.18 : 0.15) * backgroundSettings.opacity.clamp(0.3, 1.0)
+        : 0.0;
 
     return FittedBox(
       fit: BoxFit.fitWidth,
       child: Container(
         width: _paperWidth,
-        height: _paperBaseHeight + extra,
+        height: _paperBaseHeight,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: page,
@@ -293,47 +368,81 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // 🎨 Fond personnalisé (image ou préréglage) — sous le contenu.
             Positioned.fill(
               child: TemplateBackgroundLayer(
                 presetId:
                     backgroundImage != null ? '' : backgroundSettings.presetId,
                 imageBytes: backgroundImage,
-                opacity: backgroundSettings.hasCustomImage
-                    ? 1.0
-                    : backgroundSettings.opacity,
+                opacity: backgroundSettings.opacity,
                 blur: backgroundSettings.blur,
                 fit: backgroundSettings.fit,
               ),
             ),
-            // Voile de lisibilité quand un fond décoratif est posé.
-            if (hasBg)
+            if (hasBg && overlayAlpha > 0)
               Positioned.fill(
                 child: ColoredBox(
                   color: darkPage
-                      ? Colors.black.withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: 0.45),
+                      ? Colors.black.withValues(alpha: overlayAlpha)
+                      : Colors.white.withValues(alpha: overlayAlpha),
                 ),
               ),
-            // Tampon « PAYÉ » doré pivoté (-12°) — maquette.
+            if (_accentBorder == 'left')
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 8,
+                    decoration: BoxDecoration(color: accent),
+                  ),
+                ),
+              ),
+            if (_accentBorder == 'top')
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(color: accent),
+                  ),
+                ),
+              ),
+            if (_accentBorder == 'frame')
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: accent, width: 2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
             if (_effectiveShowPaidStamp && data.isPaid)
-              Positioned.fill(child: _buildPaidStamp()),
-            // 🧧 Filigrane personnalisé (paramètres de facture, InvoiceSettings).
+              Positioned.fill(
+                child: _buildPaidStampAt(
+                  x: stampX,
+                  y: stampY,
+                  rotation: stampRotation,
+                  scale: stampScale,
+                ),
+              ),
             if (showWatermark && watermarkText.isNotEmpty)
               Positioned.fill(child: _buildWatermark(cText)),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildHeader(accent, onAccent, k),
-                _buildInfoRow(cText, cSub, k),
-                Expanded(
-                  child:
-                      _buildItemsAndTotals(accent, onAccent, cText, cSub, line, k),
-                ),
-                _buildFooter(accent, cText, cSub, line, k),
-                // Bande décorative basse de la maquette.
-                Container(height: 8, color: accent.withValues(alpha: 0.85)),
-              ],
+            Padding(
+              padding: EdgeInsets.all(pagePadding * k),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(accent, onAccent, k),
+                  _buildInfoRow(cText, cSub, k),
+                  Expanded(
+                    child: _buildItemsAndTotals(
+                        accent, onAccent, cText, cSub, line, k),
+                  ),
+                  _buildFooter(accent, cText, cSub, line, k),
+                ],
+              ),
             ),
           ],
         ),
@@ -341,107 +450,134 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-    // ============================================================
-  //  🟣 EN-TÊTE — bandeau coloré à motif de points + dégradé
   // ============================================================
-
+  //  EN-TÊTE — multi-styles
+  // ============================================================
   Widget _buildHeader(Color accent, Color onAccent, double k) {
     final Color dotColor =
         Color.lerp(accent, Colors.black, 0.5)!.withValues(alpha: 0.55);
 
-    return Container(
-      color: accent,
-      child: Stack(
-        children: [
-          // Motif de points (radial-gradient 8px, maquette).
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _DotsPatternPainter(dotColor),
-              child: const SizedBox.expand(),
-            ),
+    final baseRow = Padding(
+      padding: EdgeInsets.fromLTRB(4 * k, 14 * k, 4 * k, 14 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _buildHeaderRowChildren(onAccent, k),
+      ),
+    );
+
+    switch (_headerStyle) {
+      case 'dark':
+        return Container(
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(6),
           ),
-          // Dégradé de lisibilité gauche → droite (secondary/90 → /30).
-          Positioned.fill(
-            child: DecoratedBox(
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _DotsPatternPainter(dotColor),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: 0.95),
+                        accent.withValues(alpha: 0.75),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              baseRow,
+            ],
+          ),
+        );
+
+      case 'bar':
+        return Column(
+          children: [
+            Container(
+              height: 8,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    accent.withValues(alpha: 0.92),
-                    accent.withValues(alpha: 0.70),
-                    accent.withValues(alpha: 0.30),
-                  ],
+                color: accent.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              decoration: BoxDecoration(color: accent),
+              child: baseRow,
+            ),
+          ],
+        );
+
+      case 'zigzag':
+        return Column(
+          children: [
+            ClipPath(
+              clipper: _DiagonalClipper(),
+              child: Container(
+                height: 70 * k,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      accent,
+                      Color.lerp(accent, Colors.black, 0.15)!,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(24 * k, 20 * k, 24 * k, 20 * k),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: _buildHeaderRowChildren(onAccent, k),
-            ),
-          ),
-        ],
-      ),
+            SizedBox(child: baseRow),
+          ],
         );
+
+      case 'band':
+      default:
+        return Container(
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _DotsPatternPainter(dotColor),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: 0.92),
+                        accent.withValues(alpha: 0.70),
+                        accent.withValues(alpha: 0.30),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              baseRow,
+            ],
+          ),
+        );
+    }
   }
 
-    /// Nom de la société : la personnalisation (`company_name`) prend le dessus.
-  String get _customCompanyName {
-    final override = _cpString('company_name');
-    return override.isNotEmpty ? override : (data.companyName);
-  }
- 
-  /// Nom du client : la personnalisation (`client_name`) prend le dessus.
-  String get _customClientName {
-    final override = _cpString('client_name');
-    return override.isNotEmpty ? override : (data.clientName);
-  }
- 
-      /// Titre « FACTURE / DEVIS » : la personnalisation (`invoice_title_text`)
-  /// prend le dessus, sinon le libellé par défaut.
-  String get _customTitle {
-    final override = _cpString('invoice_title_text');
-    if (override.isNotEmpty) return override;
-    return data.isDevis ? 'DEVIS' : 'FACTURE';
-  }
- 
-  /// Texte légal personnalisé (`custom_legal_text`) s'il a été saisi,
-  /// sinon vide → on utilise le texte par défaut du modèle/client.
-  String get _customLegalText => _cpString('custom_legal_text');
- 
-  /// Texte du tampon « PAYÉ » personnalisé (`stamp_text`).
-  String get _customStampText => _cpString('stamp_text');
- 
-  /// Intitulé de la ligne de signature (`signatory_title`).
-  String get _customSignatoryTitle {
-    final override = _cpString('signatory_title');
-    return override.isNotEmpty ? override : 'Signature';
-  }
- 
-  /// Affichage du tampon « PAYÉ » (personnalisation ou défaut = facture payée).
-  bool get _effectiveShowPaidStamp =>
-      _cpBool('show_paid_stamp', showPaidStamp);
- 
-  /// Affichage de la ligne de signature.
-  bool get _effectiveShowSignature =>
-      _cpBool('show_signature_line', _vis(LayoutElement.signature));
- 
-  /// Enfants de la Row d'en-tête, réordonnés selon `header_elements_order`
-  /// (par défaut : logo → company_info → invoice_title) — identique au PDF.
   List<Widget> _buildHeaderRowChildren(Color onAccent, double k) {
-    final order = _cpStrings('header_elements_order');
-    const defaults = ['logo', 'company_info', 'invoice_title'];
-    const known = {'logo', 'company_info', 'invoice_title'};
-    final seen = <String>{};
-    final resolved = <String>[];
-    for (final e in order) {
-      if (known.contains(e) && seen.add(e)) resolved.add(e);
-    }
-    for (final e in defaults) {
-      if (seen.add(e)) resolved.add(e);
-    }
- 
+    final resolved = InvoiceTemplate.visibleHeaderElements(customPositions);
+
     final children = <Widget>[];
     for (var i = 0; i < resolved.length; i++) {
       final key = resolved[i];
@@ -481,34 +617,57 @@ class StitchA4InvoicePreview extends StatelessWidget {
               ),
               SizedBox(height: 4 * k),
               if (data.companyAddress.isNotEmpty)
-                _contactLine(data.companyAddress, onAccent, k),
+                _contactLine(_sanitizeText(data.companyAddress), onAccent, k),
               if (data.companyPhone.isNotEmpty)
-                _contactLine(data.companyPhone, onAccent, k),
+                _contactLine(_sanitizeText(data.companyPhone), onAccent, k),
               if (data.companyEmail.isNotEmpty)
-                _contactLine(data.companyEmail, onAccent, k),
+                _contactLine(_sanitizeText(data.companyEmail), onAccent, k),
               if (data.companyWebsite.isNotEmpty)
-                _contactLine(data.companyWebsite, onAccent, k),
+                _contactLine(_sanitizeText(data.companyWebsite), onAccent, k),
             ],
           ),
         ));
         if (!isLast) children.add(SizedBox(width: 10 * k));
       } else if (key == 'invoice_title') {
-        children.add(Text(
-          _customTitle,
-          style: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 26 * k,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.4,
-            color: onAccent,
-          ),
+        children.add(Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _customTitle,
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 26 * k,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.4,
+                color: onAccent,
+              ),
+            ),
+            if (_customSubtitle.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.only(top: 2 * k),
+                child: Text(
+                  _customSubtitle,
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'WorkSans',
+                    fontSize: 11 * k,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: onAccent.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
         ));
       }
     }
     return children;
   }
- 
-  Widget _contactLine(String text,Color onAccent, double k) {
+
+  Widget _contactLine(String text, Color onAccent, double k) {
     return Padding(
       padding: EdgeInsets.only(top: 2 * k),
       child: Text(
@@ -525,9 +684,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// Logo rond : image de la société, sinon cercle à initiales (maquette).
   Widget _buildLogo(Color onAccent, double k) {
     final double size = 64 * k;
+    final Uint8List? bytes = _effectiveLogoBytes;
+
     final Widget fallback = Text(
       data.companyInitials.toUpperCase(),
       maxLines: 1,
@@ -537,70 +697,51 @@ class StitchA4InvoicePreview extends StatelessWidget {
         fontSize: 19 * k,
         fontWeight: FontWeight.w900,
         fontStyle: FontStyle.italic,
-        color: const Color(0xFF93000A), // on-error-container (maquette)
+        color: const Color(0xFF93000A),
       ),
     );
+
     return Container(
       width: size,
       height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xFFFFDAD6), // error-container (maquette)
+        color: const Color(0xFFFFDAD6),
         shape: BoxShape.circle,
         border:
             Border.all(color: onAccent.withValues(alpha: 0.20), width: 2),
       ),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(4),
-      child: data.companyLogoPath.isEmpty
+      child: bytes == null
           ? fallback
-          : _logoImage(data.companyLogoPath, size, fallback),
+          : Image.memory(
+              bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (_, __, ___) => fallback,
+            ),
     );
   }
 
-  /// Charge le logo (data URI base64, URL ou chemin fichier) avec repli.
-  Widget _logoImage(String path, double size, Widget fallback) {
-    try {
-      final ImageProvider provider;
-      if (path.startsWith('data:image')) {
-        final parts = path.split(',');
-        provider =
-            MemoryImage(base64Decode(parts.length == 2 ? parts[1] : path));
-      } else if (path.startsWith('http')) {
-        provider = NetworkImage(path);
-      } else {
-        provider = FileImage(File(path));
-      }
-      return Image(
-        image: provider,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback,
-      );
-    } catch (_) {
-      return fallback;
-    }
-  }
-
   // ============================================================
-  //  📋 INFOS — « FACTURÉ À » ↔ N° / Date / Échéance / Devise
+  //  INFOS
   // ============================================================
-
   Widget _buildInfoRow(Color cText, Color cSub, double k) {
     final rows = <(String, String)>[
-      ('FACTURE N°', data.invoiceNumber),
+      ('FACTURE N°', _sanitizeText(data.invoiceNumber)),
       ('DATE', data.issueDate),
       ('ÉCHÉANCE', data.dueDate),
       ('DEVISE', data.currency),
     ];
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24 * k, 16 * k, 24 * k, 12 * k),
+      padding: EdgeInsets.fromLTRB(4 * k, 16 * k, 4 * k, 12 * k),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Bloc « FACTURÉ À » — coordonnées du client.
           Expanded(
             child: _vis(LayoutElement.clientName)
                 ? Column(
@@ -631,19 +772,21 @@ class StitchA4InvoicePreview extends StatelessWidget {
                         ),
                       if (_vis(LayoutElement.clientAddress) &&
                           data.clientAddress.isNotEmpty)
-                        _clientLine(data.clientAddress, cSub, k),
+                        _clientLine(
+                            _sanitizeText(data.clientAddress), cSub, k),
                       if (_vis(LayoutElement.clientPhone) &&
                           data.clientPhone.isNotEmpty)
-                        _clientLine(data.clientPhone, cSub, k),
+                        _clientLine(
+                            _sanitizeText(data.clientPhone), cSub, k),
                       if (_vis(LayoutElement.clientEmail) &&
                           data.clientEmail.isNotEmpty)
-                        _clientLine(data.clientEmail, cSub, k),
+                        _clientLine(
+                            _sanitizeText(data.clientEmail), cSub, k),
                     ],
                   )
                 : const SizedBox(),
           ),
           SizedBox(width: 16 * k),
-          // Récap facture (min-w 140px en maquette).
           SizedBox(
             width: 160 * k,
             child: Column(
@@ -707,9 +850,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
   }
 
   // ============================================================
-  //  🧾 TABLEAU + TOTAUX
+  //  TABLEAU + TOTAUX
   // ============================================================
-
   Widget _buildItemsAndTotals(
     Color accent,
     Color onAccent,
@@ -721,19 +863,19 @@ class StitchA4InvoicePreview extends StatelessWidget {
     final BorderSide side = BorderSide(color: line, width: 1);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24 * k, 4 * k, 24 * k, 0),
+      padding: EdgeInsets.fromLTRB(4 * k, 4 * k, 4 * k, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_vis(LayoutElement.itemsTable)) ...[
-            // En-tête du tableau (bg accent/80, coins hauts arrondis).
             Container(
               padding:
                   EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
               decoration: BoxDecoration(
                 color: accent.withValues(alpha: 0.82),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(4)),
+                borderRadius: _tableStyle == 'cards'
+                    ? BorderRadius.circular(8)
+                    : const BorderRadius.vertical(top: Radius.circular(4)),
               ),
               child: Row(
                 children: [
@@ -743,8 +885,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 2,
-                    child: _thText('QTÉ', onAccent, k,
-                        align: TextAlign.center),
+                    child:
+                        _thText('QTÉ', onAccent, k, align: TextAlign.center),
                   ),
                   Expanded(
                     flex: 3,
@@ -759,30 +901,20 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 ],
               ),
             ),
-            // Corps du tableau.
             if (data.items.isEmpty)
               Container(
                 height: 64 * k,
-                padding: EdgeInsets.symmetric(horizontal: 12 * k),
                 decoration: BoxDecoration(
                   border: Border(left: side, right: side, bottom: side),
                 ),
-                child: Row(
-                  children: [
-                    const Expanded(flex: 8, child: SizedBox()),
-                    _cellBorder(flex: 2, side: side),
-                    _cellBorder(flex: 3, side: side),
-                    _cellBorder(flex: 3, side: side),
-                  ],
-                ),
+                child: const SizedBox.shrink(),
               )
             else
               for (var i = 0; i < data.items.length; i++)
-                _itemRow(data.items[i], cText, side, k),
+                _buildItemRowStyled(data.items[i], i, cText, accent, side, k),
           ],
-
-          // Totaux — alignés à droite (maquette).
-          if (_vis(LayoutElement.subtotal) || _vis(LayoutElement.totalAmount)) ...[
+          if (_vis(LayoutElement.subtotal) ||
+              _vis(LayoutElement.totalAmount)) ...[
             SizedBox(height: 14 * k),
             Padding(
               padding: EdgeInsets.only(right: 4 * k),
@@ -800,8 +932,12 @@ class StitchA4InvoicePreview extends StatelessWidget {
                         cText,
                         k),
                   if (data.discount > 0 && _vis(LayoutElement.discount))
-                    _totalLine('Remise',
-                        '- ${StitchPreviewData.amount(data.discount)}', cSub, cText, k),
+                    _totalLine(
+                        'Remise',
+                        '- ${StitchPreviewData.amount(data.discount)}',
+                        cSub,
+                        cText,
+                        k),
                   if (_vis(LayoutElement.totalAmount)) ...[
                     SizedBox(height: 8 * k),
                     Container(
@@ -871,72 +1007,146 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// Colonne bordée à gauche (séparateur vertical, maquette).
-  Widget _cellBorder({required int flex, required BorderSide side}) {
-    return Expanded(
-      flex: flex,
-      child: Container(
-        decoration: BoxDecoration(border: Border(left: side)),
-      ),
-    );
+  Widget _buildItemRowStyled(
+    StitchPreviewItem item,
+    int index,
+    Color cText,
+    Color accent,
+    BorderSide side,
+    double k,
+  ) {
+    switch (_tableStyle) {
+      case 'zebra':
+        return Container(
+          decoration: BoxDecoration(
+            color: index.isEven
+                ? Colors.grey.withValues(alpha: 0.06)
+                : Colors.transparent,
+            border: Border(left: side, right: side, bottom: side),
+          ),
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+          child: _itemRowContentFlex(item, cText, k),
+        );
+
+      case 'cards':
+        return Container(
+          margin: EdgeInsets.symmetric(vertical: 4 * k),
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: accent.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: _itemRowContentFlex(item, cText, k),
+        );
+
+      case 'numbered':
+        return Container(
+          decoration: BoxDecoration(border: Border(bottom: side)),
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30 * k,
+                child: Text(
+                  '${index + 1}.',
+                  style: TextStyle(
+                    fontFamily: 'WorkSans',
+                    fontSize: 11 * k,
+                    fontWeight: FontWeight.w600,
+                    color: accent,
+                  ),
+                ),
+              ),
+              Expanded(child: _itemRowContentFlex(item, cText, k)),
+            ],
+          ),
+        );
+
+      case 'plain':
+      default:
+        return Container(
+          decoration: BoxDecoration(
+            border: Border(left: side, right: side, bottom: side),
+          ),
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+          child: _itemRowContentFlex(item, cText, k),
+        );
+    }
   }
 
-  Widget _itemRow(StitchPreviewItem item, Color cText, BorderSide side, double k) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(left: side, right: side, bottom: side),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 8,
-            child: Text(
-              item.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: _bodyFont,
-                fontSize: 12 * k,
-                fontWeight: FontWeight.w500,
-                color: cText,
-              ),
+  /// ✅ Ligne d'article — Row autonome avec ses `Expanded` internes.
+  Widget _itemRowContentFlex(
+    StitchPreviewItem item,
+    Color cText,
+    double k,
+  ) {
+    final safeDescription = _sanitizeText(item.description);
+    return Row(
+      children: [
+        Expanded(
+          flex: 8,
+          child: Text(
+            safeDescription,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: _bodyFont,
+              fontSize: 12 * k,
+              fontWeight: FontWeight.w500,
+              color: cText,
             ),
           ),
-          _itemCell(item.quantity.toString(), cText, k,
-              flex: 2, align: TextAlign.center, side: side),
-          _itemCell(StitchPreviewData.money(item.unitPrice), cText, k,
-              flex: 3, align: TextAlign.right, side: side),
-          _itemCell(StitchPreviewData.money(item.total), cText, k,
-              flex: 3, align: TextAlign.right, side: side),
-        ],
-      ),
-    );
-  }
-
-  Widget _itemCell(
-    String text,
-    Color cText,
-    double k, {
-    required int flex,
-    required TextAlign align,
-    required BorderSide side,
-  }) {
-    return Expanded(
-      flex: flex,
-      child: Container(
-        decoration: BoxDecoration(border: Border(left: side)),
-        padding: EdgeInsets.only(left: 8 * k),
-        child: Text(
-          text,
-          textAlign: align,
-          style: TextStyle(
-            fontFamily: _bodyFont,
-            fontSize: 11.5 * k,
-            color: cText,
+        ),
+        Expanded(
+          flex: 2,
+          child: Text(
+            item.quantity.toString(),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: _bodyFont,
+              fontSize: 11.5 * k,
+              color: cText,
+            ),
           ),
         ),
-      ),
+        Expanded(
+          flex: 3,
+          child: Text(
+            StitchPreviewData.money(item.unitPrice),
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontFamily: _bodyFont,
+              fontSize: 11.5 * k,
+              color: cText,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Text(
+            StitchPreviewData.money(item.total),
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontFamily: _bodyFont,
+              fontSize: 11.5 * k,
+              fontWeight: FontWeight.w600,
+              color: cText,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -974,9 +1184,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
   }
 
   // ============================================================
-  //  📜 PIED — termes & conditions / légal / QR / signature + bande
+  //  PIED — multi-styles différenciés
   // ============================================================
-
   Widget _buildFooter(
       Color accent, Color cText, Color cSub, Color line, double k) {
     final bool termsOn = showPaymentTerms && _vis(LayoutElement.footerText);
@@ -987,13 +1196,21 @@ class StitchA4InvoicePreview extends StatelessWidget {
             _customLegalText.isNotEmpty);
     final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
     final bool signOn = _effectiveShowSignature;
+    final bool contactBar = _footerStyle == 'icons' ||
+        _footerStyle == 'contact' ||
+        _footerStyle == 'banner';
 
-    if (!termsOn && !legalOn && !qrOn && !signOn) {
+    if (!termsOn &&
+        !legalOn &&
+        !qrOn &&
+        !signOn &&
+        !_showThankYou &&
+        !contactBar) {
       return const SizedBox.shrink();
     }
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24 * k, 0, 24 * k, 12 * k),
+      padding: EdgeInsets.fromLTRB(4 * k, 6 * k, 4 * k, 4 * k),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1016,9 +1233,9 @@ class StitchA4InvoicePreview extends StatelessWidget {
                       ),
                       SizedBox(height: 3 * k),
                       Text(
-                        data.terms.isEmpty
+                        _sanitizeText(data.terms.isEmpty
                             ? 'Merci pour votre confiance.'
-                            : data.terms,
+                            : data.terms),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1028,45 +1245,21 @@ class StitchA4InvoicePreview extends StatelessWidget {
                         ),
                       ),
                     ],
-                                          if (legalOn) ...[
+                    if (legalOn) ...[
                       SizedBox(height: 8 * k),
-                      if (_customLegalText.isNotEmpty) ...[
-                        Text(
-                          _customLegalText,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 9.5 * k,
-                            fontStyle: FontStyle.italic,
-                            color: cSub,
-                          ),
-                        ),
-                      ] else ...[
-                        Text(
+                      Text(
+                        _sanitizeText(
                           'RCCM : ${data.rccm.isEmpty ? '—' : data.rccm}'
                           '  ·  N° Contribuable : ${data.taxId.isEmpty ? '—' : data.taxId}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 9.5 * k,
-                            color: cSub,
-                          ),
                         ),
-                        if (data.legalMention.isNotEmpty)
-                          Text(
-                            data.legalMention,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'WorkSans',
-                              fontSize: 9.5 * k,
-                              fontStyle: FontStyle.italic,
-                              color: cSub,
-                            ),
-                          ),
-                      ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'WorkSans',
+                          fontSize: 9.5 * k,
+                          color: cSub,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1098,16 +1291,59 @@ class StitchA4InvoicePreview extends StatelessWidget {
               ],
             ],
           ),
+          if (_bankName.isNotEmpty || _bankAccount.isNotEmpty) ...[
+            SizedBox(height: 8 * k),
+            Text(
+              '${_bankName.isNotEmpty ? 'Banque : $_bankName' : ''}'
+              '${_bankName.isNotEmpty && _bankAccount.isNotEmpty ? '  ·  ' : ''}'
+              '${_bankAccount.isNotEmpty ? 'Compte : $_bankAccount' : ''}',
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 9.5 * k,
+                color: cSub,
+              ),
+            ),
+          ],
+          if (_showThankYou) ...[
+            SizedBox(height: 10 * k),
+            Center(
+              child: Text(
+                _thankYouText,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 13 * k,
+                  fontWeight: FontWeight.w700,
+                  color: accent,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
           if (signOn) ...[
             SizedBox(height: 14 * k),
             Align(
               alignment: Alignment.centerRight,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (_signatureImageBytes != null) ...[
+                    Image.memory(
+                      _signatureImageBytes!,
+                      width: 130 * k,
+                      height: 52 * k,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.bottomRight,
+                      gaplessPlayback: true,
+                    ),
+                    SizedBox(height: 2 * k),
+                  ],
                   Container(
-                      width: 120 * k,
-                      height: 1,
-                      color: cSub.withValues(alpha: 0.45)),
+                    width: 120 * k,
+                    height: 1,
+                    decoration: BoxDecoration(
+                      color: cSub.withValues(alpha: 0.45),
+                    ),
+                  ),
                   SizedBox(height: 4 * k),
                   Text(
                     _customSignatoryTitle,
@@ -1121,66 +1357,221 @@ class StitchA4InvoicePreview extends StatelessWidget {
               ),
             ),
           ],
+          if (contactBar) ...[
+            SizedBox(height: 12 * k),
+            _buildFooterContactBar(accent, cSub, k),
+          ],
         ],
       ),
     );
   }
 
-  // ============================================================
-  //  🏷️ TAMPON « PAYÉ »
-  // ============================================================
+  /// ✅ Différenciation : `icons` (icônes + texte), `contact` (texte seul),
+  /// `banner` (bandeau plein + centré).
+  Widget _buildFooterContactBar(Color accent, Color cSub, double k) {
+    final String website = _sanitizeText(data.companyWebsite.isNotEmpty
+        ? data.companyWebsite
+        : 'www.example.com');
+    final String email = _sanitizeText(data.companyEmail.isNotEmpty
+        ? data.companyEmail
+        : 'mail@example.com');
+    final String phone = _sanitizeText(data.companyPhone.isNotEmpty
+        ? data.companyPhone
+        : '+00 123 45X XX');
 
-  Widget _buildPaidStamp() {
-    return Center(
-      child: Transform.rotate(
-        angle: -12 * math.pi / 180,
-        child: Opacity(
-          opacity: 0.80,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: RoyalColors.tertiaryFixedDim,
-                width: 4,
-              ),
-            ),
-                        child: Text(
-              _customStampText.isNotEmpty
-                  ? _customStampText
-                  : 'PAYÉ',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 46,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 8,
-                color: RoyalColors.tertiaryFixedDim,
-                height: 1.0,
-              ),
-            ),
+    switch (_footerStyle) {
+      case 'banner':
+        // Bandeau plein largeur, contenu centré.
+        return Container(
+          width: double.infinity,
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(4),
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                website,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 10 * k,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 2 * k),
+              Text(
+                '$email  ·  $phone',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 9 * k,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case 'contact':
+        // 3 colonnes de texte sans icônes.
+        return Container(
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _footerTextOnly(website, k),
+              _footerTextOnly(email, k),
+              _footerTextOnly(phone, k),
+            ],
+          ),
+        );
+
+      case 'icons':
+      default:
+        // 3 icônes + texte.
+        return Container(
+          padding:
+              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _footerContact(Icons.public, website, k),
+              _footerContact(Icons.mail_outline, email, k),
+              _footerContact(Icons.phone_outlined, phone, k),
+            ],
+          ),
+        );
+    }
+  }
+
+  Widget _footerTextOnly(String text, double k) {
+    return Flexible(
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: 'WorkSans',
+          fontSize: 9.5 * k,
+          color: Colors.white,
         ),
       ),
     );
   }
 
-  // ============================================================
-  //  🧧 FILIGRANE personnalisé (InvoiceSettings.watermarkText)
-  // ============================================================
+  Widget _footerContact(IconData icon, String text, double k) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11 * k, color: Colors.white),
+        SizedBox(width: 4 * k),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 9.5 * k,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
+  // ============================================================
+  //  TAMPON PAYÉ
+  // ============================================================
+  Widget _buildPaidStampAt({
+    required double x,
+    required double y,
+    required double rotation,
+    required double scale,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        return Stack(
+          children: [
+            Positioned(
+              left: x * w - 90 * scale,
+              top: y * h - 30 * scale,
+              child: Transform.rotate(
+                angle: rotation,
+                child: Opacity(
+                  opacity: 0.85,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 26 * scale, vertical: 10 * scale),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8 * scale),
+                      border: Border.all(
+                        color: const Color(0xFFBAAB6D),
+                        width: 4 * scale,
+                      ),
+                    ),
+                    child: Text(
+                      _customStampText.isNotEmpty ? _customStampText : 'PAYÉ',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 40 * scale,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 6 * scale,
+                        color: const Color(0xFFBAAB6D),
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  //  FILIGRANE
+  // ============================================================
   Widget _buildWatermark(Color baseColor) {
+    final double rotation =
+        ((customPositions['watermark_rotation'] as num?)?.toDouble() ?? -0.5);
+    final double size =
+        ((customPositions['watermark_size'] as num?)?.toDouble() ?? 48);
+    final double opacity =
+        ((customPositions['watermark_opacity'] as num?)?.toDouble() ?? 0.08)
+            .clamp(0.01, 0.5);
+
     return Center(
       child: Transform.rotate(
-        angle: -12 * math.pi / 180,
+        angle: rotation,
         child: Opacity(
-          opacity: 0.08,
+          opacity: opacity,
           child: Text(
-            watermarkText,
+            _sanitizeText(watermarkText),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Manrope',
-              fontSize: 44,
+              fontSize: size,
               fontWeight: FontWeight.w800,
               letterSpacing: 4,
               color: baseColor,
@@ -1195,7 +1586,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
 
 /// Conversion des modèles métier → données de l'aperçu.
 extension StitchPreviewDataX on StitchPreviewData {
-  /// Construit les données d'aperçu depuis une facture réelle.
   static StitchPreviewData fromInvoice({
     required dynamic invoice,
     dynamic client,
@@ -1258,7 +1648,7 @@ extension StitchPreviewDataX on StitchPreviewData {
   }
 }
 
-/// Motif de points de l'en-tête (radial-gradient 8px de la maquette).
+/// Motif de points de l'en-tête.
 class _DotsPatternPainter extends CustomPainter {
   final Color color;
   _DotsPatternPainter(this.color);
@@ -1266,7 +1656,7 @@ class _DotsPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const double cell = 8.0;
-    const double radius = 1.2; // ~15 % de la cellule
+    const double radius = 1.2;
     final Paint paint = Paint()..color = color;
     for (double y = cell / 2; y < size.height; y += cell) {
       for (double x = cell / 2; x < size.width; x += cell) {
@@ -1280,11 +1670,18 @@ class _DotsPatternPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// Bandeau diagonal pour le style `zigzag`.
+class _DiagonalClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final p = Path();
+    p.lineTo(0, size.height * 0.6);
+    p.lineTo(size.width, size.height);
+    p.lineTo(size.width, 0);
+    p.close();
+    return p;
+  }
 
-
-
-
-
-
-
-
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}

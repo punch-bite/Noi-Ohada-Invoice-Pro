@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/team.dart';
 import '../../models/team_message.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -48,9 +49,12 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   bool _streamError = false;
   String _senderName = 'Moi';
   List<String> _memberIds = const [];
+  // 🔑 Propriétaire de l'équipe (auteur des messages marqués « Propriétaire »).
+  String _ownerId = '';
+  String _ownerName = '';
+  List<String> _adminIds = const [];
 
-  String get _currentUserId =>
-      context.read<AppAuthProvider>().user?.id ?? '';
+  String get _currentUserId => context.read<AppAuthProvider>().user?.id ?? '';
 
   @override
   void initState() {
@@ -74,18 +78,14 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
     final uid = _currentUserId;
     if (uid.isEmpty) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? const {};
       if (!mounted) return;
       setState(() {
-        _senderName = (data['displayName'] ??
-                data['name'] ??
-                data['email'] ??
-                'Moi')
-            .toString();
+        _senderName =
+            (data['displayName'] ?? data['name'] ?? data['email'] ?? 'Moi')
+                .toString();
       });
     } catch (_) {
       // Fallback silencieux : « Moi ».
@@ -94,12 +94,21 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
       final team = await TeamService().getTeam(widget.teamId);
       if (!mounted || team == null) return;
       setState(() {
+        _ownerId = team.ownerId;
+        _adminIds = List<String>.from(team.adminIds);
         _memberIds = <String>{
           team.ownerId,
           ...team.adminIds,
           ...team.memberIds,
         }.toList();
       });
+      // 🔑 Nom du propriétaire (badge « Propriétaire » sur ses messages).
+      if (team.ownerId.isNotEmpty) {
+        final ownerName = await _displayNameOf(team.ownerId);
+        if (mounted && ownerName.isNotEmpty) {
+          setState(() => _ownerName = ownerName);
+        }
+      }
     } catch (_) {
       // Ignoré : les notifications seront simplement limitées.
     }
@@ -107,6 +116,19 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
 
   /// 1) Affiche IMMÉDIATEMENT l'historique local (Hive) — même hors connexion.
   /// 2) Branche ensuite le flux temps réel Firestore (qui re-cache tout).
+  /// Nom lisible d'un utilisateur (best-effort) — sert au badge « Propriétaire ».
+  Future<String> _displayNameOf(String uid) async {
+    try {
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = doc.data() ?? const {};
+      return (data['displayName'] ?? data['name'] ?? data['email'] ?? '')
+          .toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<void> _loadCacheThenStream() async {
     final cached = await _chatService.getCachedMessages(widget.teamId);
     if (!mounted) return;
@@ -148,6 +170,9 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
         senderName: _senderName,
         text: text,
         memberIds: _memberIds,
+        // 🔑 Estampille le propriétaire du message (celui de l'équipe).
+        ownerId: _ownerId,
+        ownerName: _ownerName,
       );
       _scrollToBottom();
       _inputFocus.requestFocus();
@@ -186,6 +211,13 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   String _membersLabel() {
     final count = _memberIds.length;
     return count <= 1 ? 'Vous êtes seul' : '$count membres';
+  }
+
+  /// Sous-titre de l'en-tête : nombre de membres + propriétaire de l'équipe.
+  String _headerSubtitle() {
+    if (_streamError) return 'Hors ligne · historique local';
+    final members = _membersLabel();
+    return _ownerName.isEmpty ? members : '$members · 👑 $_ownerName';
   }
 
   // ===== UI =====
@@ -245,7 +277,7 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                         child: Text(
                           _streamError
                               ? 'Hors ligne · historique local'
-                              : _membersLabel(),
+                              : _headerSubtitle(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: subTextColor, fontSize: 11),
@@ -357,7 +389,13 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
 
   Widget _dayDivider(DateTime date, ThemeProvider theme) {
     const days = [
-      'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi',
+      'Samedi',
+      'Dimanche',
     ];
     final label =
         '${days[date.weekday - 1]} ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}';
@@ -407,7 +445,9 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: mine ? null : (isDark ? const Color(0xFF23263A) : const Color(0xFFF0F1F7)),
+          color: mine
+              ? null
+              : (isDark ? const Color(0xFF23263A) : const Color(0xFFF0F1F7)),
           borderRadius: radius,
           border: mine
               ? null
@@ -426,18 +466,32 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
           crossAxisAlignment:
               mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (!mine)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  message.senderName,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: theme.primaryColor,
+            // 👤 Nom de l'auteur + TITRE de rôle sur CHAQUE message
+            // (y compris les siens) : « Propriétaire du groupe » pour les
+            // gestionnaires, « Membre » pour les autres.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      message.senderName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: mine
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : theme.primaryColor,
+                      ),
+                    ),
                   ),
-                ),
+                  ..._authorBadges(message, theme),
+                ],
               ),
+            ),
             Text(
               message.text,
               style: TextStyle(
@@ -460,6 +514,48 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
         ),
       ),
     );
+  }
+
+  /// 👑 TITRE DE RÔLE affiché à côté du nom de l'auteur sur chaque message :
+  /// « Propriétaire du groupe » pour le propriétaire et les administrateurs
+  /// de l'équipe, « Membre » pour les autres.
+  ///
+  /// Source de vérité : les rôles RÉELS de l'équipe (`ownerId` / `adminIds`
+  /// chargés depuis Firestore). En repli (équipe pas encore chargée / hors
+  /// ligne), on retombe sur l'estampille du message (`ownerId` envoyé avec
+  /// le message) — jamais de titre fantaisiste.
+  List<Widget> _authorBadges(TeamMessage message, ThemeProvider theme) {
+    final ownerId = _ownerId.isNotEmpty ? _ownerId : message.ownerId;
+    final isManager = (ownerId.isNotEmpty && message.senderId == ownerId) ||
+        _adminIds.contains(message.senderId);
+    final title = isManager ? Team.ownerTitle : Team.memberTitle;
+    final mine = message.senderId == _currentUserId;
+    return [
+      const SizedBox(width: 6),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: isManager
+              ? theme.primaryColor.withValues(alpha: 0.15)
+              : (mine
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : theme.primaryColor.withValues(alpha: 0.06)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+            color: isManager
+                ? theme.primaryColor
+                : (mine
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : theme.subTextColor),
+          ),
+        ),
+      ),
+    ];
   }
 
   String _formatTime(DateTime date) {
@@ -494,68 +590,69 @@ class _TeamChatScreenState extends State<TeamChatScreen> {
   }
 
   // ── Barre de saisie ─────────────────────────────────────────────────────
+  // 💬 Style « soft & minimaliste » : aucune bordure — le champ est une
+  // simple surface teintée proportionnelle à son conteneur, alignée au
+  // bouton d'envoi, avec des coins en pilule.
   Widget _buildInputBar(ThemeProvider theme, bool isDark) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF151722).withValues(alpha: 0.97)
-            : Colors.white.withValues(alpha: 0.96),
-        border: Border(
-          top: BorderSide(
-            color: theme.primaryColor.withValues(alpha: 0.08),
-          ),
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      color: isDark ? const Color(0xFF151722) : Colors.white,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
-              constraints: const BoxConstraints(minHeight: 44, maxHeight: 120),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              // constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+              // 👉 SANS bordure : juste une surface douce, très légèrement
+              // teintée, qui s'adapte à la hauteur du texte (1 à 4 lignes).
               decoration: BoxDecoration(
-                color: theme.primaryColor.withValues(alpha: isDark ? 0.10 : 0.06),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: theme.primaryColor.withValues(alpha: 0.18),
-                ),
+                color:
+                    theme.primaryColor.withValues(alpha: isDark ? 0.08 : 0.05),
+                borderRadius: BorderRadius.circular(24),
               ),
-              child: TextField(
-                controller: _inputController,
-                focusNode: _inputFocus,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-                style: TextStyle(fontSize: 13.5, color: theme.textColor),
-                decoration: InputDecoration(
-                  hintText: 'Écrivez un message…',
-                  hintStyle:
-                      TextStyle(fontSize: 13, color: theme.subTextColor),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextField(
+                  controller: _inputController,
+                  focusNode: _inputFocus,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  style: TextStyle(fontSize: 13.5, color: theme.textColor),
+                  decoration: InputDecoration(
+                    hintText: 'Écrivez un message…',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: theme.subTextColor.withValues(alpha: 0.8),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    // Padding vertical symétrique → le texte reste centré
+                    // quelle que soit la hauteur prise par le champ.
+                    contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 15),
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           AnimatedContainer(
             duration: const Duration(milliseconds: 160),
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [theme.primaryColor, theme.gradientEndColor],
               ),
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
+              // Ombre douce, discrète — le bouton reste minimaliste.
               boxShadow: [
                 BoxShadow(
-                  color: theme.primaryColor.withValues(alpha: 0.35),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+                  color: theme.primaryColor.withValues(alpha: 0.22),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),

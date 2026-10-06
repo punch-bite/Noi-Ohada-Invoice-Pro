@@ -518,7 +518,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     );
   }
 
-  Widget _buildPaymentOption({
+   Widget _buildPaymentOption({
     required String id,
     required String name,
     required IconData icon,
@@ -527,21 +527,35 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
   }) {
     final isSelected = _selectedPaymentMethod == id;
     final goldAccent = theme.accentGold;
+    final isDark = theme.isDarkMode;
+
     return GestureDetector(
       onTap: () => setState(() => _selectedPaymentMethod = id),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           color: theme.cardColor,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? goldAccent : theme.dividerColor,
+            color: isSelected
+                ? goldAccent
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04)),
             width: isSelected ? 2 : 1,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
@@ -553,14 +567,35 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 ),
               ),
             ),
-            Radio<String>(
-              value: id,
-              activeColor: goldAccent,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? goldAccent
+                      : theme.subTextColor.withValues(alpha: 0.4),
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: goldAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    )
+                  : null,
             ),
           ],
         ),
       ),
     );
-  }
-}
+  }}
 

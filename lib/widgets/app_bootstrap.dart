@@ -165,9 +165,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
                       color: s.faint,
                     ),
                   ),
-                  const SizedBox(height: 26),
-                  _badge(s),
-                  const SizedBox(height: 46),
+                  
+                  const SizedBox(height: 80.0),
                   // Fines amorces de progression (n'apparaissent qu'en
                   // phase d'initialisation réelle).
                   SizedBox(
@@ -274,22 +273,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
               ],
             ),
           ),
-          const SizedBox(width: 9),
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'Conforme aux normes OHADA & SYSCOHADA',
-                style: TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                  color: s.kicker,
-                ),
-              ),
-            ),
-          ),
+          
         ],
       ),
     );

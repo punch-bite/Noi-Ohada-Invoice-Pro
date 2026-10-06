@@ -36,31 +36,20 @@ class ThemeService {
     }
   }
 
-    // ============================================================
-  //  DESIGN SYSTEM — Marquee moderne "Glass + Indigo/Violet"
-  //  Couleur primaire : Deep Indigo #2A2A72 → Violet #5B3B8C (dégradé)
-  //  Accent premium   : Or cuivré #D4AF37
-  // ============================================================
+  // Design system: encre botanique, ivoire clair et laiton discret.
+  static const Color primaryLight = Color(0xFF176B58);
+  static const Color primaryGradientEndLight = Color(0xFF3B8B73);
+  static const Color accentGold = Color(0xFFC49A48);
+  static const Color bgLight = Color(0xFFF4F6F2);
+  static const Color bgDark = Color(0xFF111916);
+  static const Color surfaceDark = Color(0xFF19231F);
+  static const Color surfaceDarkAlt = Color(0xFF202D28);
 
-  /// Couleur primaire (dégradé indigo/violette) — ton clair
-  static const Color primaryLight = Color(0xFF4338CA);
-  static const Color primaryGradientEndLight = Color(0xFF7C3AED);
-  /// Accent doré (marketing, badges premium, highlights)
-  static const Color accentGold = Color(0xFFE9B949);
-  /// Fond clair : très léger dégradé indigo
-  static const Color bgLight = Color(0xFFF6F7FB);
-  /// Fond sombre
-  static const Color bgDark = Color(0xFF0E1117);
-  static const Color surfaceDark = Color(0xFF161B26);
-  static const Color surfaceDarkAlt = Color(0xFF1E2433);
-
-  /// Typographie : hiérarchie raffinée sur la police Roboto (embarquée,
-  /// fiable hors-ligne) avec graisses et espacements soignés.
+  /// Titres Manrope, avec Work Sans pour le texte courant.
   static TextStyle _displayLarge(Color color, {double size = 34}) => TextStyle(
-        fontFamily: 'Roboto',
+        fontFamily: 'Manrope',
         fontSize: size,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.5,
+        fontWeight: FontWeight.w700,
         height: 1.1,
         color: color,
       );
@@ -77,11 +66,14 @@ class ThemeService {
       // Transparent : le fond glass global (GlassAppBackground) transparaît.
       scaffoldBackgroundColor: Colors.transparent,
       fontFamily: 'Roboto',
-            colorScheme: ColorScheme.light(
+      colorScheme: ColorScheme.light(
         primary: primaryLight,
         secondary: gradientEnd,
-        surface: Colors.white,
-        error: Colors.redAccent,
+        surface: const Color(0xFFFCFDFB),
+        surfaceContainerHighest: const Color(0xFFE9EEE9),
+        outline: const Color(0xFF78857E),
+        outlineVariant: const Color(0xFFD8E0D9),
+        error: const Color(0xFFB5473F),
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: const Color(0xFF14161C),
@@ -92,34 +84,33 @@ class ThemeService {
         displayLarge: _displayLarge(const Color(0xFF14161C)),
         headlineLarge: _displayLarge(const Color(0xFF14161C), size: 28),
         headlineMedium: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 22,
           fontWeight: FontWeight.w700,
           color: const Color(0xFF14161C),
-          letterSpacing: -0.3,
         ),
         titleLarge: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: const Color(0xFF14161C),
         ),
         titleMedium: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 15,
           fontWeight: FontWeight.w600,
           color: const Color(0xFF1A1D24),
           letterSpacing: 0.1,
         ),
         bodyLarge: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 15,
           fontWeight: FontWeight.w400,
           color: const Color(0xFF33373F),
           height: 1.5,
         ),
         bodyMedium: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 13,
           fontWeight: FontWeight.w400,
           color: const Color(0xFF5A5F6B),
@@ -135,58 +126,58 @@ class ThemeService {
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: const Color(0xFF14161C),
+        foregroundColor: const Color(0xFF1D2923),
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          color: Color(0xFF14161C),
+          color: Color(0xFF1D2923),
         ),
       ),
-      // ===== Cartes en "glassmorphisme" =====
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
         ),
-        color: Colors.white.withValues(alpha: 0.7),
-        shadowColor: const Color(0xFF4338CA).withValues(alpha: 0.08),
+        color: const Color(0xFFFCFDFB),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0xFF20372D).withValues(alpha: 0.06),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(11),
           ),
           elevation: 0,
           textStyle: const TextStyle(
-            fontFamily: 'Roboto',
+            fontFamily: 'WorkSans',
             fontSize: 15,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(11),
           ),
-          side: const BorderSide(color: primaryLight, width: 1.5),
+          side: const BorderSide(color: Color(0xFFB9CEC3), width: 1),
           textStyle: TextStyle(
-            fontFamily: 'Roboto',
+            fontFamily: 'WorkSans',
             fontSize: 15,
             fontWeight: FontWeight.w600,
             color: primary,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -201,31 +192,31 @@ class ThemeService {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.85),
-        // 📏 Hauteur 50-54px, coins arrondis 8
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        fillColor: const Color(0xFFFCFDFB),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey[300]!, width: 0.6),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFD8E0D9), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: primaryLight.withValues(alpha: 0.8), width: 1),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: primaryLight, width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFB5473F), width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFB5473F), width: 1.4),
         ),
         labelStyle: TextStyle(
-          color: const Color(0xFF14161C),
+          color: const Color(0xFF1D2923),
           fontWeight: FontWeight.w500,
           fontFamily: 'Roboto',
         ),
@@ -238,15 +229,15 @@ class ThemeService {
         thickness: 1,
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: Colors.white.withValues(alpha: 0.85),
+        backgroundColor: const Color(0xFFFCFDFB),
         selectedItemColor: primary,
-        unselectedItemColor: Colors.grey[500],
+        unselectedItemColor: const Color(0xFF78857E),
         elevation: 0,
         type: BottomNavigationBarType.fixed,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
         backgroundColor: const Color(0xFF14161C),
         contentTextStyle: const TextStyle(fontFamily: 'Roboto', fontSize: 14),
       ),
@@ -288,7 +279,7 @@ class ThemeService {
             return Colors.grey[300]!;
           },
         ),
-                trackColor: WidgetStateProperty.resolveWith<Color>(
+        trackColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
               return primary.withValues(alpha: 0.5);
@@ -302,15 +293,16 @@ class ThemeService {
         linearTrackColor: primary.withValues(alpha: 0.15),
       ),
       listTileTheme: const ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(14))),
       ),
     );
   }
 
-    // ===== THÈME SOMBRE =====
+  // ===== THÈME SOMBRE =====
   static ThemeData getDarkTheme() {
-    final primary = const Color(0xFF7C6CF0);
-    final gradientEnd = const Color(0xFF9A7BFF);
+    const primary = Color(0xFF83C8AC);
+    const gradientEnd = Color(0xFFC5AA69);
 
     return ThemeData(
       useMaterial3: true,
@@ -319,11 +311,14 @@ class ThemeService {
       // Transparent : le fond glass global (GlassAppBackground) transparaît.
       scaffoldBackgroundColor: Colors.transparent,
       fontFamily: 'Roboto',
-            colorScheme: ColorScheme.dark(
+      colorScheme: ColorScheme.dark(
         primary: primary,
         secondary: gradientEnd,
         surface: surfaceDark,
-        error: const Color(0xFFFF6B6B),
+        surfaceContainerHighest: surfaceDarkAlt,
+        outline: const Color(0xFF91A198),
+        outlineVariant: const Color(0xFF34433C),
+        error: const Color(0xFFE9897F),
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: Colors.white,
@@ -334,41 +329,40 @@ class ThemeService {
         displayLarge: _displayLarge(Colors.white),
         headlineLarge: _displayLarge(Colors.white, size: 28),
         headlineMedium: const TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 22,
           fontWeight: FontWeight.w700,
           color: Colors.white,
-          letterSpacing: -0.3,
         ),
         titleLarge: const TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: Colors.white,
         ),
         titleMedium: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 15,
           fontWeight: FontWeight.w600,
           color: Colors.white.withValues(alpha: 0.92),
           letterSpacing: 0.1,
         ),
         bodyLarge: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 15,
           fontWeight: FontWeight.w400,
           color: Colors.white.withValues(alpha: 0.82),
           height: 1.5,
         ),
         bodyMedium: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'WorkSans',
           fontSize: 13,
           fontWeight: FontWeight.w400,
           color: Colors.white.withValues(alpha: 0.6),
           height: 1.45,
         ),
         labelLarge: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Manrope',
           fontSize: 14,
           fontWeight: FontWeight.w600,
           color: primary,
@@ -386,49 +380,49 @@ class ThemeService {
           fontFamily: 'Roboto',
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
+          color: Color(0xFFF0F4F0),
         ),
       ),
-      // ===== Cartes en "glassmorphisme" sombre =====
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
         ),
-        color: surfaceDarkAlt.withValues(alpha: 0.6),
-        shadowColor: Colors.black.withValues(alpha: 0.3),
+        color: surfaceDark,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black.withValues(alpha: 0.18),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(11),
           ),
           elevation: 0,
           textStyle: const TextStyle(
-            fontFamily: 'Roboto',
+            fontFamily: 'WorkSans',
             fontSize: 15,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(11),
           ),
-          side: const BorderSide(color: Color(0xFF7C6CF0), width: 1.5),
+          side: const BorderSide(color: Color(0xFF52675C), width: 1),
           textStyle: const TextStyle(
-            fontFamily: 'Roboto',
+            fontFamily: 'WorkSans',
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF7C6CF0),
+            color: Color(0xFF83C8AC),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -443,31 +437,31 @@ class ThemeService {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceDarkAlt.withValues(alpha: 0.65),
-        // 📏 Hauteur 50-54px, coins arrondis 8
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        fillColor: surfaceDarkAlt,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF34433C), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF7C6CF0), width: 1),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF83C8AC), width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 0.8),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE9897F), width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFFF6B6B), width: 1),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE9897F), width: 1.4),
         ),
         labelStyle: const TextStyle(
-          color: Colors.white,
+          color: Color(0xFFF0F4F0),
           fontWeight: FontWeight.w500,
           fontFamily: 'Roboto',
         ),
@@ -488,7 +482,7 @@ class ThemeService {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
         backgroundColor: const Color(0xFF1E2433),
         contentTextStyle: const TextStyle(fontFamily: 'Roboto', fontSize: 14),
       ),
@@ -530,7 +524,7 @@ class ThemeService {
             return Colors.grey[600]!;
           },
         ),
-                trackColor: WidgetStateProperty.resolveWith<Color>(
+        trackColor: WidgetStateProperty.resolveWith<Color>(
           (states) {
             if (states.contains(WidgetState.selected)) {
               return primary.withValues(alpha: 0.5);
@@ -544,13 +538,15 @@ class ThemeService {
         linearTrackColor: primary.withValues(alpha: 0.15),
       ),
       listTileTheme: const ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(14))),
       ),
     );
   }
 
   static ThemeData getSystemTheme() {
-    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
     return brightness == Brightness.dark ? getDarkTheme() : getLightTheme();
   }
 

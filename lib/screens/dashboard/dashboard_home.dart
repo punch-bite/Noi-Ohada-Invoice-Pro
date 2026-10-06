@@ -1,7 +1,15 @@
 // lib/screens/dashboard/dashboard_home.dart
+//
+// 🎨 Dashboard épuré, animé et fluide.
+//    • Entrées en cascade (flutter_animate) : header, solde, stats, listes
+//    • Transitions douces sur les cartes (AnimatedContainer)
+//    • Hiérarchie claire : gros solde gradient, stats discrètes, listes aérées
+//    • Aucune donnée modifiée — mêmes API (DatabaseService / FinancialStats).
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
@@ -37,9 +45,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     _maybeCheckForUpdate();
   }
 
-  /// 🚀 Détection automatique de mise à jour : attend quelques secondes pour
-  /// ne pas couper l'affichage initial, et ne propose la mise à jour qu'une
-  /// seule fois par session (UpdateService._autoPrompted).
+  /// 🚀 Détection automatique de mise à jour différée.
   Future<void> _maybeCheckForUpdate() async {
     if (UpdateService.hasAutoPrompted) return;
     await Future<void>.delayed(const Duration(seconds: 4));
@@ -52,6 +58,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     final clients = await _db.getClients();
     final invoices = await _db.getInvoices();
     final stats = _calculateFinancialStats(invoices);
+    if (!mounted) return;
     setState(() {
       _recentClients = clients.take(5).toList();
       _recentInvoices = invoices.take(4).toList();
@@ -129,106 +136,121 @@ class _DashboardHomeState extends State<DashboardHome> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      // 🔥 En-tête personnalisé
-      body: Column(
-        children: [
-          // Contenu de la page
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadData,
-              color: primaryColor,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    const SizedBox(height: 25),
-                    _buildHeader(
-                      authProvider: authProvider,
-                      subscriptionProvider: subscriptionProvider,
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                    ),
-                    const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: primaryColor,
+        backgroundColor: cardColor,
+        displacement: 40,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
 
-                    // 🎯 Slides marketing abonnement (carrousel + badges)
-                    MarketingCarousel(
-                      slides: buildSubscriptionSlides(subscriptionProvider),
-                    ),
-                    const SizedBox(height: 16),
+              // ── Header (avatar + bonjour + actions) ──
+              _buildHeader(
+                authProvider: authProvider,
+                subscriptionProvider: subscriptionProvider,
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                subTextColor: subTextColor,
+              ).animate().fadeIn(duration: 400.ms).slideY(
+                    begin: -0.2,
+                    end: 0,
+                    duration: 400.ms,
+                    curve: Curves.easeOut,
+                  ),
+              const SizedBox(height: 24),
 
-                    // ⚠️ Rappel de la sauvegarde locale pour les plans gratuits
-                    if (!_hasCloudSubscription(subscriptionProvider))
-                      CloudStorageInfoBanner(isFreePlan: true, compact: true),
-                    const SizedBox(height: 16),
+              // ── Carrousel marketing abonnement ──
+              MarketingCarousel(
+                slides: buildSubscriptionSlides(subscriptionProvider),
+              ).animate().fadeIn(
+                    delay: 100.ms,
+                    duration: 500.ms,
+                  ),
+              const SizedBox(height: 16),
 
-                    // 💳 Balance (Solde Total FCFA) — en haut selon la maquette
-                    _buildBalanceCard(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      cardColor: cardColor,
-                    ),
-                    const SizedBox(height: 20),
+              // ── Bannière cloud (plan gratuit) ──
+              if (!_hasCloudSubscription(subscriptionProvider)) ...[
+                CloudStorageInfoBanner(isFreePlan: true, compact: true)
+                    .animate()
+                    .fadeIn(delay: 150.ms, duration: 500.ms),
+                const SizedBox(height: 16),
+              ],
 
-                    // Stats (Moy. Facture / Taux paiement)
-                    _buildFinancialStats(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      cardColor: cardColor,
-                    ),
-                    const SizedBox(height: 24),
+              // ── Solde ──
+              _buildBalanceCard(
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                cardColor: cardColor,
+              ).animate().fadeIn(delay: 200.ms, duration: 500.ms).slideY(
+                    begin: 0.1,
+                    end: 0,
+                    curve: Curves.easeOut,
+                    duration: 500.ms,
+                  ),
+              const SizedBox(height: 24),
 
-                    // Status
-                    _buildInvoiceStatus(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      cardColor: cardColor,
-                    ),
-                    const SizedBox(height: 24),
+              // ── Statistiques ──
+              _buildFinancialStats(
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                subTextColor: subTextColor,
+                cardColor: cardColor,
+              ).animate().fadeIn(delay: 300.ms, duration: 500.ms),
+              const SizedBox(height: 28),
 
-                    // 🎉 Carrousel publicitaire (défilement auto) : factures
-                    // Pro, relance, équipe, cloud Drive
-                    const PromoSection(),
-                    const SizedBox(height: 24),
+              // ── Statut des factures ──
+              _buildInvoiceStatus(
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                subTextColor: subTextColor,
+                cardColor: cardColor,
+              ).animate().fadeIn(delay: 400.ms, duration: 500.ms),
+              const SizedBox(height: 28),
 
-                    // Recent Clients
-                    _buildRecentClients(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      cardColor: cardColor,
-                    ),
-                    const SizedBox(height: 24),
+              // ── Promo ──
+              const PromoSection()
+                  .animate()
+                  .fadeIn(delay: 500.ms, duration: 500.ms),
+              const SizedBox(height: 28),
 
-                    // Recent Invoices
-                    _buildRecentInvoices(
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      cardColor: cardColor,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+              // ── Clients récents ──
+              _buildRecentClients(
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                subTextColor: subTextColor,
+                cardColor: cardColor,
+              ).animate().fadeIn(delay: 600.ms, duration: 500.ms),
+              const SizedBox(height: 28),
+
+              // ── Factures récentes ──
+              _buildRecentInvoices(
+                isDark: isDark,
+                primaryColor: primaryColor,
+                textColor: textColor,
+                subTextColor: subTextColor,
+                cardColor: cardColor,
+              ).animate().fadeIn(delay: 700.ms, duration: 500.ms),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // ===== HEADER (Avatar, bonjour, badge) =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  HEADER — Avatar + bienvenue + actions (épuré)
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildHeader({
     required AppAuthProvider authProvider,
     required SubscriptionProvider subscriptionProvider,
@@ -238,34 +260,30 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color subTextColor,
   }) {
     final user = authProvider.user;
-    final subscription = subscriptionProvider.subscription;
-    final planName = subscription?.planId == 'pro'
-        ? 'Pro'
-        : subscription?.planId == 'business'
-            ? 'Business'
-            : subscription?.planId == 'illimite'
-                ? 'illimite'
-                : 'Gratuit';
-    final isActive = subscription?.isActive ?? false;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // Avatar
         GestureDetector(
           onTap: () => context.push('/dashboard/settings'),
           child: Container(
-            width: 48,
-            height: 48,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  primaryColor,
+                  primaryColor.withValues(alpha: 0.65),
+                ],
               ),
-              borderRadius: BorderRadius.circular(36),
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: primaryColor.withValues(alpha: 0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  color: primaryColor.withValues(alpha: 0.28),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -275,8 +293,8 @@ class _DashboardHomeState extends State<DashboardHome> {
                     ? user!.displayName[0].toUpperCase()
                     : 'U',
                 style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
                   color: Colors.white,
                 ),
               ),
@@ -284,119 +302,72 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
         ),
         const SizedBox(width: 14),
+
+        // Bienvenue
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '👋 Bonjour,',
+                'Bonjour',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12.5,
                   color: subTextColor,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 2),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      user?.displayName ?? 'Utilisateur',
-                      softWrap: false,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? const Color(0xFF4338CA).withValues(alpha: 0.1)
-                          : const Color(0xFFE9B949).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: isActive
-                            ? const Color(0xFF4338CA).withValues(alpha: 0.25)
-                            : const Color(0xFFE9B949).withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isActive ? Icons.verified : Icons.star,
-                          size: 13,
-                          color: isActive
-                              ? const Color(0xFF4338CA)
-                              : const Color(0xFFB8860B),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          planName.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: isActive
-                                ? const Color(0xFF4338CA)
-                                : const Color(0xFFB8860B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Text(
+                user?.displayName ?? 'Utilisateur',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                  letterSpacing: -0.3,
+                ),
               ),
             ],
           ),
         ),
-        const Spacer(),
-        Expanded(
-          // Notification avec badge (bouton rond + pastille rouge)
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              NotificationBadge(
-                onTap: () => context.push('/notifications'),
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[800] : Colors.grey[100],
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.notifications_outlined,
-                    color: textColor,
-                    size: 22,
-                  ),
-                ),
+
+        // Actions : notification + menu
+        NotificationBadge(
+          onTap: () => context.push('/notifications'),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.05),
+                width: 1,
               ),
-              SizedBox(width: 8),
-              // Menu hamburger (ouvre le drawer)
-              IconButton(
-                icon: Icon(Icons.menu, color: textColor),
-                onPressed: () {
-                  // Ouverture simple du drawer grâce au Scaffold parent
-                  Scaffold.of(context).openDrawer();
-                },
-              ),
-            ],
+            ),
+            child: Icon(
+              Icons.notifications_none_rounded,
+              color: textColor,
+              size: 22,
+            ),
           ),
+        ),
+        const SizedBox(width: 6),
+        IconButton(
+          icon: Icon(Icons.menu_rounded, color: textColor, size: 26),
+          onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ],
     );
   }
 
-  // ===== FINANCIAL STATS =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  STATS — 3 cartes épurées
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildFinancialStats({
     required bool isDark,
     required Color primaryColor,
@@ -405,7 +376,10 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color cardColor,
   }) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 90,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Row(
@@ -414,29 +388,29 @@ class _DashboardHomeState extends State<DashboardHome> {
           label: 'Revenus',
           value: _financialStats.getFormattedTotalRevenue(),
           color: primaryColor,
-          icon: Icons.trending_up,
+          icon: Icons.trending_up_rounded,
           isDark: isDark,
           cardColor: cardColor,
           textColor: textColor,
           subTextColor: subTextColor,
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         _buildStatCard(
           label: 'Moyenne',
           value: _financialStats.getFormattedAverageInvoice(),
-          color: const Color(0xFF4CAF50),
-          icon: Icons.equalizer,
+          color: const Color(0xFF10B981),
+          icon: Icons.show_chart_rounded,
           isDark: isDark,
           cardColor: cardColor,
           textColor: textColor,
           subTextColor: subTextColor,
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         _buildStatCard(
           label: 'Taux paiement',
-          value: '${_financialStats.paidPercentage.toStringAsFixed(1)}%',
-          color: const Color(0xFFFF9800),
-          icon: Icons.percent,
+          value: '${_financialStats.paidPercentage.toStringAsFixed(0)}%',
+          color: const Color(0xFFF59E0B),
+          icon: Icons.percent_rounded,
           isDark: isDark,
           cardColor: cardColor,
           textColor: textColor,
@@ -457,48 +431,50 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color subTextColor,
   }) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-              blurRadius: 5,
-            ),
-          ],
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.04),
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, color: color, size: 14),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 16),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-              ),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+                letterSpacing: -0.3,
+              ),
             ),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 9,
+                fontSize: 10.5,
                 color: subTextColor,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -507,7 +483,9 @@ class _DashboardHomeState extends State<DashboardHome> {
     );
   }
 
-  // ===== BALANCE CARD =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  BALANCE — Grande carte gradient
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildBalanceCard({
     required bool isDark,
     required Color primaryColor,
@@ -519,89 +497,170 @@ class _DashboardHomeState extends State<DashboardHome> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor,
+            primaryColor.withValues(alpha: 0.72),
+          ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: primaryColor.withValues(alpha: 0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Text(
-            'Solde Total (FCFA)',
-            style: TextStyle(
-              fontSize: 14,
-              letterSpacing: 0.4,
-              color: Colors.white.withValues(alpha: 0.8),
+          // Cercles décoratifs (fond)
+          Positioned(
+            top: -40,
+            right: -40,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.07),
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            _financialStats.getFormattedTotalRevenue(),
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: Colors.white,
+          Positioned(
+            bottom: -50,
+            left: -30,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          Row(
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildBalanceItem(
-                label: 'Encaissé',
-                value: _financialStats.getFormattedTotalPaid(),
-                color: const Color(0xFF34D399),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.account_balance_wallet_rounded,
+                            color: Colors.white, size: 13),
+                        const SizedBox(width: 5),
+                        Text(
+                          'SOLDE TOTAL',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              _buildBalanceItem(
-                label: 'En attente',
-                value: _financialStats.getFormattedTotalPending(),
-                color: const Color(0xFFFBBF24),
+              const SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _financialStats.getFormattedTotalRevenue(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1.2,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'FCFA',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              _buildBalanceItem(
-                label: 'En retard',
-                value: _financialStats.getFormattedTotalOverdue(),
-                color: const Color(0xFFF87171),
+              const SizedBox(height: 22),
+
+              // 3 mini-stats : encaissé / en attente / en retard
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    _buildBalanceItem(
+                      label: 'Encaissé',
+                      value: _financialStats.getFormattedTotalPaid(),
+                      color: const Color(0xFF34D399),
+                    ),
+                    _balanceDivider(),
+                    _buildBalanceItem(
+                      label: 'En attente',
+                      value: _financialStats.getFormattedTotalPending(),
+                      color: const Color(0xFFFBBF24),
+                    ),
+                    _balanceDivider(),
+                    _buildBalanceItem(
+                      label: 'En retard',
+                      value: _financialStats.getFormattedTotalOverdue(),
+                      color: const Color(0xFFF87171),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _buildActionButton(
-                icon: Icons.add,
-                label: 'Facture',
-                color: Colors.white.withValues(alpha: 0.2),
-                textColor: Colors.white,
-                onTap: () {
-                  context.push('/dashboard/invoices/create');
-                },
-              ),
-              const SizedBox(width: 12),
-              _buildActionButton(
-                icon: Icons.person_add,
-                label: 'Client',
-                color: Colors.white.withValues(alpha: 0.2),
-                textColor: Colors.white,
-                onTap: () {
-                  context.push('/dashboard/clients/create');
-                },
-              ),
-              const SizedBox(width: 12),
-              _buildActionButton(
-                icon: Icons.payment,
-                label: 'Payer',
-                color: Colors.white.withValues(alpha: 0.2),
-                textColor: Colors.white,
-                onTap: () {
-                  _showPaymentDialog();
-                },
+              const SizedBox(height: 20),
+
+              // Actions rapides
+              Row(
+                children: [
+                  _buildActionButton(
+                    icon: Icons.add_rounded,
+                    label: 'Facture',
+                    onTap: () => context.push('/dashboard/invoices/create'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildActionButton(
+                    icon: Icons.person_add_alt_1_rounded,
+                    label: 'Client',
+                    onTap: () => context.push('/dashboard/clients/create'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildActionButton(
+                    icon: Icons.payments_rounded,
+                    label: 'Payer',
+                    onTap: _showPaymentDialog,
+                  ),
+                ],
               ),
             ],
           ),
@@ -609,6 +668,13 @@ class _DashboardHomeState extends State<DashboardHome> {
       ),
     );
   }
+
+  Widget _balanceDivider() => Container(
+        width: 1,
+        height: 24,
+        color: Colors.white.withValues(alpha: 0.14),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+      );
 
   Widget _buildBalanceItem({
     required String label,
@@ -636,21 +702,22 @@ class _DashboardHomeState extends State<DashboardHome> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.75),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
           ),
@@ -662,46 +729,54 @@ class _DashboardHomeState extends State<DashboardHome> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required Color color,
-    required Color textColor,
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2), width: 1),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: textColor, size: 18),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: 17),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ===== INVOICE STATUS =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  STATUT DES FACTURES — 4 mini-cartes
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildInvoiceStatus({
     required bool isDark,
     required Color primaryColor,
@@ -710,34 +785,46 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color cardColor,
   }) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 90,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'Statut des factures',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
                 color: textColor,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${_financialStats.totalInvoices} factures',
+              style: TextStyle(
+                fontSize: 12,
+                color: subTextColor,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         Row(
           children: [
             _buildStatusCard(
               label: 'Payées',
               count: _financialStats.paidCount,
               amount: _financialStats.getFormattedTotalPaid(),
-              color: Colors.green,
-              icon: Icons.check_circle,
+              color: const Color(0xFF10B981),
+              icon: Icons.check_circle_rounded,
               isDark: isDark,
               cardColor: cardColor,
               textColor: textColor,
@@ -748,8 +835,8 @@ class _DashboardHomeState extends State<DashboardHome> {
               label: 'En attente',
               count: _financialStats.pendingCount,
               amount: _financialStats.getFormattedTotalPending(),
-              color: Colors.orange,
-              icon: Icons.hourglass_empty,
+              color: const Color(0xFFF59E0B),
+              icon: Icons.schedule_rounded,
               isDark: isDark,
               cardColor: cardColor,
               textColor: textColor,
@@ -760,8 +847,8 @@ class _DashboardHomeState extends State<DashboardHome> {
               label: 'En retard',
               count: _financialStats.overdueCount,
               amount: _financialStats.getFormattedTotalOverdue(),
-              color: Colors.red,
-              icon: Icons.warning,
+              color: const Color(0xFFEF4444),
+              icon: Icons.warning_rounded,
               isDark: isDark,
               cardColor: cardColor,
               textColor: textColor,
@@ -772,8 +859,8 @@ class _DashboardHomeState extends State<DashboardHome> {
               label: 'Annulées',
               count: _financialStats.cancelledCount,
               amount: _financialStats.getFormattedTotalCancelled(),
-              color: Colors.grey,
-              icon: Icons.cancel,
+              color: const Color(0xFF6B7280),
+              icon: Icons.cancel_rounded,
               isDark: isDark,
               cardColor: cardColor,
               textColor: textColor,
@@ -798,40 +885,46 @@ class _DashboardHomeState extends State<DashboardHome> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-              blurRadius: 5,
-            ),
-          ],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withValues(alpha: 0.18),
+            width: 1,
+          ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 16),
-            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 14),
+            ),
+            const SizedBox(height: 8),
             Text(
               count.toString(),
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
                 color: textColor,
+                letterSpacing: -0.3,
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               label,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                color: subTextColor,
-              ),
               textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: subTextColor,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -839,7 +932,9 @@ class _DashboardHomeState extends State<DashboardHome> {
     );
   }
 
-  // ===== RECENT CLIENTS =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  CLIENTS RÉCENTS — bulles horizontales
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildRecentClients({
     required bool isDark,
     required Color primaryColor,
@@ -848,55 +943,59 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color cardColor,
   }) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 90,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'Nouveaux clients',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
                 color: textColor,
+                letterSpacing: -0.2,
               ),
             ),
+            const Spacer(),
             TextButton(
-              onPressed: () {
-                context.push('/dashboard/clients');
-              },
-              child: Text(
+              onPressed: () => context.push('/dashboard/clients'),
+              style: TextButton.styleFrom(
+                foregroundColor: primaryColor,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
                 'Voir tout',
                 style: TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
+                    fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         _recentClients.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    'Aucun client pour le moment',
-                    style: TextStyle(color: subTextColor),
-                  ),
-                ),
+            ? _emptyMini(
+                icon: Icons.people_outline,
+                text: 'Aucun client pour le moment',
+                subTextColor: subTextColor,
               )
             : SizedBox(
-                height: 100,
+                height: 96,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
                   itemCount: _recentClients.length,
                   itemBuilder: (context, index) {
-                    final client = _recentClients[index];
-                    return _buildClientBubble(client, isDark);
+                    return _buildClientBubble(
+                        _recentClients[index], isDark);
                   },
                 ),
               ),
@@ -906,23 +1005,21 @@ class _DashboardHomeState extends State<DashboardHome> {
 
   Widget _buildClientBubble(Client client, bool isDark) {
     final colors = [
-      const Color(0xFF1A237E),
-      const Color(0xFF3949AB),
-      const Color(0xFF4CAF50),
-      const Color(0xFFFF9800),
-      const Color(0xFFE91E63),
-      const Color(0xFF9C27B0),
+      const Color(0xFF4F46E5),
+      const Color(0xFF06B6D4),
+      const Color(0xFF10B981),
+      const Color(0xFFF59E0B),
+      const Color(0xFFEC4899),
+      const Color(0xFF8B5CF6),
     ];
     final colorIndex = client.id.hashCode.abs() % colors.length;
     final color = colors[colorIndex];
 
     return GestureDetector(
-      onTap: () {
-        context.push('/dashboard/clients/${client.id}');
-      },
+      onTap: () => context.push('/dashboard/clients/${client.id}'),
       child: Container(
-        margin: const EdgeInsets.only(right: 16),
-        width: 80,
+        margin: const EdgeInsets.only(right: 14),
+        width: 76,
         child: Column(
           children: [
             Container(
@@ -930,14 +1027,19 @@ class _DashboardHomeState extends State<DashboardHome> {
               height: 60,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    color,
+                    color.withValues(alpha: 0.7),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
+                    color: color.withValues(alpha: 0.28),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -945,25 +1047,26 @@ class _DashboardHomeState extends State<DashboardHome> {
                 child: Text(
                   client.name.substring(0, 1).toUpperCase(),
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(
               client.name.length > 10
-                  ? '${client.name.substring(0, 10)}...'
+                  ? '${client.name.substring(0, 10)}…'
                   : client.name,
               style: TextStyle(
                 fontSize: 11,
-                color: isDark ? Colors.grey[400] : Colors.grey[700],
-                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.grey[300] : Colors.grey[700],
+                fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ],
         ),
@@ -971,7 +1074,9 @@ class _DashboardHomeState extends State<DashboardHome> {
     );
   }
 
-  // ===== RECENT INVOICES =====
+  // ═══════════════════════════════════════════════════════════════════
+  //  FACTURES RÉCENTES — liste épurée
+  // ═══════════════════════════════════════════════════════════════════
   Widget _buildRecentInvoices({
     required bool isDark,
     required Color primaryColor,
@@ -980,51 +1085,59 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color cardColor,
   }) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox(
+        height: 90,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'Factures récentes',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
                 color: textColor,
+                letterSpacing: -0.2,
               ),
             ),
+            const Spacer(),
             TextButton(
-              onPressed: () {
-                context.push('/dashboard/invoices');
-              },
-              child: Text(
+              onPressed: () => context.push('/dashboard/invoices'),
+              style: TextButton.styleFrom(
+                foregroundColor: primaryColor,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
                 'Voir tout',
                 style: TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
+                    fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         _recentInvoices.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Text(
-                    'Aucune facture pour le moment',
-                    style: TextStyle(color: subTextColor),
-                  ),
-                ),
+            ? _emptyMini(
+                icon: Icons.receipt_long_outlined,
+                text: 'Aucune facture pour le moment',
+                subTextColor: subTextColor,
               )
             : Column(
                 children: _recentInvoices
                     .map((invoice) => _buildTransactionItem(
-                        invoice, isDark, cardColor, textColor, subTextColor))
+                          invoice,
+                          isDark,
+                          cardColor,
+                          textColor,
+                          subTextColor,
+                        ))
                     .toList(),
               ),
       ],
@@ -1042,100 +1155,135 @@ class _DashboardHomeState extends State<DashboardHome> {
     final isExpense = invoice.status != 'paid' && invoice.status != 'cancelled';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-            blurRadius: 5,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+          width: 1,
+        ),
       ),
-      child: InkWell(
-        onTap: () {
-          context.push('/dashboard/invoices/${invoice.id}');
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: invoice.isDevis ? Colors.orange[50] : Colors.blue[50],
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                invoice.isDevis
-                    ? Icons.description_outlined
-                    : Icons.receipt_long,
-                color: invoice.isDevis ? Colors.orange[700] : Colors.blue[700],
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    invoice.invoiceNumber,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () =>
+              context.push('/dashboard/invoices/${invoice.id}'),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: invoice.isDevis
+                        ? Colors.orange.withValues(alpha: 0.12)
+                        : Colors.blue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Client #${invoice.clientId.substring(0, 6)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: subTextColor,
-                    ),
+                  child: Icon(
+                    invoice.isDevis
+                        ? Icons.description_outlined
+                        : Icons.receipt_long_rounded,
+                    color: invoice.isDevis
+                        ? Colors.orange[700]
+                        : Colors.blue[700],
+                    size: 20,
                   ),
-                ],
-              ),
-            ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 130),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isExpense ? Colors.red[700] : Colors.green[700],
-                    ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        invoice.invoiceNumber,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Client #${invoice.clientId.substring(0, 6)}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: subTextColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColors['bg'],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getStatusLabel(invoice.status),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${invoice.totalAmount.toStringAsFixed(0)} FCFA',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: statusColors['text'],
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color:
+                            isExpense ? Colors.red[700] : Colors.green[700],
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColors['bg'],
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        _getStatusLabel(invoice.status),
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: statusColors['text'],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _emptyMini({
+    required IconData icon,
+    required String text,
+    required Color subTextColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Icon(icon, size: 32, color: subTextColor.withValues(alpha: 0.4)),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            style: TextStyle(
+              color: subTextColor.withValues(alpha: 0.7),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1144,28 +1292,28 @@ class _DashboardHomeState extends State<DashboardHome> {
     switch (status) {
       case 'paid':
         return {
-          'bg': Colors.green[50]!,
-          'text': Colors.green[700]!,
+          'bg': const Color(0xFF10B981).withValues(alpha: 0.14),
+          'text': const Color(0xFF047857),
         };
       case 'sent':
         return {
-          'bg': Colors.orange[50]!,
-          'text': Colors.orange[700]!,
+          'bg': const Color(0xFFF59E0B).withValues(alpha: 0.14),
+          'text': const Color(0xFFB45309),
         };
       case 'overdue':
         return {
-          'bg': Colors.red[50]!,
-          'text': Colors.red[700]!,
+          'bg': const Color(0xFFEF4444).withValues(alpha: 0.14),
+          'text': const Color(0xFFB91C1C),
         };
       case 'cancelled':
         return {
-          'bg': Colors.grey[100]!,
-          'text': Colors.grey[700]!,
+          'bg': const Color(0xFF6B7280).withValues(alpha: 0.14),
+          'text': const Color(0xFF374151),
         };
       default:
         return {
-          'bg': Colors.grey[50]!,
-          'text': Colors.grey[700]!,
+          'bg': const Color(0xFF6B7280).withValues(alpha: 0.10),
+          'text': const Color(0xFF4B5563),
         };
     }
   }
@@ -1185,7 +1333,6 @@ class _DashboardHomeState extends State<DashboardHome> {
     }
   }
 
-  /// Vrai si l'utilisateur a un abonnement payant actif (cloud).
   bool _hasCloudSubscription(SubscriptionProvider subscriptionProvider) {
     final subscription = subscriptionProvider.subscription;
     final plan = subscriptionProvider.currentPlan;
@@ -1196,7 +1343,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => PaymentBottomSheet(
         onPaymentComplete: _loadData,

@@ -23,6 +23,7 @@ import '../../providers/subscription_provider.dart';
 import '../../services/template_cart.dart';
 import '../../services/template_custom_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/invoice_render_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
@@ -40,6 +41,15 @@ class TemplatePreviewScreen extends StatefulWidget {
 
 class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   late InvoiceLayoutConfig _layoutConfig;
+
+  /// 🧩 Positions EFFECTIVES affichées par l'aperçu.
+  ///
+  /// Priorité identique à l'impression (`PrintingService`) : personnalisation
+  /// locale de l'utilisateur (`TemplateCustomService`) puis positions
+  /// embarquées dans le modèle (presets « Royal Ledger »). Sans ce repli,
+  /// l'aperçu d'un modèle fraîchement installé montrerait l'ancien layout fixe
+  /// (ni titre/sous-titre, ni sections personnalisées).
+  Map<String, dynamic> _positions = const <String, dynamic>{};
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
   // 🎨 Modèle EFFECTIF (paramètres globaux appliqués au modèle).
@@ -87,32 +97,39 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   }
 
   Future<void> _loadData() async {
-    // 🧩 Personnalisations sauvegardées du modèle (positions drag & drop +
-    // fond image/préreéglage) — mêmes sources que le workspace et le PDF.
-    final custom = await TemplateCustomService.loadCustom(widget.template.id);
-    if (!mounted) return;
-    // 1️⃣ Affichage IMMÉDIAT avec le modèle brut (ne jamais bloquer l'aperçu
-    // sur le chargement des paramètres globaux).
-    setState(() {
-      if (custom.positions.isNotEmpty) {
-        _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
-      }
-      _backgroundSettings = custom.background;
-      _isLoading = false;
-    });
-    // 2️⃣ Puis les paramètres globaux (couleurs / police / filigrane) sont
-    // appliqués en arrière-plan : le template effectif se met à jour.
     try {
-      final settings = await SettingsService.instance.loadSettings();
+      final render = await InvoiceRenderService.resolveRenderState(
+        template: widget.template,
+        invoiceSettings: await SettingsService.instance.loadSettings(),
+      );
       if (!mounted) return;
       setState(() {
-        _effectiveTemplate =
-            SettingsService.applyToTemplate(widget.template, settings);
-        _watermarkText = settings.watermarkText;
-        _showWatermark = settings.showWatermark;
+        _positions = render.positions;
+        if (_positions.isNotEmpty) {
+          _layoutConfig = InvoiceLayoutConfig.fromMap(_positions);
+        }
+        _backgroundSettings = render.backgroundSettings;
+        _effectiveTemplate = render.effectiveTemplate;
+        _watermarkText = render.watermarkText;
+        _showWatermark = render.showWatermark;
+        _isLoading = false;
       });
     } catch (_) {
-      // Repli silencieux : le design du modèle reste utilisé.
+      final custom = await TemplateCustomService.loadCustom(widget.template.id);
+      if (!mounted) return;
+      final positions = InvoiceTemplate.effectivePositions(
+        customPositions: custom.positions,
+        templatePositions: widget.template.positions,
+      );
+      setState(() {
+        _positions = positions;
+        if (positions.isNotEmpty) {
+          _layoutConfig = InvoiceLayoutConfig.fromMap(positions);
+        }
+        _backgroundSettings = custom.background;
+        _effectiveTemplate = widget.template;
+        _isLoading = false;
+      });
     }
   }
 
@@ -212,7 +229,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                           child: Transform.scale(
                             scale: _zoom,
                             alignment: Alignment.topCenter,
-                             child: StitchA4InvoicePreview(
+                            child: StitchA4InvoicePreview(
                               data: StitchPreviewData.sample(),
                               accentColor: _effectiveTemplate.primaryColor,
                               pageColor: _effectiveTemplate.backgroundColor,
@@ -225,6 +242,9 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                               fontFamily: _effectiveTemplate.fontFamily,
                               fontScale: _effectiveTemplate.fontSize / 12,
                               layoutConfig: _layoutConfig,
+                              // 🧩 Textes / sections issus du preset ou de la
+                              // personnalisation locale (WYSIWYG avec le PDF).
+                              customPositions: _positions,
                               backgroundSettings: _backgroundSettings,
                               backgroundImage: bgImage,
                               // Tampon « PAYÉ » — démonstration maquette.
@@ -260,12 +280,13 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     return AppBar(
       backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 0.5,
+      elevation: 0,
       scrolledUnderElevation: 0.5,
       shadowColor: Colors.black.withValues(alpha: 0.06),
       centerTitle: false,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: c.onSurface),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: c.onSurface, size: 20),
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -280,9 +301,10 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontFamily: 'Manrope',
-          fontSize: 18,
+          fontSize: 19,
           fontWeight: FontWeight.w700,
           color: c.onSurface,
+          letterSpacing: -0.3,
         ),
       ),
       bottom: PreferredSize(
@@ -303,23 +325,24 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
         ),
       ),
       actions: [
-        // 👮 Personnalisation réservée à l'admin et au propriétaire du modèle.
         if (canCustomize)
           IconButton(
             tooltip: 'Personnaliser (Drag & Drop)',
-            icon: Icon(Icons.tune, color: c.tertiary),
+            icon: Icon(Icons.tune_rounded, color: c.tertiary, size: 22),
             onPressed: _openWorkspace,
           ),
+        const SizedBox(width: 4),
       ],
     );
   }
 
   /// Bouton zoom flottant de la maquette (cercle translucide bordé).
+  /// Bouton zoom flottant (pilule translucide bordée).
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: 0.55),
-        shape: BoxShape.circle,
+        color: c.surface.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.outlineVariant.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
@@ -336,12 +359,12 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
             setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 1.6));
           }),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               '${(_zoom * 100).toInt()}%',
               style: TextStyle(
                 fontFamily: 'WorkSans',
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: c.onSurface,
               ),
@@ -400,12 +423,16 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
               label: 'Éditer',
               onTap: _openWorkspace,
             ),
-          _bottomAction(
-            c,
-            icon: Icons.check_circle_outline_rounded,
-            label: 'Utiliser',
-            onTap: _useThisTemplate,
-          ),
+          // 🚫 Modèle À VENDRE (payant non acquis) : « Utiliser » est masqué —
+          // il n'a de sens qu'après l'achat. Seuls « Panier » / « Commander »
+          // sont alors proposés.
+          if (!showCommerce)
+            _bottomAction(
+              c,
+              icon: Icons.check_circle_outline_rounded,
+              label: 'Utiliser',
+              onTap: _useThisTemplate,
+            ),
           if (showCommerce) ...[
             _bottomAction(
               c,

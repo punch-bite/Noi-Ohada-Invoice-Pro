@@ -89,23 +89,13 @@ class TeamService {
   }
 
   // ===== GESTION DES MEMBRES (via serveur = SDK admin) =====
-  //
-  // 🔒 Les règles Firestore n'autorisent QUE le propriétaire (ou l'admin
-  // global) à modifier le document `teams`, et interdisent de résoudre un
-  // email → UID (lecture `users` restreinte) ou de révoquer l'accès d'un
-  // membre sur les ressources des autres. Toute la gestion des membres
-  // passe donc par le serveur (POST /team/manage-member) qui utilise le
-  // SDK admin (contourne les règles) et gère la révocation d'accès.
 
-  /// Traduit une erreur réseau/serveur en message UTILISATEUR lisible —
-  /// au lieu d'un « Exception: … » brut qui ne dit rien.
   static String prettyError(Object error) {
     var message = error.toString();
     if (message.startsWith('Exception: ')) message = message.substring(11);
     return message;
   }
 
-  /// Extrait un extrait de corps de réponse (pour le diagnostic).
   static String _excerpt(String body) {
     final cleaned = body.trim().replaceAll('\n', ' ');
     return cleaned.length > 120 ? '${cleaned.substring(0, 120)}…' : cleaned;
@@ -117,6 +107,7 @@ class TeamService {
     String? userId,
     String? email,
     String? role,
+    String? permission,
     String? invitationId,
     required String requestedBy,
   }) async {
@@ -136,6 +127,7 @@ class TeamService {
               'userId': userId,
               'email': email,
               'role': role,
+              'permission': permission,
               'invitationId': invitationId,
               'requestedBy': requestedBy,
             }),
@@ -145,7 +137,6 @@ class TeamService {
       throw Exception(
           'Le serveur met trop de temps à répondre — réessayez dans un instant.');
     } catch (e) {
-      // SocketException / ClientException / DNS… → réseau indisponible.
       throw Exception(
           'Serveur injoignable — vérifiez votre connexion internet et réessayez.');
     }
@@ -153,8 +144,6 @@ class TeamService {
     try {
       body = jsonDecode(resp.body) as Map<String, dynamic>? ?? {};
     } catch (_) {
-      // Réponse non-JSON (page d'erreur HTML du serveur, proxy…) : on la
-      // remonte tronquée pour permettre un vrai diagnostic.
       throw Exception(
           'Réponse serveur invalide (HTTP ${resp.statusCode}) : ${_excerpt(resp.body)}');
     }
@@ -164,12 +153,6 @@ class TeamService {
     return body;
   }
 
-  /// Traduit une erreur HTTP du serveur en message UTILISATEUR actionnable.
-  /// Les messages serveur déjà explicites (404 « Aucun compte… », 403…) sont
-  /// renvoyés tels quels ; les 500 génériques (« Erreur interne du serveur »)
-  /// reçoivent un contexte selon l'action + la cause la plus probable —
-  /// notamment le SMTP d'invitation non configuré côté Vercel, qui fait
-  /// echo en `500 Erreur interne du serveur` sur `/team/manage-member`.
   static String _serverErrorText(
       String action, int statusCode, Map<String, dynamic> body) {
     final serverMsg = (body['error']?.toString() ?? '').trim();
@@ -178,7 +161,9 @@ class TeamService {
             serverMsg.contains('Erreur interne du serveur') ||
             serverMsg.contains('Internal Server Error'));
     if (!isGeneric500) {
-      return serverMsg.isEmpty ? 'Erreur serveur (HTTP $statusCode)' : serverMsg;
+      return serverMsg.isEmpty
+          ? 'Erreur serveur (HTTP $statusCode)'
+          : serverMsg;
     }
     switch (action) {
       case 'invite':
@@ -202,17 +187,12 @@ class TeamService {
     }
   }
 
-  /// Invite un membre par EMAIL. Le serveur crée une invitation EN ATTENTE,
-  /// envoie une notification (toast) à l'invité et un EMAIL ; l'invité devra
-  /// l'accepter pour rejoindre l'équipe.
   Future<Map<String, dynamic>> inviteMember({
     required String teamId,
     required String email,
     required String role,
     required String requestedBy,
   }) {
-    // Validation précoce : évite un aller-retour serveur inutile (et une
-    // invitation HS) quand l'adresse est mal formée.
     final normalized = email.trim();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
       throw Exception('Adresse email invalide : "$email"');
@@ -226,8 +206,6 @@ class TeamService {
     );
   }
 
-  /// L'invité ACCEPTE une invitation → devient membre de l'équipe.
-  /// Le propriétaire est prévenu par notification (+ email).
   Future<void> acceptInvitation({
     required String invitationId,
     required String requestedBy,
@@ -240,12 +218,11 @@ class TeamService {
         requestedBy: requestedBy,
       );
     } catch (e) {
-      debugPrint('⚠️ Server accept invitation failed, trying direct Firestore acceptance: $e');
-      // ⚠️ Fallback direct : NE FONCTIONNE que pour un ADMIN GLOBAL — les
-      // règles Firestore (firestore.rules) interdisent à un simple invité
-      // d'écrire sur `teams` et `team_invitations` (write: isAdmin()).
+      debugPrint(
+          '⚠️ Server accept invitation failed, trying direct Firestore acceptance: $e');
       try {
-        final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+        final invDoc =
+            await _db.collection('team_invitations').doc(invitationId).get();
         if (invDoc.exists) {
           final data = invDoc.data() ?? {};
           final teamId = data['teamId']?.toString() ?? '';
@@ -256,13 +233,16 @@ class TeamService {
             await _db.collection('team_invitations').doc(invitationId).update({
               'status': 'accepted',
             });
+            await syncMemberSharedAccess(
+              teamId: teamId,
+              userId: requestedBy,
+              role: data['role']?.toString(),
+            );
             return;
           }
         }
       } catch (err) {
         debugPrint('⚠️ Firestore direct acceptance refused (règles): $err');
-        // Permission-denied attendu pour un invité non-admin : on remonte un
-        // message ACTIONNABLE plutôt que l'exception Firestore brute.
         throw Exception(
           'L\'acceptation a échoué côté serveur et les règles de sécurité '
           'Firestore interdisent l\'écriture directe. Vérifiez votre '
@@ -273,7 +253,6 @@ class TeamService {
     }
   }
 
-  /// L'invité REFUSE une invitation.
   Future<void> declineInvitation({
     required String invitationId,
     required String requestedBy,
@@ -286,11 +265,11 @@ class TeamService {
         requestedBy: requestedBy,
       );
     } catch (e) {
-      debugPrint('⚠️ Server decline invitation failed, trying direct Firestore decline: $e');
-      // ⚠️ Fallback direct : NE FONCTIONNE que pour un ADMIN GLOBAL (règles
-      // Firestore : write sur team_invitations → isAdmin() uniquement).
+      debugPrint(
+          '⚠️ Server decline invitation failed, trying direct Firestore decline: $e');
       try {
-        final invDoc = await _db.collection('team_invitations').doc(invitationId).get();
+        final invDoc =
+            await _db.collection('team_invitations').doc(invitationId).get();
         if (invDoc.exists) {
           await _db.collection('team_invitations').doc(invitationId).update({
             'status': 'declined',
@@ -309,9 +288,6 @@ class TeamService {
     }
   }
 
-  /// Liste les invitations EN ATTENTE d'un utilisateur.
-  /// Retourne une liste de maps : {id, teamId, teamName, inviterName,
-  /// inviterUid, role, createdAt}.
   Future<List<Map<String, dynamic>>> getMyInvitations(String userId) async {
     try {
       final body = await _manageMember(
@@ -328,21 +304,17 @@ class TeamService {
             .toList();
       }
     } catch (e) {
-      debugPrint('⚠️ Server get-invitations failed, using Firestore fallback: $e');
+      debugPrint(
+          '⚠️ Server get-invitations failed, using Firestore fallback: $e');
       try {
-        // ⚠️ Le champ écrit par le serveur est `inviteeUid` (cf. server/index.js
-        // createNotification / invite) — PAS `targetUserId`. La requête reste
-        // à UNE seule égalité : Firestore l'auto-indexe, aucun index composite
-        // n'est requis (un where composé status+inviteeUid déclencherait
-        // « The query requires an index » en production).
         final snap = await _db
             .collection('team_invitations')
             .where('inviteeUid', isEqualTo: userId)
             .get();
         return snap.docs
             .map((d) => {'id': d.id, ...d.data()})
-            .where((inv) =>
-                (inv['status'] ?? 'pending').toString() == 'pending')
+            .where(
+                (inv) => (inv['status'] ?? 'pending').toString() == 'pending')
             .toList();
       } catch (err) {
         debugPrint('⚠️ Firestore get-invitations fallback error: $err');
@@ -351,8 +323,6 @@ class TeamService {
     return [];
   }
 
-  /// Retire un membre (propriétaire/admin) et révoque son accès aux
-  /// données partagées de l'équipe.
   Future<void> removeMember({
     required String teamId,
     required String userId,
@@ -392,7 +362,6 @@ class TeamService {
     );
   }
 
-  /// Un membre quitte l'équipe (et perd l'accès aux données partagées).
   Future<void> leaveTeam({
     required String teamId,
     required String userId,
@@ -424,11 +393,6 @@ class TeamService {
     }
   }
 
-  /// Partage une ressource (facture / produit / client) avec des membres de
-  /// l'équipe. Écrit un enregistrement `shared_invoices` (compatibilité avec
-  /// l'existant, champ `resourceType`), marque la ressource comme partagée
-  /// (lecture autorisée pour les membres via les règles Firestore) et envoie
-  /// une notification @mention à chaque destinataire.
   Future<SharedInvoice> shareResource({
     required String resourceId,
     required String resourceType, // 'invoice' | 'product' | 'client'
@@ -449,6 +413,9 @@ class TeamService {
       sharedAt: DateTime.now(),
       resourceType: resourceType,
       resourceName: resourceName,
+      writeUsers: permissionLevel == 'write'
+          ? List<String>.from(sharedWith)
+          : const <String>[],
     );
 
     await _db
@@ -456,15 +423,14 @@ class TeamService {
         .doc(sharedInvoice.id)
         .set(sharedInvoice.toMap());
 
-    // Marque la ressource pour que les membres puissent la lire.
     await _markResourceShared(
       resourceType,
       resourceId,
       sharedWith,
       teamId,
+      canWrite: permissionLevel == 'write',
     );
 
-    // Notifications @mention aux destinataires.
     await _notifyMentioned(
       resourceType: resourceType,
       resourceName: resourceName,
@@ -472,6 +438,7 @@ class TeamService {
       sharedBy: sharedBy,
       sharedWith: sharedWith,
       resourceId: resourceId,
+      canWrite: permissionLevel == 'write',
     );
 
     await LoggerService.info(
@@ -485,7 +452,6 @@ class TeamService {
     return sharedInvoice;
   }
 
-  /// Wrapper rétro-compatible : partage d'une facture.
   Future<void> shareInvoice({
     required String invoiceId,
     required String teamId,
@@ -506,15 +472,13 @@ class TeamService {
     );
   }
 
-  /// Met à jour le document ressource (invoices/products/clients) avec les
-  /// listes `sharedWithUsers` / `sharedTeams` pour que les règles Firestore
-  /// autorisent la lecture par les membres.
   Future<void> _markResourceShared(
     String resourceType,
     String resourceId,
     List<String> userIds,
-    String teamId,
-  ) async {
+    String teamId, {
+    bool canWrite = false,
+  }) async {
     final collection = _collectionFor(resourceType);
     if (collection.isEmpty) return;
     try {
@@ -526,17 +490,60 @@ class TeamService {
         ..addAll(userIds);
       final teams = Set<String>.from(data['sharedTeams'] ?? const [])
         ..add(teamId);
-      await ref.update({
+      final updates = <String, dynamic>{
         'sharedWithUsers': users.toList(),
         'sharedTeams': teams.toList(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (canWrite) {
+        final writers = Set<String>.from(data['editableByUsers'] ?? const [])
+          ..addAll(userIds);
+        final writerTeams = Set<String>.from(data['editableTeams'] ?? const [])
+          ..add(teamId);
+        updates['editableByUsers'] = writers.toList();
+        updates['editableTeams'] = writerTeams.toList();
+      }
+      await ref.update(updates);
     } catch (e) {
       debugPrint('⚠️ _markResourceShared: $e');
     }
   }
 
-  /// Notifications @mention pour chaque membre mentionné dans le partage.
+  Future<int> setMemberPermissionPolicy({
+    required String teamId,
+    required String permission,
+    required String requestedBy,
+  }) async {
+    final result = await _manageMember(
+      action: 'set-policy',
+      teamId: teamId,
+      permission: permission == 'write' ? 'write' : 'read',
+      requestedBy: requestedBy,
+    );
+    return (result['updated'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<bool> syncMemberSharedAccess({
+    required String teamId,
+    required String userId,
+    String? role,
+  }) async {
+    if (teamId.isEmpty || userId.isEmpty) return false;
+    try {
+      await _manageMember(
+        action: 'sync-access',
+        teamId: teamId,
+        userId: userId,
+        role: role,
+        requestedBy: userId,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ syncMemberSharedAccess: $e');
+      return false;
+    }
+  }
+
   Future<void> _notifyMentioned({
     required String resourceType,
     required String resourceName,
@@ -544,11 +551,13 @@ class TeamService {
     required String sharedBy,
     required List<String> sharedWith,
     required String resourceId,
+    bool canWrite = false,
   }) async {
     final sharerName = await _userDisplayName(sharedBy);
     final team = await getTeam(teamId);
     final teamName = team?.name ?? 'votre équipe';
     final label = _resourceLabel(resourceType);
+    final access = canWrite ? 'en lecture/écriture ✍️' : 'en lecture seule 👁️';
 
     for (final uid in sharedWith) {
       if (uid.isEmpty || uid == sharedBy) continue;
@@ -557,8 +566,8 @@ class TeamService {
         createdBy: sharedBy,
         notification: AppNotification(
           title: '🔗 Donnée partagée avec vous',
-          body:
-              '$sharerName vous a partagé « $resourceName » ($label) dans $teamName.',
+          body: '$sharerName vous a partagé « $resourceName » ($label) '
+              '$access dans $teamName.',
           type: NotificationType.team_shared.toString(),
           referenceId: resourceId,
           referenceType: resourceType,
@@ -567,14 +576,13 @@ class TeamService {
             'resourceType': resourceType,
             'sharedBy': sharedBy,
             'sharedByName': sharerName,
+            'canWrite': canWrite,
           },
         ),
       );
     }
   }
 
-  /// Récupère les partages reçus par un utilisateur, tous types confondus
-  /// (ou filtrés par [resourceType]).
   Future<List<SharedInvoice>> getSharedResourcesForUser(
     String userId, {
     String? resourceType,
@@ -597,8 +605,6 @@ class TeamService {
     }
   }
 
-  /// Récupère les partages d'une équipe, tous types (ou filtrés par
-  /// [resourceType]).
   Future<List<SharedInvoice>> getSharedResourcesByTeam(
     String teamId, {
     String? resourceType,
@@ -611,9 +617,7 @@ class TeamService {
       if (resourceType != null) {
         query = query.where('resourceType', isEqualTo: resourceType);
       }
-      final snapshot = await query
-          .orderBy('sharedAt', descending: true)
-          .get();
+      final snapshot = await query.orderBy('sharedAt', descending: true).get();
       return snapshot.docs
           .map((doc) => SharedInvoice.fromMap(doc.data(), documentId: doc.id))
           .toList();
@@ -623,8 +627,6 @@ class TeamService {
     }
   }
 
-  /// Statistiques de partage d'une équipe (par type + montant total des
-  /// factures partagées lisible par l'appelant).
   Future<Map<String, dynamic>> getTeamShareStats(String teamId) async {
     final shares = await getSharedResourcesByTeam(teamId);
     final byType = <String, int>{};
@@ -635,23 +637,18 @@ class TeamService {
       distinctIds.putIfAbsent(t, () => {}).add(s.invoiceId);
     }
 
-    // Montant total des factures partagées (les docs sont lisibles par les
-    // membres grâce à sharedWithUsers).
     double totalAmount = 0;
     final invoiceIds = distinctIds['invoice'] ?? {};
     for (final id in invoiceIds) {
       try {
-        final doc =
-            await _db.collection('invoices').doc(id).get();
+        final doc = await _db.collection('invoices').doc(id).get();
         if (!doc.exists) continue;
         final data = doc.data() ?? {};
         final amt = (data['total'] as num?)?.toDouble() ??
             (data['totalAmount'] as num?)?.toDouble() ??
             0;
         totalAmount += amt;
-      } catch (_) {
-        // Ignoré : doc non lisible (pas encore marqué partagé).
-      }
+      } catch (_) {}
     }
 
     return {
@@ -666,7 +663,6 @@ class TeamService {
     };
   }
 
-  /// Profils des membres d'une équipe : { uid → {email, name} }.
   Future<Map<String, Map<String, String>>> getMemberProfiles(
     String teamId,
   ) async {
@@ -685,9 +681,8 @@ class TeamService {
         final data = doc.data() ?? {};
         result[uid] = {
           'email': data['email']?.toString() ?? '',
-          'name': data['displayName']?.toString() ??
-              data['name']?.toString() ??
-              '',
+          'name':
+              data['displayName']?.toString() ?? data['name']?.toString() ?? '',
         };
       } catch (_) {
         result[uid] = {'email': '', 'name': ''};
@@ -706,24 +701,19 @@ class TeamService {
         'expiresAt': FieldValue.serverTimestamp(),
       });
 
-      // 🔒 Révocation complète : retire aussi les destinataires de la
-      // ressource (sharedWithUsers), sans quoi ils conserveraient l'accès
-      // lecture Firestore même après désactivation du partage.
       final resourceType = data['resourceType']?.toString() ?? 'invoice';
       final resourceId = data['invoiceId']?.toString() ?? '';
-      final users = (data['sharedWith'] as List?)
-            ?.whereType<String>()
-            .toList() ??
-        const <String>[];
+      final users =
+          (data['sharedWith'] as List?)?.whereType<String>().toList() ??
+              const <String>[];
       final collection = _collectionFor(resourceType);
       if (resourceId.isNotEmpty && users.isNotEmpty) {
         try {
           await _db.collection(collection).doc(resourceId).update({
             'sharedWithUsers': FieldValue.arrayRemove(users),
+            'editableByUsers': FieldValue.arrayRemove(users),
           });
-        } catch (_) {
-          // Doc introuvable / déjà nettoyé : le partage est déjà désactivé.
-        }
+        } catch (_) {}
       }
 
       await LoggerService.info(
@@ -735,6 +725,27 @@ class TeamService {
     } catch (e) {
       throw Exception('Erreur révocation partage: $e');
     }
+  }
+
+  /// 🔐 Ressources partagées accessibles à [userId] (membre de [teamId]).
+  ///
+  /// Un membre a accès à une ressource si :
+  ///   • il est propriétaire ou admin de l'équipe → accès à TOUT ;
+  ///   • OU son uid est dans `sharedWith` du partage ;
+  ///   • OU son uid est dans `writeUsers` du partage.
+  Future<List<SharedInvoice>> getAccessibleShares({
+    required String teamId,
+    required String userId,
+  }) async {
+    final all = await getSharedResourcesByTeam(teamId);
+    final team = await getTeam(teamId);
+    if (team == null) return const [];
+
+    final isPrivileged = team.isOwnerOf(userId) || team.isAdmin(userId);
+    return all.where((s) {
+      if (isPrivileged) return true;
+      return s.sharedWith.contains(userId) || s.writeUsers.contains(userId);
+    }).toList();
   }
 
   // ===== HELPERS =====

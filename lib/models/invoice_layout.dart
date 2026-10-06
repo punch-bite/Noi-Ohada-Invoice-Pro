@@ -2,12 +2,8 @@
 //
 // 📐 Layout par blocs avec grille de colonnes pour facture A4.
 //
-// Chaque élément est positionné dans un BLOC (header, client, items, totals, footer)
-// et occupe 1 ou 2 colonnes sur une grille de 2 colonnes.
-// Le snap automatique garantit l'alignement et évite les surprises en preview/impression.
-//
-// 🎨 NOUVEAU : chaque élément possède un style personnalisable (taille, poids,
-// couleur, alignement, visibilité) pour un drag & drop WYSIWYG complet.
+// 🔄 v2 : ajout du marqueur `empty_column` (colonne vide qui réserve sa
+// largeur) et de `page_padding` (marge paramétrable).
 
 import 'package:flutter/material.dart';
 
@@ -43,6 +39,10 @@ enum LayoutElement {
   companyPhone,
   companyEmail,
   invoiceTitle,
+  invoiceNumber,
+  issueDate,
+  dueDate,
+  status,
   clientName,
   clientAddress,
   clientPhone,
@@ -71,6 +71,14 @@ enum LayoutElement {
         return 'Email société';
       case LayoutElement.invoiceTitle:
         return 'Titre facture';
+      case LayoutElement.invoiceNumber:
+        return 'N° facture';
+      case LayoutElement.issueDate:
+        return 'Date d\'émission';
+      case LayoutElement.dueDate:
+        return 'Échéance';
+      case LayoutElement.status:
+        return 'Statut';
       case LayoutElement.clientName:
         return 'Nom client';
       case LayoutElement.clientAddress:
@@ -108,6 +116,10 @@ enum LayoutElement {
       case LayoutElement.companyPhone:
       case LayoutElement.companyEmail:
       case LayoutElement.invoiceTitle:
+      case LayoutElement.invoiceNumber:
+      case LayoutElement.issueDate:
+      case LayoutElement.dueDate:
+      case LayoutElement.status:
         return LayoutBlock.header;
       case LayoutElement.clientName:
       case LayoutElement.clientAddress:
@@ -129,6 +141,9 @@ enum LayoutElement {
     }
   }
 }
+
+/// 🧩 Marqueur de colonne vide (largeur réservée, contenu nul).
+const String kEmptyColumnMarker = 'empty_column';
 
 /// 🎨 Style personnalisable d'un élément (WYSIWYG).
 class ElementStyle {
@@ -180,11 +195,6 @@ class ElementStyle {
     );
   }
 
-  /// Convertit une valeur sérialisée en [FontWeight].
-  ///
-  /// [toMap] stocke la **valeur** du poids (100–900) et non un index :
-  /// les deux formats sont acceptés ici pour rester compatible avec
-  /// d'éventuelles anciennes données indexées (0–8).
   static FontWeight _fontWeightFromInt(int? raw) {
     if (raw == null) return FontWeight.w400;
     if (raw >= 100) {
@@ -198,7 +208,6 @@ class ElementStyle {
   }
 }
 
-/// Position d'un élément dans son bloc.
 class ElementPosition {
   final int blockIndex;
   final int column;
@@ -249,7 +258,6 @@ class ElementPosition {
   }
 }
 
-/// Configuration complète du layout d'une facture.
 class InvoiceLayoutConfig {
   final Map<LayoutElement, ElementPosition> positions;
   final Map<LayoutElement, ElementStyle> styles;
@@ -273,7 +281,8 @@ class InvoiceLayoutConfig {
     return copyWith(styles: newStyles);
   }
 
-  InvoiceLayoutConfig withPosition(LayoutElement element, ElementPosition position) {
+  InvoiceLayoutConfig withPosition(
+      LayoutElement element, ElementPosition position) {
     final newPositions = Map<LayoutElement, ElementPosition>.of(positions);
     newPositions[element] = position;
     return copyWith(positions: newPositions);
@@ -282,25 +291,52 @@ class InvoiceLayoutConfig {
   factory InvoiceLayoutConfig.defaultLayout() {
     return InvoiceLayoutConfig(
       positions: {
-        LayoutElement.logo: ElementPosition(blockIndex: 0, column: 0, order: 0),
-        LayoutElement.companyName: ElementPosition(blockIndex: 0, column: 1, order: 1),
-        LayoutElement.companyAddress: ElementPosition(blockIndex: 0, column: 1, order: 2),
-        LayoutElement.companyPhone: ElementPosition(blockIndex: 0, column: 1, order: 3),
-        LayoutElement.companyEmail: ElementPosition(blockIndex: 0, column: 1, order: 4),
-        LayoutElement.invoiceTitle: ElementPosition(blockIndex: 0, column: 0, colSpan: 2, order: 5),
-        LayoutElement.clientName: ElementPosition(blockIndex: 1, column: 0, colSpan: 2, order: 0),
-        LayoutElement.clientAddress: ElementPosition(blockIndex: 1, column: 0, colSpan: 2, order: 1),
-        LayoutElement.clientPhone: ElementPosition(blockIndex: 1, column: 0, order: 2),
-        LayoutElement.clientEmail: ElementPosition(blockIndex: 1, column: 1, order: 2),
-        LayoutElement.itemsTable: ElementPosition(blockIndex: 2, column: 0, colSpan: 2, order: 0),
-        LayoutElement.subtotal: ElementPosition(blockIndex: 3, column: 1, order: 0),
-        LayoutElement.taxAmount: ElementPosition(blockIndex: 3, column: 1, order: 1),
-        LayoutElement.discount: ElementPosition(blockIndex: 3, column: 1, order: 2),
-        LayoutElement.totalAmount: ElementPosition(blockIndex: 3, column: 1, order: 3),
-        LayoutElement.footerText: ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 0),
-        LayoutElement.legalMention: ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 2),
-        LayoutElement.qrCode: ElementPosition(blockIndex: 4, column: 0, order: 1),
-        LayoutElement.signature: ElementPosition(blockIndex: 4, column: 1, order: 1),
+        LayoutElement.logo:
+            ElementPosition(blockIndex: 0, column: 0, order: 0),
+        LayoutElement.companyName:
+            ElementPosition(blockIndex: 0, column: 1, order: 1),
+        LayoutElement.companyAddress:
+            ElementPosition(blockIndex: 0, column: 1, order: 2),
+        LayoutElement.companyPhone:
+            ElementPosition(blockIndex: 0, column: 1, order: 3),
+        LayoutElement.companyEmail:
+            ElementPosition(blockIndex: 0, column: 1, order: 4),
+        LayoutElement.invoiceTitle:
+            ElementPosition(blockIndex: 0, column: 0, colSpan: 2, order: 5),
+        LayoutElement.invoiceNumber:
+            ElementPosition(blockIndex: 0, column: 0, colSpan: 2, order: 6),
+        LayoutElement.issueDate:
+            ElementPosition(blockIndex: 0, column: 0, order: 7),
+        LayoutElement.dueDate:
+            ElementPosition(blockIndex: 0, column: 1, order: 7),
+        LayoutElement.status:
+            ElementPosition(blockIndex: 0, column: 0, colSpan: 2, order: 8),
+        LayoutElement.clientName:
+            ElementPosition(blockIndex: 1, column: 0, colSpan: 2, order: 0),
+        LayoutElement.clientAddress:
+            ElementPosition(blockIndex: 1, column: 0, colSpan: 2, order: 1),
+        LayoutElement.clientPhone:
+            ElementPosition(blockIndex: 1, column: 0, order: 2),
+        LayoutElement.clientEmail:
+            ElementPosition(blockIndex: 1, column: 1, order: 2),
+        LayoutElement.itemsTable:
+            ElementPosition(blockIndex: 2, column: 0, colSpan: 2, order: 0),
+        LayoutElement.subtotal:
+            ElementPosition(blockIndex: 3, column: 1, order: 0),
+        LayoutElement.taxAmount:
+            ElementPosition(blockIndex: 3, column: 1, order: 1),
+        LayoutElement.discount:
+            ElementPosition(blockIndex: 3, column: 1, order: 2),
+        LayoutElement.totalAmount:
+            ElementPosition(blockIndex: 3, column: 1, order: 3),
+        LayoutElement.footerText:
+            ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 0),
+        LayoutElement.legalMention:
+            ElementPosition(blockIndex: 4, column: 0, colSpan: 2, order: 2),
+        LayoutElement.qrCode:
+            ElementPosition(blockIndex: 4, column: 0, order: 1),
+        LayoutElement.signature:
+            ElementPosition(blockIndex: 4, column: 1, order: 1),
       },
       styles: {
         LayoutElement.companyName: const ElementStyle(

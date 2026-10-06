@@ -1,25 +1,23 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
 //
-// 🎨 Refonte « Détails Facture » — maquette Stitch
-// (design/stitch_refined_billing_interface/aper_u_de_la_facture/) :
-//   • AppBar fixe : retour rond + « Détails Facture »
-//   • Canvas rosé : « SAUVER » (haut droite) + bouton zoom flottant
-//   • PAPIER A4 fidèle à la maquette (`StitchA4InvoicePreview`) alimenté par
-//     la facture réelle et les PARAMÈTRES DE PERSONNALISATION sauvegardés
-//     (couleurs du modèle actif, layout drag & drop, fond image/préréglage)
-//   • Barre basse sombre : « Éditer » + « Personnaliser »
-//   • Toutes les actions sont conservées : PDF/impression, partage, email,
-//     mentions légales, image de fond, modèles premium.
+// 🎨 Aperçu Facture — respecte les positions et styles de chaque preset.
+//
+// ✅ Modification clé : `_applyCustomisation` fusionne les positions du
+//    preset (`template.positions`) avec celles de l'utilisateur
+//    (`custom.positions`), puis propage TOUTES les clés (`header_style`,
+//    `table_style`, `footer_style`, `accent_border`, `show_thank_you`,
+//    `bank_name`, `bank_account`) à l'aperçu et au PDF.
+//
 // ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
-import 'dart:io';
-import 'dart:typed_data';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../services/database_service.dart';
@@ -28,7 +26,11 @@ import '../../services/printing_service.dart';
 import '../../services/template_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_custom_service.dart';
+import '../../services/signature_service.dart';
+import '../../services/wallet_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/invoice_render_service.dart';
+import 'invoice_print_preview_screen.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_settings.dart';
 import '../../models/client.dart';
@@ -59,29 +61,19 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Company? _company;
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
-  List<InvoiceTemplate> _templates = [];
-
-  // Équipes chargées pour le bottom sheet « Partager la facture ».
   List<Team> _cachedTeams = [];
 
-  // 🖼️ Arrière-plan personnalisé (workspace / modèle admin) pour l'aperçu.
   Uint8List? _previewBackground;
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
- 
-  /// 📐 Positions drag & drop du modèle actif (ordre des sections en-tête /
-  /// body / pied, visibilité des blocs, textes personnalisés, taille du logo…).
-  /// Transmises à l'aperçu pour être WYSIWYG avec l'impression PDF.
+
+  /// 📐 Positions effectives (preset + user) — contient TOUTES les clés
+  /// de style (`header_style`, `table_style`, `footer_style`, etc.).
   Map<String, dynamic> _customPositions = const {};
 
-  // 🧩 Layout drag & drop du modèle actif (blocs / colonnes / ordre) —
-  // partagé avec le workspace et l'impression PDF (WYSIWYG).
   InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
-
-  // 📦 Paramètres de facture (filigrane, couleurs…) — SettingsService.
   InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
 
-  // 🔍 Zoom de l'aperçu papier (bouton flottant de la maquette).
   double _zoom = 1.0;
 
   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
@@ -97,114 +89,156 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     _loadTemplates();
   }
 
+  // ============================================================
+  //  CHARGEMENT
+  // ============================================================
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    _invoiceSettings = await SettingsService.instance.loadSettings();
-    _invoice = await _db.getInvoice(widget.invoiceId);
-    if (_invoice != null) {
-      _client = await _db.getClient(_invoice!.clientId);
-      _company = await _db.getCompany();
-    }
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = true);
+    try {
+      final settings = await SettingsService.instance.loadSettings();
+      final invoice = await _db.getInvoice(widget.invoiceId);
+      if (!mounted) return;
+      Client? client;
+      Company? company;
+      if (invoice != null) {
+        client = await _db.getClient(invoice.clientId);
+        company = await _db.getCompany();
+      }
+      if (!mounted) return;
+      setState(() {
+        _invoiceSettings = settings;
+        _invoice = invoice;
+        _client = client;
+        _company = company;
+        _isLoading = false;
+      });
+    } catch (e) {
+      assert(() {
+        debugPrint('⚠️ _loadData(invoice_detail): $e');
+        return true;
+      }());
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _loadTemplates() async {
-    // Fusion : templates par défaut + ceux créés par l'admin (boutique).
+    final settings = await SettingsService.instance.loadSettings();
     final defaults = InvoiceTemplate.getDefaultTemplates();
     List<InvoiceTemplate> adminTemplates = [];
     try {
       adminTemplates = await TemplateService().getAllTemplates();
-    } catch (_) {}
+    } catch (e) {
+      assert(() {
+        debugPrint('⚠️ _loadTemplates: getAllTemplates a échoué: $e');
+        return true;
+      }());
+    }
+    if (!mounted) return;
+
     final adminIds = adminTemplates.map((e) => e.id).toSet();
-    _templates = [
+    final merged = <InvoiceTemplate>[
       ...defaults.where((d) => !adminIds.contains(d.id)),
       ...adminTemplates,
     ];
 
-    // ✅ Choix du modèle : priorité au template enregistré sur la facture
-    //    (invoice.templateId), sinon le modèle actif global.
-    final String? activeTemplateId =
-        await TemplateSelectionService.getActiveTemplateId();
+    final activeId = await TemplateSelectionService.getActiveTemplateId();
+    if (!mounted) return;
+
     InvoiceTemplate? selected;
-
-    // 1) Priorité : template stocké sur la facture.
-    if (_invoice != null && _invoice!.templateId != null) {
-      final matching = _templates.firstWhere(
-        (t) => t.id == _invoice!.templateId,
-        orElse: () => _templates.first,
-      );
-      if (matching.id == _invoice!.templateId) {
-        selected = matching;
-      }
-    }
-
-    // 2) Sinon : modèle actif global.
-    if (selected == null && activeTemplateId != null) {
-      final found = _templates.firstWhere(
-        (t) => t.id == activeTemplateId,
-        orElse: () => _templates.first,
-      );
-      if (found.id == activeTemplateId) {
-        selected = found;
-      }
-    }
-
-    // 3) Sinon : premier template par défaut, sinon le premier de la liste.
-    if (selected == null && _templates.isNotEmpty) {
-      selected = _templates.firstWhere(
-        (t) => t.isDefault || _templates.indexOf(t) == 0,
-        orElse: () => _templates.first,
+    if (activeId != null && merged.any((t) => t.id == activeId)) {
+      selected = merged.firstWhere((t) => t.id == activeId);
+    } else if (merged.isNotEmpty) {
+      selected = merged.firstWhere(
+        (t) => t.isDefault,
+        orElse: () => merged.first,
       );
     }
 
+    InvoiceTemplate? applied;
     if (selected != null) {
-      _selectedTemplate = await _applyCustomisation(selected);
+      applied = await _applyCustomisation(selected, settings: settings);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+
+    setState(() {
+      _invoiceSettings = settings;
+      if (applied != null) _selectedTemplate = applied;
+    });
   }
 
-  /// Applique les personnalisations locales (positions drag & drop / mapping /
-  /// arrière-plan) d'un modèle et met à jour l'aperçu.
-  Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
-    final custom = await TemplateCustomService.loadCustom(template.id);
-    final applied = template.copyWith(
-      positions: custom.positions,
-      mapping: {...template.mapping, ...custom.mapping},
+  /// ✅ FUSIONNE les positions du preset (`template.positions`) avec celles
+  /// de l'utilisateur (`custom.positions`). Garantit que les styles
+  /// (`header_style`, `table_style`, etc.) du preset sont respectés tant
+  /// que l'utilisateur n'a pas explicitement sauvegardé une personnalisation.
+  Future<InvoiceTemplate> _applyCustomisation(
+    InvoiceTemplate template, {
+    required InvoiceSettings settings,
+  }) async {
+    final render = await InvoiceRenderService.resolveRenderState(
+      template: template,
+      invoiceSettings: settings,
     );
 
-    // 🧩 Layout drag & drop : `fromMap` réinjecte les éléments manquants
-    // depuis le layout par défaut (compat ascendante).
-    _layoutConfig = custom.positions.isNotEmpty
-        ? InvoiceLayoutConfig.fromMap(custom.positions)
-        : InvoiceLayoutConfig.defaultLayout();
-    _backgroundSettings = custom.background;
-    _customPositions = custom.positions;
-    _previewBackground = decodeBackgroundImage(custom.background.fileData);
+    final positions = Map<String, dynamic>.from(render.positions);
 
-    if (!custom.background.hasCustomImage &&
-        !custom.background.hasPreset &&
-        template.fileData.isNotEmpty &&
-        template.fileType != 'pdf') {
-      // Repli : image téléversée directement sur le modèle (admin).
-      _previewBackground = decodeBackgroundImage(template.fileData);
+    // Signature : repli sur SignatureService si absente.
+    if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
+      try {
+        final signatureBytes = await SignatureService().loadSignatureBytes();
+        if (signatureBytes != null && signatureBytes.isNotEmpty) {
+          positions['signature_image'] = base64Encode(signatureBytes);
+        }
+      } catch (_) {}
     }
 
-    if (mounted) setState(() {});
-    return applied;
+    _layoutConfig = positions.isNotEmpty
+        ? InvoiceLayoutConfig.fromMap(positions)
+        : InvoiceLayoutConfig.defaultLayout();
+
+    _backgroundSettings = render.backgroundSettings;
+    _customPositions = positions;
+
+    final hasCustomImage = render.backgroundSettings.hasCustomImage;
+    final hasPreset = render.backgroundSettings.presetId.isNotEmpty &&
+        MultiBackgroundPreset.byId(render.backgroundSettings.presetId) != null;
+
+    if (hasCustomImage) {
+      _previewBackground = render.backgroundImage;
+    } else if (hasPreset) {
+      _previewBackground = null;
+    } else if (template.fileData.isNotEmpty && template.fileType != 'pdf') {
+      _previewBackground = _safeDecodeImage(template.fileData);
+    } else {
+      _previewBackground = null;
+    }
+
+    return render.effectiveTemplate;
   }
 
-  /// Ouvre le sélecteur plein écran des modèles puis recharge l'actif.
-  /// (La protection premium/paywall est gérée dans `TemplatesScreen`.)
+  static Uint8List? _safeDecodeImage(String? data) {
+    if (data == null || data.isEmpty) return null;
+    try {
+      var raw = data;
+      if (raw.startsWith('data:image')) {
+        final comma = raw.indexOf(',');
+        if (comma == -1) return null;
+        raw = raw.substring(comma + 1);
+      }
+      final bytes = base64Decode(raw);
+      return bytes.isEmpty ? null : bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ============================================================
+  //  NAVIGATION
+  // ============================================================
   Future<void> _openTemplatePicker() async {
     await context.push('/templates/select');
     if (mounted) await _loadTemplates();
   }
 
-  /// 👮 La personnalisation de la facture est réservée à l'administrateur
-  /// et au propriétaire du modèle (créateur / acheteur / accès premium /
-  /// modèle gratuit).
   bool _canCustomizeActiveTemplate() {
     final template = _selectedTemplate;
     if (template == null) return false;
@@ -217,8 +251,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Message de restriction (personnalisation non autorisée).
   void _showCustomizationRestricted() {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
@@ -230,7 +264,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Ouvre l'espace de personnalisation (drag & drop) du modèle actif.
   Future<void> _openWorkspace() async {
     final template = _selectedTemplate;
     if (template == null) {
@@ -245,59 +278,79 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (mounted) await _loadTemplates();
   }
 
-  // ===== IMPRESSION & PARTAGE (logique conservée) =====
+  // ============================================================
+  //  IMPRESSION / PARTAGE
+  // ============================================================
+  Future<void> _savePreview() async {
+    await _loadData();
+    await _loadTemplates();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Aperçu mis à jour ✅'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(milliseconds: 1200),
+      ),
+    );
+  }
+
+  bool _isFreePlan() {
+    final sub = context.read<SubscriptionProvider>();
+    return !sub.canAccessPremiumTemplates;
+  }
+
   Future<void> _previewAndPrint() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
-    try {
-      await PrintingService.printInvoice(
+    await context.push(
+      '/dashboard/invoices/${widget.invoiceId}/print',
+      extra: InvoicePrintPreviewArgs(
         invoice: _invoice!,
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF imprimé soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
-        customBackground: _backgroundSettings,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur d\'impression: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+        background: _backgroundSettings,
+        invoiceSettings: _invoiceSettings,
+        isFreePlan: _isFreePlan(),
+      ),
+    );
   }
 
   Future<void> _shareInvoice() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final freePlan = _isFreePlan();
     try {
       final pdfData = await PrintingService.generateInvoicePdf(
         invoice: _invoice!,
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF partagé soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
+        isFreePlan: freePlan,
+        invoiceSettings: _invoiceSettings,
       );
-      final tempDir = await getTemporaryDirectory();
-      final file =
-          File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
-      await file.writeAsBytes(pdfData);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Facture ${_invoice!.invoiceNumber} - OHADA Invoice Pro',
+      final fileName =
+          '${_invoice!.isDevis ? "Devis" : "Facture"}_${_invoice!.invoiceNumber}.pdf';
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              pdfData,
+              mimeType: 'application/pdf',
+              name: fileName,
+            ),
+          ],
+          fileNameOverrides: [fileName],
+          text: 'Facture ${_invoice!.invoiceNumber} - OHADA Invoice Pro',
+        ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('Erreur de partage: $e'),
           backgroundColor: Colors.red,
@@ -309,32 +362,41 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Future<void> _sendInvoiceByEmail() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final freePlan = _isFreePlan();
     try {
       final pdfData = await PrintingService.generateInvoicePdf(
         invoice: _invoice!,
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
-        // 🧩 Passe les personnalisations locales (positions, mapping, fond)
-        // pour que le PDF envoyé par email soit WYSIWYG avec l'aperçu.
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
+        isFreePlan: freePlan,
+        invoiceSettings: _invoiceSettings,
       );
-      // TODO: Uploader le PDF (Firebase Storage…) pour obtenir un lien public.
-      const pdfLink = '#';
       final htmlBody = MailService.getInvoiceTemplate(
         _client!.name,
         _invoice!.invoiceNumber,
-        pdfLink,
+        '',
+        companyName: _company!.name,
+        amount: _invoice!.totalAmount,
+        dueDate: _fmtDate(_invoice!.dueDate),
       );
       final sent = await MailService.sendHtmlEmail(
         to: _client!.email,
-        subject: 'Facture ${_invoice!.invoiceNumber}',
+        subject: 'Votre facture ${_invoice!.invoiceNumber} — ${_company!.name}',
         htmlBody: htmlBody,
+        attachments: [
+          EmailAttachment(
+            filename: 'facture_${_invoice!.invoiceNumber}.pdf',
+            bytes: pdfData,
+            contentType: 'application/pdf',
+          ),
+        ],
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(sent
               ? 'Facture envoyée par email avec succès'
@@ -343,24 +405,40 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
       );
     }
   }
 
+  String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  // ============================================================
+  //  PARTAGE ÉQUIPE
+  // ============================================================
   Future<void> _showShareDialog() async {
     if (_invoice == null) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     final teamService = TeamService();
     final auth = context.read<AppAuthProvider>();
-    final teams = await teamService.getUserTeams(auth.user!.id);
+    final userId = auth.user?.id;
+    if (userId == null || userId.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Vous devez être connecté pour partager.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final teams = await teamService.getUserTeams(userId);
+    if (!mounted) return;
     _cachedTeams = teams;
 
     if (teams.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Vous n\'appartenez à aucune équipe'),
           backgroundColor: Colors.orange,
@@ -377,7 +455,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetCtx) {
-        // État du bottom sheet (doit survivre aux rebuilds du builder).
         String? selectedTeamId;
         String permissionLevel = 'read';
         final Set<String> selectedMembers = {};
@@ -395,7 +472,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 if (team != null) team.ownerId,
                 ...?team?.adminIds,
                 ...?team?.memberIds,
-              }..remove(auth.user!.id);
+              }..remove(userId);
               selectedMembers.clear();
               sheetSetState(() {
                 memberIds = ids.toList();
@@ -449,7 +526,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Corps du bottom sheet « Partager la facture » (état passé par callbacks).
   Widget _shareSheetBody(
     BuildContext sheetCtx,
     void Function(VoidCallback) sheetSetState,
@@ -583,7 +659,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bouton « Partager » du bottom sheet (désactivé si rien de sélectionné).
   Widget _shareButton(
     BuildContext sheetCtx,
     TeamService teamService,
@@ -599,19 +674,37 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         onPressed: selectedTeamId == null || selectedMembers.isEmpty
             ? null
             : () async {
-                await teamService.shareResource(
-                  resourceId: _invoice!.id,
-                  resourceType: 'invoice',
-                  resourceName: _invoice!.invoiceNumber,
-                  teamId: selectedTeamId,
-                  sharedBy: auth.user!.id,
-                  sharedWith: selectedMembers.toList(),
-                  permissionLevel: permissionLevel,
-                );
-                if (!sheetCtx.mounted) return;
-                Navigator.pop(sheetCtx);
+                final navigator = Navigator.of(sheetCtx);
+                final messenger = ScaffoldMessenger.of(context);
+                final invoiceId = _invoice?.id;
+                final invoiceNumber = _invoice?.invoiceNumber ?? '';
+                final sharedBy = auth.user?.id;
+                if (invoiceId == null || sharedBy == null) return;
+
+                try {
+                  await teamService.shareResource(
+                    resourceId: invoiceId,
+                    resourceType: 'invoice',
+                    resourceName: invoiceNumber,
+                    teamId: selectedTeamId,
+                    sharedBy: sharedBy,
+                    sharedWith: selectedMembers.toList(),
+                    permissionLevel: permissionLevel,
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Échec du partage : $e'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                  return;
+                }
+
+                if (navigator.canPop()) navigator.pop();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(
                         'Facture partagée avec ${selectedMembers.length} membre(s) ✅'),
@@ -636,9 +729,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  🎨 UI — Refonte maquette Stitch « Aperçu de la facture »
+  //  BUILD
   // ============================================================
-
   @override
   Widget build(BuildContext context) {
     final c = RoyalScheme.of(context);
@@ -682,7 +774,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => context.pop(),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/invoices');
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: c.primary,
                   foregroundColor: c.onPrimary,
@@ -701,13 +799,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            // Canvas rosé de la maquette contenant le papier A4.
             child: Stack(
               children: [
                 Positioned.fill(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                     child: Center(
                       child: Transform.scale(
                         scale: _zoom,
@@ -717,26 +814,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     ),
                   ),
                 ),
-                // « SAUVER » (haut droite) — enregistre l'aperçu en PDF.
-                Positioned(
-                  top: 6,
-                  right: 20,
-                  child: GestureDetector(
-                    onTap: _previewAndPrint,
-                    child: Text(
-                      'SAUVER',
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.0,
-                        color: c.secondary,
-                      ),
-                    ),
-                  ),
-                ),
-                // Bouton zoom flottant — sous « SAUVER » (maquette).
-                Positioned(top: 44, right: 16, child: _zoomButton(c)),
+                Positioned(top: 10, right: 16, child: _zoomButton(c)),
               ],
             ),
           ),
@@ -746,15 +824,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// AppBar maquette : retour rond + « Détails Facture » + partage.
   PreferredSizeWidget _appBar(RoyalScheme c) {
     return AppBar(
-      backgroundColor: c.surface.withValues(alpha: 0.92),
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      centerTitle: false,
+      scrolledUnderElevation: 0,
+      centerTitle: true,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: c.onSurface),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: c.onSurface, size: 20),
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -764,7 +843,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         },
       ),
       title: Text(
-        'Détails Facture',
+        'Aperçu',
         style: TextStyle(
           fontFamily: 'Manrope',
           fontSize: 19,
@@ -773,15 +852,35 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ),
       ),
       actions: [
-        IconButton(
-          tooltip: 'Partager le PDF',
-          icon: Icon(Icons.ios_share, size: 20, color: c.onSurface),
-          onPressed: _shareInvoice,
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: TextButton(
+            onPressed: _savePreview,
+            style: TextButton.styleFrom(
+              foregroundColor: c.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 40),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'sauver',
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+                color: c.primary,
+              ),
+            ),
+          ),
         ),
         PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: c.onSurface),
+          icon: Icon(Icons.more_vert, color: c.onSurface, size: 22),
           onSelected: (value) {
             switch (value) {
+              case 'share':
+                _shareInvoice();
+                break;
               case 'pdf':
                 _previewAndPrint();
                 break;
@@ -794,9 +893,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               case 'picker':
                 _openTemplatePicker();
                 break;
+              case 'delete':
+                _confirmDeleteInvoice();
+                break;
             }
           },
           itemBuilder: (ctx) => [
+            const PopupMenuItem(value: 'share', child: Text('Partager le PDF')),
             const PopupMenuItem(
                 value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
             const PopupMenuItem(
@@ -805,18 +908,148 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 value: 'team', child: Text('Partager avec l\'équipe')),
             const PopupMenuItem(
                 value: 'picker', child: Text('Changer de modèle')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                  SizedBox(width: 8),
+                  Text('Supprimer',
+                      style: TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  /// Papier A4 : widget Stitch partagé, alimenté par la facture réelle et
-  /// les personnalisations sauvegardées du modèle actif.
+  Future<void> _confirmDeleteInvoice() async {
+    final invoice = _invoice;
+    if (invoice == null) return;
+
+    final uid = context.read<AppAuthProvider>().user?.id ?? '';
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
+    bool removeReminders = true;
+    bool removeTransactions = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Supprimer la facture ?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'La facture ${invoice.invoiceNumber} sera définitivement '
+                'supprimée. Cette action est irréversible.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: removeReminders,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Supprimer aussi les rappels liés',
+                  style: TextStyle(fontSize: 13),
+                ),
+                onChanged: (v) => setDlg(() => removeReminders = v ?? false),
+              ),
+              CheckboxListTile(
+                value: removeTransactions,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Supprimer aussi les encaissements liés '
+                  '(transactions du portefeuille)',
+                  style: TextStyle(fontSize: 13),
+                ),
+                onChanged: (v) => setDlg(() => removeTransactions = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _db.deleteInvoice(invoice.id);
+
+      if (removeReminders) {
+        final reminders = await _db.getReminders();
+        for (final r in reminders.where((r) => r.invoiceId == invoice.id)) {
+          await _db.deleteReminder(r.id);
+        }
+      }
+
+      int removedTx = 0;
+      if (removeTransactions && uid.isNotEmpty) {
+        removedTx = await WalletService().deleteInvoiceTransactions(
+          userId: uid,
+          invoiceId: invoice.id,
+        );
+      }
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            removedTx > 0
+                ? '✅ Facture supprimée ($removedTx encaissement(s) annulé(s))'
+                : '✅ Facture supprimée',
+          ),
+          backgroundColor: RoyalColors.primary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (router.canPop()) {
+        router.pop(true);
+      } else {
+        router.go('/invoices');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur lors de la suppression : $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  /// ✅ Papier A4 : passe `_customPositions` (preset + custom fusionnés)
+  ///    à `StitchA4InvoicePreview` → styles du preset RESPECTÉS.
   Widget _buildInvoicePaper(RoyalScheme c) {
     final template = _selectedTemplate;
-    // 🎨 Template EFFECTIF : les personnalisations globales (couleurs,
-    // police, affichage) sont appliquées au modèle pour l'aperçu.
     final effective = template == null
         ? null
         : SettingsService.applyToTemplate(template, _invoiceSettings);
@@ -825,20 +1058,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       client: _client,
       company: _company,
     );
-    final bool hasDecoratedBg =
-        _previewBackground != null || _backgroundSettings.hasPreset;
+
+    final hasCustomImage =
+        _backgroundSettings.hasCustomImage && _previewBackground != null;
+    final hasPreset = _backgroundSettings.presetId.isNotEmpty &&
+        MultiBackgroundPreset.byId(_backgroundSettings.presetId) != null;
+    final hasDecoratedBg = hasCustomImage || hasPreset;
 
     return Column(
       children: [
-        // Bandeau du modèle actif (aperçu maquette « Modèle : X »).
         if (template != null) ...[
           GestureDetector(
             onTap: _openTemplatePicker,
             child: Container(
               width: double.infinity,
               margin: const EdgeInsets.only(bottom: 10),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: c.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(10),
@@ -870,20 +1105,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                       ),
                     ),
                   ),
-                  Text(
-                    'Cliquez pour changer',
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 10.5,
-                      color: c.onSurfaceVariant,
-                    ),
-                  ),
+                  Icon(Icons.swap_horiz_rounded,
+                      size: 16, color: c.onSurfaceVariant),
                 ],
               ),
             ),
           ),
         ],
-        // Papier de la facture.
         StitchA4InvoicePreview(
           data: stitchData,
           accentColor: effective?.primaryColor,
@@ -900,6 +1128,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           backgroundImage: _previewBackground,
           watermarkText: _invoiceSettings.watermarkText,
           showWatermark: _invoiceSettings.showWatermark,
+          // ✅ TOUTES les clés de style (header_style, table_style, etc.)
+          //    sont transmises via cette map.
           customPositions: _customPositions,
         ),
         if (!hasDecoratedBg) ...[
@@ -917,12 +1147,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bouton zoom flottant de la maquette (cercle translucide bordé).
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: 0.55),
-        shape: BoxShape.circle,
+        color: c.surface.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.outlineVariant.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
@@ -939,12 +1168,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             setState(() => _zoom = (_zoom - 0.1).clamp(0.5, 1.6));
           }),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               '${(_zoom * 100).toInt()}%',
               style: TextStyle(
                 fontFamily: 'WorkSans',
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: c.onSurface,
               ),
@@ -964,70 +1193,92 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       customBorder: const CircleBorder(),
       child: Padding(
         padding: const EdgeInsets.all(7),
-        child: Icon(icon, size: 16, color: c.onSurface),
+        child: Icon(icon, size: 15, color: c.onSurface),
       ),
     );
   }
 
-  /// Action de la barre basse : cercle bordé + libellé (maquette).
   Widget _bottomAction(
     RoyalScheme c, {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    Color? iconColor,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.20)),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: Colors.white.withValues(alpha: 0.06),
+        highlightColor: Colors.white.withValues(alpha: 0.04),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.05),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon,
+                    size: 22, color: iconColor ?? c.inverseOnSurface),
               ),
-              child: Icon(icon, size: 22, color: c.inverseOnSurface),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'WorkSans',
-                fontSize: 13,
-                color: c.inverseOnSurface,
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: c.inverseOnSurface,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Barre basse sombre (inverseSurface) de la maquette : Éditer + Personnaliser.
   Widget _buildBottomBar(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
-        color: c.inverseSurface.withValues(alpha: 0.97),
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            c.inverseSurface.withValues(alpha: 0.98),
+            c.inverseSurface,
+          ],
         ),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -6),
+          ),
+        ],
       ),
       padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 12,
-        bottom: 12 + MediaQuery.of(context).padding.bottom,
+        left: 16,
+        right: 16,
+        top: 14,
+        bottom: 14 + MediaQuery.of(context).padding.bottom,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // « Éditer » : paiement (si brouillon) sinon édition.
           _bottomAction(
             c,
             icon: Icons.edit_outlined,
@@ -1049,7 +1300,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               }
             },
           ),
-          // « Personnaliser » : palette de fond + outils du modèle actif.
           _bottomAction(
             c,
             icon: Icons.palette_outlined,
@@ -1061,13 +1311,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Recharge la facture après un paiement (statut → payée, tampon visible).
   Future<void> _reloadAfterPayment() async {
     await _loadData();
   }
 
-  /// Menu « Personnaliser » : workspace drag & drop, image de fond,
-  /// mention légale, liste des modèles.
   void _openCustomizationMenu() {
     final c = RoyalScheme.of(context);
     showModalBottomSheet(
@@ -1076,8 +1323,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       builder: (sheetCtx) => Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF151722) : Colors.white,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: SafeArea(
           child: Column(
@@ -1098,21 +1344,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 Icons.widgets_outlined,
                 'Personnalisation drag & drop',
                 'Blocs, ordre et styles du modèle actif',
-                _openWorkspaceFromMenu,
+                () => _openWorkspaceFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
                 Icons.wallpaper_outlined,
                 'Image de fond & palette',
                 'Image galerie ou préréglage décoratif',
-                _openBackgroundSheetFromMenu,
+                () => _openBackgroundSheetFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
                 Icons.gavel_outlined,
                 'Mention légale & conditions',
                 'Texte légal, RCCM et N° contribuable',
-                _openLegalEditorFromMenu,
+                () => _openLegalEditorFromMenu(sheetCtx),
               ),
               _menuTile(
                 c,
@@ -1132,7 +1378,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Tuile du menu « Personnaliser ».
   Widget _menuTile(
     RoyalScheme c,
     IconData icon,
@@ -1172,31 +1417,30 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Wrapper menu → workspace (referme le bottom sheet d'abord).
-  void _openWorkspaceFromMenu() {
-    Navigator.pop(context);
-    _openWorkspace();
+  Future<void> _openWorkspaceFromMenu(BuildContext sheetCtx) async {
+    Navigator.pop(sheetCtx);
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    await _openWorkspace();
   }
 
-  /// Wrapper menu → palette d'image de fond du modèle actif.
-  void _openBackgroundSheetFromMenu() {
-    Navigator.pop(context);
-    _openBackgroundSheet();
+  Future<void> _openBackgroundSheetFromMenu(BuildContext sheetCtx) async {
+    Navigator.pop(sheetCtx);
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    await _openBackgroundSheet();
   }
 
-  /// Wrapper menu → éditeur de mention légale.
-  void _openLegalEditorFromMenu() {
-    Navigator.pop(context);
-    _showLegalEditor();
+  Future<void> _openLegalEditorFromMenu(BuildContext sheetCtx) async {
+    Navigator.pop(sheetCtx);
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    await _showLegalEditor();
   }
 
-  /// Ouvre la palette d'image de fond (bottom sheet partagée avec le
-  /// workspace). Persiste à chaque changement.
   Future<void> _openBackgroundSheet() async {
     final template = _selectedTemplate;
     if (template == null || !mounted) return;
-    // 👮 Le fond fait partie des personnalisations réservées à l'admin et
-    // au propriétaire du modèle.
     if (!_canCustomizeActiveTemplate()) {
       _showCustomizationRestricted();
       return;
@@ -1208,28 +1452,41 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Persiste le fond choisi (préréglage palette ou image galerie) pour le
-  /// modèle actif — sans toucher aux positions / mapping existants.
+  /// ✅ Ne perd JAMAIS les positions ni les clés de style.
   Future<void> _persistBackground(TemplateBackgroundSettings next) async {
     final template = _selectedTemplate;
     if (template == null) return;
+
     final custom = await TemplateCustomService.loadCustom(template.id);
+
+    // ✅ Fusion : _customPositions (résolues) > custom > template
+    final effectivePositions = _customPositions.isNotEmpty
+        ? _customPositions
+        : (custom.positions.isNotEmpty
+            ? custom.positions
+            : Map<String, dynamic>.from(template.positions));
+
+    final effectiveMapping = custom.mapping.isNotEmpty
+        ? custom.mapping
+        : Map<String, String>.from(template.mapping);
+
     await TemplateCustomService.saveCustom(
       template.id,
-      positions: custom.positions,
-      mapping: custom.mapping,
+      positions: effectivePositions,
+      mapping: effectiveMapping,
       background: next,
     );
+
     if (!mounted) return;
     setState(() {
       _backgroundSettings = next;
-      _previewBackground =
-          next.hasCustomImage ? decodeBackgroundImage(next.fileData) : null;
+      final bytes = next.fileData;
+      _previewBackground = next.hasCustomImage && bytes.isNotEmpty
+          ? _safeDecodeImage(bytes)
+          : null;
     });
   }
 
-  /// 📜 Éditeur « Mention légale & conditions » de la société : texte légal
-  /// (pied de facture), RCCM et N° contribuable — enregistrés dans Company.
   Future<void> _showLegalEditor() async {
     final company = _company;
     if (company == null || !mounted) return;
@@ -1237,88 +1494,91 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final rccmCtrl = TextEditingController(text: company.rccm);
     final taxCtrl = TextEditingController(text: company.taxId);
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF151722) : Colors.white,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetCtx) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Mention légale & conditions',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ces informations apparaissent sur toutes vos factures.',
-                style: TextStyle(fontSize: 11.5, color: subTextColor),
-              ),
-              const SizedBox(height: 12),
-              _legalField('Texte légal (mentions, conditions de paiement…)',
-                  legalCtrl, 3),
-              _legalField('RCCM', rccmCtrl, 1),
-              _legalField('N° Contribuable', taxCtrl, 1),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final navigator = Navigator.of(sheetCtx);
-                    final updated = company.copyWith(
-                      legalText: legalCtrl.text.trim(),
-                      rccm: rccmCtrl.text.trim(),
-                      taxId: taxCtrl.text.trim(),
-                    );
-                    await _db.saveCompany(updated);
-                    if (!mounted) return;
-                    setState(() => _company = updated);
-                    navigator.pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Informations légales enregistrées'),
-                        backgroundColor: Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF151722) : Colors.white,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mention légale & conditions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
                   ),
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('Enregistrer'),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  'Ces informations apparaissent sur toutes vos factures.',
+                  style: TextStyle(fontSize: 11.5, color: subTextColor),
+                ),
+                const SizedBox(height: 12),
+                _legalField('Texte légal (mentions, conditions de paiement…)',
+                    legalCtrl, 3),
+                _legalField('RCCM', rccmCtrl, 1),
+                _legalField('N° Contribuable', taxCtrl, 1),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final navigator = Navigator.of(sheetCtx);
+                      final messenger = ScaffoldMessenger.of(context);
+                      final updated = company.copyWith(
+                        legalText: legalCtrl.text.trim(),
+                        rccm: rccmCtrl.text.trim(),
+                        taxId: taxCtrl.text.trim(),
+                      );
+                      await _db.saveCompany(updated);
+                      if (!mounted) return;
+                      setState(() => _company = updated);
+                      navigator.pop();
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Informations légales enregistrées'),
+                          backgroundColor: Colors.green,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Enregistrer'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    legalCtrl.dispose();
-    rccmCtrl.dispose();
-    taxCtrl.dispose();
+      );
+    } finally {
+      legalCtrl.dispose();
+      rccmCtrl.dispose();
+      taxCtrl.dispose();
+    }
   }
 
-  /// Champ texte compact du formulaire légal.
   Widget _legalField(
       String label, TextEditingController controller, int maxLines) {
     return Padding(

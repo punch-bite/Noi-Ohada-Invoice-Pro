@@ -104,7 +104,7 @@ class RoyalText {
   /// Titre de section / écran (Manrope 600, 20px).
   static TextStyle headlineMd(Color color) => TextStyle(
         fontFamily: 'Manrope',
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: FontWeight.w600,
         height: 28 / 20,
         color: color,
@@ -113,7 +113,7 @@ class RoyalText {
   /// Gros titre (Manrope 700, 24px, mobile).
   static TextStyle headlineLgMobile(Color color) => TextStyle(
         fontFamily: 'Manrope',
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: FontWeight.w700,
         height: 32 / 24,
         color: color,
@@ -122,7 +122,7 @@ class RoyalText {
   /// Corps principal (Work Sans 400, 14px).
   static TextStyle bodyMd(Color color) => TextStyle(
         fontFamily: 'WorkSans',
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: FontWeight.w400,
         height: 20 / 14,
         color: color,
@@ -131,7 +131,7 @@ class RoyalText {
   /// Corps secondaire (Work Sans 400, 16px).
   static TextStyle bodyLg(Color color) => TextStyle(
         fontFamily: 'WorkSans',
-        fontSize: 16,
+        fontSize: 12,
         fontWeight: FontWeight.w400,
         height: 24 / 16,
         color: color,

@@ -38,7 +38,7 @@ const ICON = {
 };
 
 const CSS = `
-*{margin:0;padding:0;box-sizing:border-box}
+*{margin:0;padding:0;box-sizing:border-box;text-decoration:none;list-style:none;outline:none;border:none;background:none;color:inherit;font-family:inherit;font-size:inherit}
 :root{
   --bg:#0e0d12;            /* encre très douce */
   --panel:rgba(255,255,255,.032);
@@ -139,7 +139,7 @@ function renderLanding() {
 
 <div class="wrap">
   <header>
-    <a class="brand" href="/"><span class="logo text-decoration-none"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
+    <a class="brand text-decoration-none" href="/"><span class="logo text-decoration-none"><img src="/logo.png" alt="Noi OHADA Invoice Pro"></span>Noi OHADA</a>
     <nav class="hnav">
       <a href="#fonctionnalites">Fonctionnalités</a>
       <a class="btn small primary" href="/download">${ICON.down} Télécharger</a>
@@ -152,7 +152,7 @@ function renderLanding() {
     <p class="lead">Créez des factures et devis élégants en quelques secondes, suivez vos stocks — en ligne comme hors connexion.</p>
     <div class="cta">
       <a class="btn primary" href="/download">${ICON.down} Télécharger l'application</a>
-      <a class="btn ghost" href="https://app.noi-ohada-invoice-pro.com" target="_blank" rel="noopener">${ICON.globe} Version web</a>
+      <a class="btn ghost" href="https://noi-ohada-pwa.vercel.app" target="_blank" rel="noopener">${ICON.globe} Version web</a>
     </div>
     <div class="trust">
       <span>${ICON.check} Conforme OHADA</span>

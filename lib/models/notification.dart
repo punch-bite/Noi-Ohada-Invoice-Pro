@@ -12,48 +12,49 @@ enum NotificationType {
   invoice_created,
   invoice_paid,
   invoice_overdue,
-  invoice_long_overdue,      // Impayé depuis longtemps
+  invoice_long_overdue, // Impayé depuis longtemps
   invoice_cancelled,
   client_added,
   payment_received,
   subscription_expired,
-  subscription_activated,    // Activé ou renouvelé
+  subscription_activated, // Activé ou renouvelé
   system_update,
-  reminder,                  // Rappel manuel
-  reminder_auto,             // Rappel automatique système
-  low_stock,                 // Stock faible
-  stock_out,                 // Rupture de stock
-  team_shared,               // Donnée partagée avec un membre d'équipe (@mention)
-  team_invite,               // Invitation à rejoindre une équipe (à accepter)
-  team_invite_accepted,      // Un invité a accepté/refusé l'invitation
+  reminder, // Rappel manuel
+  reminder_auto, // Rappel automatique système
+  low_stock, // Stock faible
+  stock_out, // Rupture de stock
+  team_shared, // Donnée partagée avec un membre d'équipe (@mention)
+  team_invite, // Invitation à rejoindre une équipe (à accepter)
+  team_invite_accepted, // Un invité a accepté/refusé l'invitation
 }
 
 @HiveType(typeId: 9) // Ajuste le typeId selon ton registre Hive
 class AppNotification {
   @HiveField(0)
   final String id;
-  
+
   @HiveField(1)
   final String title;
-  
+
   @HiveField(2)
   final String body;
-  
+
   @HiveField(3)
-  final String type; // Stocké sous forme de String simple (ex: 'invoice_created')
-  
+  final String
+      type; // Stocké sous forme de String simple (ex: 'invoice_created')
+
   @HiveField(4)
   final DateTime timestamp;
-  
+
   @HiveField(5)
   final bool isRead;
-  
+
   @HiveField(6)
   final String? referenceId;
-  
+
   @HiveField(7)
   final String? referenceType;
-  
+
   @HiveField(8)
   final Map<String, dynamic>? data;
 
@@ -92,7 +93,8 @@ class AppNotification {
     };
   }
 
-  factory AppNotification.fromMap(Map<String, dynamic> map, {String? documentId}) {
+  factory AppNotification.fromMap(Map<String, dynamic> map,
+      {String? documentId}) {
     return AppNotification(
       id: documentId ?? map['id'] ?? const Uuid().v4(),
       title: map['title'] ?? '',
@@ -238,13 +240,27 @@ class AppNotification {
     );
   }
 
-  static AppNotification createInvoicePaid(String invoiceNumber) {
+  /// 🔔 Notification de paiement : UNE seule notification par paiement, avec
+  /// le montant dans le corps (l'ancienne double notification « Facture
+  /// payée » + « Paiement reçu » multipliait les alertes et annonçait des
+  /// montants trompeurs — notamment pour un paiement CASH qui ne crédite
+  /// jamais le portefeuille).
+  static AppNotification createInvoicePaid(String invoiceNumber,
+      {double? amount}) {
+    final amountStr = amount == null
+        ? null
+        : (amount % 1 == 0
+            ? amount.toStringAsFixed(0)
+            : amount.toStringAsFixed(2));
     return AppNotification(
-      title: 'Paiement reçu',
-      body: 'La facture $invoiceNumber a été payée.',
+      title: 'Facture payée',
+      body: amountStr == null
+          ? 'La facture $invoiceNumber a été réglée avec succès.'
+          : 'La facture $invoiceNumber a été réglée avec succès ($amountStr FCFA).',
       type: NotificationType.invoice_paid.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
+      data: amount == null ? null : {'amount': amount, 'currency': 'FCFA'},
     );
   }
 
@@ -258,10 +274,12 @@ class AppNotification {
     );
   }
 
-  static AppNotification createInvoiceLongOverdue(String invoiceNumber, int days) {
+  static AppNotification createInvoiceLongOverdue(
+      String invoiceNumber, int days) {
     return AppNotification(
       title: '⚠️ Facture très en retard',
-      body: 'La facture $invoiceNumber est impayée depuis $days jours. Une action est nécessaire.',
+      body:
+          'La facture $invoiceNumber est impayée depuis $days jours. Une action est nécessaire.',
       type: NotificationType.invoice_long_overdue.name,
       referenceId: invoiceNumber,
       referenceType: 'invoice',
@@ -289,8 +307,10 @@ class AppNotification {
     );
   }
 
-  static AppNotification createPaymentReceived(double amount, [String currency = 'FCFA']) {
-    final amountStr = amount % 1 == 0 ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+  static AppNotification createPaymentReceived(double amount,
+      [String currency = 'FCFA']) {
+    final amountStr =
+        amount % 1 == 0 ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
     return AppNotification(
       title: 'Paiement reçu',
       body: 'Un paiement de $amountStr $currency a été reçu.',
@@ -302,7 +322,8 @@ class AppNotification {
   static AppNotification createSubscriptionExpired() {
     return AppNotification(
       title: 'Abonnement expiré',
-      body: 'Votre abonnement est arrivé à expiration. Renouvelez-le maintenant.',
+      body:
+          'Votre abonnement est arrivé à expiration. Renouvelez-le maintenant.',
       type: NotificationType.subscription_expired.name,
     );
   }
@@ -332,7 +353,8 @@ class AppNotification {
     );
   }
 
-  static AppNotification createAutoReminder(String message, String invoiceNumber) {
+  static AppNotification createAutoReminder(
+      String message, String invoiceNumber) {
     return AppNotification(
       title: '🤖 Rappel automatique',
       body: message,
@@ -342,10 +364,12 @@ class AppNotification {
     );
   }
 
-  static AppNotification createLowStock(String productName, int quantity, int minStock) {
+  static AppNotification createLowStock(
+      String productName, int quantity, int minStock) {
     return AppNotification(
       title: '⚠️ Stock faible',
-      body: 'Le produit "$productName" n\'a plus que $quantity unités (seuil : $minStock).',
+      body:
+          'Le produit "$productName" n\'a plus que $quantity unités (seuil : $minStock).',
       type: NotificationType.low_stock.name,
       referenceId: productName,
       referenceType: 'product',

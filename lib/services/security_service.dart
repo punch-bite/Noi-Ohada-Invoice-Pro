@@ -133,6 +133,11 @@ class SecurityService {
 
   // ===== BIOMETRIE =====
   static Future<bool> isBiometricAvailable() async {
+    // 🌐 PWA : `local_auth` n'a AUCUNE implémentation web (pas de capteur
+    // d'empreinte / Face ID côté navigateur). On déclare explicitement la
+    // biométrie indisponible au lieu de lever une MissingPluginException
+    // à chaque appel (qui finissait en « échec » silencieux).
+    if (kIsWeb) return false;
     try {
       return await _localAuth.canCheckBiometrics;
     } catch (e) {
@@ -147,10 +152,13 @@ class SecurityService {
 
     static Future<void> setBiometricEnabled(bool enabled) async {
     assert(_box != null, 'SecurityService n\'a pas été initialisé.');
-    await _box!.put(_biometricKey, enabled);
+    // 🌐 Web : l'activation est impossible → on force `false` pour ne pas
+    // laisser un réglage « activé » qui ne pourra jamais aboutir.
+    final effective = kIsWeb ? false : enabled;
+    await _box!.put(_biometricKey, effective);
     await _logActivity(
-      action: enabled ? 'biometric_enabled' : 'biometric_disabled',
-      details: 'Biométrie ${enabled ? 'activée' : 'désactivée'}',
+      action: effective ? 'biometric_enabled' : 'biometric_disabled',
+      details: 'Biométrie ${effective ? 'activée' : 'désactivée'}',
     );
   }
 
@@ -162,6 +170,15 @@ class SecurityService {
   }
 
   static Future<bool> authenticateWithBiometrics() async {
+    // 🌐 PWA : aucune API biométrique native sur le web → échec propre et
+    // immédiat (le code PIN reste le moyen de déverrouillage).
+    if (kIsWeb) {
+      await _logActivity(
+        action: 'biometric_authentication_failed',
+        details: 'Biométrie indisponible (version web / PWA)',
+      );
+      return false;
+    }
     try {
       final isAvailable = await isBiometricAvailable();
       if (!isAvailable) {

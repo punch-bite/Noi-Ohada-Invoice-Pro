@@ -1,16 +1,20 @@
 // lib/screens/dashboard/create_client_screen.dart
+//
+// ➕ Création / édition client — sections claires, import contact intégré.
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MissingPluginException;
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
-import '../../services/database_service.dart';
-import '../../services/quota_enforcement_service.dart';
+
 import '../../models/client.dart';
 import '../../models/plan.dart';
-import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../services/database_service.dart';
+import '../../services/quota_enforcement_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class CreateClientScreen extends StatefulWidget {
@@ -33,12 +37,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
 
   bool _isSaving = false;
   bool _isLoadingContacts = false;
-  bool _isCompany = true; // true = ENTREPRISE, false = PARTICULIER
+  bool _isCompany = true;
   String _paymentTerms = '15 jours';
-
-  // 🔍 Recherche dans le dialogue d'import des contacts.
-  final _contactSearchController = TextEditingController();
-  String _contactQuery = '';
 
   @override
   void initState() {
@@ -59,26 +59,26 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     _taxIdController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
-    _contactSearchController.dispose();
     super.dispose();
   }
 
   Future<void> _saveClient() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Blocage quota : uniquement pour un NOUVEAU client (pas en édition).
     if (widget.client == null) {
       final sub = context.read<SubscriptionProvider>();
       final plan = sub.currentPlan ?? Plan.getFreePlan();
-      final result =
-          await QuotaEnforcementService().canAddClient(plan);
+      final result = await QuotaEnforcementService().canAddClient(plan);
       if (!result.isAllowed) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                result.message ?? 'Limite de clients atteinte. Passez au plan supérieur.'),
+            content: Text(result.message ??
+                'Limite de clients atteinte. Passez au plan supérieur.'),
             backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
           ),
         );
         return;
@@ -103,7 +103,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           address: _addressController.text.trim(),
           phone: _phoneController.text.trim(),
           email: _emailController.text.trim(),
-          taxId: _taxIdController.text.trim(), userId: '',
+          taxId: _taxIdController.text.trim(),
+          userId: '',
         );
         await _db.addClient(client);
       }
@@ -112,9 +113,13 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              widget.client != null ? 'Client modifié !' : 'Client ajouté !'),
+          content: Text(widget.client != null
+              ? 'Client modifié ✓'
+              : 'Client ajouté ✓'),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
       context.pop(true);
@@ -122,42 +127,43 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Erreur : $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
 
-  // ===== IMPORTER DEPUIS LE RÉPERTOIRE (flutter_contacts) =====
-
+  // ── Import contact ──
   Future<void> _importFromContacts() async {
-    // Le plugin flutter_contacts ne supporte PAS le web (MethodChannel natif).
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Import des contacts disponible uniquement sur mobile/desktop'),
+              'Import disponible uniquement sur mobile/desktop'),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
-    // Vérifier les permissions
-    // 🔒 NB : on demande `PermissionType.read` (et non readWrite) car seul
-    // `READ_CONTACTS` est déclaré dans le manifest Android — demander
-    // readWrite échoue silencieusement et rend l'accès contacts impossible.
     final status =
         await FlutterContacts.permissions.request(PermissionType.read);
     if (status != PermissionStatus.granted &&
         status != PermissionStatus.limited) {
-      // Si refusé définitivement, on propose d'ouvrir les réglages système.
-      final permanentlyDenied = status == PermissionStatus.permanentlyDenied ||
-          status == PermissionStatus.restricted;
+      final permanentlyDenied =
+          status == PermissionStatus.permanentlyDenied ||
+              status == PermissionStatus.restricted;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              'Permission d\'accès aux contacts refusée. Autorisez-la dans les paramètres du téléphone.'),
+          content: const Text(
+              'Permission d\'accès aux contacts refusée. Autorisez-la dans les paramètres.'),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
           action: permanentlyDenied
               ? SnackBarAction(
                   label: 'Réglages',
@@ -172,225 +178,285 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     setState(() => _isLoadingContacts = true);
 
     try {
-      final List<Contact> contacts = await FlutterContacts.getAll(
-        properties: {ContactProperty.name, ContactProperty.photoThumbnail, ContactProperty.phone, ContactProperty.email},
-        // filter: ContactFilter.name('John'),
-        // limit: 100,
+      final contacts = await FlutterContacts.getAll(
+        properties: {
+          ContactProperty.name,
+          ContactProperty.phone,
+          ContactProperty.email,
+        },
       );
+
+      if (!mounted) return;
+      setState(() => _isLoadingContacts = false);
 
       if (contacts.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Aucun contact trouvé'),
             backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
           ),
         );
-        setState(() => _isLoadingContacts = false);
         return;
       }
 
-      setState(() => _isLoadingContacts = false);
-      _showContactsDialog(contacts);
+      _showContactsSheet(contacts);
     } on MissingPluginException {
+      if (!mounted) return;
       setState(() => _isLoadingContacts = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Import des contacts non disponible sur cette plateforme. Saisissez le client manuellement.'),
+              'Import non disponible sur cette plateforme.'),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoadingContacts = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur lors du chargement des contacts: $e'),
+          content: Text('Erreur : $e'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  void _showContactsDialog(List<Contact> contacts) {
+  void _showContactsSheet(List<Contact> contacts) {
     final theme = context.read<ThemeProvider>();
     final isDark = theme.isDarkMode;
     final textColor = theme.textColor;
     final subTextColor = theme.subTextColor;
     final primaryColor = theme.primaryColor;
+    final searchCtrl = TextEditingController();
+    String query = '';
 
-    showDialog(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: Text(
-          'Sélectionner un contact',
-          style: TextStyle(
-            color: textColor,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 440,
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              // 🔍 Filtre sur le nom, le téléphone et l'email.
-              final filtered = _contactQuery.isEmpty
-                  ? contacts
-                  : contacts.where((c) {
-                      final q = _contactQuery.toLowerCase();
-                      final name = (c.displayName ?? '').toLowerCase();
-                      final phone = c.phones.isNotEmpty
-                          ? c.phones.first.number.toLowerCase()
-                          : '';
-                      final email = c.emails.isNotEmpty
-                          ? c.emails.first.address.toLowerCase()
-                          : '';
-                      return name.contains(q) ||
-                          phone.contains(q) ||
-                          email.contains(q);
-                    }).toList();
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final filtered = query.isEmpty
+              ? contacts
+              : contacts.where((c) {
+                  final q = query.toLowerCase();
+                  final name = (c.displayName ?? '').toLowerCase();
+                  final phone = c.phones.isNotEmpty
+                      ? c.phones.first.number.toLowerCase()
+                      : '';
+                  final email = c.emails.isNotEmpty
+                      ? c.emails.first.address.toLowerCase()
+                      : '';
+                  return name.contains(q) ||
+                      phone.contains(q) ||
+                      email.contains(q);
+                }).toList();
 
-              return Column(
-                children: [
-                  // ===== Barre de recherche =====
-                  TextField(
-                    controller: _contactSearchController,
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      hintText: 'Rechercher un contact…',
-                      hintStyle: TextStyle(color: subTextColor),
-                      prefixIcon: Icon(Icons.search, color: primaryColor),
-                      suffixIcon: _contactQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _contactSearchController.clear();
-                                setState(() => _contactQuery = '');
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor:
-                          isDark ? Colors.grey[800] : Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+          return Container(
+            height: MediaQuery.of(ctx).size.height * 0.85,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1A1D26) : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              children: [
+                // Handle
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: subTextColor.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    onChanged: (v) =>
-                        setState(() => _contactQuery = v),
                   ),
-                  const SizedBox(height: 10),
-                  // ===== Liste filtrée =====
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              _contactQuery.isEmpty
-                                  ? 'Aucun contact disponible'
-                                  : 'Aucun contact ne correspond à la recherche',
-                              style: TextStyle(color: subTextColor),
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final contact = filtered[index];
-                              final displayName =
-                                  contact.displayName ?? 'Sans nom';
-                              final phones = contact.phones;
-                              final emails = contact.emails;
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Choisir un contact',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.close_rounded,
+                            color: subTextColor, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Recherche
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: TextField(
+                      controller: searchCtrl,
+                      style: TextStyle(color: textColor, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Rechercher…',
+                        hintStyle: TextStyle(
+                            color: subTextColor.withValues(alpha: 0.7),
+                            fontSize: 13.5),
+                        prefixIcon: Icon(Icons.search_rounded,
+                            color: subTextColor, size: 20),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onChanged: (v) =>
+                          setSheetState(() => query = v),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Liste
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Aucun contact ne correspond',
+                            style: TextStyle(color: subTextColor),
+                          ),
+                        )
+                      : ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 8),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final c = filtered[i];
+                            final name = c.displayName ?? 'Sans nom';
+                            final phone = c.phones.isNotEmpty
+                                ? c.phones.first.number
+                                : '';
+                            final email = c.emails.isNotEmpty
+                                ? c.emails.first.address
+                                : '';
 
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor:
-                                      primaryColor.withValues(alpha: 0.1),
-                                  child: Text(
-                                    displayName.isNotEmpty
-                                        ? displayName[0].toUpperCase()
-                                        : '?',
-                                    style: TextStyle(
-                                      color: primaryColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                title: Text(
-                                  displayName,
-                                  style: TextStyle(color: textColor),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                            return InkWell(
+                              onTap: () {
+                                _fillFromContact(c);
+                                Navigator.pop(ctx);
+                              },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                                child: Row(
                                   children: [
-                                    if (phones.isNotEmpty)
-                                      Text(
-                                        phones.first.number,
-                                        style: TextStyle(
-                                            color: subTextColor,
-                                            fontSize: 12),
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: primaryColor
+                                            .withValues(alpha: 0.12),
+                                        borderRadius:
+                                            BorderRadius.circular(14),
                                       ),
-                                    if (emails.isNotEmpty)
-                                      Text(
-                                        emails.first.address,
-                                        style: TextStyle(
-                                            color: subTextColor,
-                                            fontSize: 12),
+                                      child: Center(
+                                        child: Text(
+                                          name.isNotEmpty
+                                              ? name[0].toUpperCase()
+                                              : '?',
+                                          style: TextStyle(
+                                            color: primaryColor,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                        ),
                                       ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow:
+                                                TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                          if (phone.isNotEmpty)
+                                            Text(
+                                              phone,
+                                              style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: subTextColor),
+                                            ),
+                                          if (email.isNotEmpty)
+                                            Text(
+                                              email,
+                                              maxLines: 1,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: subTextColor),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(Icons.chevron_right_rounded,
+                                        color: subTextColor
+                                            .withValues(alpha: 0.5)),
                                   ],
                                 ),
-                                onTap: () {
-                                  _fillClientFromContact(contact);
-                                  Navigator.pop(context);
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Annuler',
-              style: TextStyle(color: subTextColor),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
-    );
-
-    setState(() => _isLoadingContacts = false);
+    ).whenComplete(() {
+      searchCtrl.dispose();
+    });
   }
 
-  void _fillClientFromContact(Contact contact) {
+  void _fillFromContact(Contact contact) {
     final displayName = contact.displayName ?? '';
     final phones = contact.phones;
     final emails = contact.emails;
     final addresses = contact.addresses;
 
     setState(() {
-      if (displayName.isNotEmpty) {
-        _nameController.text = displayName;
-      }
-      if (phones.isNotEmpty) {
-        _phoneController.text = phones.first.number;
-      }
-      if (emails.isNotEmpty) {
-        _emailController.text = emails.first.address;
-      }
-      if (addresses.isNotEmpty && addresses.first.formatted != null) {
+      if (displayName.isNotEmpty) _nameController.text = displayName;
+      if (phones.isNotEmpty) _phoneController.text = phones.first.number;
+      if (emails.isNotEmpty) _emailController.text = emails.first.address;
+      if (addresses.isNotEmpty &&
+          addresses.first.formatted != null) {
         _addressController.text = addresses.first.formatted ?? '';
       }
     });
@@ -399,256 +465,207 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       const SnackBar(
         content: Text('Données importées depuis le contact'),
         backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
         duration: Duration(seconds: 2),
       ),
     );
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final textColor = themeProvider.textColor;
-    final primaryColor = themeProvider.primaryColor;
+    final theme = context.watch<ThemeProvider>();
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
     final isEditing = widget.client != null;
 
     return GlassScaffold(
       appBar: AppBar(
-        title: Text(
-          isEditing ? 'Modifier le client' : 'Nouveau Client',
-          style: TextStyle(
-              color: textColor, fontSize: 18, fontWeight: FontWeight.w700),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.close, color: textColor),
+          icon: Icon(Icons.close_rounded, color: textColor, size: 22),
           onPressed: () => context.pop(),
+        ),
+        title: Text(
+          isEditing ? 'Modifier le client' : 'Nouveau client',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
         ),
         actions: [
           if (!isEditing)
             IconButton(
-              icon: Icon(Icons.contact_phone_outlined, color: primaryColor),
+              icon: Icon(Icons.contact_phone_outlined,
+                  color: primaryColor, size: 22),
               onPressed: _isLoadingContacts ? null : _importFromContacts,
               tooltip: 'Importer depuis le répertoire',
             ),
-          if (_isLoadingContacts)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else if (_isSaving)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            TextButton(
-              onPressed: _saveClient,
-              child: Text(
-                'Enregistrer',
-                style:
-                    TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-              ),
+          TextButton(
+            onPressed: _isSaving ? null : _saveClient,
+            style: TextButton.styleFrom(
+              foregroundColor: primaryColor,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
+            child: _isSaving
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: primaryColor),
+                  )
+                : const Text(
+                    'Enregistrer',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+          ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
         child: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Sous-titre explicatif
-                Text(
-                  'Ajoutez un contact pour simplifier votre facturation '
-                  'conforme OHADA.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: themeProvider.subTextColor,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ===== Type : ENTREPRISE / PARTICULIER =====
-                if (!isEditing) ...[
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: themeProvider.isDarkMode
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.white.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: themeProvider.isDarkMode
-                            ? Colors.grey[800]!
-                            : Colors.grey[300]!,
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildTypeSegment(true, 'ENTREPRISE', primaryColor),
-                        _buildTypeSegment(false, 'PARTICULIER', primaryColor),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // ===== IDENTITÉ =====
-                _buildSectionTitle('IDENTITÉ', themeProvider.subTextColor),
-                const SizedBox(height: 10),
-                GlassTextField(
-                  controller: _nameController,
-                  label: _isCompany ? 'Raison Sociale *' : 'Nom complet *',
-                  prefixIcon: _isCompany
-                      ? Icons.business_outlined
-                      : Icons.person_outline,
-                  textCapitalization: TextCapitalization.words,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Veuillez saisir le nom';
-                    }
-                    return null;
-                  },
-                ),
-                if (_isCompany) ...[
-                  const SizedBox(height: 14),
-                  GlassTextField(
-                    controller: _taxIdController,
-                    label: 'NIF / IFU *',
-                    prefixIcon: Icons.numbers_outlined,
-                    textCapitalization: TextCapitalization.characters,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Requis pour la facturation OHADA B2B',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: themeProvider.subTextColor,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-
-                // ===== CONTACT =====
-                _buildSectionTitle('CONTACT', themeProvider.subTextColor),
-                const SizedBox(height: 10),
-                GlassTextField(
-                  controller: _emailController,
-                  label: 'Email',
-                  prefixIcon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 14),
-                GlassTextField(
-                  controller: _phoneController,
-                  label: 'Téléphone *',
-                  prefixIcon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Veuillez saisir le téléphone';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-
-                // ===== LOCALISATION =====
-                _buildSectionTitle('LOCALISATION', themeProvider.subTextColor),
-                const SizedBox(height: 10),
-                GlassTextField(
-                  controller: _addressController,
-                  label: 'Adresse de Facturation',
-                  prefixIcon: Icons.location_on_outlined,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 20),
-
-                // ===== PRÉFÉRENCES =====
-                _buildSectionTitle('PRÉFÉRENCES', themeProvider.subTextColor),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () =>
-                      _showPaymentTermsDialog(themeProvider, primaryColor),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: themeProvider.isDarkMode
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.white.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: themeProvider.isDarkMode
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.04),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.schedule_outlined,
-                            color: primaryColor.withValues(alpha: 0.7),
-                            size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Conditions de Paiement',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: themeProvider.subTextColor,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          _paymentTerms,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Icon(Icons.arrow_drop_down,
-                            color: themeProvider.subTextColor, size: 20),
-                      ],
-                    ),
-                  ),
-                ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Type segment ──
+              if (!isEditing) ...[
+                _typeSegment(theme, primaryColor),
                 const SizedBox(height: 24),
-
-                // ===== Bouton d'enregistrement =====
-                GradientButton(
-                  label: isEditing ? 'Sauvegarder' : 'Enregistrer le client',
-                  icon: Icons.check_circle_outline_rounded,
-                  height: 52,
-                  loading: _isSaving,
-                  onPressed: _saveClient,
-                ),
               ],
-            ),
+
+              // ── Section Identité ──
+              _sectionLabel('IDENTITÉ', subTextColor),
+              const SizedBox(height: 10),
+              _field(
+                controller: _nameController,
+                label: _isCompany ? 'Raison sociale' : 'Nom complet',
+                icon: _isCompany
+                    ? Icons.business_outlined
+                    : Icons.person_outline_rounded,
+                theme: theme,
+                textCapitalization: TextCapitalization.words,
+                validator: (v) => v?.trim().isEmpty == true
+                    ? 'Veuillez saisir un nom'
+                    : null,
+              ).animate().fadeIn(duration: 300.ms),
+              if (_isCompany) ...[
+                const SizedBox(height: 12),
+                _field(
+                  controller: _taxIdController,
+                  label: 'NIF / IFU',
+                  icon: Icons.numbers_outlined,
+                  theme: theme,
+                  textCapitalization: TextCapitalization.characters,
+                ).animate().fadeIn(delay: 50.ms, duration: 300.ms),
+              ],
+              const SizedBox(height: 24),
+
+              // ── Section Contact ──
+              _sectionLabel('CONTACT', subTextColor),
+              const SizedBox(height: 10),
+              _field(
+                controller: _emailController,
+                label: 'Email',
+                icon: Icons.mail_outline_rounded,
+                theme: theme,
+                keyboard: TextInputType.emailAddress,
+              ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+              const SizedBox(height: 12),
+              _field(
+                controller: _phoneController,
+                label: 'Téléphone',
+                icon: Icons.phone_outlined,
+                theme: theme,
+                keyboard: TextInputType.phone,
+                validator: (v) => v?.trim().isEmpty == true
+                    ? 'Veuillez saisir un téléphone'
+                    : null,
+              ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
+              const SizedBox(height: 24),
+
+              // ── Section Localisation ──
+              _sectionLabel('LOCALISATION', subTextColor),
+              const SizedBox(height: 10),
+              _field(
+                controller: _addressController,
+                label: 'Adresse de facturation',
+                icon: Icons.location_on_outlined,
+                theme: theme,
+                maxLines: 2,
+                textCapitalization: TextCapitalization.words,
+              ).animate().fadeIn(delay: 200.ms, duration: 300.ms),
+              const SizedBox(height: 24),
+
+              // ── Section Préférences ──
+              _sectionLabel('PRÉFÉRENCES', subTextColor),
+              const SizedBox(height: 10),
+              _paymentTermsTile(theme, primaryColor)
+                  .animate()
+                  .fadeIn(delay: 250.ms, duration: 300.ms),
+              const SizedBox(height: 32),
+
+              // ── Bouton ──
+              GradientButton(
+                label: isEditing
+                    ? 'Enregistrer les modifications'
+                    : 'Ajouter le client',
+                icon: Icons.check_circle_outline_rounded,
+                height: 54,
+                loading: _isSaving,
+                onPressed: _saveClient,
+              ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// Segment ENTREPRISE / PARTICULIER.
-  Widget _buildTypeSegment(bool value, String label, Color primaryColor) {
+  Widget _sectionLabel(String label, Color sub) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1,
+        color: sub,
+      ),
+    );
+  }
+
+  Widget _typeSegment(ThemeProvider theme, Color primaryColor) {
+    final isDark = theme.isDarkMode;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          _typeBtn(true, 'ENTREPRISE', primaryColor, theme),
+          _typeBtn(false, 'PARTICULIER', primaryColor, theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _typeBtn(
+    bool value,
+    String label,
+    Color primaryColor,
+    ThemeProvider theme,
+  ) {
     final selected = _isCompany == value;
     return Expanded(
       child: GestureDetector(
@@ -657,14 +674,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFF8A4CFC)
-                : Colors.transparent,
+            color: selected ? primaryColor : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             boxShadow: selected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF8A4CFC).withValues(alpha: 0.3),
+                      color: primaryColor.withValues(alpha: 0.25),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     ),
@@ -675,14 +690,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
               letterSpacing: 0.4,
               color: selected
                   ? Colors.white
-                  : (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[300]
-                      : Colors.grey[600]),
+                  : theme.subTextColor,
             ),
           ),
         ),
@@ -690,50 +703,208 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     );
   }
 
-  /// Titre de section (maquette : MAJUSCULES gris).
-  Widget _buildSectionTitle(String title, Color subColor) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1,
-        color: subColor,
+  Widget _field({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required ThemeProvider theme,
+    TextInputType? keyboard,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
+    final isDark = theme.isDarkMode;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+    final primaryColor = theme.primaryColor;
+
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboard,
+      validator: validator,
+      maxLines: maxLines,
+      textCapitalization: textCapitalization,
+      style: TextStyle(color: textColor, fontSize: 14.5),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          color: subTextColor,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        hintStyle: TextStyle(
+          color: subTextColor.withValues(alpha: 0.5),
+          fontSize: 13.5,
+        ),
+        prefixIcon:
+            Icon(icon, size: 20, color: primaryColor.withValues(alpha: 0.7)),
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.025),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.03),
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: primaryColor.withValues(alpha: 0.7),
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: Colors.red.withValues(alpha: 0.6),
+            width: 1.2,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: Colors.red.withValues(alpha: 0.8),
+            width: 1.5,
+          ),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        isDense: true,
       ),
     );
   }
 
-  /// Dialogue de choix des conditions de paiement.
+  Widget _paymentTermsTile(ThemeProvider theme, Color primaryColor) {
+    final isDark = theme.isDarkMode;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
+    return GestureDetector(
+      onTap: () => _showPaymentTermsDialog(theme, primaryColor),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.04)
+              : Colors.black.withValues(alpha: 0.025),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.03),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.schedule_outlined,
+                color: primaryColor.withValues(alpha: 0.7), size: 20),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Conditions de paiement',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: textColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Text(
+              _paymentTerms,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down_rounded,
+                color: subTextColor, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showPaymentTermsDialog(
       ThemeProvider theme, Color primaryColor) async {
-    const options = ['À réception', '15 jours', '30 jours', '45 jours', '60 jours'];
+    const options = [
+      'À réception',
+      '15 jours',
+      '30 jours',
+      '45 jours',
+      '60 jours',
+    ];
+    final isDark = theme.isDarkMode;
+    final textColor = theme.textColor;
+    final subTextColor = theme.subTextColor;
+
     final selected = await showModalBottomSheet<String>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            const Text(
-              'Conditions de paiement',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...options.map((opt) => ListTile(
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A1D26) : Colors.white,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: subTextColor.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Conditions de paiement',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: textColor),
+              ),
+              const SizedBox(height: 12),
+              ...options.map((opt) {
+                final active = _paymentTerms == opt;
+                return ListTile(
                   leading: Icon(
-                    _paymentTerms == opt
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off,
-                    color: _paymentTerms == opt ? primaryColor : Colors.grey,
+                    active
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: active
+                        ? primaryColor
+                        : subTextColor.withValues(alpha: 0.5),
                   ),
-                  title: Text(opt),
+                  title: Text(
+                    opt,
+                    style: TextStyle(
+                      color: active ? primaryColor : textColor,
+                      fontWeight:
+                          active ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
                   onTap: () => Navigator.pop(context, opt),
-                )),
-            const SizedBox(height: 8),
-          ],
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

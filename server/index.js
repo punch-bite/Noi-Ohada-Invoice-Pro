@@ -141,7 +141,9 @@ async function activateSubscription({
 //  MIDDLEWARE (SÉCURISÉ)
 // ============================================================
 app.disable('x-powered-by');
-app.use(express.json({ limit: '100kb' }));
+// 📎 16 Mo : les e-mails avec pièces jointes (PDF de facture en base64,
+// 3 × 5 Mo max contrôlés dans /email/send) dépassent les 100 Ko par défaut.
+app.use(express.json({ limit: '16mb' }));
 
 // ====== En-têtes de sécurité (protection navigateur) ======
 app.use((req, res, next) => {
@@ -863,9 +865,43 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 15, keyPrefix: 'email' }),
   async (req, res) => {
     try {
-      const { to, subject, body, html, cc, bcc } = req.body || {};
+      const { to, subject, body, html, cc, bcc, attachments } = req.body || {};
       if (!to || (!body && !html)) {
         return res.status(400).json({ error: 'to et (body|html) requis' });
+      }
+
+      // 📎 Pieces jointes (base64) — ex. le PDF de la facture genere par l'app.
+      // Bornes : 3 pièces max, 5 Mo chacune (payload serveless borné).
+      const files = [];
+      if (Array.isArray(attachments)) {
+        if (attachments.length > 3) {
+          return res
+            .status(400)
+            .json({ error: 'Trop de pièces jointes (3 max)' });
+        }
+        for (const a of attachments) {
+          const filename = String((a && a.filename) || '').trim();
+          const base64 = String((a && a.base64) || '').trim();
+          if (!filename || !base64) continue; // pièce invalide : ignorée
+          if (filename.length > 150 || /[\\/\r\n]/.test(filename)) {
+            return res
+              .status(400)
+              .json({ error: 'Nom de pièce jointe invalide' });
+          }
+          if (base64.length > 7_000_000) { // ~5 Mo une fois décodé
+            return res
+              .status(400)
+              .json({ error: 'Pièce jointe trop volumineuse (5 Mo max)' });
+          }
+          files.push({
+            filename,
+            content: base64,
+            encoding: 'base64',
+            contentType:
+              String((a && a.contentType) || '').trim() ||
+              'application/octet-stream',
+          });
+        }
       }
 
       // 🔒 Validation stricte : emails valides, tailles bornées, pas
@@ -917,6 +953,8 @@ app.post(
         subject: subjectStr,
         text: html ? undefined : bodyStr,
         html: html ? bodyStr : undefined,
+        // 📎 Pièces jointes (facture PDF…).
+        attachments: files.length > 0 ? files : undefined,
       });
 
       res.json({ ok: true });
@@ -944,7 +982,7 @@ app.post(
   rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'wallet' }),
   async (req, res) => {
     try {
-      const { userId, amount, reference, description } = req.body || {};
+      const { userId, amount, reference, description, dedupKey } = req.body || {};
       // 🔒 uid de l'acteur : jeton vérifié (jamais le body) sinon ancienne clé.
       const uid = actorUid(req, userId);
       if (!uid || !reference) {
@@ -954,6 +992,12 @@ app.post(
       if (!Number.isFinite(amt) || amt <= 0 || amt > 100000000) {
         return res.status(400).json({ error: 'Montant invalide' });
       }
+      // 🧮 Clé de déduplication STABLE (ex. `invoice:<id>`) : la référence
+      // ENKAP change à chaque tentative de paiement, elle seule ne protège
+      // donc PAS des doubles crédits. La dedupKey, elle, est identique pour
+      // toutes les tentatives d'une même facture.
+      const dedup =
+        typeof dedupKey === 'string' && dedupKey.trim() ? dedupKey.trim() : '';
 
       // 1) Vérifie auprès d'E-nkap que la commande est confirmée.
       let status = '';
@@ -971,16 +1015,27 @@ app.post(
           .json({ error: `Paiement non confirmé par ENKAP (${status || 'inconnu'})` });
       }
 
-      // 2) Idempotence : pas de double crédit pour la même référence
-      //    (requête mono-champ `reference` = auto-indexée).
-      const existing = await db
+      // 2) Idempotence : pas de double crédit —
+      //    • par référence ENKAP (requête mono-champ `reference` = auto-indexée) ;
+      //    • ET par facture (`dedupKey` mono-champ = auto-indexée) : deux
+      //      ordres ENKAP confirmés pour la MÊME facture (réessais /
+      //      requêtes répétitives) ne créditent qu'UNE seule fois → les
+      //      chiffres du portefeuille ne sont pas gonflés.
+      const byRef = await db
         .collection('wallet_transactions')
         .where('reference', '==', reference)
         .limit(1)
         .get();
-      if (!existing.empty) {
-        const existingType = existing.docs[0].data().type;
-        if (existingType === 'credit') {
+      if (!byRef.empty && byRef.docs[0].data().type === 'credit') {
+        return res.json({ ok: true, alreadyCredited: true });
+      }
+      if (dedup) {
+        const byDedup = await db
+          .collection('wallet_transactions')
+          .where('dedupKey', '==', dedup)
+          .limit(1)
+          .get();
+        if (!byDedup.empty && byDedup.docs[0].data().type === 'credit') {
           return res.json({ ok: true, alreadyCredited: true });
         }
       }
@@ -1007,6 +1062,7 @@ app.post(
         amount: amt,
         currency: 'XAF',
         reference,
+        dedupKey: dedup || null,
         description: String(description || 'Encaissement en ligne'),
         createdAt: serverTimestamp(),
       });
@@ -1288,6 +1344,130 @@ async function createNotification({
 }
 
 // ============================================================
+//  🔓 ACCÈS DES MEMBRES AUX FICHIERS PARTAGÉS DE L'ÉQUIPE
+//
+//  Un membre qui ADHÈRE à une équipe doit pouvoir ouvrir les ressources
+//  déjà partagées (factures / produits / clients), en LECTURE ou en
+//  ÉCRITURE selon le RÔLE que l'équipe lui impose :
+//    • propriétaire / administrateur → team.adminPermission  (défaut 'write')
+//    • membre simple                 → team.memberPermission (défaut 'read')
+//  L'accès est matérialisé sur le DOCUMENT RESSOURCE (lu par les règles
+//  Firestore) et sur l'ENREGISTREMENT DE PARTAGE (lu par l'application) :
+//    sharedWithUsers  → lecture  (canReadSharedResource)
+//    editableByUsers  → écriture (canWriteSharedResource)
+//    sharedWith       → la ressource apparaît dans la liste du membre
+//    writeUsers       → le membre peut la modifier
+// ============================================================
+
+/** Permission ('read' | 'write') imposée par l'équipe selon le RÔLE. */
+function permissionForRole(team, role) {
+  const data = team || {};
+  const isAdminRole = String(role || 'member') === 'admin';
+  const value = isAdminRole ? data.adminPermission : data.memberPermission;
+  return value === 'write' ? 'write' : 'read';
+}
+
+/** Collection Firestore portant une ressource partagée. */
+function collectionForResourceType(resourceType) {
+  if (resourceType === 'product') return 'products';
+  if (resourceType === 'client') return 'clients';
+  return 'invoices';
+}
+
+/**
+ * Accorde (ou rejoue) à `userId` l'accès aux ressources DÉJÀ partagées de
+ * l'équipe `teamId`, selon `permission` ('read' | 'write').
+ * Idempotent : réappelable sans effet de bord.
+ */
+async function grantTeamSharedAccess({ teamId, userId, permission = 'read' }) {
+  if (!teamId || !userId) return { updated: 0 };
+  const canWrite = permission === 'write';
+  const sharesSnap = await db
+    .collection('shared_invoices')
+    .where('teamId', '==', teamId)
+    .get();
+  let updated = 0;
+  for (const share of sharesSnap.docs) {
+    const d = share.data() || {};
+    if (d.isActive === false) continue;
+
+    const shareUpdate = {};
+    if (!Array.isArray(d.sharedWith) || !d.sharedWith.includes(userId)) {
+      shareUpdate.sharedWith = FieldValue.arrayUnion(userId);
+    }
+    if (
+      canWrite &&
+      (!Array.isArray(d.writeUsers) || !d.writeUsers.includes(userId))
+    ) {
+      shareUpdate.writeUsers = FieldValue.arrayUnion(userId);
+    }
+    if (Object.keys(shareUpdate).length) {
+      try {
+        await share.ref.update(shareUpdate);
+      } catch (e) {
+        logger.warn('⚠️ grantTeamSharedAccess (partage):', { error: e.message });
+      }
+    }
+
+    if (d.resourceType && d.invoiceId) {
+      const resUpdate = { sharedWithUsers: FieldValue.arrayUnion(userId) };
+      if (canWrite) {
+        resUpdate.editableByUsers = FieldValue.arrayUnion(userId);
+      }
+      try {
+        await db
+          .collection(collectionForResourceType(d.resourceType))
+          .doc(d.invoiceId)
+          .update(resUpdate);
+        updated += 1;
+      } catch (e) {
+        logger.warn('⚠️ grantTeamSharedAccess (ressource):', { error: e.message });
+      }
+    }
+  }
+  return { updated };
+}
+
+/**
+ * 🔒 Retire à `userId` le droit d'ÉCRITURE sur les ressources partagées de
+ * l'équipe (rétrogradation admin → membre sans droit d'écriture). La LECTURE
+ * reste : elle n'est retirée qu'au retrait / départ de l'équipe.
+ */
+async function revokeTeamSharedWrite({ teamId, userId }) {
+  if (!teamId || !userId) return { updated: 0 };
+  const sharesSnap = await db
+    .collection('shared_invoices')
+    .where('teamId', '==', teamId)
+    .get();
+  let updated = 0;
+  for (const share of sharesSnap.docs) {
+    const d = share.data() || {};
+    if (d.isActive === false) continue;
+    if (Array.isArray(d.writeUsers) && d.writeUsers.includes(userId)) {
+      try {
+        await share.ref.update({ writeUsers: FieldValue.arrayRemove(userId) });
+      } catch (e) {
+        logger.warn('⚠️ revokeTeamSharedWrite (partage):', { error: e.message });
+      }
+    }
+    if (d.resourceType && d.invoiceId) {
+      try {
+        await db
+          .collection(collectionForResourceType(d.resourceType))
+          .doc(d.invoiceId)
+          .update({ editableByUsers: FieldValue.arrayRemove(userId) });
+        updated += 1;
+      } catch (e) {
+        logger.warn('⚠️ revokeTeamSharedWrite (ressource):', {
+          error: e.message,
+        });
+      }
+    }
+  }
+  return { updated };
+}
+
+// ============================================================
 //  GESTION DES MEMBRES D'ÉQUIPE (via SDK admin)
 //
 //  🔒 Le client ne peut PAS écrire sur `teams` (règles : seul le
@@ -1300,13 +1480,17 @@ async function createNotification({
 //    remove   : retire un membre + révoque son accès aux partages
 //    promote / demote : change le rôle (admin), utilisable par un admin
 //    leave    : un membre quitte + perd l'accès aux partages
+//    sync-access : (re)donne au membre l'accès aux fichiers déjà partagés,
+//                  en lecture/écriture selon son rôle (après adhésion)
+//    set-policy  : droit imposé aux MEMBRES (lecture seule / lecture+écriture)
+//                  — répercuté sur les membres déjà présents
 // ============================================================
 app.post(
   '/team/manage-member',
   rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'team' }),
   async (req, res) => {
     try {
-      const { action, teamId, userId, email, role, requestedBy: bodyRequestedBy, invitationId } =
+      const { action, teamId, userId, email, role, permission, requestedBy: bodyRequestedBy, invitationId } =
         req.body || {};
       // 🔒 L'acteur est TOUJOURS l'uid du jeton vérifié quand présent (jamais
       // le body — anti-impersonation). Repli body pour les anciens clients clé API.
@@ -1508,6 +1692,25 @@ app.post(
         }
         await batch.commit();
 
+        // 🔓 ADHÉSION → accès aux fichiers DÉJÀ PARTAGÉS de l'équipe, en
+        // LECTURE/ÉCRITURE selon le RÔLE imposé aux membres (adminPermission
+        // pour un admin, memberPermission pour un membre simple).
+        if (action === 'accept' && invTeamId) {
+          const joinedTeam =
+            teamSnap && teamSnap.exists ? teamSnap.data() || {} : {};
+          try {
+            await grantTeamSharedAccess({
+              teamId: invTeamId,
+              userId: requestedBy,
+              permission: permissionForRole(joinedTeam, inv.role),
+            });
+          } catch (e) {
+            logger.warn('⚠️ grantTeamSharedAccess (accept):', {
+              error: e.message,
+            });
+          }
+        }
+
         // 📢 Message (notification) au propriétaire.
         const inviteeData =
           (await db.collection('users').doc(requestedBy).get()).data() || {};
@@ -1605,6 +1808,80 @@ app.post(
         return res.json({ ok: true, invitations });
       }
 
+      // ===== SYNC-ACCESS : (re)donne au membre l'accès aux fichiers partagés
+      // de l'équipe, en LECTURE/ÉCRITURE selon son RÔLE. Utilisé juste après
+      // l'ADHÉSION (y compris quand l'acceptation s'est faite hors ligne côté
+      // client). Idempotent. Un gestionnaire peut synchroniser n'importe quel
+      // membre ; un simple membre ne peut synchroniser QUE son propre accès.
+      if (action === 'sync-access') {
+        if (!userId) {
+          return res.status(400).json({ error: 'userId requis' });
+        }
+        if (!isManager && userId !== requestedBy) {
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        const effectiveRole =
+          team.ownerId === userId || admins.includes(userId) || role === 'admin'
+            ? 'admin'
+            : 'member';
+        const result = await grantTeamSharedAccess({
+          teamId,
+          userId,
+          permission: permissionForRole(team, effectiveRole),
+        });
+        logger.info('team sync-access', {
+          teamId,
+          userId,
+          role: effectiveRole,
+          by: requestedBy,
+        });
+        return res.json({ ok: true, role: effectiveRole, ...result });
+      }
+
+      // ===== SET-POLICY : droit d'accès imposé aux MEMBRES sur les fichiers
+      // partagés de l'équipe ('read' | 'write'). Réservé aux gestionnaires.
+      // 🔄 La nouvelle politique est répercutée IMMÉDIATEMENT sur les membres
+      // existants (les admins gardent le droit défini par adminPermission).
+      if (action === 'set-policy') {
+        if (!isManager) {
+          return res.status(403).json({ error: 'Non autorisé' });
+        }
+        const perm = permission === 'write' ? 'write' : 'read';
+        await teamRef.update({
+          memberPermission: perm,
+          updatedAt: serverTimestamp(),
+        });
+        const targets = [...new Set([...members, ...admins])].filter(
+          (uid) => uid && uid !== team.ownerId && !admins.includes(uid)
+        );
+        for (const uid of targets) {
+          try {
+            if (perm === 'write') {
+              await grantTeamSharedAccess({
+                teamId,
+                userId: uid,
+                permission: 'write',
+              });
+            } else {
+              await revokeTeamSharedWrite({ teamId, userId: uid });
+            }
+          } catch (e) {
+            logger.warn('⚠️ set-policy sync:', { uid, error: e.message });
+          }
+        }
+        logger.info('team set-policy', {
+          teamId,
+          memberPermission: perm,
+          members: targets.length,
+          by: requestedBy,
+        });
+        return res.json({
+          ok: true,
+          memberPermission: perm,
+          updated: targets.length,
+        });
+      }
+
       // ===== REMOVE / LEAVE : retirer un membre + révoquer l'accès =====
       if (action === 'remove' || action === 'leave') {
         if (!userId) {
@@ -1641,18 +1918,24 @@ app.post(
             continue;
           }
           await s.ref.update({ isActive: false, expiresAt: serverTimestamp() });
+          // 🔒 Retire AUSSI le droit d'écriture précédemment accordé.
+          if (Array.isArray(d.writeUsers) && d.writeUsers.includes(userId)) {
+            try {
+              await s.ref.update({ writeUsers: FieldValue.arrayRemove(userId) });
+            } catch (_) {
+              /* partage déjà nettoyé */
+            }
+          }
           if (d.resourceType && d.invoiceId) {
-            const coll =
-              d.resourceType === 'product'
-                ? 'products'
-                : d.resourceType === 'client'
-                ? 'clients'
-                : 'invoices';
+            const coll = collectionForResourceType(d.resourceType);
             try {
               await db
                 .collection(coll)
                 .doc(d.invoiceId)
-                .update({ sharedWithUsers: FieldValue.arrayRemove(userId) });
+                .update({
+                  sharedWithUsers: FieldValue.arrayRemove(userId),
+                  editableByUsers: FieldValue.arrayRemove(userId),
+                });
             } catch (_) {
               /* doc introuvable / déjà retiré */
             }
@@ -1687,6 +1970,31 @@ app.post(
               : FieldValue.arrayRemove(userId),
           updatedAt: serverTimestamp(),
         });
+        // 🔄 Le CHANGEMENT DE RÔLE met à jour l'accès aux fichiers partagés :
+        // • promotion  → droit des admins (adminPermission, défaut écriture) ;
+        // • rétrogradation → droit des membres (memberPermission) : si celui-ci
+        //   n'autorise que la lecture, le droit d'écriture est révoqué.
+        try {
+          if (action === 'promote') {
+            await grantTeamSharedAccess({
+              teamId,
+              userId,
+              permission: permissionForRole(team, 'admin'),
+            });
+          } else if (permissionForRole(team, 'member') === 'write') {
+            await grantTeamSharedAccess({
+              teamId,
+              userId,
+              permission: 'write',
+            });
+          } else {
+            await revokeTeamSharedWrite({ teamId, userId });
+          }
+        } catch (e) {
+          logger.warn('⚠️ sync accès après promote/demote:', {
+            error: e.message,
+          });
+        }
         logger.info('team promote/demote', {
           teamId,
           userId,

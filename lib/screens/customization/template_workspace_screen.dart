@@ -1,36 +1,52 @@
 // lib/screens/customization/template_workspace_screen.dart
+//
+// 🎨 Atelier visuel de personnalisation — Design Stitch Refined.
+//
+// 🔄 v5 — TOUTES les fonctionnalités restaurées + corrections drag & drop :
+//   • 📝 Gestion multi-paragraphes accessible depuis l'éditeur de bloc.
+//   • ✏️ Édition directe du contenu texte dans le sheet de bloc.
+//   • 🔤 Taille de police par bloc (slider 60-180%).
+//   • 🎨 Police par bloc (dropdown), couleurs fond/texte.
+//   • 📐 Largeur de colonne par bloc (slider).
+//   • ✅ Drag & drop header ↔ corps FONCTIONNEL (rebuild garanti).
+//   • ✅ Styles PRO (header_style, table_style, footer_style, etc.).
+//
+// ignore_for_file: dead_null_aware_expression, deprecated_member_use
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/company.dart';
 import '../../models/invoice_layout.dart';
+import '../../models/invoice_settings.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/signature_service.dart';
 import '../../services/template_custom_service.dart';
-import '../../models/invoice_settings.dart';
 import '../../widgets/template_background_palette.dart';
 
-/// 🎨 Écran d'atelier visuel de personnalisation de facture — Design Stitch Refined.
 class TemplateWorkspaceScreen extends StatefulWidget {
   final InvoiceTemplate template;
   const TemplateWorkspaceScreen({super.key, required this.template});
 
   @override
-  State<TemplateWorkspaceScreen> createState() => _TemplateWorkspaceScreenState();
+  State<TemplateWorkspaceScreen> createState() =>
+      _TemplateWorkspaceScreenState();
 }
 
 class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     with TickerProviderStateMixin {
-  // ── 🎨 THÈME DE L'APPLICATION — l'atelier suit le mode clair/sombre ──
-  // (anciennement des couleurs figées : l'atelier ne suivait pas le thème).
+  // ── 🎨 THÈME ──
   ThemeProvider get _tp => Provider.of<ThemeProvider>(context, listen: false);
   Color get _primary => _tp.primaryColor;
   Color get _bgSurface => _tp.backgroundColor;
@@ -45,11 +61,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   late InvoiceLayoutConfig _layoutConfig;
   late InvoiceTemplate _workingTemplate;
   TemplateBackgroundSettings _background = const TemplateBackgroundSettings();
-  // 📦 Paramètres globaux de facture (appliqués à l'aperçu rapide).
   InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
 
   bool _isLoading = true;
-  // 👮 Contrôle d'accès : personnalisation réservée à l'admin/propriétaire.
   bool _accessChecked = false;
   bool _canCustomize = false;
   double _zoom = 0.82;
@@ -62,33 +76,74 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   String _activeTool = '';
   double _customFontSize = 12.0;
 
-  // Header Drag & Drop state
-  List<String> _headerElements = ['logo', 'company_info', 'invoice_title'];
-  // 🔧 Colonnes d'en-tête : largeur (poids) + alignement par élément.
+  bool _panelCollapsed = false;
+
+  /// 📝 Texte plat par clé (pour compatibilité ascendante).
+  final Map<String, String> _customTexts = {};
+
+  /// 📝 Paragraphes structurés (multi-paragraphes + gras/italique/alignement).
+  final Map<String, List<_Paragraph>> _paragraphs = {};
+
+  int _textSeq = 0;
+
+  // ✨ Styles PRO
+  String _headerStyle = 'flat';
+  String _tableStyle = 'plain';
+  String _footerStyle = 'simple';
+  String _accentBorder = '';
+  bool _showThankYou = false;
+  String _thankYouText = 'Merci pour votre confiance !';
+  String _bankName = '';
+  String _bankAccount = '';
+
+  bool _isTextBlock(String key) => _customTexts.containsKey(key);
+
+  String _textBlockTitle(String key) {
+    final flat = (_customTexts[key] ?? '').replaceAll('\n', ' ').trim();
+    if (flat.isEmpty) return 'Texte libre';
+    return flat.length > 18 ? '${flat.substring(0, 18)}…' : flat;
+  }
+
+  late List<List<String>> _headerSections;
+  List<String> _titleExtraKeys = [];
+
+  List<String> get _headerElements {
+    final out = <String>[];
+    for (final row in _headerSections) {
+      for (final k in row) {
+        out.add(k);
+      }
+    }
+    return out;
+  }
+
+  static const List<String> _nativeHeaderKeys = [
+    'logo',
+    'company_info',
+    'invoice_title',
+  ];
   final Map<String, double> _headerWidth = {};
   final Map<String, TextAlign> _headerAlign = {};
 
-  double _headerWidthOf(String key) => (_headerWidth[key] ??
-          (key == 'company_info' ? 2.0 : 1.0))
-      .clamp(0.4, 3.0);
+  double _headerWidthOf(String key) =>
+      (_headerWidth[key] ?? (key == 'company_info' ? 2.0 : 1.0))
+          .clamp(0.4, 3.0);
 
-  int _headerFlexOf(String key) => (_headerWidthOf(key) * 10).round().clamp(4, 30);
+  int _headerFlexOf(String key) =>
+      (_headerWidthOf(key) * 10).round().clamp(4, 30);
 
   TextAlign _headerAlignOf(String key) =>
-      _headerAlign[key] ?? (key == 'invoice_title' ? TextAlign.right : TextAlign.left);
+      _headerAlign[key] ??
+      (key == 'invoice_title' ? TextAlign.right : TextAlign.left);
+
+  final Map<String, bool> _headerVisibility = {};
+
+  bool _headerVisibleOf(String key) => _headerVisibility[key] ?? true;
   String? _draggingHeaderKey;
   String? _dragOverHeaderKey;
   String? _selectedHeaderKey;
 
-  // Body Blocks : SECTIONS empilées, chacune pleine largeur, avec 1 à 3
-  // blocs côte à côte (colonnes PAR SECTION, pas sur tout le papier).
-  // Le tampon n'en fait pas partie : c'est un calque FIXE au-dessus de tout.
   static const int _maxPerSection = 3;
-  /// 🧱 Clé spéciale : colonne VIDE (spacer). Elle réserve une fraction de
-  /// la largeur de la section sans contenu — utile pour scinder une rangée
-  /// (ex. « Totaux » à gauche, vide à droite). Plusieurs colonnes vides
-  /// peuvent coexister dans une même section ; elles comptent dans la
-  /// limite de _maxPerSection colonnes.
   static const String _emptyColumnKey = 'empty_column';
   List<List<String>> _sectionsLayout = [
     ['billing_info', 'invoice_meta'],
@@ -105,7 +160,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     'signature_block': true,
     'qr_block': true,
   };
-  // Alignement du contenu de chaque bloc (outil « Alignement »).
   final Map<String, TextAlign> _blockAlignment = {
     'billing_info': TextAlign.left,
     'invoice_meta': TextAlign.right,
@@ -116,35 +170,56 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     'qr_block': TextAlign.center,
   };
 
-  // 🔧 Largeur relative de chaque bloc (facteur appliqué sur la largeur de sa
-  // section ; 1.0 = colonne de largeur égale). Permet des « formes
-  // personnalisées » (ex. un bloc deux fois plus large qu'un voisin).
+  /// ✅ LARGEUR DES COLONNES DU CORPS.
   final Map<String, double> _blockWidth = {};
 
-  /// Poids d'un bloc (0.3 → 3.0) ; 1.0 par défaut (colonne égale).
   double _widthOf(String key) => (_blockWidth[key] ?? 1.0).clamp(0.3, 3.0);
 
-  /// Flex int pour `Expanded` (proportionnel au poids).
+  /// ✅ POLICE PAR BLOC.
+  final Map<String, String> _blockFonts = {};
+
+  /// ✅ TAILLE DE POLICE PAR BLOC.
+  final Map<String, double> _blockFontScales = {};
+
+  double _blockFontScaleOf(String key) =>
+      (_blockFontScales[key] ?? 1.0).clamp(0.6, 1.8);
+
+  Widget _wrapBlockTypo(String key, Widget child) {
+    var wrapped = child;
+    final font = _blockFonts[key];
+    if (font != null && font.isNotEmpty) {
+      wrapped = DefaultTextStyle(
+        style: TextStyle(fontFamily: font),
+        child: wrapped,
+      );
+    }
+    final scale = _blockFontScaleOf(key);
+    if (scale != 1.0) {
+      final mq = MediaQuery.of(context);
+      wrapped = MediaQuery(
+        data: mq.copyWith(textScaler: TextScaler.linear(scale)),
+        child: wrapped,
+      );
+    }
+    return wrapped;
+  }
+
   int _flexOf(String key) => (_widthOf(key) * 10).round().clamp(3, 30);
 
-  // 🎨 Couleurs personnalisées par bloc (fond + texte). 0 / absent = défaut
-  // (fond transparent, texte du thème). ARGB 32 bits.
+  /// ✅ COULEUR DE FOND ET DE TEXTE PAR BLOC.
   final Map<String, int> _blockBg = {};
   final Map<String, int> _blockText = {};
 
-  /// Couleur de fond choisie pour un bloc (null = transparent).
   Color? _bgOf(String key) {
     final v = _blockBg[key];
     return (v == null || v == 0) ? null : Color(v);
   }
 
-  /// Couleur de texte choisie pour un bloc (null = couleur du thème).
   Color? _textColorOf(String key) {
     final v = _blockText[key];
     return (v == null || v == 0) ? null : Color(v);
   }
 
-  /// Enveloppe le contenu d'un bloc avec le fond teinté choisi (aperçu).
   Widget _tintBlock(String key, Widget child) {
     final bg = _bgOf(key);
     if (bg == null) return child;
@@ -161,21 +236,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
 
   String? _draggingKey;
   String? _dragOverKey;
-  int? _dragOverSection; // -1 = zone « nouvelle section »
+  int? _dragOverSection;
   String? _selectedBlockKey;
 
-  // Signature & Stamp state
   bool _showPaidStamp = true;
   String _stampText = 'PAYÉ';
   final Color _stampColor = const Color(0xFFBAAB6D);
   bool _showSignatureLine = true;
   String _signatoryTitle = 'Direction Générale';
 
-  // Legal & QR state
-  String _customLegalText = 'Paiement sous 30 jours net. Pénalités de retard applicables selon normes SYSCOHADA.';
-  String _qrPosition = 'totals'; // 'header', 'totals', 'footer', 'standalone'
+  String _customLegalText =
+      'Paiement sous 30 jours net. Pénalités de retard applicables selon normes SYSCOHADA.';
+  String _qrPosition = 'totals';
 
-  // Editable Label Overrides
   String _companyName = '';
   String _companyAddress = '';
   String _companyPhone = '';
@@ -183,14 +256,26 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   String _clientName = 'Client Exemple SARL';
   final String _clientAddress = 'N° RCCM: CM-DOU-2024-B123\nDouala, Cameroun';
   String _invoiceTitleText = 'FACTURE';
+  String _invoiceSubtitle = '';
+
+  Uint8List? _signatureImageBytes;
 
   final List<String> _categories = const [
-    'Recommandé', 'Simple', 'Classique', 'Professionnel',
+    'Recommandé',
+    'Simple',
+    'Classique',
+    'Professionnel',
   ];
 
   final List<Color> _paletteColors = const [
-    Color(0xFF300546), Color(0xFF4A148C), Color(0xFF1E1E2C), Color(0xFF0D47A1),
-    Color(0xFF004D40), Color(0xFFB78103), Color(0xFF880E4F), Color(0xFF1B5E20),
+    Color(0xFF300546),
+    Color(0xFF4A148C),
+    Color(0xFF1E1E2C),
+    Color(0xFF0D47A1),
+    Color(0xFF004D40),
+    Color(0xFFB78103),
+    Color(0xFF880E4F),
+    Color(0xFF1B5E20),
   ];
 
   List<InvoiceTemplate> _availableTemplates = [];
@@ -199,6 +284,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   @override
   void initState() {
     super.initState();
+    _headerSections = <List<String>>[
+      <String>['logo', 'company_info', 'invoice_title'],
+    ];
     _workingTemplate = widget.template;
     _customFontSize = widget.template.fontSize;
     _layoutConfig = InvoiceLayoutConfig.defaultLayout();
@@ -207,10 +295,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _loadData();
   }
 
-  /// 👮 Vérifie que l'utilisateur courant peut personnaliser ce modèle :
-  /// la personnalisation de la facture est réservée à l'administrateur et
-  /// au propriétaire du modèle (créateur / acheteur / accès premium /
-  /// modèle gratuit).
   Future<void> _checkAccess() async {
     final auth = context.read<AppAuthProvider>();
     final sub = context.read<SubscriptionProvider>();
@@ -229,36 +313,58 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   void _initBlocks() {
     final Map<String, _InvoiceBlock> allBlocks = {
       'billing_info': _InvoiceBlock(
-          key: 'billing_info', title: 'Infos Client (Facturé à)', builder: _buildBillingInfoBlock),
+        key: 'billing_info',
+        title: 'Infos Client (Facturé à)',
+        builder: _buildBillingInfoBlock,
+      ),
       'invoice_meta': _InvoiceBlock(
-          key: 'invoice_meta', title: 'Méta Facture (N°, Date, Échéance)', builder: _buildInvoiceMetaBlock),
+        key: 'invoice_meta',
+        title: 'Méta Facture (N°, Date, Échéance)',
+        builder: _buildInvoiceMetaBlock,
+      ),
       'items_table': _InvoiceBlock(
-          key: 'items_table', title: 'Tableau des Articles', builder: _buildItemsTableBlock),
+        key: 'items_table',
+        title: 'Tableau des Articles',
+        builder: _buildItemsTableBlock,
+      ),
       'totals': _InvoiceBlock(
-          key: 'totals', title: 'Bloc Totaux (HT, TVA, TTC)', builder: _buildTotalsBlock),
+        key: 'totals',
+        title: 'Bloc Totaux (HT, TVA, TTC)',
+        builder: _buildTotalsBlock,
+      ),
       'legal_mentions': _InvoiceBlock(
-          key: 'legal_mentions', title: 'Mentions Légales & Conditions', builder: _buildLegalMentionsBlock),
+        key: 'legal_mentions',
+        title: 'Mentions Légales & Conditions',
+        builder: _buildLegalMentionsBlock,
+      ),
       'signature_block': _InvoiceBlock(
-          key: 'signature_block', title: 'Ligne de Signature & Cachet', builder: _buildSignatureBlock),
+        key: 'signature_block',
+        title: 'Ligne de Signature & Cachet',
+        builder: _buildSignatureBlock,
+      ),
       'qr_block': _InvoiceBlock(
-          key: 'qr_block', title: 'QR Code de Paiement', builder: _buildQRBlock),
+        key: 'qr_block',
+        title: 'QR Code de Paiement',
+        builder: _buildQRBlock,
+      ),
     };
 
-    // Définitions de tous les blocs (le tampon, lui, est un calque fixe).
+    for (final key in _customTexts.keys) {
+      allBlocks[key] = _InvoiceBlock(
+        key: key,
+        title: _textBlockTitle(key),
+        builder: (align) => _buildStaticTextBlock(key, align),
+      );
+    }
+
     _invoiceBlocks = allBlocks.values.toList();
 
-    // Normalise les sections : 1 à _maxPerSection blocs par section, blocs
-    // connus uniquement, sans doublon. Les anciennes clés inconnues (ex :
-    // « stamp_block ») sont retirées ; un bloc excédentaire ou manquant est
-    // ajouté à la dernière section non pleine, sinon dans une nouvelle.
     final knownKeys = allBlocks.keys.toSet();
     final seen = <String>{};
     final sections = <List<String>>[];
     for (final section in _sectionsLayout) {
       final cleaned = <String>[];
       for (final key in section) {
-        // 🧱 Les colonnes vides (spacers) sont conservées : doublons
-        // autorisés (chaque occurrence est un spacer distinct).
         if (key == _emptyColumnKey) {
           if (cleaned.length >= _maxPerSection) continue;
           cleaned.add(key);
@@ -272,6 +378,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     }
     for (final key in knownKeys) {
       if (seen.contains(key)) continue;
+      if (_headerElements.contains(key) || _titleExtraKeys.contains(key)) {
+        continue;
+      }
       if (sections.isEmpty || sections.last.length >= _maxPerSection) {
         sections.add([key]);
       } else {
@@ -282,144 +391,396 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _sectionsLayout = sections;
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({InvoiceTemplate? template}) async {
+    final selectedTemplate = template ?? _workingTemplate;
     final company = await _db.getCompany();
-    final custom = await TemplateCustomService.loadCustom(widget.template.id);
+    final loaded = await TemplateCustomService.loadCustom(selectedTemplate.id);
+
+    final mergedPositions = <String, dynamic>{
+      ...selectedTemplate.positions,
+      ...loaded.positions,
+    };
+    final templateOverrides = mergedPositions['template_overrides'];
+    var effectiveTemplate = selectedTemplate;
+    if (templateOverrides is Map) {
+      int? colorValue(String key) {
+        final value = templateOverrides[key];
+        return value is num ? value.toInt() : null;
+      }
+
+      effectiveTemplate = selectedTemplate.copyWith(
+        primaryColor: colorValue('primaryColorValue') == null
+            ? null
+            : Color(colorValue('primaryColorValue')!),
+        textColor: colorValue('textColorValue') == null
+            ? null
+            : Color(colorValue('textColorValue')!),
+        backgroundColor: colorValue('backgroundColorValue') == null
+            ? null
+            : Color(colorValue('backgroundColorValue')!),
+        showLogo: templateOverrides['showLogo'] as bool?,
+        showTaxDetails: templateOverrides['showTaxDetails'] as bool?,
+        showPaymentTerms: templateOverrides['showPaymentTerms'] as bool?,
+        showPaymentQR: templateOverrides['showPaymentQR'] as bool?,
+        showBorder: templateOverrides['showBorder'] as bool?,
+        fontFamily: templateOverrides['fontFamily'] as String?,
+        fontSize: (templateOverrides['fontSize'] as num?)?.toDouble(),
+      );
+    }
+
     final templates = InvoiceTemplate.getDefaultTemplates();
+    Uint8List? storedSignature;
+    try {
+      storedSignature = await SignatureService().loadSignatureBytes();
+    } catch (_) {
+      storedSignature = null;
+    }
     if (!mounted) return;
+
     setState(() {
-      _company = company;
+      _workingTemplate = effectiveTemplate;
+      _customFontSize =
+          ((mergedPositions['custom_font_size'] as num?) ?? selectedTemplate.fontSize)
+              .toDouble()
+              .clamp(6.0, 40.0);
+      _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+      _headerSections = [
+        ['logo', 'company_info', 'invoice_title'],
+      ];
+      _sectionsLayout = [
+        ['billing_info', 'invoice_meta'],
+        ['items_table'],
+        ['totals'],
+        ['legal_mentions', 'signature_block', 'qr_block'],
+      ];
+      _blockVisibility
+        ..clear()
+        ..addAll({
+          'billing_info': true,
+          'invoice_meta': true,
+          'items_table': true,
+          'totals': true,
+          'legal_mentions': true,
+          'signature_block': true,
+          'qr_block': true,
+        });
+      _blockAlignment
+        ..clear()
+        ..addAll({
+          'billing_info': TextAlign.left,
+          'invoice_meta': TextAlign.right,
+          'items_table': TextAlign.left,
+          'totals': TextAlign.right,
+          'legal_mentions': TextAlign.left,
+          'signature_block': TextAlign.center,
+          'qr_block': TextAlign.center,
+        });
+      _blockWidth.clear();
+      _blockBg.clear();
+      _blockText.clear();
+      _blockFonts.clear();
+      _blockFontScales.clear();
+      _headerWidth.clear();
+      _headerAlign.clear();
+      _headerVisibility.clear();
+      _customTexts.clear();
+      _paragraphs.clear();
+      _titleExtraKeys = [];
+      _textSeq = 0;
+      _qrPosition = 'totals';
+      _customLegalText =
+          'Paiement sous 30 jours net. Pénalités de retard applicables selon normes SYSCOHADA.';
+      _stampText = 'PAYÉ';
+      _signatoryTitle = 'Direction Générale';
+      _showPaidStamp = true;
+      _showSignatureLine = true;
+      _signatureImageBytes = null;
+      _customLogoBytes = null;
+      _logoSize = 46;
+      _headerStyle = 'flat';
+      _tableStyle = 'plain';
+      _footerStyle = 'simple';
+      _accentBorder = '';
+      _showThankYou = false;
+      _thankYouText = 'Merci pour votre confiance !';
+      _bankName = '';
+      _bankAccount = '';
+      _invoiceTitleText = 'FACTURE';
+      _invoiceSubtitle = '';
       _companyName = company?.name ?? 'Noi Concept digital';
       _companyAddress = company?.address ?? 'Doww Essos Yaoundé Cameroun';
       _companyPhone = company?.phone ?? '+237620409383';
       _companyEmail = company?.email ?? 'contact@noiconcept.com';
+      _clientName = 'Client Exemple SARL';
+      _company = company;
 
-      if (custom.positions.isNotEmpty) {
-        _layoutConfig = InvoiceLayoutConfig.fromMap(custom.positions);
-        if (custom.positions['header_elements_order'] is List) {
-          _headerElements = List<String>.from(custom.positions['header_elements_order']);
+      if (mergedPositions.isNotEmpty) {
+        _layoutConfig = InvoiceLayoutConfig.fromMap(mergedPositions);
+
+        // ── Header ──
+        if (mergedPositions['header_sections'] is List) {
+          final parsed = InvoiceTemplate.decodeSections(
+            mergedPositions['header_sections'],
+          );
+          if (parsed.isNotEmpty) _headerSections = parsed;
+        } else if (mergedPositions['header_elements_order'] is List) {
+          _headerSections = [
+            List<String>.from(mergedPositions['header_elements_order']),
+          ];
         }
-        if (custom.positions['blocks_sections'] is List) {
-          final raw = custom.positions['blocks_sections'] as List;
+
+        // ── Body sections ──
+        if (mergedPositions['blocks_sections'] is List) {
+          final decoded =
+              InvoiceTemplate.decodeSections(mergedPositions['blocks_sections']);
+          if (decoded.isNotEmpty) _sectionsLayout = decoded;
+        } else if (mergedPositions['blocks_layout'] is List) {
           _sectionsLayout = [
-            for (final s in raw)
-              if (s is List) List<String>.from(s.whereType<String>()) else <String>[],
+            for (final s in mergedPositions['blocks_layout'] as List)
+              if (s is List)
+                List<String>.from(s.whereType<String>())
+              else
+                <String>[],
           ];
-        } else if (custom.positions['blocks_layout'] is List) {
-          // Migration : anciennes colonnes pleine page → une section par colonne.
-          _sectionsLayout = [
-            for (final s in custom.positions['blocks_layout'] as List)
-              if (s is List) List<String>.from(s.whereType<String>()) else <String>[],
-          ];
-        } else if (custom.positions['blocks_order'] is List) {
-          // Migration : ancien ordre simple → une section par bloc.
+        } else if (mergedPositions['blocks_order'] is List) {
           _sectionsLayout = [
             for (final key
-                in (custom.positions['blocks_order'] as List).whereType<String>())
+                in (mergedPositions['blocks_order'] as List).whereType<String>())
               [key],
           ];
         }
-        if (custom.positions['block_visibility'] is Map) {
-          final Map<String, dynamic> visMap = custom.positions['block_visibility'];
+
+        // ── Visibility / alignement ──
+        if (mergedPositions['block_visibility'] is Map) {
+          final Map<String, dynamic> visMap =
+              mergedPositions['block_visibility'];
           visMap.forEach((k, v) {
             if (v is bool) _blockVisibility[k] = v;
           });
         }
-        if (custom.positions['block_alignment'] is Map) {
-          (custom.positions['block_alignment'] as Map).forEach((k, v) {
+        if (mergedPositions['block_alignment'] is Map) {
+          (mergedPositions['block_alignment'] as Map).forEach((k, v) {
             final key = k.toString();
             for (final t in TextAlign.values) {
               if (t.name == v) _blockAlignment[key] = t;
             }
           });
         }
-        if (custom.positions['block_widths'] is Map) {
-          (custom.positions['block_widths'] as Map).forEach((k, v) {
+
+        // ✅ Largeur des colonnes.
+        if (mergedPositions['block_widths'] is Map) {
+          (mergedPositions['block_widths'] as Map).forEach((k, v) {
             if (v is num) _blockWidth[k.toString()] = v.toDouble();
           });
         }
-        if (custom.positions['block_bg_colors'] is Map) {
-          (custom.positions['block_bg_colors'] as Map).forEach((k, v) {
+
+        // ✅ Couleur fond.
+        if (mergedPositions['block_bg_colors'] is Map) {
+          (mergedPositions['block_bg_colors'] as Map).forEach((k, v) {
             if (v is num) _blockBg[k.toString()] = v.toInt();
           });
         }
-        if (custom.positions['block_text_colors'] is Map) {
-          (custom.positions['block_text_colors'] as Map).forEach((k, v) {
+
+        // ✅ Couleur texte.
+        if (mergedPositions['block_text_colors'] is Map) {
+          (mergedPositions['block_text_colors'] as Map).forEach((k, v) {
             if (v is num) _blockText[k.toString()] = v.toInt();
           });
         }
-        if (custom.positions['header_widths'] is Map) {
-          (custom.positions['header_widths'] as Map).forEach((k, v) {
+
+        // ✅ Police par bloc.
+        if (mergedPositions['block_fonts'] is Map) {
+          (mergedPositions['block_fonts'] as Map).forEach((k, v) {
+            if (v is String && v.isNotEmpty) _blockFonts[k.toString()] = v;
+          });
+        }
+
+        // ✅ Taille police par bloc.
+        if (mergedPositions['block_font_scales'] is Map) {
+          (mergedPositions['block_font_scales'] as Map).forEach((k, v) {
+            if (v is num) {
+              _blockFontScales[k.toString()] = (v.toDouble()).clamp(0.6, 1.8);
+            }
+          });
+        }
+
+        // ── Header : largeurs / alignements / visibilité ──
+        if (mergedPositions['header_widths'] is Map) {
+          (mergedPositions['header_widths'] as Map).forEach((k, v) {
             if (v is num) _headerWidth[k.toString()] = v.toDouble();
           });
         }
-        if (custom.positions['header_alignments'] is Map) {
-          (custom.positions['header_alignments'] as Map).forEach((k, v) {
+        if (mergedPositions['header_alignments'] is Map) {
+          (mergedPositions['header_alignments'] as Map).forEach((k, v) {
             final key = k.toString();
             for (final t in TextAlign.values) {
               if (t.name == v) _headerAlign[key] = t;
             }
           });
         }
-        if (custom.positions['qr_position'] != null) {
-          _qrPosition = custom.positions['qr_position'] as String;
+        if (mergedPositions['header_visibility'] is Map) {
+          (mergedPositions['header_visibility'] as Map).forEach((k, v) {
+            if (v is bool) _headerVisibility[k.toString()] = v;
+          });
         }
-        if (custom.positions['custom_legal_text'] != null) {
-          _customLegalText = custom.positions['custom_legal_text'] as String;
+
+        // ── Textes / QR ──
+        if (mergedPositions['qr_position'] != null) {
+          _qrPosition = mergedPositions['qr_position'] as String;
         }
-        if (custom.positions['stamp_text'] != null) {
-          _stampText = custom.positions['stamp_text'] as String;
+        if (mergedPositions['custom_legal_text'] != null) {
+          _customLegalText = mergedPositions['custom_legal_text'] as String;
         }
-        if (custom.positions['signatory_title'] != null) {
-          _signatoryTitle = custom.positions['signatory_title'] as String;
+        if (mergedPositions['stamp_text'] != null) {
+          _stampText = mergedPositions['stamp_text'] as String;
         }
-        if (custom.positions['company_name'] != null) {
-          _companyName = custom.positions['company_name'] as String;
+        if (mergedPositions['signatory_title'] != null) {
+          _signatoryTitle = mergedPositions['signatory_title'] as String;
         }
-        if (custom.positions['client_name'] != null) {
-          _clientName = custom.positions['client_name'] as String;
+        if (mergedPositions['company_name'] != null) {
+          _companyName = mergedPositions['company_name'] as String;
         }
-        if (custom.positions['invoice_title_text'] != null) {
-          _invoiceTitleText = custom.positions['invoice_title_text'] as String;
+        if (mergedPositions['client_name'] != null) {
+          _clientName = mergedPositions['client_name'] as String;
         }
-        if (custom.positions['show_paid_stamp'] != null) {
-          _showPaidStamp = custom.positions['show_paid_stamp'] as bool;
+        if (mergedPositions['invoice_title_text'] != null) {
+          _invoiceTitleText =
+              mergedPositions['invoice_title_text'] as String;
         }
-        if (custom.positions['show_signature_line'] != null) {
-          _showSignatureLine = custom.positions['show_signature_line'] as bool;
+        if (mergedPositions['invoice_subtitle'] != null) {
+          _invoiceSubtitle = mergedPositions['invoice_subtitle'] as String;
+        }
+        if (mergedPositions['signature_image'] != null) {
+          try {
+            _signatureImageBytes =
+                base64Decode(mergedPositions['signature_image'] as String);
+          } catch (_) {
+            _signatureImageBytes = null;
+          }
+        }
+        if (mergedPositions['show_paid_stamp'] != null) {
+          _showPaidStamp = mergedPositions['show_paid_stamp'] as bool;
+        }
+        if (mergedPositions['show_signature_line'] != null) {
+          _showSignatureLine =
+              mergedPositions['show_signature_line'] as bool;
           _blockVisibility['signature_block'] = _showSignatureLine;
         }
-        if (custom.positions['logo_size'] != null) {
-          _logoSize = (custom.positions['logo_size'] as num).toDouble();
+        if (mergedPositions['logo_size'] != null) {
+          _logoSize = (mergedPositions['logo_size'] as num).toDouble();
         }
-        if (custom.positions['custom_logo_base64'] != null) {
+        if (mergedPositions['custom_logo_base64'] != null) {
           try {
-            _customLogoBytes = base64Decode(custom.positions['custom_logo_base64'] as String);
+            _customLogoBytes = base64Decode(
+                mergedPositions['custom_logo_base64'] as String);
           } catch (_) {}
         }
+
+        // ✨ Styles PRO
+        if (mergedPositions['header_style'] != null) {
+          _headerStyle = mergedPositions['header_style'] as String;
+        }
+        if (mergedPositions['table_style'] != null) {
+          _tableStyle = mergedPositions['table_style'] as String;
+        }
+        if (mergedPositions['footer_style'] != null) {
+          _footerStyle = mergedPositions['footer_style'] as String;
+        }
+        if (mergedPositions['accent_border'] != null) {
+          _accentBorder = mergedPositions['accent_border'] as String;
+        }
+        if (mergedPositions['show_thank_you'] != null) {
+          _showThankYou = mergedPositions['show_thank_you'] as bool;
+        }
+        if (mergedPositions['thank_you_text'] != null) {
+          _thankYouText = mergedPositions['thank_you_text'] as String;
+        }
+        if (mergedPositions['bank_name'] != null) {
+          _bankName = mergedPositions['bank_name'] as String;
+        }
+        if (mergedPositions['bank_account'] != null) {
+          _bankAccount = mergedPositions['bank_account'] as String;
+        }
       }
-      _background = custom.background;
+
+      if (_signatureImageBytes == null || _signatureImageBytes!.isEmpty) {
+        if (storedSignature != null && storedSignature.isNotEmpty) {
+          _signatureImageBytes = storedSignature;
+        }
+      }
+
+      // ── Textes libres ──
+      if (mergedPositions['custom_texts'] is Map) {
+        _customTexts.clear();
+        (mergedPositions['custom_texts'] as Map).forEach((k, v) {
+          final key = k.toString();
+          if (!key.startsWith('text_')) return;
+          _customTexts[key] = v?.toString() ?? '';
+          final seq = int.tryParse(key.substring('text_'.length));
+          if (seq != null && seq > _textSeq) _textSeq = seq;
+        });
+      }
+
+      // ✅ Paragraphes structurés — AVANT _initBlocks().
+      _paragraphs.clear();
+      if (mergedPositions['custom_paragraphs'] is Map) {
+        final rawParas = mergedPositions['custom_paragraphs'] as Map;
+        rawParas.forEach((k, v) {
+          if (v is List) {
+            _paragraphs[k.toString()] = v
+                .whereType<Map>()
+                .map((m) => _Paragraph.fromMap(Map<String, dynamic>.from(m)))
+                .toList();
+          }
+        });
+        _paragraphs.forEach((key, list) {
+          _customTexts[key] = list.map((p) => p.text).join('\n\n');
+        });
+      }
+
+      _titleExtraKeys = mergedPositions['title_extra_keys'] is List
+          ? (mergedPositions['title_extra_keys'] as List)
+              .whereType<String>()
+              .where((k) => k.startsWith('text_'))
+              .toList()
+          : <String>[];
+
+      _background = loaded.background;
       _availableTemplates = templates;
       _initBlocks();
       _isLoading = false;
     });
-    // 📦 Paramètres globaux de facture (couleurs / police / filigrane)
-    // chargés en ARRIÈRE-PLAN : l'atelier s'affiche immédiatement, et
-    // l'aperçu rapide les lira au moment où il est ouvert.
+
     try {
       final s = await SettingsService.instance.loadSettings();
       if (mounted) setState(() => _invoiceSettings = s);
-    } catch (_) {
-      // Repli silencieux : défauts (aucune surcharge du design).
-    }
+    } catch (_) {}
   }
 
-  // ── 👁️ APERÇU RAPIDE (rendu A4 Stitch fidèle) ───────────────────────────
+  Future<void> _selectTemplate(InvoiceTemplate template) async {
+    if (template.id == _workingTemplate.id) return;
+    await _saveConfig();
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    await _loadData(template: template);
+  }
 
-  /// Ouvre un dialog plein écran montrant la facture d'exemple rendue avec
-  /// TOUTES les customisations en cours (layout drag & drop, fond, tampon)
-  /// + les paramètres globaux (couleurs, police, filigrane) — sans quitter
-  /// l'atelier ni sauvegarder.
+  // ── 📝 PARAGRAPHES ──
+  List<_Paragraph> _paragraphsOf(String key) {
+    if (!_paragraphs.containsKey(key)) {
+      final raw = _customTexts[key] ?? '';
+      if (raw.isEmpty) {
+        _paragraphs[key] = [_Paragraph()];
+      } else {
+        _paragraphs[key] = raw
+            .split('\n\n')
+            .map((t) => _Paragraph(text: t.trim()))
+            .toList();
+      }
+    }
+    return _paragraphs[key]!;
+  }
+
   void _openQuickPreview() {
     final effective =
         SettingsService.applyToTemplate(_workingTemplate, _invoiceSettings);
@@ -431,7 +792,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Barre haute : titre + fermer.
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                 child: Row(
@@ -445,7 +805,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                         'Aperçu rapide — ${_workingTemplate.name}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -475,7 +835,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ],
                 ),
               ),
-              // 🔍 Aperçu A4 - occupe toute la hauteur
               Expanded(
                 child: InteractiveViewer(
                   maxScale: 2.5,
@@ -483,7 +842,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: AspectRatio(
                       aspectRatio: 794 / 1123,
                       child: Container(
@@ -506,21 +866,22 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            // Fond de la facture (page) - couleur personnalisée ou blanc
                             Positioned.fill(
-                              child: ColoredBox(
-                                color: effective.backgroundColorValue != 0
-                                    ? Color(effective.backgroundColorValue)
-                                    : Colors.white,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: effective.backgroundColorValue != 0
+                                      ? Color(effective.backgroundColorValue)
+                                      : Colors.white,
+                                ),
                               ),
                             ),
-                            // Image / motif de fond personnalisé
-                            if (_background.hasCustomImage || _background.hasPreset)
+                            if (_background.hasCustomImage ||
+                                _background.hasPreset)
                               Positioned.fill(
                                 child: TemplateBackgroundLayer(
                                   presetId: _background.presetId,
-                                  imageBytes:
-                                      decodeBackgroundImage(_background.fileData),
+                                  imageBytes: decodeBackgroundImage(
+                                      _background.fileData),
                                   opacity: _background.opacity,
                                   blur: _background.blur,
                                   fit: _background.fit,
@@ -528,10 +889,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                               ),
                             Column(children: [
                               _buildCleanInvoiceHeader(),
-                              // 📐 Le contenu occupe TOUTE la hauteur A4 :
-                              // hauteur minimale = hauteur du viewport, et les
-                              // sections sont réparties verticalement (pas de
-                              // bloc compact en haut avec un vide en bas).
                               Expanded(
                                 child: LayoutBuilder(builder: (_, boxC) {
                                   return SingleChildScrollView(
@@ -574,11 +931,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   Future<void> _saveConfig({bool showFeedback = false}) async {
     final updatedPositions = _layoutConfig.toMap();
     updatedPositions['header_elements_order'] = _headerElements;
+    updatedPositions['header_sections'] = _headerSections;
     updatedPositions['header_widths'] = Map<String, double>.from(_headerWidth);
     updatedPositions['header_alignments'] =
         _headerAlign.map((k, v) => MapEntry(k, v.name));
+    updatedPositions['header_visibility'] =
+        Map<String, bool>.from(_headerVisibility);
     updatedPositions['blocks_sections'] = _sectionsLayout;
-    // Compat : ordre à plat (d'éventuels anciens lecteurs / exports).
     updatedPositions['blocks_order'] =
         _sectionsLayout.expand((s) => s).toList();
     updatedPositions['block_visibility'] = _blockVisibility;
@@ -587,6 +946,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['block_widths'] = Map<String, double>.from(_blockWidth);
     updatedPositions['block_bg_colors'] = Map<String, int>.from(_blockBg);
     updatedPositions['block_text_colors'] = Map<String, int>.from(_blockText);
+    updatedPositions['block_fonts'] = Map<String, String>.from(_blockFonts);
+    updatedPositions['block_font_scales'] =
+        Map<String, double>.from(_blockFontScales);
     updatedPositions['qr_position'] = _qrPosition;
     updatedPositions['custom_legal_text'] = _customLegalText;
     updatedPositions['stamp_text'] = _stampText;
@@ -594,9 +956,47 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['show_paid_stamp'] = _showPaidStamp;
     updatedPositions['show_signature_line'] = _showSignatureLine;
     updatedPositions['logo_size'] = _logoSize;
+    updatedPositions['custom_font_size'] = _customFontSize;
+    updatedPositions['template_overrides'] = {
+      'primaryColorValue': _workingTemplate.primaryColorValue,
+      'textColorValue': _workingTemplate.textColorValue,
+      'backgroundColorValue': _workingTemplate.backgroundColorValue,
+      'showLogo': _workingTemplate.showLogo,
+      'showTaxDetails': _workingTemplate.showTaxDetails,
+      'showPaymentTerms': _workingTemplate.showPaymentTerms,
+      'showPaymentQR': _workingTemplate.showPaymentQR,
+      'showBorder': _workingTemplate.showBorder,
+      'fontFamily': _workingTemplate.fontFamily,
+      'fontSize': _workingTemplate.fontSize,
+    };
     updatedPositions['company_name'] = _companyName;
     updatedPositions['client_name'] = _clientName;
     updatedPositions['invoice_title_text'] = _invoiceTitleText;
+    updatedPositions['invoice_subtitle'] = _invoiceSubtitle;
+
+    // ✨ Styles PRO
+    updatedPositions['header_style'] = _headerStyle;
+    updatedPositions['table_style'] = _tableStyle;
+    updatedPositions['footer_style'] = _footerStyle;
+    updatedPositions['accent_border'] = _accentBorder;
+    updatedPositions['show_thank_you'] = _showThankYou;
+    updatedPositions['thank_you_text'] = _thankYouText;
+    updatedPositions['bank_name'] = _bankName;
+    updatedPositions['bank_account'] = _bankAccount;
+
+    // 📝 Paragraphes structurés
+    final serializedParagraphs = <String, List<Map<String, dynamic>>>{};
+    _paragraphs.forEach((key, list) {
+      _customTexts[key] = list.map((p) => p.text).join('\n\n');
+      serializedParagraphs[key] = list.map((p) => p.toMap()).toList();
+    });
+    updatedPositions['custom_texts'] = Map<String, String>.from(_customTexts);
+    updatedPositions['custom_paragraphs'] = serializedParagraphs;
+    updatedPositions['title_extra_keys'] = List<String>.from(_titleExtraKeys);
+
+    if (_signatureImageBytes != null && _signatureImageBytes!.isNotEmpty) {
+      updatedPositions['signature_image'] = base64Encode(_signatureImageBytes!);
+    }
     if (_customLogoBytes != null) {
       updatedPositions['custom_logo_base64'] = base64Encode(_customLogoBytes!);
     }
@@ -608,49 +1008,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       background: _background,
     );
 
-    // 🔁 WYSIWYG : aligne les réglages globaux de facture (InvoiceSettings)
-    // sur le design de l'atelier. SANS ça, `applyToTemplate` — utilisé par
-    // l'aperçu A4 ET la facture imprimée — écrase la couleur / police /
-    // taille / toggles choisis ICI avec d'anciennes valeurs globales dès
-    // qu'elles diffèrent des défauts : la personnalisation de l'atelier
-    // semblait alors « sans effet » sur l'aperçu et l'impression.
-    // (Le filigrane, lui, reste piloté uniquement par les InvoiceSettings.)
-    try {
-      final t = _workingTemplate;
-      final s = _invoiceSettings;
-      final differs = s.primaryColorValue != t.primaryColorValue ||
-          s.textColorValue != t.textColorValue ||
-          s.backgroundColorValue != t.backgroundColorValue ||
-          s.fontFamily != t.fontFamily ||
-          s.fontSize != t.fontSize ||
-          s.showLogo != t.showLogo ||
-          s.showBorder != t.showBorder ||
-          s.showTaxDetails != t.showTaxDetails ||
-          s.showPaymentTerms != t.showPaymentTerms ||
-          s.showPaymentQR != t.showPaymentQR;
-      if (differs) {
-        _invoiceSettings = await SettingsService.instance
-            .updateSettings((cur) => cur.copyWith(
-                  primaryColor: t.primaryColor,
-                  textColor: t.textColor,
-                  backgroundColor: t.backgroundColor,
-                  fontFamily: t.fontFamily,
-                  fontSize: t.fontSize,
-                  showLogo: t.showLogo,
-                  showBorder: t.showBorder,
-                  showTaxDetails: t.showTaxDetails,
-                  showPaymentTerms: t.showPaymentTerms,
-                  showPaymentQR: t.showPaymentQR,
-                ));
-      }
-    } catch (e) {
-      debugPrint('⚠️ Sync InvoiceSettings (atelier) échouée: $e');
-    }
-
-    // 🔇 Feedback UNIQUEMENT sur la sauvegarde explicite (bouton
-    // ENREGISTRER). `_saveConfig()` est aussi appelé automatiquement à
-    // chaque drag & drop / toggle : un SnackBar à chaque interaction
-    // apparaissait en répétition — d'où le paramètre [showFeedback].
     if (!showFeedback || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -666,14 +1023,44 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  void _removeFromHeaderSections(String key) {
+    for (final row in _headerSections) {
+      row.remove(key);
+    }
+    _headerSections.removeWhere((r) => r.isEmpty);
+  }
+
   void _reorderHeaderElements(String draggedKey, String targetKey) {
     if (draggedKey == targetKey) return;
     setState(() {
-      final fromIndex = _headerElements.indexOf(draggedKey);
-      final toIndex = _headerElements.indexOf(targetKey);
-      if (fromIndex != -1 && toIndex != -1) {
-        final item = _headerElements.removeAt(fromIndex);
-        _headerElements.insert(toIndex, item);
+      int? fromRow, fromCol;
+      for (var r = 0; r < _headerSections.length; r++) {
+        final c = _headerSections[r].indexOf(draggedKey);
+        if (c != -1) {
+          fromRow = r;
+          fromCol = c;
+          break;
+        }
+      }
+      if (fromRow == null) return;
+      _headerSections[fromRow].removeAt(fromCol!);
+      int? toRow, toCol;
+      for (var r = 0; r < _headerSections.length; r++) {
+        final c = _headerSections[r].indexOf(targetKey);
+        if (c != -1) {
+          toRow = r;
+          toCol = c;
+          break;
+        }
+      }
+      if (toRow == null) {
+        if (_headerSections.isEmpty) {
+          _headerSections.add([draggedKey]);
+        } else {
+          _headerSections.last.add(draggedKey);
+        }
+      } else {
+        _headerSections[toRow].insert(toCol!, draggedKey);
       }
       _draggingHeaderKey = null;
       _dragOverHeaderKey = null;
@@ -681,17 +1068,12 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _saveConfig();
   }
 
-  // ── Déplacement d'un bloc entre les sections ──────────────────────────────
-
-  /// Déplace [key] dans la section [targetSection] — avant [beforeKey] si
-  /// fourni, sinon en fin de section. Avec [newSection], crée une section
-  /// pleine largeur dédiée. Avec [replaceEmptyAtIndex], le bloc PREND LA
-  /// PLACE de la colonne vide située à cet index (le spacer est consommé).
-  /// Les sections devenues vides sont supprimées.
   void _moveBlock(String key, int targetSection,
-      {String? beforeKey,
-      bool newSection = false,
-      int? replaceEmptyAtIndex}) {
+      {String? beforeKey, bool newSection = false, int? replaceEmptyAtIndex}) {
+    if (newSection && _sectionsLayout.isNotEmpty) {
+      final last = _sectionsLayout.last;
+      if (last.length == 1 && last.first == key) return;
+    }
     setState(() {
       final sourceIdx = _sectionsLayout.indexWhere((s) => s.contains(key));
       List<String>? sourceList;
@@ -700,8 +1082,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         sourceList = _sectionsLayout[sourceIdx];
         removedIdx = sourceList.indexOf(key);
       }
-      // Position d'insertion calculée AVANT suppression (index de beforeKey
-      // ou index de la colonne vide à remplacer).
       var insertIdx = -1;
       var replaceIdx = -1;
       if (!newSection &&
@@ -719,7 +1099,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           if (insertIdx == -1) insertIdx = list.length;
         }
       }
-      // Suppression à la source (+ suppression de la section si vide).
       if (sourceIdx != -1) {
         sourceList!.removeAt(removedIdx);
         if (sourceList.isEmpty) {
@@ -727,9 +1106,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           if (targetSection > sourceIdx) targetSection -= 1;
         }
       }
-      // Réinsertion : avant le bloc visé, en fin de section, nouvelle
-      // section dédiée, ou REMPLACEMENT d'une colonne vide (le bloc prend
-      // sa place, le spacer disparaît).
       if (newSection ||
           targetSection < 0 ||
           targetSection >= _sectionsLayout.length) {
@@ -758,7 +1134,443 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _saveConfig();
   }
 
-  /// Alignement courant du contenu d'un bloc.
+  void _moveSection(int s, int delta) {
+    final target = s + delta;
+    if (target < 0 || target >= _sectionsLayout.length) return;
+    setState(() {
+      final section = _sectionsLayout.removeAt(s);
+      _sectionsLayout.insert(target, section);
+    });
+    _saveConfig();
+  }
+
+  /// ✅ Déplace un élément du corps vers l'en-tête — REBUILD GARANTI.
+  void _moveBlockToHeader(String key, {String? beforeKey, int? row}) {
+    setState(() {
+      // 1. Retire du corps (toutes les sections).
+      for (final section in _sectionsLayout) {
+        section.remove(key);
+      }
+      _sectionsLayout.removeWhere((s) => s.isEmpty);
+      if (_sectionsLayout.isEmpty) _sectionsLayout.add(<String>[]);
+
+      // 2. Retire de l'en-tête (positions précédentes éventuelles).
+      _removeFromHeaderSections(key);
+
+      // 3. Force la visibilité.
+      _blockVisibility[key] = true;
+      _headerVisibility[key] = true;
+      _headerWidth.putIfAbsent(key, () => 1.0);
+      if (!_headerAlign.containsKey(key)) {
+        _headerAlign[key] = TextAlign.left;
+      }
+
+      // 4. Insère à la position demandée.
+      final targetRow =
+          (row != null && row >= 0 && row < _headerSections.length)
+              ? row
+              : (_headerSections.isEmpty ? -1 : _headerSections.length - 1);
+      if (targetRow < 0) {
+        _headerSections.add([key]);
+      } else {
+        final list = _headerSections[targetRow];
+        final idx = beforeKey == null ? -1 : list.indexOf(beforeKey);
+        if (idx >= 0) {
+          list.insert(idx, key);
+        } else {
+          list.add(key);
+        }
+      }
+
+      // 5. ✅ REBUILD de la table des blocs (sinon le bloc disparaît).
+      _initBlocks();
+    });
+    _saveConfig();
+  }
+
+  /// ✅ Déplace un élément de l'en-tête vers le corps — REBUILD GARANTI.
+  void _moveHeaderToBody(String key) {
+    // Les clés natives restent dans l'en-tête.
+    if (_nativeHeaderKeys.contains(key)) return;
+
+    setState(() {
+      // 1. Retire de l'en-tête.
+      _removeFromHeaderSections(key);
+      _headerVisibility.remove(key);
+      _headerWidth.remove(key);
+      _headerAlign.remove(key);
+
+      if (_headerSections.isEmpty) {
+        _headerSections = [
+          List<String>.from(_nativeHeaderKeys),
+        ];
+      }
+
+      // 2. Force la visibilité du bloc.
+      _blockVisibility[key] = true;
+
+      // 3. Ajoute au corps si absent.
+      if (!_sectionsLayout.any((s) => s.contains(key))) {
+        _sectionsLayout.add(<String>[key]);
+      }
+
+      // 4. ✅ REBUILD.
+      _initBlocks();
+    });
+    _saveConfig();
+  }
+
+  /// ✅ Retire un texte du titre et le replace dans le corps.
+  void _dropUnderTitle(String key) {
+    setState(() {
+      for (final section in _sectionsLayout) {
+        section.remove(key);
+      }
+      _sectionsLayout.removeWhere((s) => s.isEmpty);
+      if (_sectionsLayout.isEmpty) _sectionsLayout.add(<String>[]);
+      _removeFromHeaderSections(key);
+      _headerVisibility.remove(key);
+      _headerWidth.remove(key);
+      _headerAlign.remove(key);
+
+      _blockVisibility[key] = true;
+
+      if (!_titleExtraKeys.contains(key)) {
+        _titleExtraKeys.add(key);
+      }
+
+      if (!_isTextBlock(key) &&
+          key != _emptyColumnKey &&
+          key.startsWith('text_')) {
+        _customTexts.putIfAbsent(key, () => '');
+      }
+      _initBlocks();
+      _draggingKey = null;
+      _dragOverKey = null;
+      _dragOverSection = null;
+    });
+    _saveConfig();
+  }
+
+  void _removeTextFromTitle(String key) {
+    setState(() {
+      _titleExtraKeys.remove(key);
+      if (!_sectionsLayout.any((s) => s.contains(key))) {
+        _sectionsLayout.add(<String>[key]);
+      }
+      _initBlocks();
+    });
+    _saveConfig();
+  }
+
+  void _showAddUnderTitleSheet() {
+    final bodyKeys = _sectionsLayout
+        .expand((s) => s)
+        .where((k) => k != _emptyColumnKey)
+        .where((k) => !_titleExtraKeys.contains(k))
+        .toList();
+    final headerKeys =
+        _headerElements.where((k) => !_titleExtraKeys.contains(k)).toList();
+    final freeTexts = _customTexts.keys
+        .where((k) => !_titleExtraKeys.contains(k))
+        .where((k) => !_headerElements.contains(k))
+        .toList();
+    final candidates = <String>{...bodyKeys, ...headerKeys, ...freeTexts};
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.vertical_align_top, color: _primary, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text("Ajouter sous le titre",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              "Créez un texte ou rattachez un bloc existant sous le titre.",
+              style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(Icons.notes_outlined, size: 20, color: _primary),
+              title: const Text('Nouveau texte libre',
+                  style:
+                      TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              subtitle: Text("Créer un texte sous le titre",
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant)),
+              trailing: Icon(Icons.chevron_right, size: 20, color: _outline),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addTextUnderTitle();
+              },
+            ),
+            if (candidates.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Divider(height: 1),
+              const SizedBox(height: 6),
+              const Text("Blocs existants",
+                  style:
+                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final key in candidates)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(
+                            _headerElements.contains(key)
+                                ? Icons.view_column_outlined
+                                : _sectionsLayout.any((s) => s.contains(key))
+                                    ? Icons.dashboard_outlined
+                                    : Icons.notes_outlined,
+                            size: 18,
+                            color: _outline,
+                          ),
+                          title: Text(_blockTitle(key),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          trailing: Icon(Icons.vertical_align_top,
+                              size: 18, color: _primary),
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            _dropUnderTitle(key);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddToHeaderSheet() {
+    final bodyKeys = _sectionsLayout
+        .expand((s) => s)
+        .where((k) =>
+            k != _emptyColumnKey &&
+            !_headerElements.contains(k) &&
+            !_titleExtraKeys.contains(k))
+        .toList();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.add_to_photos_outlined, color: _primary, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text("Ajouter dans l'en-tête",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 15.5)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+              "Ajoutez un texte libre ou déplacez un bloc du corps dans "
+              "l'en-tête (nouvelle colonne, à droite du titre).",
+              style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(Icons.notes_outlined, size: 20, color: _primary),
+              title: const Text('Texte libre',
+                  style:
+                      TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              subtitle: Text("Créer un texte dans l'en-tête",
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant)),
+              trailing: Icon(Icons.chevron_right, size: 20, color: _outline),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _addTextToHeader();
+              },
+            ),
+            if (bodyKeys.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Divider(height: 1),
+              const SizedBox(height: 6),
+              const Text("Blocs du corps",
+                  style:
+                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final key in bodyKeys)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(Icons.drag_indicator,
+                              size: 18, color: _outline),
+                          title: Text(_blockTitle(key),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          trailing: Icon(Icons.vertical_align_top,
+                              size: 18, color: _primary),
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            _moveBlockToHeader(key);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addTextToHeader({int? row}) {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _paragraphs[key] = [_Paragraph()];
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      final targetRow =
+          (row != null && row >= 0 && row < _headerSections.length)
+              ? row
+              : (_headerSections.isEmpty ? -1 : _headerSections.length - 1);
+      if (targetRow < 0) {
+        _headerSections.add([key]);
+      } else {
+        _headerSections[targetRow].add(key);
+      }
+      _headerVisibility.putIfAbsent(key, () => true);
+      _headerWidth.putIfAbsent(key, () => 1.0);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  void _addHeaderRow() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _paragraphs[key] = [_Paragraph()];
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      _headerSections.add([key]);
+      _headerVisibility.putIfAbsent(key, () => true);
+      _headerWidth.putIfAbsent(key, () => 1.0);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  void _addHeaderColumn(int row) {
+    if (row < 0 || row >= _headerSections.length) return;
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _paragraphs[key] = [_Paragraph()];
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      _headerSections[row].add(key);
+      _headerVisibility.putIfAbsent(key, () => true);
+      _headerWidth.putIfAbsent(key, () => 1.0);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  void _addTextUnderTitle() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _paragraphs[key] = [_Paragraph()];
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.right;
+      _titleExtraKeys.add(key);
+      _initBlocks();
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  void _addStaticText() {
+    final key = 'text_${++_textSeq}';
+    setState(() {
+      _customTexts[key] = '';
+      _paragraphs[key] = [_Paragraph()];
+      _blockVisibility[key] = true;
+      _blockAlignment[key] = TextAlign.left;
+      _initBlocks();
+      _sectionsLayout.add(<String>[key]);
+    });
+    _saveConfig();
+    _showStaticTextEditorSheet(key);
+  }
+
+  void _removeStaticText(String key) {
+    setState(() {
+      _customTexts.remove(key);
+      _paragraphs.remove(key);
+      _blockVisibility.remove(key);
+      _blockAlignment.remove(key);
+      _blockFonts.remove(key);
+      _blockFontScales.remove(key);
+      _blockWidth.remove(key);
+      _blockBg.remove(key);
+      _blockText.remove(key);
+      for (final section in _sectionsLayout) {
+        section.remove(key);
+      }
+      _sectionsLayout.removeWhere((s) => s.isEmpty);
+      if (_sectionsLayout.isEmpty) _sectionsLayout.add(<String>[]);
+      _titleExtraKeys.remove(key);
+      _removeFromHeaderSections(key);
+      _headerVisibility.remove(key);
+      _headerWidth.remove(key);
+      _headerAlign.remove(key);
+      _initBlocks();
+    });
+    _saveConfig();
+  }
+
   TextAlign _alignOf(String key) => _blockAlignment[key] ?? TextAlign.left;
 
   CrossAxisAlignment _ca(TextAlign align) {
@@ -802,22 +1614,26 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     if (_availableTemplates.isEmpty) return [_workingTemplate];
     switch (_selectedCategory) {
       case 'Recommandé':
-        return _availableTemplates.where((t) => t.isDefault || t.isPremium).toList();
+        return _availableTemplates
+            .where((t) => t.isDefault || t.isPremium)
+            .toList();
       case 'Simple':
-        return _availableTemplates.where((t) => t.category == 'moderne' || !t.isPremium).toList();
+        return _availableTemplates
+            .where((t) => t.category == 'moderne' || !t.isPremium)
+            .toList();
       case 'Classique':
-        return _availableTemplates.where((t) => t.category == 'classique').toList();
+        return _availableTemplates
+            .where((t) => t.category == 'classique')
+            .toList();
       case 'Professionnel':
-        return _availableTemplates.where((t) => t.isPremium || t.category == 'entreprise').toList();
+        return _availableTemplates
+            .where((t) => t.isPremium || t.category == 'entreprise')
+            .toList();
       default:
         return _availableTemplates;
     }
   }
 
-  // ── BUILD ──────────────────────────────────────────────────────────────────
-
-  /// 👮 Écran « Accès restreint » : la personnalisation de la facture est
-  /// réservée à l'administrateur et au propriétaire du modèle.
   Widget _buildAccessDeniedScreen() {
     return Scaffold(
       backgroundColor: _bgSurface,
@@ -846,8 +1662,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   shape: BoxShape.circle,
                   color: _primary.withValues(alpha: 0.08),
                 ),
-                child: Icon(Icons.lock_outline_rounded,
-                    size: 40, color: _primary),
+                child:
+                    Icon(Icons.lock_outline_rounded, size: 40, color: _primary),
               ),
               const SizedBox(height: 20),
               Text(
@@ -893,12 +1709,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
 
   @override
   Widget build(BuildContext context) {
-    // 👮 Personnalisation réservée à l'administrateur et au propriétaire du
-    // modèle : écran bloquant (aucune modification ni sauvegarde possible).
     if (!_accessChecked) {
       return Scaffold(
         backgroundColor: Colors.transparent,
-        body: Center(child: CircularProgressIndicator()),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (!_canCustomize) {
@@ -916,7 +1730,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  // ── 🎨 AppBar avec effet glass ─────────────────────────────────────────────
   PreferredSizeWidget _buildGlassAppBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return PreferredSize(
@@ -955,30 +1768,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       ),
                     ),
                   ),
-                  // 👁️ Aperçu rapide : rendu A4 fidèle (Stitch) de la customisation
-                  // EN COURS, sans quitter l'atelier.
                   IconButton(
                     tooltip: 'Aperçu rapide',
-                    icon: Icon(Icons.visibility_outlined, color: _onSurface, size: 20),
+                    icon: Icon(Icons.visibility_outlined,
+                        color: _onSurface, size: 20),
                     onPressed: _openQuickPreview,
                   ),
-                  _GlassButton(
-                    onPressed: () => _saveConfig(showFeedback: true),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.save, size: 14, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text(
-                          'ENREGISTRER',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
+                  Tooltip(
+                    message: 'Enregistrer',
+                    child: _GlassButton(
+                      onPressed: () => _saveConfig(showFeedback: true),
+                      padding: const EdgeInsets.all(7),
+                      child:
+                          const Icon(Icons.save, size: 18, color: Colors.white),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -990,8 +1792,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       ),
     );
   }
-
-  // ── Zone de prévisualisation ──────────────────────────────────────────────
 
   Widget _buildInvoicePreviewArea() {
     return Container(
@@ -1032,10 +1832,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Stack(children: [
-                  // Image / motif de fond — 📐 L'IMAGE personnalisée est
-                  // elle-même contrainte au ratio A4 par TemplateBackgroundLayer
-                  // (AspectRatio 794/1123) : elle reste donc TOUJOURS
-                  // proportionnelle au papier, quel que soit le contenu.
                   TemplateBackgroundLayer(
                     presetId: _background.presetId,
                     imageBytes: decodeBackgroundImage(_background.fileData),
@@ -1048,7 +1844,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     _buildDraggableInvoiceBody(),
                     _buildBottomStripe(),
                   ]),
-                  // 🏷️ Tampon FIXE : calque au-dessus de TOUS les éléments.
                   if (_showPaidStamp) _buildPaidStamp(),
                 ]),
               ),
@@ -1059,18 +1854,27 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  // ── EN-TÊTE AVEC DRAG & DROP (Titre, Logo, Info Entreprise) ───────────────
-
   Widget _buildInvoiceHeader() {
     final headerColor = _workingTemplate.primaryColor;
+
+    final rows = <Widget>[];
+    for (var r = 0; r < _headerSections.length; r++) {
+      rows.add(_buildHeaderRowWidget(r));
+    }
+
     return Container(
-      color: headerColor,
+      decoration: BoxDecoration(
+        color: headerColor,
+        border: _draggingKey != null
+            ? Border.all(color: Colors.amberAccent, width: 2)
+            : null,
+      ),
       padding: const EdgeInsets.all(12),
       child: Stack(children: [
         Positioned.fill(child: CustomPaint(painter: _DotPatternPainter())),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(bottom: 6),
@@ -1081,131 +1885,232 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.swap_horiz, color: Colors.white70, size: 12),
-                  SizedBox(width: 4),
+                  const Icon(Icons.swap_horiz,
+                      color: Colors.white70, size: 12),
+                  const SizedBox(width: 4),
                   Text(
-                    'Glissez pour réorganiser : Titre, Logo & Infos',
-                    style: TextStyle(color: Colors.white70, fontSize: 8, fontWeight: FontWeight.w600),
+                    '${_headerElements.length} élément(s) — '
+                    '${_headerSections.length} ligne(s) · glissez pour réorganiser',
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                for (final key in _headerElements)
-                  Expanded(
-                    flex: _headerFlexOf(key),
-                    child: Align(
-                      alignment: _wa(_headerAlignOf(key)),
-                      child: _buildDraggableHeaderElement(key),
-                    ),
-                  ),
-              ],
+            ...rows,
+            _buildHeaderAddRowButton(),
+            _buildUnderTitleDropZone(),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildHeaderRowWidget(int r) {
+    if (r < 0 || r >= _headerSections.length) {
+      return const SizedBox.shrink();
+    }
+    final rowKeys = _headerSections[r];
+
+    final cells = <Widget>[];
+    for (var c = 0; c < rowKeys.length; c++) {
+      if (c > 0) cells.add(const SizedBox(width: 4));
+      final k = rowKeys[c];
+      cells.add(
+        Expanded(
+          flex: _headerFlexOf(k),
+          child: Align(
+            alignment: _wa(_headerAlignOf(k)),
+            child: Opacity(
+              opacity: _headerVisibleOf(k) ? 1.0 : 0.35,
+              child: _buildDraggableHeaderElement(k),
             ),
-          ],
-        ),
-      ]),
-    );
-  }
-
-  /// En-tête PROPRE (aperçu rapide) : bandeau société coloré avec les
-  /// éléments d'en-tête (logo, info entreprise, titre) dans l'ordre choisi,
-  /// sans les poignées de glisser redimensionnement ni la bannière.
-  Widget _buildCleanInvoiceHeader() {
-    final headerColor = _workingTemplate.primaryColor;
-    return Container(
-      color: headerColor,
-      padding: const EdgeInsets.all(12),
-      child: Stack(children: [
-        Positioned.fill(child: CustomPaint(painter: _DotPatternPainter())),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            for (final key in _headerElements)
-              Expanded(
-                flex: _headerFlexOf(key),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Align(
-                    alignment: _wa(_headerAlignOf(key)),
-                    child: _buildHeaderElementContent(key),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildDraggableHeaderElement(String key) {
-    final isDragging = _draggingHeaderKey == key;
-    final isDragOver = _dragOverHeaderKey == key;
-    final isSelected = _selectedHeaderKey == key;
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (d) => d.data != key,
-      onAcceptWithDetails: (d) => _reorderHeaderElements(d.data, key),
-      onMove: (_) => setState(() => _dragOverHeaderKey = key),
-      onLeave: (_) => setState(() => _dragOverHeaderKey = null),
-      builder: (ctx, candidateData, _) {
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(
-            border: isDragOver
-                ? Border.all(color: Colors.amberAccent, width: 2)
-                : isSelected
-                    ? Border.all(color: Colors.white, width: 1.5)
-                    : Border.all(color: Colors.transparent, width: 1.5),
-            borderRadius: BorderRadius.circular(6),
           ),
-          child: Draggable<String>(
-            data: key,
-            feedback: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(8),
-              color: Colors.transparent,
+        ),
+      );
+    }
+    if (rowKeys.length < 6) {
+      cells.add(_buildHeaderAddColumnButton(r));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: cells,
+      ),
+    );
+  }
+
+  Widget _buildHeaderAddColumnButton(int r) {
+    return Tooltip(
+      message: 'Ajouter une colonne à cette ligne',
+      child: GestureDetector(
+        onTap: () {
+          if (r < 0 || r >= _headerSections.length) return;
+          _addHeaderColumn(r);
+        },
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          margin: const EdgeInsets.only(left: 4),
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+          ),
+          child: Icon(Icons.add,
+              size: 14, color: Colors.white.withValues(alpha: 0.9)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderAddRowButton() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DragTarget<String>(
+          onWillAcceptWithDetails: (d) {
+            if (d.data.isEmpty) return false;
+            return !_headerElements.contains(d.data);
+          },
+          onAcceptWithDetails: (d) {
+            _moveBlockToHeader(d.data, row: _headerSections.length);
+          },
+          builder: (ctx, candidate, _) {
+            final isOver = candidate.isNotEmpty;
+            return GestureDetector(
+              onTap: _addHeaderRow,
+              behavior: HitTestBehavior.opaque,
               child: Container(
-                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 2),
+                height: 24,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _workingTemplate.primaryColor.withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isOver
+                        ? Colors.amberAccent
+                        : Colors.white.withValues(alpha: 0.35),
+                    width: isOver ? 2 : 1,
+                  ),
+                  color: isOver
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.04),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add,
+                        size: 12, color: Colors.white.withValues(alpha: 0.9)),
+                    const SizedBox(width: 4),
+                    Text(
+                      isOver
+                          ? 'Déposer pour créer une nouvelle ligne'
+                          : 'Ajouter une ligne',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
-                child: Opacity(
-                  opacity: 0.9,
-                  child: _buildHeaderElementContent(key, isFeedback: true),
-                ),
+              ),
+            );
+          },
+        ),
+        GestureDetector(
+          onTap: _showAddToHeaderSheet,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            margin: const EdgeInsets.only(top: 4),
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              color: Colors.white.withValues(alpha: 0.08),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.35),
+                width: 1,
               ),
             ),
-            childWhenDragging: Opacity(
-              opacity: 0.25,
-              child: _buildHeaderElementContent(key),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_to_photos_outlined,
+                    size: 12, color: Colors.white.withValues(alpha: 0.9)),
+                const SizedBox(width: 4),
+                Text(
+                  'Ajouter un bloc ou un texte',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            onDragStarted: () => setState(() => _draggingHeaderKey = key),
-            onDragEnd: (_) => setState(() {
-              _draggingHeaderKey = null;
-              _dragOverHeaderKey = null;
-            }),
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedHeaderKey = key);
-                _showHeaderElementSheet(key);
-              },
-              child: _wrapHeaderWithIndicator(
-                key,
-                _buildHeaderElementContent(key),
-                isBeingDragged: isDragging,
-                isSelected: isSelected,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnderTitleDropZone() {
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) {
+        return !_titleExtraKeys.contains(d.data);
+      },
+      onAcceptWithDetails: (d) => _dropUnderTitle(d.data),
+      onMove: (_) => setState(() => _dragOverSection = -2),
+      onLeave: (_) => setState(() => _dragOverSection = null),
+      builder: (ctx, candidate, _) {
+        final isOver = _dragOverSection == -2;
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isOver
+                  ? Colors.white.withValues(alpha: 0.20)
+                  : Colors.white.withValues(alpha: 0.06),
+              border: Border.all(
+                color: isOver
+                    ? Colors.amberAccent
+                    : Colors.white.withValues(alpha: 0.35),
+                width: isOver ? 2 : 1,
+              ),
+            ),
+            child: InkWell(
+              onTap: _showAddUnderTitleSheet,
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isOver ? Icons.move_down_rounded : Icons.add,
+                    size: 13,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    isOver
+                        ? 'Déposer ici pour rattacher au titre'
+                        : 'Déposer un bloc sous le titre',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1214,12 +2119,196 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// Réglages de la colonne d'en-tête (largeur + alignement).
+  Widget _buildCleanInvoiceHeader() {
+    final headerColor = _workingTemplate.primaryColor;
+
+    final rowsWidgets = <Widget>[];
+    for (var r = 0; r < _headerSections.length; r++) {
+      final rowKeys = _headerSections[r];
+      final cells = <Widget>[];
+      for (var c = 0; c < rowKeys.length; c++) {
+        final k = rowKeys[c];
+        if (!_headerVisibleOf(k)) continue;
+        cells.add(
+          Expanded(
+            flex: _headerFlexOf(k),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Align(
+                alignment: _wa(_headerAlignOf(k)),
+                child: _buildHeaderElementContent(k),
+              ),
+            ),
+          ),
+        );
+      }
+      if (cells.isNotEmpty) {
+        rowsWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: cells,
+            ),
+          ),
+        );
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(color: headerColor),
+      padding: const EdgeInsets.all(12),
+      child: Stack(children: [
+        Positioned.fill(child: CustomPaint(painter: _DotPatternPainter())),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: rowsWidgets,
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildDraggableCell({
+    required String key,
+    required Widget content,
+    required bool Function(String) acceptDrop,
+    required void Function(String) onAcceptDrop,
+    double feedbackWidth = 190,
+    bool isHeaderContext = false,
+  }) {
+    final isDragging = _draggingKey == key || _draggingHeaderKey == key;
+    final isDragOver = _dragOverKey == key || _dragOverHeaderKey == key;
+    final isSelected = _selectedBlockKey == key || _selectedHeaderKey == key;
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (d) => d.data != key && acceptDrop(d.data),
+      onAcceptWithDetails: (d) => onAcceptDrop(d.data),
+      onMove: (_) => setState(() {
+        if (isHeaderContext) {
+          _dragOverHeaderKey = key;
+        } else {
+          _dragOverKey = key;
+        }
+      }),
+      onLeave: (_) => setState(() {
+        if (isHeaderContext) {
+          _dragOverHeaderKey = null;
+        } else {
+          _dragOverKey = null;
+        }
+      }),
+      builder: (ctx, candidate, _) {
+        return Draggable<String>(
+          data: key,
+          onDragStarted: () => setState(() {
+            if (isHeaderContext) {
+              _draggingHeaderKey = key;
+            } else {
+              _draggingKey = key;
+            }
+          }),
+          onDragEnd: (_) => setState(() {
+            _draggingKey = null;
+            _draggingHeaderKey = null;
+            _dragOverKey = null;
+            _dragOverHeaderKey = null;
+            _dragOverSection = null;
+          }),
+          feedback: Material(
+            elevation: 10,
+            borderRadius: BorderRadius.circular(10),
+            color: isHeaderContext
+                ? _workingTemplate.primaryColor.withValues(alpha: 0.95)
+                : Colors.white,
+            child: Container(
+              width: feedbackWidth,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isHeaderContext
+                    ? _workingTemplate.primaryColor.withValues(alpha: 0.95)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isHeaderContext ? Colors.amber : _primary,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primary.withValues(alpha: 0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Opacity(opacity: 0.9, child: content),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.25, child: content),
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isHeaderContext) {
+                  _selectedHeaderKey = key;
+                } else {
+                  _selectedBlockKey = key;
+                }
+              });
+              if (isHeaderContext) {
+                _showHeaderElementSheet(key);
+              } else {
+                _showElementEditorSheet(key);
+              }
+            },
+            child: isHeaderContext
+                ? _wrapHeaderWithIndicator(
+                    key,
+                    content,
+                    isBeingDragged: isDragging,
+                    isSelected: isSelected,
+                  )
+                : _wrapBlockTypo(
+                    key,
+                    _wrapBlock(
+                      _invoiceBlocks.firstWhere(
+                        (b) => b.key == key,
+                        orElse: () {
+                          assert(() {
+                            debugPrint(
+                                '⚠️ _buildDraggableCell: clé inconnue « $key »');
+                            return true;
+                          }());
+                          return _invoiceBlocks.first;
+                        },
+                      ),
+                      content,
+                      isDragOver,
+                      isBeingDragged: isDragging,
+                      isSelected: isSelected,
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDraggableHeaderElement(String key) {
+    return _buildDraggableCell(
+      key: key,
+      content: _buildHeaderElementContent(key),
+      acceptDrop: (data) => data != key,
+      onAcceptDrop: (data) => _reorderHeaderElements(data, key),
+      feedbackWidth: 220,
+      isHeaderContext: true,
+    );
+  }
+
   void _showHeaderElementSheet(String key) {
     final title = switch (key) {
       'logo' => 'Logo',
       'company_info' => 'Infos Société',
-      _ => 'Titre',
+      'invoice_title' => 'Titre',
+      _ => _blockTitle(key),
     };
     showModalBottomSheet(
       context: context,
@@ -1235,92 +2324,236 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Icon(Icons.view_column_outlined, color: _primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Colonne « $title »',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15.5)),
-                ),
-              ]),
-              const SizedBox(height: 4),
-              // 🔠 Alignement de la colonne.
-              Row(children: [
-                const Text('Alignement :',
-                    style: TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {
-                    setSS(() => _headerAlign[key] = TextAlign.left);
-                    setState(() => _headerAlign[key] = TextAlign.left);
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.view_column_outlined, color: _primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Colonne « $title »',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15.5)),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+
+                // ✅ Texte libre : édition directe du contenu.
+                if (_isTextBlock(key)) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _showStaticTextEditorSheet(key);
+                    },
+                    icon: Icon(Icons.article_outlined,
+                        size: 18, color: _primary),
+                    label: Text('Éditer le contenu (multi-paragraphes)',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: _primary,
+                            fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                          color: _primary.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Afficher cet élément',
+                      style: TextStyle(fontSize: 13.5)),
+                  subtitle: Text(
+                    _headerVisibleOf(key)
+                        ? 'Visible sur la facture'
+                        : 'Masqué (l\'espace est libéré pour les autres)',
+                    style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
+                  ),
+                  value: _headerVisibleOf(key),
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() => _headerVisibility[key] = val);
+                    setSS(() => _headerVisibility[key] = val);
                     _saveConfig();
                   },
-                  icon: const Icon(Icons.format_align_left, size: 18),
-                  color: _headerAlignOf(key) == TextAlign.left
-                      ? _primary
-                      : _onSurfaceVariant,
-                  constraints: const BoxConstraints(minWidth: 34),
-                  padding: EdgeInsets.zero,
                 ),
-                IconButton(
-                  onPressed: () {
-                    setSS(() => _headerAlign[key] = TextAlign.center);
-                    setState(() => _headerAlign[key] = TextAlign.center);
+                Row(children: [
+                  const Text('Alignement :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () {
+                      setState(() => _headerAlign[key] = TextAlign.left);
+                      setSS(() => _headerAlign[key] = TextAlign.left);
+                      _saveConfig();
+                    },
+                    icon: const Icon(Icons.format_align_left, size: 18),
+                    color: _headerAlignOf(key) == TextAlign.left
+                        ? _primary
+                        : _onSurfaceVariant,
+                    constraints: const BoxConstraints(minWidth: 34),
+                    padding: EdgeInsets.zero,
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(() => _headerAlign[key] = TextAlign.center);
+                      setSS(() => _headerAlign[key] = TextAlign.center);
+                      _saveConfig();
+                    },
+                    icon: const Icon(Icons.format_align_center, size: 18),
+                    color: _headerAlignOf(key) == TextAlign.center
+                        ? _primary
+                        : _onSurfaceVariant,
+                    constraints: const BoxConstraints(minWidth: 34),
+                    padding: EdgeInsets.zero,
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(() => _headerAlign[key] = TextAlign.right);
+                      setSS(() => _headerAlign[key] = TextAlign.right);
+                      _saveConfig();
+                    },
+                    icon: const Icon(Icons.format_align_right, size: 18),
+                    color: _headerAlignOf(key) == TextAlign.right
+                        ? _primary
+                        : _onSurfaceVariant,
+                    constraints: const BoxConstraints(minWidth: 34),
+                    padding: EdgeInsets.zero,
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Row(children: [
+                  const Text('Largeur :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('${(_headerWidthOf(key) * 100).round()}%',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: _primary,
+                          fontWeight: FontWeight.bold)),
+                ]),
+                Slider(
+                  value: _headerWidthOf(key),
+                  min: 0.5,
+                  max: 2.5,
+                  activeColor: _primary,
+                  onChanged: (val) {
+                    setState(() => _headerWidth[key] = val);
+                    setSS(() => _headerWidth[key] = val);
                     _saveConfig();
                   },
-                  icon: const Icon(Icons.format_align_center, size: 18),
-                  color: _headerAlignOf(key) == TextAlign.center
-                      ? _primary
-                      : _onSurfaceVariant,
-                  constraints: const BoxConstraints(minWidth: 34),
-                  padding: EdgeInsets.zero,
                 ),
-                IconButton(
-                  onPressed: () {
-                    setSS(() => _headerAlign[key] = TextAlign.right);
-                    setState(() => _headerAlign[key] = TextAlign.right);
-                    _saveConfig();
-                  },
-                  icon: const Icon(Icons.format_align_right, size: 18),
-                  color: _headerAlignOf(key) == TextAlign.right
-                      ? _primary
-                      : _onSurfaceVariant,
-                  constraints: const BoxConstraints(minWidth: 34),
-                  padding: EdgeInsets.zero,
-                ),
-              ]),
-              const SizedBox(height: 4),
-              // ↔️ Largeur de la colonne.
-              Row(children: [
-                const Text('Largeur :',
-                    style: TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                Text('${(_headerWidthOf(key) * 100).round()}%',
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: _primary,
-                        fontWeight: FontWeight.bold)),
-              ]),
-              Slider(
-                value: _headerWidthOf(key),
-                min: 0.5,
-                max: 2.5,
-                activeColor: _primary,
-                onChanged: (val) {
-                  setSS(() => _headerWidth[key] = val);
-                  setState(() => _headerWidth[key] = val);
-                  _saveConfig();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+                if (key == 'invoice_title') ...[
+                  const SizedBox(height: 4),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    const Text('Éléments sous le titre',
+                        style: TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _showAddUnderTitleSheet();
+                      },
+                      icon: Icon(Icons.add, size: 16, color: _primary),
+                      label: Text('Ajouter',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ]),
+                  if (_titleExtraKeys.isEmpty)
+                    Text('Aucun élément — ajoutez un texte sous le titre.',
+                        style:
+                            TextStyle(fontSize: 11.5, color: _onSurfaceVariant))
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 170),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final ek in _titleExtraKeys)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                leading: Icon(
+                                  _isTextBlock(ek)
+                                      ? Icons.notes_outlined
+                                      : Icons.dashboard_outlined,
+                                  size: 17,
+                                  color: _primary,
+                                ),
+                                title: Text(_blockTitle(ek),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Modifier',
+                                      icon: Icon(Icons.edit_outlined,
+                                          size: 17, color: _primary),
+                                      onPressed: () {
+                                        Navigator.of(ctx).pop();
+                                        if (_isTextBlock(ek)) {
+                                          _showStaticTextEditorSheet(ek);
+                                        } else {
+                                          _showElementEditorSheet(ek);
+                                        }
+                                      },
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Retirer du titre',
+                                      icon: const Icon(Icons.close,
+                                          size: 17, color: Colors.redAccent),
+                                      onPressed: () {
+                                        _removeTextFromTitle(ek);
+                                        setSS(() {});
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+                if (!_nativeHeaderKeys.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _moveHeaderToBody(key);
+                      },
+                      icon: Icon(Icons.vertical_align_bottom,
+                          size: 16, color: _primary),
+                      label: Text('Replacer dans le corps',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
       ),
@@ -1346,13 +2579,62 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           Positioned(
             top: -2,
             right: -2,
-            child: Container(
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(Icons.drag_indicator, size: 10, color: Colors.white70),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(1),
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(Icons.drag_indicator,
+                      size: 10, color: Colors.white70),
+                ),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  iconSize: 12,
+                  icon: Container(
+                    padding: const EdgeInsets.all(1),
+                    decoration: BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(Icons.more_vert,
+                        size: 10, color: Colors.white70),
+                  ),
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'visibility':
+                        setState(() =>
+                            _headerVisibility[key] = !_headerVisibleOf(key));
+                        _saveConfig();
+                        break;
+                      case 'remove':
+                        _moveHeaderToBody(key);
+                        break;
+                      case 'edit':
+                        if (_isTextBlock(key)) {
+                          _showStaticTextEditorSheet(key);
+                        } else {
+                          _showHeaderElementSheet(key);
+                        }
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'visibility',
+                      child: Text(
+                          _headerVisibleOf(key) ? 'Masquer' : 'Afficher'),
+                    ),
+                    const PopupMenuItem(
+                        value: 'edit', child: Text('Modifier')),
+                    const PopupMenuItem(
+                        value: 'remove', child: Text('Retirer')),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -1360,7 +2642,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  Widget _buildHeaderElementContent(String key, {bool isFeedback = false}) {
+  Widget _buildHeaderElementContent(String key) {
     final companyName = _companyName.isNotEmpty
         ? _companyName
         : (_company?.name ?? 'Noi Concept digital');
@@ -1374,13 +2656,15 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.white38, style: BorderStyle.solid),
+              border:
+                  Border.all(color: Colors.white38, style: BorderStyle.solid),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Column(
+            child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.image_not_supported_outlined, color: Colors.white70, size: 16),
+                Icon(Icons.image_not_supported_outlined,
+                    color: Colors.white70, size: 16),
                 SizedBox(height: 2),
                 Text('Logo masqué',
                     style: TextStyle(color: Colors.white70, fontSize: 8)),
@@ -1394,12 +2678,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.white.withValues(alpha: 0.18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.4), width: 1.5),
           ),
           alignment: Alignment.center,
           clipBehavior: Clip.antiAlias,
           child: _customLogoBytes != null
-              ? Image.memory(_customLogoBytes!, fit: BoxFit.cover, width: _logoSize, height: _logoSize)
+              ? Image.memory(_customLogoBytes!,
+                  fit: BoxFit.cover, width: _logoSize, height: _logoSize)
               : Text(initials,
                   style: TextStyle(
                     color: Colors.white,
@@ -1427,9 +2713,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     fontWeight: FontWeight.bold,
                     fontSize: (_customFontSize * 0.95).clamp(9.0, 14.0))),
             Text(
-              '$_companyAddress\n'
-              '$_companyPhone\n'
-              '$_companyEmail',
+              '$_companyAddress\n$_companyPhone\n$_companyEmail',
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1452,25 +2736,195 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   fontWeight: FontWeight.w900,
                   fontSize: (_customFontSize * 1.35).clamp(13.0, 22.0),
                   letterSpacing: -0.5,
-                  shadows: [Shadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4)],
+                  shadows: [
+                    Shadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4)
+                  ],
                 )),
+            if (_invoiceSubtitle.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(_invoiceSubtitle.trim(),
+                    textAlign: TextAlign.right,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w600,
+                      fontSize: (_customFontSize * 0.7).clamp(7.5, 11.0),
+                      letterSpacing: 0.6,
+                    )),
+              ),
             if (_qrPosition == 'header' && _workingTemplate.showPaymentQR)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: _buildQRCodeWidget(mini: true),
               ),
+            for (final ek in _titleExtraKeys)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: _buildUnderTitleElement(ek),
+              ),
           ],
         );
 
       default:
+        if (_isTextBlock(key)) {
+          final paragraphs = _paragraphsOf(key);
+          final isEmpty = paragraphs.every((p) => p.text.trim().isEmpty);
+          final align = _headerAlignOf(key);
+          return GestureDetector(
+            onTap: () => _showStaticTextEditorSheet(key),
+            child: Container(
+              padding: isEmpty
+                  ? const EdgeInsets.symmetric(horizontal: 6, vertical: 4)
+                  : EdgeInsets.zero,
+              decoration: isEmpty
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    )
+                  : null,
+              child: isEmpty
+                  ? Text(
+                      'Tapez ici…',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontStyle: FontStyle.italic,
+                        fontSize: (_customFontSize * 0.8).clamp(7.5, 12.5),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final p in paragraphs)
+                          if (p.text.trim().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                p.text,
+                                textAlign: align,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: (_customFontSize * 0.8)
+                                      .clamp(7.5, 12.5),
+                                  height: 1.3,
+                                  fontWeight: p.bold
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  fontStyle: p.italic
+                                      ? FontStyle.italic
+                                      : FontStyle.normal,
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+            ),
+          );
+        }
+
+        final moved = _invoiceBlocks.where((b) => b.key == key).toList();
+        if (moved.isNotEmpty) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            ),
+            child: IconTheme(
+              data: IconThemeData(
+                  color: Colors.white.withValues(alpha: 0.9), size: 12),
+              child: DefaultTextStyle(
+                style:
+                    TextStyle(color: Colors.white, fontSize: _customFontSize),
+                child: moved.first.builder(_headerAlignOf(key)),
+              ),
+            ),
+          );
+        }
         return const SizedBox.shrink();
     }
   }
 
-  // ── BLOCS DU CORPS DRAGGABLE ──────────────────────────────────────────────
+  Widget _buildUnderTitleElement(String key) {
+    if (_isTextBlock(key)) {
+      final paragraphs = _paragraphsOf(key);
+      final isEmpty = paragraphs.every((p) => p.text.trim().isEmpty);
+      return GestureDetector(
+        onTap: () => _showStaticTextEditorSheet(key),
+        child: isEmpty
+            ? Text(
+                'Tapez ici…',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontStyle: FontStyle.italic,
+                  fontSize: (_customFontSize * 0.7).clamp(7.5, 11.0),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final p in paragraphs)
+                    if (p.text.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          p.text,
+                          textAlign: p.align == TextAlign.left
+                              ? TextAlign.right
+                              : p.align,
+                          maxLines: 6,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            fontSize:
+                                (_customFontSize * 0.7).clamp(7.5, 11.0),
+                            height: 1.25,
+                            fontWeight:
+                                p.bold ? FontWeight.bold : FontWeight.w500,
+                            fontStyle: p.italic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                        ),
+                      ),
+                ],
+              ),
+      );
+    }
+    if (key == 'logo' || key == 'company_info') {
+      return _buildHeaderElementContent(key);
+    }
+    final moved = _invoiceBlocks.where((b) => b.key == key).toList();
+    if (moved.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+        ),
+        child: IconTheme(
+          data: IconThemeData(
+              color: Colors.white.withValues(alpha: 0.9), size: 12),
+          child: DefaultTextStyle(
+            style: TextStyle(color: Colors.white, fontSize: _customFontSize),
+            child: moved.first.builder(_headerAlignOf(key)),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 
-  /// Un bloc est rendu s'il est marqué visible ; le QR Code n'apparaît dans
-  /// son bloc dédié que si le placement « autonome » est sélectionné.
   bool _isBlockVisible(String key) {
     if (!(_blockVisibility[key] ?? true)) return false;
     if (key == 'qr_block') {
@@ -1480,66 +2934,69 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   Widget _buildDraggableInvoiceBody() {
-    // 🖼️ Corps TRANSPARENT : le fond personnalisé (TemplateBackgroundLayer)
-    // est dessiné sous la colonne ; un fond blanc opaque le masquerait.
+    final children = <Widget>[];
+    for (var s = 0; s < _sectionsLayout.length; s++) {
+      children.add(_buildSectionRow(s));
+    }
+    children.add(_buildNewSectionDropZone());
+
     return Container(
-      color: Colors.transparent,
+      decoration: const BoxDecoration(color: Colors.transparent),
       padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // SECTIONS empilées : chaque section prend toute la largeur et
-          // répartit ses blocs (1 à 3) en colonnes SUR SA PROPRE LARGEUR.
-          for (var s = 0; s < _sectionsLayout.length; s++) _buildSectionRow(s),
-          if (_draggingKey != null) _buildNewSectionDropZone(),
-        ],
+        children: children,
       ),
     );
   }
 
-  /// APERÇU PROPRE (rapide plein écran) : même contenu que le canvas
-  /// d'édition, mais SANS les affordances de drag & drop (manettes,
-  /// bordures, boutons +, zones vides). Reflète strictement l'ordre des
-  /// sections et la visibilité des blocs définis dans l'atelier.
   Widget _buildCleanInvoiceBody() {
     final cells = <Widget>[];
     for (final section in _sectionsLayout) {
       final inRow = <Widget>[];
       for (final key in section) {
-        // 🧱 Les colonnes vides sont visibles dans l'aperçu
         if (key == _emptyColumnKey) {
-          inRow.add(Expanded(
-              flex: _flexOf(key), child: _buildEmptyColumnPreview()));
+          inRow.add(
+              Expanded(flex: _flexOf(key), child: _buildEmptyColumnPreview()));
           continue;
         }
         if (!_isBlockVisible(key)) continue;
-        final block =
-            _invoiceBlocks.firstWhere((b) => b.key == key, orElse: () => _invoiceBlocks.first);
+        final block = _invoiceBlocks.firstWhere(
+          (b) => b.key == key,
+          orElse: () {
+            assert(() {
+              debugPrint('⚠️ _buildCleanInvoiceBody: clé inconnue « $key »');
+              return true;
+            }());
+            return _invoiceBlocks.first;
+          },
+        );
         inRow.add(Expanded(
-            flex: _flexOf(key), child: _tintBlock(key, block.builder(_alignOf(key)))));
+            flex: _flexOf(key),
+            child: _wrapBlockTypo(
+              key,
+              _tintBlock(key, block.builder(_alignOf(key))),
+            )));
       }
       if (inRow.isNotEmpty) {
         cells.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: inRow),
+          child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start, children: inRow),
         ));
       }
     }
     return Container(
-      // 🖼️ TRANSPARENT : laisse apparaître l'image de fond personnalisée.
-      color: Colors.transparent,
+      decoration: const BoxDecoration(color: Colors.transparent),
       padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        // 📐 Répartition verticale : quand le contenu est court, les sections
-        // occupent toute la hauteur A4 (au lieu d'un bloc compact en haut).
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: cells,
       ),
     );
   }
 
-  /// 🧱 Aperçu d'une colonne vide (espaceur) - visible et positionné
   Widget _buildEmptyColumnPreview() {
     return Container(
       constraints: const BoxConstraints(minHeight: 44),
@@ -1561,9 +3018,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// Une section : bande pleine largeur contenant 1 à 3 blocs côte à côte
-  /// (colonne vide 🧱 acceptée pour scinder la rangée). Déposer un bloc sur
-  /// l'espace libre → ajout en fin de cette section.
   Widget _buildSectionRow(int s) {
     final rawKeys = _sectionsLayout[s];
     return DragTarget<String>(
@@ -1575,8 +3029,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       onLeave: (_) => setState(() => _dragOverSection = null),
       builder: (ctx, candidate, _) {
         final isOver = _dragOverSection == s;
-        // Cellules de la rangée : blocs visibles + colonnes vides, dans
-        // l'ordre brut de la section (les index servent au remplacement).
         final cells = <Widget>[];
         for (var i = 0; i < rawKeys.length; i++) {
           final key = rawKeys[i];
@@ -1584,27 +3036,40 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             cells.add(Expanded(
                 flex: _flexOf(key), child: _buildEmptyColumnCell(s, i)));
           } else if (_isBlockVisible(key)) {
+            final block = _invoiceBlocks.firstWhere(
+              (b) => b.key == key,
+              orElse: () {
+                assert(() {
+                  debugPrint('⚠️ _buildSectionRow: clé inconnue « $key »');
+                  return true;
+                }());
+                return _invoiceBlocks.first;
+              },
+            );
             cells.add(Expanded(
               flex: _flexOf(key),
-              child: _buildBlockCell(
-                  _invoiceBlocks.firstWhere((b) => b.key == key), s),
+              child: _buildBlockCell(block, s),
             ));
           }
         }
-        // Section entièrement masquée : zone de dépôt pendant un drag.
         if (cells.isEmpty && _draggingKey != null) {
           cells.add(Expanded(
             child: SizedBox(
               height: 40,
-              child: Center(
-                  child: Icon(Icons.add, size: 16, color: _outline)),
+              child: Center(child: Icon(Icons.add, size: 16, color: _outline)),
             ),
           ));
         }
-        // 🧱 Mini-bouton « + colonne vide » (si la section n'est pas pleine).
         if (rawKeys.length < _maxPerSection) {
           cells.add(_buildAddEmptyColumnCell(s));
         }
+
+        final rowChildren = <Widget>[];
+        for (var i = 0; i < cells.length; i++) {
+          if (i > 0) rowChildren.add(const SizedBox(width: 6));
+          rowChildren.add(cells[i]);
+        }
+
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           margin: const EdgeInsets.only(bottom: 6),
@@ -1629,14 +3094,31 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                       'Section ${s + 1} · ${_sectionsLayout[s].length}/$_maxPerSection colonnes',
                       style: TextStyle(fontSize: 7.5, color: _outline)),
                 ),
+              if (_draggingKey == null && _sectionsLayout.length > 1)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('Section ${s + 1}',
+                        style: TextStyle(fontSize: 7.5, color: _outline)),
+                    const SizedBox(width: 4),
+                    _SectionMoveButton(
+                      icon: Icons.keyboard_arrow_up,
+                      enabled: s > 0,
+                      onTap: () => _moveSection(s, -1),
+                      color: _outline,
+                    ),
+                    _SectionMoveButton(
+                      icon: Icons.keyboard_arrow_down,
+                      enabled: s < _sectionsLayout.length - 1,
+                      onTap: () => _moveSection(s, 1),
+                      color: _outline,
+                    ),
+                  ]),
+                ),
+              const SizedBox(height: 2),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < cells.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 6),
-                    cells[i],
-                  ],
-                ],
+                children: rowChildren,
               ),
             ],
           ),
@@ -1645,8 +3127,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// Zone sous la dernière section : crée une NOUVELLE section pleine
-  /// largeur dédiée au bloc déposé.
   Widget _buildNewSectionDropZone() {
     return DragTarget<String>(
       onWillAcceptWithDetails: (d) => true,
@@ -1670,21 +3150,29 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     ? _tertiaryContainer
                     : _surfaceVariant.withValues(alpha: 0.6)),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.add, size: 14, color: _outline),
-            SizedBox(width: 4),
-            Text('Nouvelle section (pleine largeur)',
-                style: TextStyle(fontSize: 9.5, color: _outline)),
-          ]),
+          child: InkWell(
+            onTap: _addSectionBelow,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add, size: 14, color: _outline),
+              const SizedBox(width: 4),
+              Text(
+                  _draggingKey != null
+                      ? 'Nouvelle section (pleine largeur)'
+                      : 'Ajouter une rangée de colonnes en dessous',
+                  style: TextStyle(fontSize: 9.5, color: _outline)),
+            ]),
+          ),
         );
       },
     );
   }
 
-  /// 🧱 Colonne vide (spacer) : réserve une fraction de la largeur de la
-  /// section sans contenu — permet de scinder une rangée (ex. « Totaux »
-  /// à gauche, espace libre à droite). Déposer un bloc dessus le place à
-  /// CETTE position (le spacer est consommé) ; le bouton × la supprime.
+  void _addSectionBelow() {
+    setState(() => _sectionsLayout.add(<String>[_emptyColumnKey]));
+    _saveConfig();
+  }
+
   Widget _buildEmptyColumnCell(int s, int index) {
     final hoverKey = 'empty@$s@$index';
     return DragTarget<String>(
@@ -1710,9 +3198,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Icon(
-                    isOver
-                        ? Icons.move_down_rounded
-                        : Icons.view_week_outlined,
+                    isOver ? Icons.move_down_rounded : Icons.view_week_outlined,
                     size: 13,
                     color: isOver ? _tertiaryContainer : _outline),
                 const SizedBox(height: 2),
@@ -1748,9 +3234,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// 🧱 Mini-bouton « + » en fin de rangée : ajoute une colonne vide à la
-  /// section (scinder la rangée). Pendant un drag, déposer dessus ajoute
-  /// le bloc en fin de section (le DragTarget parent couvre la zone).
   Widget _buildAddEmptyColumnCell(int s) {
     return Tooltip(
       message: 'Ajouter une colonne vide (scinder la rangée)',
@@ -1763,15 +3246,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           child: CustomPaint(
             painter: _DashedRectPainter(
                 color: _outline.withValues(alpha: 0.35), radius: 6),
-            child: Center(
-                child: Icon(Icons.add, size: 13, color: _outline)),
+            child: Center(child: Icon(Icons.add, size: 13, color: _outline)),
           ),
         ),
       ),
     );
   }
 
-  /// 🧱 Ajoute une colonne vide en fin de section [s].
   void _addEmptyColumn(int s) {
     if (s < 0 || s >= _sectionsLayout.length) return;
     if (_sectionsLayout[s].length >= _maxPerSection) return;
@@ -1779,8 +3260,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _saveConfig();
   }
 
-  /// 🧱 Supprime la colonne vide d'index [index] dans la section [s].
-  /// La section est retirée si elle ne contient plus aucune colonne.
   void _removeEmptyColumn(int s, int index) {
     if (s < 0 || s >= _sectionsLayout.length) return;
     final list = _sectionsLayout[s];
@@ -1793,78 +3272,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _saveConfig();
   }
 
-  /// Une « cellule » : cible de dépôt (insertion avant ce bloc, dans la
-  /// section de celui-ci) + source draggable — le glisser fonctionne au sein
-  /// d'une section et entre les sections.
   Widget _buildBlockCell(_InvoiceBlock block, int section) {
     final align = _alignOf(block.key);
-    final isDragging = _draggingKey == block.key;
-    final isDragOver = _dragOverKey == block.key;
-    final isSelected = _selectedBlockKey == block.key;
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (d) {
+    return _buildDraggableCell(
+      key: block.key,
+      content: block.builder(align),
+      acceptDrop: (data) {
         final sec = _sectionsLayout[section];
-        // Réordonnancement au sein de la même section : toujours autorisé.
-        if (sec.contains(d.data)) return true;
-        // Sinon la section ne doit pas dépasser _maxPerSection blocs.
+        if (sec.contains(data)) return true;
         return sec.length < _maxPerSection;
       },
-      onAcceptWithDetails: (d) =>
-          _moveBlock(d.data, section, beforeKey: block.key),
-      onMove: (_) => setState(() => _dragOverKey = block.key),
-      onLeave: (_) => setState(() => _dragOverKey = null),
-      builder: (ctx, candidateData, _) {
-        return Draggable<String>(
-          data: block.key,
-          onDragStarted: () => setState(() => _draggingKey = block.key),
-          onDragEnd: (_) => setState(() {
-            _draggingKey = null;
-            _dragOverKey = null;
-            _dragOverSection = null;
-          }),
-          feedback: Material(
-            elevation: 10,
-            borderRadius: BorderRadius.circular(10),
-            color: Colors.white,
-            child: Container(
-              width: 190,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _primary, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: _primary.withValues(alpha: 0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  )
-                ],
-              ),
-              child: Opacity(opacity: 0.9, child: block.builder(align)),
-            ),
-          ),
-          childWhenDragging: Opacity(
-            opacity: 0.25,
-            child: _wrapBlock(block, block.builder(align), isDragOver,
-                isBeingDragged: isDragging, isSelected: isSelected),
-          ),
-          child: GestureDetector(
-            onTap: () {
-              setState(() => _selectedBlockKey = block.key);
-              _showElementEditorSheet(block.key);
-            },
-            child: _wrapBlock(
-              block,
-              block.builder(align),
-              isDragOver,
-              isBeingDragged: isDragging,
-              isSelected: isSelected,
-            ),
-          ),
-        );
-      },
+      onAcceptDrop: (data) => _moveBlock(data, section, beforeKey: block.key),
+      feedbackWidth: 190,
+      isHeaderContext: false,
     );
   }
 
@@ -1925,7 +3345,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     SizedBox(width: 2),
                     Text(
                       'Modifier',
-                      style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -1936,7 +3359,59 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  // ── Blocs individuels du corps ────────────────────────────────────────────
+  Widget _buildStaticTextBlock(String key, TextAlign align) {
+    final paragraphs = _paragraphsOf(key);
+    final isEmpty = paragraphs.every((p) => p.text.trim().isEmpty);
+
+    if (isEmpty) {
+      return GestureDetector(
+        onTap: () => _showStaticTextEditorSheet(key),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(
+            'Texte libre — appuyez pour saisir',
+            textAlign: align,
+            style: TextStyle(
+              fontSize: _customFontSize,
+              height: 1.35,
+              fontStyle: FontStyle.italic,
+              color: _onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _showStaticTextEditorSheet(key),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: _ca(align),
+          children: [
+            for (final p in paragraphs)
+              if (p.text.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    p.text,
+                    textAlign: p.align,
+                    style: TextStyle(
+                      fontSize: _customFontSize,
+                      height: 1.35,
+                      color: _textColorOf(key) ?? _onSurface,
+                      fontWeight:
+                          p.bold ? FontWeight.bold : FontWeight.normal,
+                      fontStyle:
+                          p.italic ? FontStyle.italic : FontStyle.normal,
+                    ),
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildBillingInfoBlock(TextAlign align) {
     return Padding(
@@ -2013,20 +3488,25 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          color: _workingTemplate.primaryColor.withValues(alpha: 0.08),
+          decoration: BoxDecoration(
+            color: _workingTemplate.primaryColor.withValues(alpha: 0.08),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           child: Row(children: [
             Expanded(flex: descFlex, child: _th('Description')),
             Expanded(flex: qtyFlex, child: _th('QTÉ', align: TextAlign.center)),
             Expanded(
                 flex: priceFlex, child: _th('Prix HT', align: TextAlign.right)),
-            Expanded(flex: priceFlex, child: _th('Total', align: TextAlign.right)),
+            Expanded(
+                flex: priceFlex, child: _th('Total', align: TextAlign.right)),
           ]),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: _surfaceVariant.withValues(alpha: 0.5))),
+            border: Border(
+                bottom:
+                    BorderSide(color: _surfaceVariant.withValues(alpha: 0.5))),
           ),
           child: Row(children: [
             Expanded(
@@ -2039,9 +3519,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             Expanded(
               flex: qtyFlex,
               child: Text('1',
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  style: cellStyle),
+                  textAlign: TextAlign.center, maxLines: 1, style: cellStyle),
             ),
             Expanded(
               flex: priceFlex,
@@ -2081,84 +3559,53 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         fontWeight: FontWeight.w600);
     final valueStyle = TextStyle(
         fontSize: (_customFontSize * 0.7).clamp(6.5, 10.5), color: _onSurface);
+    final totalStyle = TextStyle(
+        color: _onSurface,
+        fontSize: (_customFontSize * 0.75).clamp(7.0, 11.0),
+        fontWeight: FontWeight.w800);
+
+    Widget line(String label, String value, TextStyle l, TextStyle v) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: _ma(align),
+          children: [
+            Text(label, style: l),
+            const SizedBox(width: 6),
+            Text(value, style: v),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: _ca(align),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: _ca(align),
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(children: [
-                  Flexible(
-                    child: Text('Sous-Total HT',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: labelStyle),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text('150 000 FCFA',
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: valueStyle),
-                  ),
-                ]),
-              ),
+              line('Sous-Total HT', '150 000 FCFA', labelStyle, valueStyle),
               if (_workingTemplate.showTaxDetails)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(children: [
-                    Flexible(
-                      child: Text('TVA (18%)',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: labelStyle),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text('27 000 FCFA',
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: valueStyle),
-                    ),
-                  ]),
-                ),
-              // 🔓 TOTAL TTC SANS fond : le bandeau plein cachait le texte
-              // (texte blanc sur couleur claire). On garde un texte lisible
-              // dans la couleur du thème.
+                line('TVA (18%)', '27 000 FCFA', labelStyle, valueStyle),
               Container(
                 margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                child: Row(children: [
-                  Flexible(
-                    child: Text('TOTAL TTC',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: _onSurface,
-                            fontSize: (_customFontSize * 0.75).clamp(7.0, 11.0),
-                            fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                        _workingTemplate.showTaxDetails
-                            ? '177 000 FCFA'
-                            : '150 000 FCFA',
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: _onSurface,
-                            fontSize: (_customFontSize * 0.75).clamp(7.0, 11.0),
-                            fontWeight: FontWeight.w800)),
-                  ),
-                ]),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: _ma(align),
+                  children: [
+                    Text('TOTAL TTC', style: totalStyle),
+                    const SizedBox(width: 6),
+                    Text(
+                      _workingTemplate.showTaxDetails
+                          ? '177 000 FCFA'
+                          : '150 000 FCFA',
+                      style: totalStyle,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -2210,6 +3657,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 fontSize: (_customFontSize * 0.60).clamp(6.5, 9.0),
                 fontWeight: FontWeight.w700,
                 color: _onSurfaceVariant)),
+        if (_signatureImageBytes != null && _signatureImageBytes!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Image.memory(
+              _signatureImageBytes!,
+              width: 130,
+              height: 52,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          ),
         const SizedBox(height: 14),
         Container(
             width: 90,
@@ -2226,7 +3684,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 
   Widget _buildQRBlock(TextAlign align) {
-    // Bloc dédié : rendu uniquement quand le QR est en placement « autonome ».
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Align(alignment: _wa(align), child: _buildQRCodeWidget()),
@@ -2241,12 +3698,16 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           color: Colors.white,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.qr_code_2, size: 20, color: Colors.black87),
             SizedBox(width: 4),
-            Text('PAYQR', style: TextStyle(color: Colors.black87, fontSize: 7, fontWeight: FontWeight.bold)),
+            Text('PAYQR',
+                style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 7,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       );
@@ -2258,7 +3719,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: _primary.withValues(alpha: 0.2)),
       ),
-      // Wrap : s'adapte aux colonnes étroites (icône / textes à la ligne).
       child: Wrap(
         spacing: 8,
         runSpacing: 4,
@@ -2278,7 +3738,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Payer via Mobile Money',
-                  style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: _primary)),
+                  style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.bold,
+                      color: _primary)),
               Text('Scanner le QR Code sécurisé',
                   style: TextStyle(fontSize: 7.5, color: _onSurfaceVariant)),
             ],
@@ -2288,31 +3751,27 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  /// 🏷️ Tampon FIXE : calque positionné AU-DESSUS de tous les éléments de la
-  /// facture (dernier enfant du Stack). IgnorePointer → il ne bloque ni le
-  /// drag & drop des blocs, ni les taps.
   Widget _buildPaidStamp() {
-    return Positioned(
-      top: 150,
-      left: 40,
-      right: 40,
+    return Positioned.fill(
       child: IgnorePointer(
-        child: Transform.rotate(
-          angle: -0.22,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.all(color: _stampColor, width: 3.5),
-              borderRadius: BorderRadius.circular(8),
-              color: _stampColor.withValues(alpha: 0.08),
+        child: Center(
+          child: Transform.rotate(
+            angle: -0.22,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: _stampColor, width: 3.5),
+                borderRadius: BorderRadius.circular(8),
+                color: _stampColor.withValues(alpha: 0.08),
+              ),
+              child: Text(_stampText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: Color(0xFFBAAB6D),
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4)),
             ),
-            child: Text(_stampText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: _stampColor,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4)),
           ),
         ),
       ),
@@ -2322,19 +3781,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   Widget _buildBottomStripe() {
     return Container(
       height: 5,
-      color: _workingTemplate.primaryColor,
+      decoration: BoxDecoration(color: _workingTemplate.primaryColor),
       child: Row(children: [
         const SizedBox(width: 16),
-        Transform(transform: Matrix4.skewX(-0.3),
+        Transform(
+            transform: Matrix4.skewX(-0.3),
             child: Container(width: 28, color: Colors.white24)),
         const SizedBox(width: 4),
-        Transform(transform: Matrix4.skewX(-0.3),
+        Transform(
+            transform: Matrix4.skewX(-0.3),
             child: Container(width: 14, color: Colors.white24)),
       ]),
     );
   }
-
-  // ── Panneau inférieur (Toolbar & Catégories) ──────────────────────────────
 
   Widget _buildBottomControlPanel() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -2357,12 +3816,53 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             ),
           ),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _buildCategoryTabs(),
-            _buildTemplateCarousel(),
-            Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
+            _buildPanelHandle(),
+            if (!_panelCollapsed) ...[
+              _buildCategoryTabs(),
+              _buildTemplateCarousel(),
+              Divider(height: 1, color: _surfaceVariant.withValues(alpha: 0.5)),
+            ],
             _buildToolBar(),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 4),
           ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPanelHandle() {
+    return InkWell(
+      onTap: () => setState(() => _panelCollapsed = !_panelCollapsed),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: _outline.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              _panelCollapsed
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: _onSurfaceVariant,
+            ),
+            const SizedBox(width: 2),
+            Text(
+              _panelCollapsed ? 'Afficher les modèles' : 'Masquer les modèles',
+              style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: _onSurfaceVariant),
+            ),
+          ],
         ),
       ),
     );
@@ -2384,7 +3884,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               decoration: BoxDecoration(
                 border: Border(
                     bottom: BorderSide(
-                        color: isSel ? _primary : Colors.transparent, width: 2.5)),
+                        color: isSel ? _primary : Colors.transparent,
+                        width: 2.5)),
               ),
               child: Text(cat,
                   style: TextStyle(
@@ -2411,7 +3912,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           final t = templates[i];
           final isSel = _workingTemplate.id == t.id;
           return GestureDetector(
-            onTap: () => setState(() => _workingTemplate = t),
+            onTap: () => _selectTemplate(t),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 76,
@@ -2423,10 +3924,12 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     color: isSel ? _primary : _outline.withValues(alpha: 0.3),
                     width: isSel ? 2 : 1),
                 boxShadow: isSel
-                    ? [BoxShadow(
-                        color: _primary.withValues(alpha: 0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2))]
+                    ? [
+                        BoxShadow(
+                            color: _primary.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2))
+                      ]
                     : [],
               ),
               clipBehavior: Clip.antiAlias,
@@ -2434,45 +3937,57 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 Column(children: [
                   Container(
                     height: 22,
-                    color: t.primaryColor,
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                              color: Colors.white24, shape: BoxShape.circle)),
-                      Container(width: 18, height: 3, color: Colors.white60),
-                    ]),
+                    decoration: BoxDecoration(color: t.primaryColor),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                  color: Colors.white24,
+                                  shape: BoxShape.circle)),
+                          Container(
+                              width: 18, height: 3, color: Colors.white60),
+                        ]),
                   ),
                   Expanded(
                     child: Container(
-                      color: Colors.white,
+                      decoration: const BoxDecoration(color: Colors.white),
                       padding: const EdgeInsets.all(4),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Container(width: 32, height: 3, color: Colors.grey[400]),
-                        const SizedBox(height: 3),
-                        Container(width: 46, height: 2, color: Colors.grey[300]),
-                        const SizedBox(height: 4),
-                        Container(height: 10, color: Colors.grey[200]),
-                        const Spacer(),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(width: 20, height: 5, color: t.primaryColor),
-                        ),
-                      ]),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                                width: 32, height: 3, color: Colors.grey[400]),
+                            const SizedBox(height: 3),
+                            Container(
+                                width: 46, height: 2, color: Colors.grey[300]),
+                            const SizedBox(height: 4),
+                            Container(height: 10, color: Colors.grey[200]),
+                            const Spacer(),
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Container(
+                                  width: 20, height: 5, color: t.primaryColor),
+                            ),
+                          ]),
                     ),
                   ),
                 ]),
                 if (t.isPremium)
                   Positioned(
-                    top: 3, right: 3,
+                    top: 3,
+                    right: 3,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
                           color: _tertiaryContainer,
                           borderRadius: BorderRadius.circular(3)),
-                      child: Text('PRO',
+                      child: const Text('PRO',
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 7,
@@ -2493,15 +4008,30 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Row(children: [
-        _toolItem(Icons.palette_outlined, 'Couleur', 'couleur', _showColorPickerSheet),
+        _toolItem(Icons.palette_outlined, 'Couleur', 'couleur',
+            _showColorPickerSheet),
         _toolItem(Icons.image_outlined, 'Logo', 'logo', _showLogoSettingsSheet),
-        _toolItem(Icons.text_fields_outlined, 'Taille police', 'police', _showFontSizeSheet),
-        _toolItem(Icons.format_align_left, 'Alignement', 'alignement', _showAlignmentSheet),
-        _toolItem(Icons.texture_outlined, 'Ombres & Zoom', 'ombres', _showShadowSheet),
-        _toolItem(Icons.draw_outlined, 'Signature', 'signature', _showSignatureSheet, badge: _showSignatureLine),
-        _toolItem(Icons.gavel_outlined, 'Mentions légales', 'legale', _showLegalMentionsSheet),
-        _toolItem(Icons.qr_code_2_outlined, 'QR Code', 'qrcode', _showQRCodeSheet, badge: _workingTemplate.showPaymentQR),
-        _toolItem(Icons.wallpaper_outlined, 'Image de fond', 'fond', _showBackgroundImageSheet, badge: _background.hasCustomImage || _background.hasPreset),
+        _toolItem(Icons.text_fields_outlined, 'Taille police', 'police',
+            _showFontSizeSheet),
+        _toolItem(Icons.notes_outlined, 'Textes', 'textes', _showTextsSheet),
+        _toolItem(Icons.article_outlined, 'Texte libre', 'texte_libre',
+            _showStaticTextsSheet),
+        _toolItem(Icons.style_outlined, 'Style', 'style', _showStyleSheet),
+        _toolItem(Icons.format_align_left, 'Alignement', 'alignement',
+            _showAlignmentSheet),
+        _toolItem(Icons.texture_outlined, 'Ombres & Zoom', 'ombres',
+            _showShadowSheet),
+        _toolItem(
+            Icons.draw_outlined, 'Signature', 'signature', _showSignatureSheet,
+            badge: _showSignatureLine),
+        _toolItem(Icons.gavel_outlined, 'Mentions légales', 'legale',
+            _showLegalMentionsSheet),
+        _toolItem(
+            Icons.qr_code_2_outlined, 'QR Code', 'qrcode', _showQRCodeSheet,
+            badge: _workingTemplate.showPaymentQR),
+        _toolItem(Icons.wallpaper_outlined, 'Image de fond', 'fond',
+            _showBackgroundImageSheet,
+            badge: _background.hasCustomImage || _background.hasPreset),
       ]),
     );
   }
@@ -2521,16 +4051,21 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: active ? _primary.withValues(alpha: 0.12) : Colors.transparent,
+                color: active
+                    ? _primary.withValues(alpha: 0.12)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 24, color: active ? _primary : _onSurfaceVariant),
+              child: Icon(icon,
+                  size: 24, color: active ? _primary : _onSurfaceVariant),
             ),
             if (badge)
               Positioned(
-                top: -1, right: -1,
+                top: -1,
+                right: -1,
                 child: Container(
-                  width: 8, height: 8,
+                  width: 8,
+                  height: 8,
                   decoration: BoxDecoration(
                       color: Colors.green,
                       shape: BoxShape.circle,
@@ -2552,20 +4087,520 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  // ── Éditeur rapide d'un bloc (tap sur un bloc du corps) ───────────────────
+  // ── TEXTES ──
+  void _showTextsSheet() {
+    setState(() => _activeTool = 'textes');
+    final titleCtrl = TextEditingController(text: _invoiceTitleText);
+    final subtitleCtrl = TextEditingController(text: _invoiceSubtitle);
+    final companyCtrl = TextEditingController(text: _companyName);
+    final clientCtrl = TextEditingController(text: _clientName);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.notes, color: _primary, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Textes de la facture',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15.5)),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Titre',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: subtitleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Sous-titre',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: companyCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nom société (aperçu)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: clientCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nom client (aperçu)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text('Annuler',
+                      style: TextStyle(color: _onSurfaceVariant)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _invoiceTitleText = titleCtrl.text.trim().isNotEmpty
+                          ? titleCtrl.text.trim()
+                          : 'FACTURE';
+                      _invoiceSubtitle = subtitleCtrl.text.trim();
+                      _companyName = companyCtrl.text.trim().isNotEmpty
+                          ? companyCtrl.text.trim()
+                          : _companyName;
+                      _clientName = clientCtrl.text.trim().isNotEmpty
+                          ? clientCtrl.text.trim()
+                          : _clientName;
+                    });
+                    Navigator.of(ctx).pop();
+                    _saveConfig(showFeedback: true);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Appliquer'),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  void _showStaticTextsSheet() {
+    setState(() => _activeTool = 'texte_libre');
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.article_outlined, color: _primary, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Texte libre',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15.5)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                'Ajoutez du texte statique (mention, note, congés…).',
+                style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              if (_customTexts.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _surfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('Aucun texte libre pour le moment.',
+                      style:
+                          TextStyle(fontSize: 12.5, color: _onSurfaceVariant)),
+                )
+              else
+                ..._customTexts.keys.map((key) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading:
+                          Icon(Icons.notes_outlined, size: 18, color: _primary),
+                      title: Text(_textBlockTitle(key),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        '${_paragraphsOf(key).where((p) => p.text.trim().isNotEmpty).length} '
+                        'paragraphe(s) — '
+                        '${_titleExtraKeys.contains(key) ? 'Sous le titre' : _headerElements.contains(key) ? 'En-tête' : 'Corps'}',
+                        style:
+                            TextStyle(fontSize: 11, color: _onSurfaceVariant),
+                      ),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Modifier',
+                          icon: Icon(Icons.edit_outlined,
+                              size: 18, color: _primary),
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _showStaticTextEditorSheet(key);
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Supprimer',
+                          icon: const Icon(Icons.delete_outline,
+                              size: 18, color: Colors.redAccent),
+                          onPressed: () {
+                            _removeStaticText(key);
+                            Navigator.of(ctx).pop();
+                          },
+                        ),
+                      ]),
+                    )),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _addStaticText();
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  label: const Text('Ajouter un texte'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  /// 📝 Éditeur multi-paragraphes — accessible depuis le sheet de bloc.
+  void _showStaticTextEditorSheet(String key) {
+    final paragraphs = _paragraphsOf(key);
+    final working = paragraphs.map((p) => p.copy()).toList();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) {
+          Future<void> apply() async {
+            setState(() {
+              _paragraphs[key] = working;
+              _customTexts[key] = working.map((p) => p.text).join('\n\n');
+            });
+            await _saveConfig(showFeedback: true);
+            if (ctx.mounted) Navigator.of(ctx).pop();
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.article_outlined, color: _primary, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Éditeur multi-paragraphes',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15.5)),
+                  ),
+                  IconButton(
+                    tooltip: 'Ajouter un paragraphe',
+                    onPressed: () {
+                      setSS(() => working.add(_Paragraph()));
+                    },
+                    icon: Icon(Icons.add_circle_outline,
+                        color: _primary, size: 22),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Text(
+                  '${working.length} paragraphe${working.length > 1 ? 's' : ''}',
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
+                ),
+                const SizedBox(height: 10),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.5,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < working.length; i++)
+                          _buildParagraphEditor(
+                            index: i,
+                            paragraph: working[i],
+                            onChanged: () => setSS(() {}),
+                            onRemove: working.length > 1
+                                ? () {
+                                    setSS(() => working.removeAt(i));
+                                  }
+                                : null,
+                            onMoveUp: i > 0
+                                ? () {
+                                    setSS(() {
+                                      final p = working.removeAt(i);
+                                      working.insert(i - 1, p);
+                                    });
+                                  }
+                                : null,
+                            onMoveDown: i < working.length - 1
+                                ? () {
+                                    setSS(() {
+                                      final p = working.removeAt(i);
+                                      working.insert(i + 1, p);
+                                    });
+                                  }
+                                : null,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _paragraphs[key] = working;
+                          _customTexts[key] =
+                              working.map((p) => p.text).join('\n\n');
+                        });
+                        _saveConfig();
+                        Navigator.of(ctx).pop();
+                      },
+                      icon: const Icon(Icons.tune, size: 16),
+                      label: const Text('Appliquer'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: apply,
+                      style: FilledButton.styleFrom(
+                          backgroundColor: _primary,
+                          foregroundColor: Colors.white),
+                      child: const Text('Enregistrer'),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildParagraphEditor({
+    required int index,
+    required _Paragraph paragraph,
+    required VoidCallback onChanged,
+    VoidCallback? onRemove,
+    VoidCallback? onMoveUp,
+    VoidCallback? onMoveDown,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: _surfaceVariant.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _outline.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('¶ ${index + 1}',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: _primary)),
+            ),
+            const Spacer(),
+            if (onMoveUp != null)
+              IconButton(
+                tooltip: 'Monter',
+                onPressed: onMoveUp,
+                icon: Icon(Icons.arrow_upward, size: 16, color: _outline),
+                constraints: const BoxConstraints(minWidth: 28),
+                padding: EdgeInsets.zero,
+              ),
+            if (onMoveDown != null)
+              IconButton(
+                tooltip: 'Descendre',
+                onPressed: onMoveDown,
+                icon: Icon(Icons.arrow_downward, size: 16, color: _outline),
+                constraints: const BoxConstraints(minWidth: 28),
+                padding: EdgeInsets.zero,
+              ),
+            if (onRemove != null)
+              IconButton(
+                tooltip: 'Supprimer',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline,
+                    size: 16, color: Colors.redAccent),
+                constraints: const BoxConstraints(minWidth: 28),
+                padding: EdgeInsets.zero,
+              ),
+          ]),
+          const SizedBox(height: 6),
+          TextFormField(
+            initialValue: paragraph.text,
+            maxLines: null,
+            minLines: 2,
+            onChanged: (v) {
+              paragraph.text = v;
+              onChanged();
+            },
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Saisissez votre paragraphe…',
+              hintStyle:
+                  TextStyle(fontSize: 12.5, color: _onSurfaceVariant),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.5),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: _outline),
+              ),
+            ),
+            style: TextStyle(
+              fontSize: 13,
+              color: _onSurface,
+              fontWeight:
+                  paragraph.bold ? FontWeight.bold : FontWeight.normal,
+              fontStyle:
+                  paragraph.italic ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            FilterChip(
+              label: const Text('Gras', style: TextStyle(fontSize: 11)),
+              selected: paragraph.bold,
+              onSelected: (v) {
+                paragraph.bold = v;
+                onChanged();
+              },
+            ),
+            FilterChip(
+              label: const Text('Italique', style: TextStyle(fontSize: 11)),
+              selected: paragraph.italic,
+              onSelected: (v) {
+                paragraph.italic = v;
+                onChanged();
+              },
+            ),
+            _alignChip(paragraph, TextAlign.left, Icons.format_align_left,
+                onChanged),
+            _alignChip(paragraph, TextAlign.center, Icons.format_align_center,
+                onChanged),
+            _alignChip(paragraph, TextAlign.right, Icons.format_align_right,
+                onChanged),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _alignChip(_Paragraph p, TextAlign align, IconData icon,
+      VoidCallback onChanged) {
+    final selected = p.align == align;
+    return GestureDetector(
+      onTap: () {
+        p.align = align;
+        onChanged();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? _primary.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? _primary : _outline.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Icon(icon,
+            size: 14, color: selected ? _primary : _onSurfaceVariant),
+      ),
+    );
+  }
 
   String _blockTitle(String key) {
     if (key == _emptyColumnKey) return 'Colonne vide';
+    if (_isTextBlock(key)) return _textBlockTitle(key);
     for (final b in _invoiceBlocks) {
       if (b.key == key) return b.title;
     }
     return key;
   }
 
+  /// ✅ ÉDITEUR DE BLOC : tous les contrôles + édition texte intégrée.
   void _showElementEditorSheet(String key) {
     final clientCtrl = TextEditingController(text: _clientName);
     final signatoryCtrl = TextEditingController(text: _signatoryTitle);
     final legalCtrl = TextEditingController(text: _customLegalText);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2575,41 +4610,202 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: EdgeInsets.only(
-            left: 20, right: 20, top: 20,
+            left: 20,
+            right: 20,
+            top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(
+          child: SingleChildScrollView(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Titre ──
                 Row(children: [
                   Icon(Icons.tune, color: _primary, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(_blockTitle(key),
-                        style: TextStyle(
+                        style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 15.5)),
                   ),
                 ]),
                 const SizedBox(height: 6),
+
+                // ✅ TEXTE LIBRE : édition du contenu + paragraphes.
+                if (_isTextBlock(key)) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _surfaceVariant.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: _outline.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(Icons.article_outlined,
+                              size: 16, color: _primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Contenu du texte',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: _onSurface,
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 8),
+                        // Aperçu du contenu actuel.
+                        Text(
+                          _customTexts[key]?.trim().isEmpty == true
+                              ? '(vide)'
+                              : _customTexts[key] ?? '',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: _customTexts[key]?.trim().isEmpty ==
+                                    true
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            color: _onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(ctx).pop();
+                              _showStaticTextEditorSheet(key);
+                            },
+                            icon: Icon(Icons.edit_note,
+                                size: 18, color: _primary),
+                            label: Text(
+                              'Éditer (multi-paragraphes)',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: _primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                  color: _primary.withValues(alpha: 0.4)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // ── Visibilité ──
                 if (key != 'qr_block')
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: Text('Afficher ce bloc',
+                    title: const Text('Afficher ce bloc',
                         style: TextStyle(fontSize: 13.5)),
                     value: _blockVisibility[key] ?? true,
                     activeThumbColor: _primary,
                     onChanged: (val) {
-                      setSS(() => _blockVisibility[key] = val);
                       setState(() {
                         _blockVisibility[key] = val;
-                        if (key == 'signature_block') _showSignatureLine = val;
+                        if (key == 'signature_block') {
+                          _showSignatureLine = val;
+                        }
+                      });
+                      setSS(() {
+                        _blockVisibility[key] = val;
                       });
                       _saveConfig();
                     },
                   ),
+
+                // ── Police ──
                 const SizedBox(height: 4),
+                Row(children: [
+                  const Text('Police :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _blockFonts[key] ?? '',
+                      isDense: true,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(ctx).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600),
+                      items: const [
+                        DropdownMenuItem(
+                            value: '', child: Text('Défaut (modèle)')),
+                        DropdownMenuItem(
+                            value: 'WorkSans', child: Text('Work Sans')),
+                        DropdownMenuItem(
+                            value: 'Manrope', child: Text('Manrope')),
+                        DropdownMenuItem(
+                            value: 'Roboto', child: Text('Roboto')),
+                      ],
+                      onChanged: (val) {
+                        final font = (val == null || val.isEmpty) ? '' : val;
+                        setState(() {
+                          if (font.isEmpty) {
+                            _blockFonts.remove(key);
+                          } else {
+                            _blockFonts[key] = font;
+                          }
+                        });
+                        setSS(() {
+                          if (font.isEmpty) {
+                            _blockFonts.remove(key);
+                          } else {
+                            _blockFonts[key] = font;
+                          }
+                        });
+                        _saveConfig();
+                      },
+                    ),
+                  ),
+                ]),
+
+                // ── Taille de police par bloc ──
+                Row(children: [
+                  const Text('Taille de police :',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('${(_blockFontScaleOf(key) * 100).round()}%',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: _primary,
+                          fontWeight: FontWeight.bold)),
+                ]),
+                Slider(
+                  value: _blockFontScaleOf(key),
+                  min: 0.6,
+                  max: 1.8,
+                  divisions: 12,
+                  activeColor: _primary,
+                  label: '${(_blockFontScaleOf(key) * 100).round()}%',
+                  onChanged: (val) {
+                    setState(() => _blockFontScales[key] = val);
+                    setSS(() => _blockFontScales[key] = val);
+                    _saveConfig();
+                  },
+                ),
+
+                // ── Alignement ──
                 Row(children: [
                   const Text('Alignement :',
                       style: TextStyle(
@@ -2617,8 +4813,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   const Spacer(),
                   IconButton(
                     onPressed: () {
-                      setSS(() => _blockAlignment[key] = TextAlign.left);
                       setState(() => _blockAlignment[key] = TextAlign.left);
+                      setSS(() => _blockAlignment[key] = TextAlign.left);
                       _saveConfig();
                     },
                     icon: const Icon(Icons.format_align_left, size: 18),
@@ -2630,8 +4826,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ),
                   IconButton(
                     onPressed: () {
-                      setSS(() => _blockAlignment[key] = TextAlign.center);
                       setState(() => _blockAlignment[key] = TextAlign.center);
+                      setSS(() => _blockAlignment[key] = TextAlign.center);
                       _saveConfig();
                     },
                     icon: const Icon(Icons.format_align_center, size: 18),
@@ -2643,8 +4839,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ),
                   IconButton(
                     onPressed: () {
-                      setSS(() => _blockAlignment[key] = TextAlign.right);
                       setState(() => _blockAlignment[key] = TextAlign.right);
+                      setSS(() => _blockAlignment[key] = TextAlign.right);
                       _saveConfig();
                     },
                     icon: const Icon(Icons.format_align_right, size: 18),
@@ -2655,10 +4851,111 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     padding: EdgeInsets.zero,
                   ),
                 ]),
-                // 🔧 Largeur de la colonne du bloc (formes personnalisées).
+
+                // ── Déplacer / Retirer ──
+                const SizedBox(height: 6),
+                if (_titleExtraKeys.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _removeTextFromTitle(key);
+                      },
+                      icon: Icon(Icons.vertical_align_bottom,
+                          size: 16, color: _primary),
+                      label: Text('Replacer dans le corps',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  )
+                else if (!_nativeHeaderKeys.contains(key) &&
+                    _headerElements.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _moveHeaderToBody(key);
+                      },
+                      icon: Icon(Icons.vertical_align_bottom,
+                          size: 16, color: _primary),
+                      label: Text('Replacer dans le corps',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: _primary,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  )
+                else if (!_nativeHeaderKeys.contains(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Déplacer ce bloc vers l\'en-tête',
+                      color: Theme.of(ctx).colorScheme.surface,
+                      onSelected: (val) {
+                        Navigator.of(ctx).pop();
+                        switch (val) {
+                          case 'header_first':
+                            _moveBlockToHeader(key, beforeKey: 'logo');
+                            break;
+                          case 'header_after_logo':
+                            _moveBlockToHeader(key, beforeKey: 'company_info');
+                            break;
+                          case 'under_title':
+                            _dropUnderTitle(key);
+                            break;
+                          default:
+                            _moveBlockToHeader(key);
+                            break;
+                        }
+                      },
+                      itemBuilder: (c) => const [
+                        PopupMenuItem(
+                            value: 'header_first',
+                            child: Text('En-tête — avant le logo')),
+                        PopupMenuItem(
+                            value: 'header_after_logo',
+                            child: Text('En-tête — après le logo')),
+                        PopupMenuItem(
+                            value: 'under_title', child: Text('Sous le titre')),
+                      ],
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.vertical_align_top,
+                            size: 16, color: _primary),
+                        const SizedBox(width: 4),
+                        Text('Déplacer vers l\'en-tête',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: _primary,
+                                fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                if (_isTextBlock(key))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _removeStaticText(key);
+                      },
+                      icon: const Icon(Icons.delete_outline,
+                          size: 16, color: Colors.redAccent),
+                      label: const Text('Supprimer ce texte',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+
+                // ── Largeur de colonne ──
                 const SizedBox(height: 8),
                 Row(children: [
-                  const Text('Largeur :',
+                  const Text('Largeur de colonne :',
                       style: TextStyle(
                           fontSize: 12.5, fontWeight: FontWeight.w600)),
                   const Spacer(),
@@ -2672,42 +4969,46 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   value: _widthOf(key),
                   min: 0.5,
                   max: 2.5,
+                  divisions: 20,
                   activeColor: _primary,
+                  label: '${(_widthOf(key) * 100).round()}%',
                   onChanged: (val) {
-                    setSS(() => _blockWidth[key] = val);
                     setState(() => _blockWidth[key] = val);
+                    setSS(() => _blockWidth[key] = val);
                     _saveConfig();
                   },
                 ),
-                // 🎨 Couleur de FOND du bloc.
+
+                // ── Couleur du fond ──
                 const SizedBox(height: 6),
                 const Text('Couleur du fond :',
-                    style: TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Wrap(spacing: 10, runSpacing: 8, children: [
                   _colorChip(null, _bgOf(key) == null, () {
-                    setSS(() => _blockBg[key] = 0);
                     setState(() => _blockBg[key] = 0);
+                    setSS(() => _blockBg[key] = 0);
                     _saveConfig();
                   }),
                   for (final c in _paletteColors)
                     _colorChip(c, _blockBg[key] == c.toARGB32(), () {
-                      setSS(() => _blockBg[key] = c.toARGB32());
                       setState(() => _blockBg[key] = c.toARGB32());
+                      setSS(() => _blockBg[key] = c.toARGB32());
                       _saveConfig();
                     }),
                 ]),
+
+                // ── Couleur du texte ──
                 const SizedBox(height: 10),
-                // 🎨 Couleur du TEXTE du bloc.
                 const Text('Couleur du texte :',
-                    style: TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Wrap(spacing: 10, runSpacing: 8, children: [
                   _colorChip(null, _textColorOf(key) == null, () {
-                    setSS(() => _blockText[key] = 0);
                     setState(() => _blockText[key] = 0);
+                    setSS(() => _blockText[key] = 0);
                     _saveConfig();
                   }),
                   for (final c in [
@@ -2716,11 +5017,13 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     ..._paletteColors,
                   ])
                     _colorChip(c, _blockText[key] == c.toARGB32(), () {
-                      setSS(() => _blockText[key] = c.toARGB32());
                       setState(() => _blockText[key] = c.toARGB32());
+                      setSS(() => _blockText[key] = c.toARGB32());
                       _saveConfig();
                     }),
                 ]),
+
+                // ── Champs spécifiques ──
                 if (key == 'billing_info') ...[
                   const SizedBox(height: 8),
                   TextField(
@@ -2765,13 +5068,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   ),
                 ],
                 const SizedBox(height: 12),
-              ]),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  /// Pastille de couleur pour la palette des blocs (null = « Aucune »).
   Widget _colorChip(Color? color, bool selected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -2799,7 +5103,323 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
-  // ── Modales & Bottom Sheets ───────────────────────────────────────────────
+  void _applyComposition(String composition) {
+    final bodyBlocks = switch (composition) {
+      'hero' => <List<String>>[
+          ['billing_info'],
+          ['invoice_meta'],
+          ['items_table'],
+          ['legal_mentions', 'totals'],
+          ['signature_block'],
+        ],
+      'ledger' => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['legal_mentions', 'totals'],
+          ['signature_block'],
+        ],
+      'magazine' => <List<String>>[
+          ['invoice_meta'],
+          ['billing_info'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+      'compact' => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+      _ => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+    };
+    final header = switch (composition) {
+      'hero' => <List<String>>[
+          ['logo'],
+          ['company_info', 'invoice_title'],
+        ],
+      'ledger' => <List<String>>[
+          ['logo', 'company_info', 'invoice_title'],
+        ],
+      'magazine' => <List<String>>[
+          ['logo', 'invoice_title'],
+          ['company_info'],
+        ],
+      'compact' => <List<String>>[
+          ['invoice_title', 'logo'],
+          ['company_info'],
+        ],
+      _ => <List<String>>[
+          ['logo', 'company_info'],
+          ['invoice_title'],
+        ],
+    };
+
+    final customBodyBlocks = _customTexts.keys
+        .where((key) => !_headerElements.contains(key))
+        .toList();
+    bodyBlocks.insertAll(
+      bodyBlocks.length - 1,
+      customBodyBlocks.map((key) => [key]),
+    );
+
+    setState(() {
+      _headerSections = header;
+      _sectionsLayout = bodyBlocks;
+    });
+    _saveConfig(showFeedback: true);
+  }
+
+  void _showStyleSheet() {
+    setState(() => _activeTool = 'style');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.style_outlined, color: _primary, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Style du modèle',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15.5)),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Text(
+                  "Personnalisez le style d'en-tête, de tableau et de pied de page.",
+                  style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+                ),
+                const SizedBox(height: 14),
+                _styleSectionTitle('Composition de la page'),
+                Text(
+                  'Choisissez une grille de départ, puis affinez-la par glisser-déposer.',
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ('editorial', 'Éditorial'),
+                    ('hero', 'Titre dominant'),
+                    ('ledger', 'Registre OHADA'),
+                    ('magazine', 'Magazine'),
+                    ('compact', 'Compact'),
+                  ].map((option) => ActionChip(
+                        avatar: const Icon(Icons.dashboard_customize_outlined,
+                            size: 16),
+                        label: Text(option.$2),
+                        onPressed: () => _applyComposition(option.$1),
+                      )).toList(),
+                ),
+                const SizedBox(height: 16),
+                _styleSectionTitle('En-tête'),
+                _styleChoices<String>(
+                  current: _headerStyle,
+                  options: const [
+                    ('flat', 'Plat'),
+                    ('band', 'Bandeau coloré'),
+                    ('bar', 'Barre haute'),
+                    ('dark', 'Sombre'),
+                    ('zigzag', 'Zigzag'),
+                  ],
+                  onChanged: (v) {
+                    setSS(() => _headerStyle = v);
+                    setState(() {});
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 14),
+                _styleSectionTitle('Tableau des articles'),
+                _styleChoices<String>(
+                  current: _tableStyle,
+                  options: const [
+                    ('plain', 'Simple'),
+                    ('zebra', 'Zébré'),
+                    ('cards', 'Cartes'),
+                    ('numbered', 'Numéroté'),
+                  ],
+                  onChanged: (v) {
+                    setSS(() => _tableStyle = v);
+                    setState(() {});
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 14),
+                _styleSectionTitle('Pied de page'),
+                _styleChoices<String>(
+                  current: _footerStyle,
+                  options: const [
+                    ('simple', 'Simple'),
+                    ('contact', 'Contact'),
+                    ('banner', 'Bandeau'),
+                    ('icons', 'Icônes'),
+                  ],
+                  onChanged: (v) {
+                    setSS(() => _footerStyle = v);
+                    setState(() {});
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 14),
+                _styleSectionTitle('Bordure décorative'),
+                _styleChoices<String>(
+                  current: _accentBorder,
+                  options: const [
+                    ('', 'Aucune'),
+                    ('top', 'Haut'),
+                    ('left', 'Gauche'),
+                    ('frame', 'Cadre'),
+                  ],
+                  onChanged: (v) {
+                    setSS(() => _accentBorder = v);
+                    setState(() {});
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 14),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Afficher « Merci pour votre confiance »',
+                      style: TextStyle(fontSize: 13.5)),
+                  value: _showThankYou,
+                  activeThumbColor: _primary,
+                  onChanged: (v) {
+                    setSS(() => _showThankYou = v);
+                    setState(() {});
+                    _saveConfig();
+                  },
+                ),
+                if (_showThankYou)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: TextFormField(
+                      initialValue: _thankYouText,
+                      decoration: const InputDecoration(
+                        labelText: 'Texte de remerciement',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        _thankYouText = v;
+                        _saveConfig();
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                _styleSectionTitle('Infos bancaires'),
+                TextFormField(
+                  initialValue: _bankName,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom de la banque',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    _bankName = v;
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  initialValue: _bankAccount,
+                  decoration: const InputDecoration(
+                    labelText: 'Numéro de compte',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    _bankAccount = v;
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  Widget _styleSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: _onSurface,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _styleChoices<T>({
+    required T current,
+    required List<(T, String)> options,
+    required ValueChanged<T> onChanged,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (value, label) in options)
+          GestureDetector(
+            onTap: () => onChanged(value),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: value == current
+                    ? _primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: value == current
+                      ? _primary
+                      : _outline.withValues(alpha: 0.5),
+                  width: value == current ? 2 : 1,
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight:
+                      value == current ? FontWeight.w700 : FontWeight.w500,
+                  color: value == current ? _primary : _onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   void _showColorPickerSheet() {
     setState(() => _activeTool = 'couleur');
@@ -2811,51 +5431,47 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Palette de Couleur Principale',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            const Text('Applique la teinte sélectionnée sur les éléments clés de la facture.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 12, runSpacing: 12,
-              children: _paletteColors.map((color) {
-                final isSel = _workingTemplate.primaryColor == color;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id, name: _workingTemplate.name,
-                        description: _workingTemplate.description, primaryColor: color,
-                        textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: _workingTemplate.showLogo, showTaxDetails: _workingTemplate.showTaxDetails,
-                        showPaymentTerms: _workingTemplate.showPaymentTerms,
-                        showPaymentQR: _workingTemplate.showPaymentQR,
-                        isPremium: _workingTemplate.isPremium,
-                        category: _workingTemplate.category,
-                        price: _workingTemplate.price,
-                      );
-                    });
-                    setSS(() {});
-                    _saveConfig();
-                  },
-                  child: Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: isSel ? Colors.black : Colors.transparent,
-                            width: isSel ? 3.5 : 0)),
-                    child: isSel
-                        ? const Icon(Icons.check, color: Colors.white, size: 22)
-                        : null),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 18),
-          ]),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Palette de Couleur Principale',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: _paletteColors.map((color) {
+                    final isSel = _workingTemplate.primaryColor == color;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _workingTemplate =
+                              _workingTemplate.copyWith(primaryColor: color);
+                        });
+                        setSS(() {});
+                        _saveConfig();
+                      },
+                      child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color:
+                                      isSel ? Colors.black : Colors.transparent,
+                                  width: isSel ? 3.5 : 0)),
+                          child: isSel
+                              ? const Icon(Icons.check,
+                                  color: Colors.white, size: 22)
+                              : null),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 18),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -2871,66 +5487,69 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("Réglages du Logo d'Entreprise",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: Text("Afficher le Logo"),
-              value: _workingTemplate.showLogo,
-              activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() {});
-                setState(() {
-                  _workingTemplate = InvoiceTemplate(
-                    id: _workingTemplate.id, name: _workingTemplate.name,
-                    description: _workingTemplate.description, primaryColor: _workingTemplate.primaryColor,
-                    textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                    showLogo: val, showTaxDetails: _workingTemplate.showTaxDetails,
-                    showPaymentTerms: _workingTemplate.showPaymentTerms,
-                    showPaymentQR: _workingTemplate.showPaymentQR, isPremium: _workingTemplate.isPremium,
-                  );
-                });
-                _saveConfig();
-              },
-            ),
-            const SizedBox(height: 8),
-            Row(children: [
-              const Text('Taille du logo: '),
-              Expanded(
-                child: Slider(
-                  value: _logoSize,
-                  min: 32, max: 72, divisions: 10, activeColor: _primary,
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Réglages du Logo d'Entreprise",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text("Afficher le Logo"),
+                  value: _workingTemplate.showLogo,
+                  activeThumbColor: _primary,
                   onChanged: (val) {
-                    setSS(() => _logoSize = val);
-                    setState(() {});
+                    setState(() {
+                      _workingTemplate = _workingTemplate.copyWith(showLogo: val);
+                    });
+                    setSS(() {});
                     _saveConfig();
                   },
                 ),
-              ),
-              Text('${_logoSize.toInt()} px'),
-            ]),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final picker = ImagePicker();
-                final picked = await picker.pickImage(source: ImageSource.gallery);
-                if (picked != null) {
-                  final bytes = await picked.readAsBytes();
-                  setState(() => _customLogoBytes = bytes);
-                  _saveConfig();
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Nouveau logo téléversé !')));
-                  }
-                }
-              },
-              icon: Icon(Icons.upload_file, color: _primary),
-              label: Text('Téléverser un logo (PNG / JPEG)', style: TextStyle(color: _primary)),
-            ),
-            const SizedBox(height: 16),
-          ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('Taille du logo: '),
+                  Expanded(
+                    child: Slider(
+                      value: _logoSize,
+                      min: 32,
+                      max: 72,
+                      divisions: 10,
+                      activeColor: _primary,
+                      onChanged: (val) {
+                        setState(() => _logoSize = val);
+                        setSS(() => _logoSize = val);
+                        _saveConfig();
+                      },
+                    ),
+                  ),
+                  Text('${_logoSize.toInt()} px'),
+                ]),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picker = ImagePicker();
+                    final picked =
+                        await picker.pickImage(source: ImageSource.gallery);
+                    if (picked != null) {
+                      final bytes = await picked.readAsBytes();
+                      setState(() => _customLogoBytes = bytes);
+                      _saveConfig();
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Nouveau logo téléversé !')));
+                      }
+                    }
+                  },
+                  icon: Icon(Icons.upload_file, color: _primary),
+                  label: Text('Téléverser un logo (PNG / JPEG)',
+                      style: TextStyle(color: _primary)),
+                ),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -2946,39 +5565,41 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Taille de Police Globale',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text('${_customFontSize.toInt()} pt',
-                  style: TextStyle(
-                      color: _primary, fontWeight: FontWeight.bold, fontSize: 16)),
-            ]),
-            const SizedBox(height: 6),
-            const Text('Ajuste dynamiquement la taille des textes de la facture.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 14),
-            Slider(
-              value: _customFontSize.clamp(9.0, 20.0),
-              min: 9, max: 20, divisions: 11, activeColor: _primary,
-              onChanged: (val) {
-                setSS(() => _customFontSize = val);
-                setState(() {
-                  _workingTemplate = InvoiceTemplate(
-                    id: _workingTemplate.id, name: _workingTemplate.name,
-                    description: _workingTemplate.description, primaryColor: _workingTemplate.primaryColor,
-                    textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                    showLogo: _workingTemplate.showLogo, showTaxDetails: _workingTemplate.showTaxDetails,
-                    showPaymentTerms: _workingTemplate.showPaymentTerms,
-                    showPaymentQR: _workingTemplate.showPaymentQR,
-                    fontSize: val, isPremium: _workingTemplate.isPremium,
-                  );
-                });
-                _saveConfig();
-              },
-            ),
-            const SizedBox(height: 16),
-          ]),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Taille de Police Globale',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('${_customFontSize.toInt()} pt',
+                          style: TextStyle(
+                              color: _primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                    ]),
+                const SizedBox(height: 14),
+                Slider(
+                  value: _customFontSize.clamp(9.0, 20.0),
+                  min: 9,
+                  max: 20,
+                  divisions: 11,
+                  activeColor: _primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _customFontSize = val;
+                      _workingTemplate =
+                          _workingTemplate.copyWith(fontSize: val);
+                    });
+                    setSS(() => _customFontSize = val);
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -2994,51 +5615,69 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("Style & Zoom du Canevas A4",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 14),
-            Row(children: [
-              const SizedBox(width: 120, child: Text('Zoom de la page: ')),
-              Expanded(child: Slider(
-                value: _zoom, min: 0.5, max: 1.1, divisions: 12, activeColor: _primary,
-                onChanged: (val) {
-                  setSS(() {});
-                  setState(() => _zoom = val);
-                },
-              )),
-              Text('${(_zoom * 100).toInt()}%'),
-            ]),
-            Row(children: [
-              const SizedBox(width: 120, child: Text('Intensité d\'ombre: ')),
-              Expanded(child: Slider(
-                value: _shadowBlur, min: 4, max: 40, divisions: 18, activeColor: _primary,
-                onChanged: (val) {
-                  setSS(() {});
-                  setState(() => _shadowBlur = val);
-                },
-              )),
-              Text('${_shadowBlur.toInt()}px'),
-            ]),
-            Row(children: [
-              const SizedBox(width: 120, child: Text('Arrondi feuille: ')),
-              Expanded(child: Slider(
-                value: _paperRadius, min: 0, max: 24, divisions: 12, activeColor: _primary,
-                onChanged: (val) {
-                  setSS(() {});
-                  setState(() => _paperRadius = val);
-                },
-              )),
-              Text('${_paperRadius.toInt()}px'),
-            ]),
-            const SizedBox(height: 16),
-          ]),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Style & Zoom du Canevas A4",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 14),
+                Row(children: [
+                  const SizedBox(width: 120, child: Text('Zoom de la page: ')),
+                  Expanded(
+                      child: Slider(
+                    value: _zoom,
+                    min: 0.5,
+                    max: 1.1,
+                    divisions: 12,
+                    activeColor: _primary,
+                    onChanged: (val) {
+                      setState(() => _zoom = val);
+                      setSS(() => _zoom = val);
+                    },
+                  )),
+                  Text('${(_zoom * 100).toInt()}%'),
+                ]),
+                Row(children: [
+                  const SizedBox(
+                      width: 120, child: Text('Intensité d\'ombre: ')),
+                  Expanded(
+                      child: Slider(
+                    value: _shadowBlur,
+                    min: 4,
+                    max: 40,
+                    divisions: 18,
+                    activeColor: _primary,
+                    onChanged: (val) {
+                      setState(() => _shadowBlur = val);
+                      setSS(() => _shadowBlur = val);
+                    },
+                  )),
+                  Text('${_shadowBlur.toInt()}px'),
+                ]),
+                Row(children: [
+                  const SizedBox(width: 120, child: Text('Arrondi feuille: ')),
+                  Expanded(
+                      child: Slider(
+                    value: _paperRadius,
+                    min: 0,
+                    max: 24,
+                    divisions: 12,
+                    activeColor: _primary,
+                    onChanged: (val) {
+                      setState(() => _paperRadius = val);
+                      setSS(() => _paperRadius = val);
+                    },
+                  )),
+                  Text('${_paperRadius.toInt()}px'),
+                ]),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
   }
-
-  // ── Outil « Alignement » : colonnes du corps + alignement par bloc ────────
 
   void _showAlignmentSheet() {
     setState(() => _activeTool = 'alignement');
@@ -3050,28 +5689,82 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Alignement des blocs',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            const Text(
-                'Alignement du contenu de chaque bloc. Astuce : glissez-déposez '
-                'les blocs sur la facture — chaque section (pleine largeur) '
-                'peut afficher 1 à 3 blocs côte à côte. Ajoutez une colonne '
-                'vide (+) dans une section pour scinder la rangée.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 14),
-            // 🧱 Les colonnes vides (spacers) n'ont pas d'alignement.
-            ..._sectionsLayout
-                .expand((s) => s)
-                .where((key) => key != _emptyColumnKey)
-                .where(_isBlockVisible)
-                .map((key) => _alignmentRow(key, setSS)),
-            const SizedBox(height: 10),
-          ]),
+          child: SingleChildScrollView(
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Alignement des blocs',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  const Text(
+                      'Alignement du contenu de chaque bloc. Astuce : glissez-déposez '
+                      'les blocs sur la facture.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 14),
+                  ..._sectionsLayout
+                      .expand((s) => s)
+                      .where((key) => key != _emptyColumnKey)
+                      .where(_isBlockVisible)
+                      .map((key) => _alignmentRow(key, setSS)),
+                  if (_headerElements.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                    const Text("Colonnes de l'en-tête",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13.5)),
+                    const SizedBox(height: 2),
+                    for (final key in _headerElements)
+                      _headerAlignmentRow(key, setSS),
+                  ],
+                  const SizedBox(height: 10),
+                ]),
+          ),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
+  }
+
+  Widget _headerAlignmentRow(String key, void Function(void Function()) setSS) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+              key == _emptyColumnKey ? 'Colonne vide' : _blockTitle(key),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
+        SegmentedButton<TextAlign>(
+          segments: const [
+            ButtonSegment(
+                value: TextAlign.left,
+                icon: Icon(Icons.format_align_left, size: 16)),
+            ButtonSegment(
+                value: TextAlign.center,
+                icon: Icon(Icons.format_align_center, size: 16)),
+            ButtonSegment(
+                value: TextAlign.right,
+                icon: Icon(Icons.format_align_right, size: 16)),
+          ],
+          selected: {_headerAlignOf(key)},
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onSelectionChanged: (sel) {
+            setState(() => _headerAlign[key] = sel.first);
+            setSS(() => _headerAlign[key] = sel.first);
+            _saveConfig();
+          },
+        ),
+      ]),
+    );
   }
 
   Widget _alignmentRow(String key, void Function(void Function()) setSS) {
@@ -3104,8 +5797,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           onSelectionChanged: (sel) {
-            setSS(() => _blockAlignment[key] = sel.first);
             setState(() => _blockAlignment[key] = sel.first);
+            setSS(() => _blockAlignment[key] = sel.first);
             _saveConfig();
           },
         ),
@@ -3123,57 +5816,66 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("Tampon & Signature de l'Émetteur",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: Text('Afficher le Tampon d\'état'),
-              value: _showPaidStamp,
-              activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() => _showPaidStamp = val);
-                setState(() => _showPaidStamp = val);
-                _saveConfig();
-              },
-            ),
-            if (_showPaidStamp)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Wrap(
-                  spacing: 8,
-                  children: ['PAYÉ', 'DEVIS', 'VALIDE', 'URGENT', 'REÇU'].map((txt) {
-                    final isSel = _stampText == txt;
-                    return ChoiceChip(
-                      label: Text(txt),
-                      selected: isSel,
-                      selectedColor: _primary,
-                      labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black),
-                      onSelected: (_) {
-                        setSS(() => _stampText = txt);
-                        setState(() {});
-                        _saveConfig();
-                      },
-                    );
-                  }).toList(),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Tampon & Signature de l'Émetteur",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text('Afficher le Tampon d\'état'),
+                  value: _showPaidStamp,
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() => _showPaidStamp = val);
+                    setSS(() => _showPaidStamp = val);
+                    _saveConfig();
+                  },
                 ),
-              ),
-            const Divider(height: 24),
-            SwitchListTile(
-              title: Text('Afficher la Ligne de Signature'),
-              value: _showSignatureLine,
-              activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() => _showSignatureLine = val);
-                setState(() {
-                  _showSignatureLine = val;
-                  _blockVisibility['signature_block'] = val;
-                });
-                _saveConfig();
-              },
-            ),
-            const SizedBox(height: 16),
-          ]),
+                if (_showPaidStamp)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Wrap(
+                      spacing: 8,
+                      children: ['PAYÉ', 'DEVIS', 'VALIDE', 'URGENT', 'REÇU']
+                          .map((txt) {
+                        final isSel = _stampText == txt;
+                        return ChoiceChip(
+                          label: Text(txt),
+                          selected: isSel,
+                          selectedColor: _primary,
+                          labelStyle: TextStyle(
+                              color: isSel ? Colors.white : Colors.black),
+                          onSelected: (_) {
+                            setState(() => _stampText = txt);
+                            setSS(() => _stampText = txt);
+                            _saveConfig();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                const Divider(height: 24),
+                SwitchListTile(
+                  title: const Text('Afficher la Ligne de Signature'),
+                  value: _showSignatureLine,
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _showSignatureLine = val;
+                      _blockVisibility['signature_block'] = val;
+                    });
+                    setSS(() {
+                      _showSignatureLine = val;
+                      _blockVisibility['signature_block'] = val;
+                    });
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -3191,67 +5893,62 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: EdgeInsets.only(
-            left: 20, right: 20, top: 20,
+            left: 20,
+            right: 20,
+            top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Mentions Légales & Conformité OHADA',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: Text('Détails des Taxes & TVA 18% SYSCOHADA'),
-              subtitle: Text('Affiche le calcul explicite de la TVA et du Hors-Taxe'),
-              value: _workingTemplate.showTaxDetails, activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() {});
-                setState(() {
-                  _workingTemplate = InvoiceTemplate(
-                    id: _workingTemplate.id, name: _workingTemplate.name,
-                    description: _workingTemplate.description, primaryColor: _workingTemplate.primaryColor,
-                    textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                    showLogo: _workingTemplate.showLogo, showTaxDetails: val,
-                    showPaymentTerms: _workingTemplate.showPaymentTerms,
-                    showPaymentQR: _workingTemplate.showPaymentQR,
-                    isPremium: _workingTemplate.isPremium,
-                  );
-                });
-                _saveConfig();
-              },
-            ),
-            SwitchListTile(
-              title: Text('Conditions & Délais de Paiement'),
-              subtitle: Text('Affiche les clauses de règlement'),
-              value: _workingTemplate.showPaymentTerms, activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() {});
-                setState(() {
-                  _workingTemplate = InvoiceTemplate(
-                    id: _workingTemplate.id, name: _workingTemplate.name,
-                    description: _workingTemplate.description, primaryColor: _workingTemplate.primaryColor,
-                    textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                    showLogo: _workingTemplate.showLogo, showTaxDetails: _workingTemplate.showTaxDetails,
-                    showPaymentTerms: val, showPaymentQR: _workingTemplate.showPaymentQR,
-                    isPremium: _workingTemplate.isPremium,
-                  );
-                });
-                _saveConfig();
-              },
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Texte des mentions légales',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (val) {
-                setState(() => _customLegalText = val);
-                _saveConfig();
-              },
-            ),
-            const SizedBox(height: 16),
-          ]),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Mentions Légales & Conformité OHADA',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  title: const Text('Détails des Taxes & TVA'),
+                  value: _workingTemplate.showTaxDetails,
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _workingTemplate = _workingTemplate.copyWith(
+                        showTaxDetails: val,
+                      );
+                    });
+                    setSS(() {});
+                    _saveConfig();
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Conditions & Délais de Paiement'),
+                  value: _workingTemplate.showPaymentTerms,
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _workingTemplate = _workingTemplate.copyWith(
+                        showPaymentTerms: val,
+                      );
+                    });
+                    setSS(() {});
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: controller,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Texte des mentions légales',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (val) {
+                    setState(() => _customLegalText = val);
+                    _saveConfig();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -3267,60 +5964,62 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('QR Code de Paiement Sécurisé',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            const Text(
-                'Permet à vos clients de scanner la facture pour payer instantanément par Mobile Money.',
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 14),
-            SwitchListTile(
-              title: Text('Afficher le QR Code PayQR'),
-              value: _workingTemplate.showPaymentQR, activeThumbColor: _primary,
-              onChanged: (val) {
-                setSS(() {});
-                setState(() {
-                  _workingTemplate = InvoiceTemplate(
-                    id: _workingTemplate.id, name: _workingTemplate.name,
-                    description: _workingTemplate.description, primaryColor: _workingTemplate.primaryColor,
-                    textColor: _workingTemplate.textColor, backgroundColor: _workingTemplate.backgroundColor,
-                    showLogo: _workingTemplate.showLogo, showTaxDetails: _workingTemplate.showTaxDetails,
-                    showPaymentTerms: _workingTemplate.showPaymentTerms, showPaymentQR: val,
-                    isPremium: _workingTemplate.isPremium,
-                  );
-                });
-                _saveConfig();
-              },
-            ),
-            if (_workingTemplate.showPaymentQR)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    const Text('Emplacement du QR: '),
-                    const SizedBox(width: 8),
-                    DropdownButton<String>(
-                      value: _qrPosition,
-                      items: const [
-                        DropdownMenuItem(value: 'header', child: Text('En-tête')),
-                        DropdownMenuItem(value: 'totals', child: Text('Bloc Totaux')),
-                        DropdownMenuItem(value: 'footer', child: Text('Pied de page')),
-                        DropdownMenuItem(value: 'standalone', child: Text('Bloc autonome')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setSS(() => _qrPosition = val);
-                          setState(() {});
-                          _saveConfig();
-                        }
-                      },
-                    ),
-                  ],
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('QR Code de Paiement Sécurisé',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 14),
+                SwitchListTile(
+                  title: const Text('Afficher le QR Code PayQR'),
+                  value: _workingTemplate.showPaymentQR,
+                  activeThumbColor: _primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _workingTemplate = _workingTemplate.copyWith(
+                        showPaymentQR: val,
+                      );
+                    });
+                    setSS(() {});
+                    _saveConfig();
+                  },
                 ),
-              ),
-            const SizedBox(height: 16),
-          ]),
+                if (_workingTemplate.showPaymentQR)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Text('Emplacement du QR: '),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: _qrPosition,
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'header', child: Text('En-tête')),
+                            DropdownMenuItem(
+                                value: 'totals', child: Text('Bloc Totaux')),
+                            DropdownMenuItem(
+                                value: 'footer', child: Text('Pied de page')),
+                            DropdownMenuItem(
+                                value: 'standalone',
+                                child: Text('Bloc autonome')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _qrPosition = val);
+                              setSS(() => _qrPosition = val);
+                              _saveConfig();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+              ]),
         ),
       ),
     ).whenComplete(() => setState(() => _activeTool = ''));
@@ -3339,14 +6038,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
   }
 }
 
-// ── Modèle d'un bloc draggable ────────────────────────────────────────────
-
+// ── Modèles annexes ──
 class _InvoiceBlock {
   final String key;
   final String title;
-
-  /// Chaque constructeur de bloc reçoit l'alignement choisi pour ce bloc
-  /// (outil « Alignement »).
   final Widget Function(TextAlign align) builder;
   const _InvoiceBlock({
     required this.key,
@@ -3355,7 +6050,43 @@ class _InvoiceBlock {
   });
 }
 
-// ── Peintre du motif pointillés (header) ─────────────────────────────────
+class _Paragraph {
+  String text;
+  TextAlign align;
+  bool bold;
+  bool italic;
+
+  _Paragraph({
+    this.text = '',
+    this.align = TextAlign.left,
+    this.bold = false,
+    this.italic = false,
+  });
+
+  _Paragraph copy() => _Paragraph(
+        text: text,
+        align: align,
+        bold: bold,
+        italic: italic,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'text': text,
+        'align': align.name,
+        'bold': bold,
+        'italic': italic,
+      };
+
+  factory _Paragraph.fromMap(Map<String, dynamic> m) => _Paragraph(
+        text: m['text']?.toString() ?? '',
+        align: TextAlign.values.firstWhere(
+          (a) => a.name == m['align'],
+          orElse: () => TextAlign.left,
+        ),
+        bold: m['bold'] as bool? ?? false,
+        italic: m['italic'] as bool? ?? false,
+      );
+}
 
 class _DotPatternPainter extends CustomPainter {
   @override
@@ -3373,7 +6104,6 @@ class _DotPatternPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// 🧱 Bordure pointillée (colonnes vides du drag & drop).
 class _DashedRectPainter extends CustomPainter {
   final Color color;
   final double radius;
@@ -3415,16 +6145,15 @@ class _DashedRectPainter extends CustomPainter {
       oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
-// ── 🎨 Widget Bouton Glass ─────────────────────────────────────────────────
-
-/// Bouton avec effet glass pour l'interface du workspace.
 class _GlassButton extends StatelessWidget {
   final VoidCallback onPressed;
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   const _GlassButton({
     required this.onPressed,
     required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
   });
 
   @override
@@ -3442,18 +6171,51 @@ class _GlassButton extends StatelessWidget {
               ],
             ),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3), width: 1),
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: onPressed,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: padding,
                 child: Center(child: child),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionMoveButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _SectionMoveButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = enabled ? color : color.withValues(alpha: 0.35);
+    return Tooltip(
+      message: icon == Icons.keyboard_arrow_up
+          ? 'Monter la section'
+          : 'Descendre la section',
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          child: Icon(icon, size: 15, color: c),
         ),
       ),
     );

@@ -227,37 +227,42 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
 
   Future<void> _changePlan(Subscription subscription) async {
     final theme = context.read<ThemeProvider>();
-    Plan? selected = _plans.firstWhere((p) => p.id == subscription.planId,
-        orElse: () => _plans.first);
+    Plan? selected = _plans.firstWhere(
+      (p) => p.id == subscription.planId,
+      orElse: () => _plans.first,
+    );
 
     final result = await showDialog<Plan>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: theme.cardColor,
-        title:
-            Text('Choisir un plan', style: TextStyle(color: theme.textColor)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: Text('Choisir un plan',
+            style: TextStyle(
+                color: theme.textColor, fontWeight: FontWeight.w700)),
         content: SizedBox(
-          width: double
-              .maxFinite, // Important pour éviter les erreurs de contrainte
+          width: double.maxFinite,
           child: DropdownButtonFormField<Plan>(
             initialValue: selected,
-            // Correction visuelle : fond transparent et texte aux bonnes couleurs
             dropdownColor: theme.cardColor,
             style: TextStyle(color: theme.textColor, fontSize: 14),
             decoration: InputDecoration(
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
               enabledBorder: OutlineInputBorder(
-                borderSide:
-                    BorderSide(color: theme.subTextColor.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                    color: theme.subTextColor.withValues(alpha: 0.4)),
               ),
             ),
             items: _plans
                 .map((p) => DropdownMenuItem(
                       value: p,
-                      child: Text(p.name),
+                      child: Text(p.name,
+                          style: TextStyle(color: theme.textColor)),
                     ))
                 .toList(),
             onChanged: (p) => selected = p,
@@ -265,10 +270,15 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => context.pop(), child: const Text('Annuler')),
+            onPressed: () => Navigator.pop(dialogCtx, null),
+            child: const Text('Annuler'),
+          ),
           TextButton(
-            onPressed: () => context.pop(selected),
-            child: const Text('Confirmer'),
+            onPressed: () => Navigator.pop(dialogCtx, selected),
+            style: TextButton.styleFrom(
+                foregroundColor: theme.primaryColor),
+            child: const Text('Confirmer',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -278,25 +288,26 @@ class _UserSubscriptionScreenState extends State<UserSubscriptionScreen> {
       try {
         await _adminService.changeUserPlan(widget.userId, result.id);
         await _loadData();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Plan modifié avec succès : ${result.name}'),
-                backgroundColor: Colors.green),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Plan modifié : ${result.name}'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Erreur : $e'),
-                backgroundColor: Colors.redAccent),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur : $e'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();

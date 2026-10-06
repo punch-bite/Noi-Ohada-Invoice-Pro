@@ -1,7 +1,7 @@
 name: noi_ohada_invoice_pro
 description: "Gestion de factures conforme OHADA"
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.5.0 <4.0.0' # Flutter 3.41 nécessite un SDK Dart récent
@@ -39,6 +39,7 @@ dependencies:
   printing: ^5.14.0
   csv: ^6.0.0
   fl_chart: ^0.69.0
+  qr: ^3.0.1
 
   # --- Utilitaires & Sécurité ---
   dart_dash_otp: ^2.0.0
@@ -86,6 +87,13 @@ flutter:
     - assets/images/
     # ⚠️ NE PAS embarquer .env ici : il contient des secrets (SMTP, NochPay…).
     # Les secrets sont injectés au build via --dart-define (voir README).
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf
+    - assets/fonts/Roboto-Medium.ttf
+    - assets/fonts/Roboto-Condensed.ttf
+    - assets/fonts/Roboto-Light.ttf
+    - assets/fonts/Manrope.ttf
+    - assets/fonts/WorkSans.ttf
   fonts:
     - family: NoiPolice
       fonts:
@@ -97,7 +105,6 @@ flutter:
           weight: 500
         - asset: assets/fonts/Roboto-Light.ttf
           weight: 300
-    # 👑 Design system « Royal Ledger » (maquette Stitch)
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope.ttf

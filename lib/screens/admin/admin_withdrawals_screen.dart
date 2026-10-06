@@ -1,12 +1,12 @@
 // lib/screens/admin/admin_withdrawals_screen.dart
 //
-// 💰 ADMIN : traitement des demandes de retrait du portefeuille marchand.
-// Liste les demandes (pending), permet de les marquer `paid` (le solde est
-// décrémenté) ou `rejected`.
+// 💸 Retraits — épuré : filtre segmenté, cards bordées, actions animées.
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/wallet_service.dart';
@@ -24,7 +24,7 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
   final Map<String, String> _userEmails = {};
   bool _loading = true;
   bool _processing = false;
-  String _filter = 'pending'; // 'pending' | 'all'
+  String _filter = 'pending';
 
   @override
   void initState() {
@@ -33,11 +33,12 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     _withdrawals = await _wallet.getAllWithdrawals(
       status: _filter == 'pending' ? 'pending' : null,
     );
-    // Résout les emails des utilisateurs pour un affichage lisible.
+
     final userIds = _withdrawals
         .map((w) => w['userId']?.toString() ?? '')
         .where((u) => u.isNotEmpty)
@@ -45,8 +46,10 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     for (final uid in userIds) {
       if (_userEmails.containsKey(uid)) continue;
       try {
-        final doc =
-            await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
         _userEmails[uid] = doc.data()?['email']?.toString() ?? uid;
       } catch (_) {
         _userEmails[uid] = uid;
@@ -60,6 +63,8 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     if (_processing) return;
     setState(() => _processing = true);
     final auth = context.read<AppAuthProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
     final ok = await _wallet.setWithdrawalStatus(
       withdrawalId: id,
       status: status,
@@ -67,12 +72,16 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     );
     if (!mounted) return;
     setState(() => _processing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
+
+    messenger.showSnackBar(
       SnackBar(
         content: Text(ok
             ? 'Retrait ${status == 'paid' ? 'payé ✅' : 'refusé'}'
             : 'Erreur lors du traitement'),
         backgroundColor: ok ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
     if (ok) await _load();
@@ -84,57 +93,76 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    final isDark = theme.isDarkMode;
     final text = theme.textColor;
     final sub = theme.subTextColor;
     final bg = theme.backgroundColor;
-    final isDark = theme.isDarkMode;
+    final primary = theme.primaryColor;
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
-        title: Text('💸 Demandes de retrait',
-            style: TextStyle(color: text, fontWeight: FontWeight.w600)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: text, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
           onPressed: () => context.pop(),
+        ),
+        title: Text(
+          'Retraits',
+          style: TextStyle(
+            color: text,
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
         ),
       ),
       body: Column(
         children: [
-          // Filtre
+          // Filtre segmenté
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Row(
-              children: [
-                _filterChip('pending', 'En attente', isDark, text),
-                const SizedBox(width: 8),
-                _filterChip('all', 'Toutes', isDark, text),
-              ],
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  _filterBtn('pending', 'En attente', primary, text),
+                  _filterBtn('all', 'Toutes', primary, text),
+                ],
+              ),
             ),
           ),
-          const Divider(height: 1),
+
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator(color: primary))
                 : RefreshIndicator(
                     onRefresh: _load,
+                    color: primary,
                     child: _withdrawals.isEmpty
-                        ? ListView(
-                            children: const [
-                              SizedBox(height: 120),
-                              Center(
-                                child: Text('Aucune demande de retrait.',
-                                    style: TextStyle(color: Colors.grey)),
-                              ),
-                            ],
-                          )
+                        ? _emptyState(text, sub, primary)
                         : ListView.builder(
-                            padding: const EdgeInsets.all(12),
+                            physics: const BouncingScrollPhysics(),
+                            padding:
+                                const EdgeInsets.fromLTRB(20, 0, 20, 32),
                             itemCount: _withdrawals.length,
-                            itemBuilder: (context, index) =>
-                                _buildCard(_withdrawals[index], isDark, text, sub),
+                            itemBuilder: (context, index) => _buildCard(
+                              _withdrawals[index],
+                              isDark,
+                              text,
+                              sub,
+                              primary,
+                              theme.cardColor,
+                              index: index,
+                            ),
                           ),
                   ),
           ),
@@ -143,25 +171,54 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     );
   }
 
-  Widget _filterChip(String value, String label, bool isDark, Color text) {
+  Widget _filterBtn(
+      String value, String label, Color primary, Color text) {
     final selected = _filter == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) {
-        setState(() => _filter = value);
-        _load();
-      },
-      selectedColor: Theme.of(context).colorScheme.primary,
-      backgroundColor: isDark ? Colors.grey[900] : Colors.grey[100],
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : text,
-        fontWeight: FontWeight.w600,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _filter = value);
+          _load();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: primary.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? Colors.white : text,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildCard(Map<String, dynamic> w, bool isDark, Color text, Color sub) {
+  Widget _buildCard(
+    Map<String, dynamic> w,
+    bool isDark,
+    Color text,
+    Color sub,
+    Color primary,
+    Color card, {
+    required int index,
+  }) {
     final id = w['id']?.toString() ?? '';
     final userId = w['userId']?.toString() ?? '';
     final amount = (w['amount'] as num?)?.toDouble() ?? 0;
@@ -169,103 +226,194 @@ class _AdminWithdrawalsScreenState extends State<AdminWithdrawalsScreen> {
     final status = (w['status'] ?? 'pending').toString();
     final isPending = status == 'pending';
 
-    final Color statusColor = status == 'paid'
-        ? Colors.green
+    final statusColor = status == 'paid'
+        ? const Color(0xFF10B981)
         : status == 'rejected'
-            ? Colors.red
-            : Colors.orange;
-    final String statusLabel = status == 'paid'
+            ? const Color(0xFFEF4444)
+            : const Color(0xFFF59E0B);
+    final statusLabel = status == 'paid'
         ? 'Payé'
         : status == 'rejected'
             ? 'Refusé'
             : 'En attente';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[900] : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isPending
-              ? Colors.orange.withValues(alpha: 0.4)
-              : (isDark ? Colors.grey[800]! : Colors.grey[200]!),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_fmt(amount),
-                        style: TextStyle(
-                            color: text,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(
-                      _userEmails[userId] ?? userId,
-                      style: TextStyle(color: sub, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (phone.isNotEmpty)
-                      Text('📱 $phone',
-                          style: TextStyle(color: sub, fontSize: 12)),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(statusLabel,
-                    style: TextStyle(
-                        color: statusColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isPending
+                ? statusColor.withValues(alpha: 0.4)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04)),
+            width: 1,
           ),
-          if (isPending) ...[
-            const SizedBox(height: 12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        _processing ? null : () => _process(id, 'rejected'),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Refuser'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _fmt(amount),
+                        style: TextStyle(
+                          color: text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _userEmails[userId] ?? userId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: sub, fontSize: 12),
+                      ),
+                      if (phone.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            children: [
+                              Icon(Icons.phone_rounded,
+                                  size: 11, color: sub.withValues(alpha: 0.8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                phone,
+                                style: TextStyle(color: sub, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _processing ? null : () => _process(id, 'paid'),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Marquer payé'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
                     ),
                   ),
                 ),
               ],
             ),
+            if (isPending) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _processing ? null : () => _process(id, 'rejected'),
+                      icon: const Icon(Icons.close_rounded, size: 16),
+                      label: const Text('Refuser'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: BorderSide(
+                            color: Colors.redAccent.withValues(alpha: 0.5),
+                            width: 1.2),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          _processing ? null : () => _process(id, 'paid'),
+                      icon: const Icon(Icons.check_rounded, size: 16),
+                      label: const Text('Marquer payé'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
+      )
+          .animate()
+          .fadeIn(
+            delay: Duration(milliseconds: 30 + (index * 40)),
+            duration: 300.ms,
+          )
+          .slideY(
+            begin: 0.05,
+            end: 0,
+            duration: 300.ms,
+            curve: Curves.easeOut,
+          ),
+    );
+  }
+
+  Widget _emptyState(Color text, Color sub, Color primary) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(Icons.account_balance_wallet_outlined,
+                  size: 40, color: primary),
+            ),
+            const SizedBox(height: 22),
+            Text(
+              'Aucune demande',
+              style: TextStyle(
+                color: text,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Les demandes de retrait s\'afficheront ici.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: sub, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }

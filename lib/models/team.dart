@@ -36,6 +36,18 @@ class Team {
   @HiveField(9)
   final bool isActive;
 
+  /// 🔑 POLITIQUE D'ACCÈS AUX FICHIERS PARTAGÉS, PAR RÔLE.
+  /// - [memberPermission] : droit accordé aux MEMBRES simples
+  ///   (`'read'` = lecture seule, `'write'` = lecture/écriture).
+  /// - [adminPermission] : droit accordé aux ADMINISTRATEURS (et au
+  ///   propriétaire) — par défaut `'write'`.
+  /// Tout membre qui ADHÈRE à l'équipe reçoit ces droits sur les ressources
+  /// déjà partagées (factures / produits / clients).
+  @HiveField(10)
+  final String memberPermission;
+  @HiveField(11)
+  final String adminPermission;
+
   Team({
     String? id,
     required this.name,
@@ -47,6 +59,8 @@ class Team {
     DateTime? createdAt,
     this.updatedAt,
     this.isActive = true,
+    this.memberPermission = 'read',
+    this.adminPermission = 'write',
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -62,6 +76,8 @@ class Team {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
+      'memberPermission': memberPermission,
+      'adminPermission': adminPermission,
     };
   }
 
@@ -75,8 +91,13 @@ class Team {
       adminIds: List<String>.from(map['adminIds'] ?? []),
       logoPath: map['logoPath'],
       createdAt: _parseDateTime(map['createdAt']),
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      updatedAt:
+          map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
       isActive: map['isActive'] ?? true,
+      memberPermission:
+          normalizePermission(map['memberPermission'], fallback: 'read'),
+      adminPermission:
+          normalizePermission(map['adminPermission'], fallback: 'write'),
     );
   }
 
@@ -90,7 +111,59 @@ class Team {
 
   bool isOwnerOf(String userId) => ownerId == userId;
   bool isAdmin(String userId) => adminIds.contains(userId);
-  bool isMember(String userId) => memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
+  bool isMember(String userId) =>
+      memberIds.contains(userId) || isAdmin(userId) || isOwnerOf(userId);
+
+  // 👑 TITRES DE RÔLE affichés dans la messagerie d'équipe.
+  static const String ownerTitle = 'Propriétaire du groupe';
+  static const String memberTitle = 'Membre';
+
+  /// 👑 Titre de [userId] : « Propriétaire du groupe » pour le propriétaire
+  /// et les administrateurs de l'équipe, « Membre » pour les autres.
+  /// Un utilisateur inconnu (hors équipe) est considéré comme simple membre.
+  String roleTitleFor(String userId) =>
+      isOwnerOf(userId) || isAdmin(userId) ? ownerTitle : memberTitle;
+
+  /// Normalise une valeur de permission ('read' | 'write').
+  static String normalizePermission(String? value, {String fallback = 'read'}) {
+    final v = (value ?? '').trim().toLowerCase();
+    if (v == 'write' || v == 'read') return v;
+    return fallback;
+  }
+
+  /// 🔑 Droit d'accès de [userId] aux FICHIERS PARTAGÉS de l'équipe,
+  /// déduit de son RÔLE (propriétaire/admin → [adminPermission],
+  /// membre simple → [memberPermission]).
+  String permissionFor(String userId) {
+    if (isOwnerOf(userId) || isAdmin(userId)) return adminPermission;
+    return memberPermission;
+  }
+
+  /// Vrai si [userId] peut MODIFIER les fichiers partagés de l'équipe.
+  bool canWriteShared(String userId) => permissionFor(userId) == 'write';
+
+  /// Vrai si [userId] peut au moins LIRE les fichiers partagés de l'équipe.
+  /// Les membres y ont toujours accès en lecture (le partage est explicite).
+  bool canReadShared(String userId) =>
+      isMember(userId) || memberPermission == 'read';
+
+  /// 🔑 Droit EFFECTIF de [userId] sur une ressource partagée.
+  ///
+  /// Combine :
+  ///   • le droit spécifique du partage (`SharedInvoice.canWrite`) ;
+  ///   • le droit global de l'équipe sur les fichiers partagés.
+  ///
+  /// ⚠️ Prend un `dynamic` pour éviter un import circulaire du modèle
+  /// `SharedInvoice` — la classe y répond avec sa méthode `canWrite`.
+  bool canWriteResource(String userId, dynamic share) {
+    if (share == null) return false;
+    try {
+      final canWriteShare = share.canWrite(userId) as bool;
+      return canWriteShare || canWriteShared(userId);
+    } catch (_) {
+      return canWriteShared(userId);
+    }
+  }
 
   Team copyWith({
     String? name,
@@ -99,6 +172,8 @@ class Team {
     List<String>? adminIds,
     String? logoPath,
     bool? isActive,
+    String? memberPermission,
+    String? adminPermission,
   }) {
     return Team(
       id: id,
@@ -111,6 +186,10 @@ class Team {
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
+      memberPermission: normalizePermission(memberPermission,
+          fallback: this.memberPermission),
+      adminPermission:
+          normalizePermission(adminPermission, fallback: this.adminPermission),
     );
   }
 }

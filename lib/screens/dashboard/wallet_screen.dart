@@ -339,9 +339,70 @@ class _WalletScreenState extends State<WalletScreen> {
             style: TextStyle(
                 color: color, fontWeight: FontWeight.w700, fontSize: 13),
           ),
+          // 🗑️ Les ENCAISSEMENTS (crédits, ex. paiement d'une facture) sont
+          // supprimables : le solde est diminué d'autant (jamais sous 0).
+          if (isCredit && (t['id'] ?? '').toString().isNotEmpty)
+            IconButton(
+              tooltip: 'Supprimer la transaction',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints:
+                  const BoxConstraints(minWidth: 34, minHeight: 34),
+              icon: const Icon(Icons.delete_outline,
+                  size: 18, color: Colors.redAccent),
+              onPressed: () => _confirmDeleteTransaction(t),
+            ),
         ],
       ),
     );
+  }
+
+  /// 🗑️ Confirmation puis suppression d'une transaction de l'historique.
+  /// Le solde du portefeuille est recalculé (le crédit est annulé).
+  Future<void> _confirmDeleteTransaction(Map<String, dynamic> t) async {
+    final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Supprimer la transaction ?'),
+        content: Text(
+          'Cet encaissement de ${_fmt(amount)} sera retiré de votre '
+          'historique et le solde du portefeuille sera diminué d\'autant.\n\n'
+          'Cette opération est irréversible.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final id = (t['id'] ?? '').toString();
+    final ok =
+        await _wallet.deleteTransaction(userId: _uid, transactionId: id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? '✅ Transaction supprimée (solde mis à jour)'
+            : '❌ Impossible de supprimer cette transaction'),
+        backgroundColor: ok ? Colors.green : Colors.redAccent,
+      ),
+    );
+    if (ok) _load();
   }
 
   String _formatDate(DateTime d) {
