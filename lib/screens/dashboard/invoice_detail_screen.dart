@@ -61,6 +61,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Company? _company;
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
+  List<InvoiceTemplate> _templates = [];
   List<Team> _cachedTeams = [];
 
   Uint8List? _previewBackground;
@@ -141,11 +142,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       ...adminTemplates,
     ];
 
+    // 1) Priorité : template stocké sur la facture.
+    final templateFromInvoice = _invoice != null && _invoice!.templateId != null
+        ? _templates.firstWhere(
+            (t) => t.id == _invoice!.templateId,
+            orElse: () => _templates.first,
+          )
+        : null;
+
     final activeId = await TemplateSelectionService.getActiveTemplateId();
     if (!mounted) return;
 
     InvoiceTemplate? selected;
-    if (activeId != null && merged.any((t) => t.id == activeId)) {
+    if (templateFromInvoice != null) {
+      selected = templateFromInvoice;
+    } else if (activeId != null && merged.any((t) => t.id == activeId)) {
       selected = merged.firstWhere((t) => t.id == activeId);
     } else if (merged.isNotEmpty) {
       selected = merged.firstWhere(
@@ -162,6 +173,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     setState(() {
       _invoiceSettings = settings;
+      _templates = merged;
       if (applied != null) _selectedTemplate = applied;
     });
   }
