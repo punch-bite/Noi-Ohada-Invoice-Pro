@@ -53,7 +53,7 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"/>
     <!-- ===== APPLICATION ===== -->
     <application
-        android:label="NOI OHADA Invoice Pro"
+        android:label="NOI Invoice Pro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"

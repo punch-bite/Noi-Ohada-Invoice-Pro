@@ -57,6 +57,9 @@ class Delivery {
   @HiveField(11)
   final String? createdBy;
 
+  @HiveField(12)
+  final String? userId;
+
   Delivery({
     String? id,
     required this.productId,
@@ -70,6 +73,7 @@ class Delivery {
     DateTime? createdAt,
     this.completedAt,
     this.createdBy,
+    this.userId,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -110,6 +114,7 @@ class Delivery {
       'reference': reference,
       'clientName': clientName,
       'notes': notes,
+      'userId': userId ?? '',
       'createdAt': Timestamp.fromDate(createdAt),
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'createdBy': createdBy,
@@ -127,6 +132,7 @@ class Delivery {
       reference: map['reference'],
       clientName: map['clientName'],
       notes: map['notes'],
+      userId: map['userId'],
       createdAt: _parseDateTime(map['createdAt']),
       completedAt: map['completedAt'] != null ? _parseDateTime(map['completedAt']) : null,
       createdBy: map['createdBy'],
@@ -141,6 +147,7 @@ class Delivery {
     String? reference,
     String? clientName,
     String? createdBy,
+    String? userId,
   }) {
     return Delivery(
       id: id,
@@ -152,6 +159,7 @@ class Delivery {
       reference: reference ?? this.reference,
       clientName: clientName ?? this.clientName,
       notes: notes ?? this.notes,
+      userId: userId ?? this.userId,
       createdAt: createdAt,
       completedAt: completedAt ?? this.completedAt,
       createdBy: createdBy ?? this.createdBy,

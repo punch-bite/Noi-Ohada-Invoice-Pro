@@ -33,17 +33,19 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       terms: fields[13] as String,
       isDevis: fields[14] as bool,
       notes: fields[15] as String,
-      syncedAt: fields[16] as DateTime?,
-      isSynced: fields[19] as bool,
-      updatedAt: fields[17] as DateTime?,
-      createdAt: fields[18] as DateTime?,
+      userId: fields[16] as String?,
+      syncedAt: fields[18] as DateTime?,
+      isSynced: fields[17] as bool,
+      templateId: fields[21] as String?,
+      updatedAt: fields[19] as DateTime?,
+      createdAt: fields[20] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Invoice obj) {
     writer
-      ..writeByte(20)
+      ..writeByte(22)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -76,14 +78,18 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       ..write(obj.isDevis)
       ..writeByte(15)
       ..write(obj.notes)
-      ..writeByte(19)
-      ..write(obj.isSynced)
       ..writeByte(16)
-      ..write(obj.syncedAt)
+      ..write(obj.userId)
       ..writeByte(17)
-      ..write(obj.updatedAt)
+      ..write(obj.isSynced)
       ..writeByte(18)
-      ..write(obj.createdAt);
+      ..write(obj.syncedAt)
+      ..writeByte(19)
+      ..write(obj.updatedAt)
+      ..writeByte(20)
+      ..write(obj.createdAt)
+      ..writeByte(21)
+      ..write(obj.templateId);
   }
 
   @override

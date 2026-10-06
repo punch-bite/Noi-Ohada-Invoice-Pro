@@ -1,4 +1,4 @@
-// lib/screens/dashboard/create_invoice_screen.dart
+﻿// lib/screens/dashboard/create_invoice_screen.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +7,9 @@ import '../../services/database_service.dart';
 import '../../services/stock_service.dart';
 import '../../services/quota_enforcement_service.dart';
 import '../../services/signature_service.dart';
+import '../../services/template_service.dart';
+import '../../services/template_selection_service.dart';
+import '../../models/invoice_template.dart';
 import '../../models/invoice.dart';
 import '../../models/line_item.dart';
 import '../../models/client.dart';
@@ -31,6 +34,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   Client? _selectedClient;
   List<Client> _clients = [];
+  String? _selectedTemplateId; // ðŸ”¥ ModÃ¨le sÃ©lectionnÃ© pour la facture
+  List<InvoiceTemplate> _templates = [];
   final List<LineItem> _items = [];
   bool _isDevis = false;
   bool _isSaving = false;
@@ -38,10 +43,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   double _discount = 0;
   double _deliveryFee = 0;
 
-  // Conditions de facturation (éditable)
+  // Conditions de facturation (Ã©ditable)
   final _termsController = TextEditingController();
 
-  // Signature numérique
+  // Signature numÃ©rique
   final SignatureService _signatureService = SignatureService();
   Uint8List? _signatureBytes;
   String? _signatureName;
@@ -59,10 +64,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   @override
   void initState() {
     super.initState();
-    _termsController.text = 'Paiement à 30 jours';
+    _termsController.text = 'Paiement Ã  30 jours';
     _loadClients();
     _loadStockProducts();
     _loadSignature();
+    _loadTemplates();
     _deliveryFeeController.addListener(() {
       setState(() =>
           _deliveryFee = double.tryParse(_deliveryFeeController.text) ?? 0);
@@ -79,6 +85,29 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       _signatureName = name;
       _signatureTitle = title;
     });
+  }
+
+  Future<void> _loadTemplates() async {
+    try {
+      final templates = await TemplateService().getAllTemplates();
+      String? activeTemplateId;
+      try {
+        activeTemplateId = await TemplateSelectionService.getActiveTemplateId();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _templates = templates;
+        // Le template global actif est utilisÃ© par dÃ©faut (si existant)
+        if (templates.any((t) => t.id == activeTemplateId)) {
+          _selectedTemplateId = activeTemplateId;
+        } else if (templates.isNotEmpty) {
+          _selectedTemplateId = templates.firstWhere(
+            (t) => t.isDefault,
+            orElse: () => templates.first,
+          ).id;
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _openSignaturePad() async {
@@ -195,7 +224,32 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              // ðŸ”¥ Template Selector
+              DropdownButtonFormField<String>(
+                initialValue: _selectedTemplateId,
+                decoration: InputDecoration(
+                  labelText: 'ModÃ¨le de facture',
+                  labelStyle: TextStyle(color: sub, fontSize: 13),
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: primary, width: 2),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                items: _templates.map((t) => DropdownMenuItem<String>(
+                  value: t.id,
+                  child: Text('${t.name} (${t.isDefault ? 'par dÃ©faut' : ''})'),
+                )).toList(),
+                onChanged: (id) => setState(() => _selectedTemplateId = id),
+              ),
+              const SizedBox(height: 12),
 
               // Client Selector Field
               TextFormField(
@@ -204,7 +258,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 style: TextStyle(color: text, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Client',
-                  hintText: 'Sélectionner un client',
+                  hintText: 'SÃ©lectionner un client',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
                   hintStyle: TextStyle(color: sub.withValues(alpha: 0.5)),
                   prefixIcon: Icon(Icons.person_outline, color: sub),
@@ -258,7 +312,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       keyboardType: TextInputType.number,
                       style: TextStyle(color: text, fontSize: 14),
                       decoration: InputDecoration(
-                        labelText: 'Qté',
+                        labelText: 'QtÃ©',
                         labelStyle: TextStyle(color: sub, fontSize: 13),
                         filled: true,
                         fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.7),
@@ -438,7 +492,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 style: TextStyle(color: text, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Conditions de paiement',
-                  hintText: 'Ex: Paiement à 30 jours',
+                  hintText: 'Ex: Paiement Ã  30 jours',
                   labelStyle: TextStyle(color: sub, fontSize: 13),
                   hintStyle: TextStyle(color: sub.withValues(alpha: 0.5)),
                   prefixIcon: Icon(Icons.description_outlined, color: sub),
@@ -457,7 +511,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Signature numérique
+              // Signature numÃ©rique
               _buildSignatureSection(isDark, text, sub, primary),
               const SizedBox(height: 12),
 
@@ -577,7 +631,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     });
   }
 
-  // ===== DIALOGUE PRODUIT DEPUIS LE STOCK AVEC QUANTITÉ =====
+  // ===== DIALOGUE PRODUIT DEPUIS LE STOCK AVEC QUANTITÃ‰ =====
   void _showStockProductsDialog() {
     final theme = context.read<ThemeProvider>();
     Product? selectedProduct;
@@ -613,7 +667,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             ),
                             title: Text(p.name, style: TextStyle(color: theme.textColor, fontSize: 14)),
                             subtitle: Text(
-                              '${p.price.toStringAsFixed(0)} FCFA · Stock: ${p.quantity} ${p.unit}',
+                              '${p.price.toStringAsFixed(0)} FCFA Â· Stock: ${p.quantity} ${p.unit}',
                               style: TextStyle(color: theme.subTextColor, fontSize: 12),
                             ),
                             trailing: isSelected ? Icon(Icons.check_circle, color: theme.primaryColor) : null,
@@ -623,11 +677,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Champ quantité
+                    // Champ quantitÃ©
                     if (selectedProduct != null) ...[
                       Row(
                         children: [
-                          const Text('Quantité :', style: TextStyle(fontWeight: FontWeight.w500)),
+                          const Text('QuantitÃ© :', style: TextStyle(fontWeight: FontWeight.w500)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextFormField(
@@ -663,13 +717,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   onPressed: () {
                     if (selectedProduct == null) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Sélectionnez un produit'), backgroundColor: Colors.orange),
+                        const SnackBar(content: Text('SÃ©lectionnez un produit'), backgroundColor: Colors.orange),
                       );
                       return;
                     }
                     if (quantity <= 0) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Quantité invalide'), backgroundColor: Colors.orange),
+                        const SnackBar(content: Text('QuantitÃ© invalide'), backgroundColor: Colors.orange),
                       );
                       return;
                     }
@@ -706,11 +760,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // ===== SÉLECTION CLIENT =====
+  // ===== SÃ‰LECTION CLIENT =====
   Future<void> _selectClient() async {
     if (_clients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucun client enregistré'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Aucun client enregistrÃ©'), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -749,11 +803,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  // ===== SAUVEGARDE AVEC MISE À JOUR DU STOCK =====
+  // ===== SAUVEGARDE AVEC MISE Ã€ JOUR DU STOCK =====
   Future<void> _saveInvoice() async {
     if (_selectedClient == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez un client'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('SÃ©lectionnez un client'), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -774,18 +828,18 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(quota.message ??
-              'Limite de factures atteinte. Passez au plan supérieur.'),
+              'Limite de factures atteinte. Passez au plan supÃ©rieur.'),
           backgroundColor: Colors.orange,
         ),
       );
       return;
     }
 
-    // Vérifier la disponibilité du stock pour chaque produit (si c'est une facture, pas un devis)
-    // On vérifie pour les produits issus du stock (on pourrait avoir ajouté des produits manuels sans lien avec le stock)
+    // VÃ©rifier la disponibilitÃ© du stock pour chaque produit (si c'est une facture, pas un devis)
+    // On vÃ©rifie pour les produits issus du stock (on pourrait avoir ajoutÃ© des produits manuels sans lien avec le stock)
     // On va essayer de retrouver les produits par leur nom (approximation)
     if (!_isDevis) {
-      // Récupérer les produits depuis le stock pour vérification
+      // RÃ©cupÃ©rer les produits depuis le stock pour vÃ©rification
       final allProducts = await _stockService.getProducts();
       final productMap = {for (var p in allProducts) p.name: p};
 
@@ -834,16 +888,17 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         discount: _discount,
         totalAmount: _total,
         terms: _termsController.text.trim().isEmpty
-            ? 'Paiement à 30 jours'
+            ? 'Paiement Ã  30 jours'
             : _termsController.text.trim(),
         isDevis: _isDevis,
         notes: _notesController.text.trim(),
         isSynced: false,
+        templateId: _selectedTemplateId,
       );
 
       await _db.addInvoice(invoice);
 
-      // Mise à jour du stock (seulement pour les factures, pas les devis)
+      // Mise Ã  jour du stock (seulement pour les factures, pas les devis)
       if (!_isDevis) {
         final allProducts = await _stockService.getProducts();
         final productMap = {for (var p in allProducts) p.name: p};
@@ -863,7 +918,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isDevis ? 'Devis créé !' : 'Facture créée et stock mis à jour !'),
+          content: Text(_isDevis ? 'Devis crÃ©Ã© !' : 'Facture crÃ©Ã©e et stock mis Ã  jour !'),
           backgroundColor: Colors.green,
         ),
       );
@@ -877,7 +932,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  // ===== SECTION SIGNATURE NUMÉRIQUE =====
+  // ===== SECTION SIGNATURE NUMÃ‰RIQUE =====
   Widget _buildSignatureSection(
       bool isDark, Color text, Color sub, Color primary) {
     return Container(
@@ -896,7 +951,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               Icon(Icons.draw_outlined, color: primary, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Signature numérique',
+                'Signature numÃ©rique',
                 style: TextStyle(
                   color: text,
                   fontWeight: FontWeight.w600,
@@ -920,7 +975,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           ),
           const SizedBox(height: 8),
           if (_signatureBytes != null) ...[
-            // Aperçu de la signature
+            // AperÃ§u de la signature
             Container(
               width: double.infinity,
               height: 80,
@@ -935,7 +990,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => Center(
                   child: Text(
-                    'Signature configurée',
+                    'Signature configurÃ©e',
                     style: TextStyle(color: sub, fontSize: 12),
                   ),
                 ),
@@ -959,7 +1014,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
             ],
           ] else ...[
-            // Aucune signature configurée
+            // Aucune signature configurÃ©e
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -976,12 +1031,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   Icon(Icons.edit_note, size: 28, color: sub.withValues(alpha: 0.5)),
                   const SizedBox(height: 4),
                   Text(
-                    'Aucune signature configurée',
+                    'Aucune signature configurÃ©e',
                     style: TextStyle(color: sub, fontSize: 12),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'La facture sera générée sans signature',
+                    'La facture sera gÃ©nÃ©rÃ©e sans signature',
                     style: TextStyle(
                         color: sub.withValues(alpha: 0.7), fontSize: 11),
                   ),

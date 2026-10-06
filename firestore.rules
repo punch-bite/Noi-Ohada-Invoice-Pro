@@ -3,30 +3,28 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========== FONCTIONS UTILITAIRES ===========
-    // ⚠️ Langage des règles Firestore = langage d'EXPRESSIONS.
-    // Pas de `if`, `for`, `let`, `while` — uniquement des expressions.
 
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    // Le document appartient à l'utilisateur connecté.
+    // Le document appartient à l'utilisateur connecté (vérification sécurisée des champs)
     function isOwner() {
-      return resource.data.userId == request.auth.uid;
-    }
-    function isNewOwner() {
-      return request.resource.data.userId == request.auth.uid;
+      return 'userId' in resource.data && resource.data.userId == request.auth.uid;
     }
 
-    // Vrai si le document (nouveau ou existant) accorde des privilèges admin.
-    // ✅ Défensif : on vérifie l'existence des champs avant d'y accéder pour
-    // éviter qu'un champ manquant ne fasse échouer la règle (erreur = déni).
+    function isNewOwner() {
+      return 'userId' in request.resource.data && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Vrai si le document accorde des privilèges admin.
     function hasAdminPrivileges(data) {
       return ('isAdmin' in data && data.isAdmin == true)
-        || ('roles' in data && data.roles.hasAny(['admin', 'super-admin']));
+        || ('roles' in data && data.roles is list && data.roles.hasAny(['admin', 'super-admin']));
     }
 
     // Lecture autorisée : admin OU propriétaire.
@@ -35,25 +33,26 @@ service cloud.firestore {
     }
 
     // Lecture autorisée pour un membre d'équipe ayant reçu un partage.
-    // Le partage est matérialisé sur le document (sharedWithUsers) par l'émetteur.
     function canReadSharedResource() {
       return isSignedIn()
+        && ('sharedWithUsers' in resource.data)
+        && (resource.data.sharedWithUsers is list)
         && (request.auth.uid in resource.data.sharedWithUsers);
     }
 
     // 🔒 Vrai si `uid` est membre (ou propriétaire/admin) de l'équipe `teamId`.
     function isTeamMember(teamId, uid) {
+      let teamDoc = get(/databases/$(database)/documents/teams/$(teamId));
       return teamId is string && uid is string && uid.size() > 0
-        && get(/databases/$(database)/documents/teams/$(teamId)).data != null
+        && teamDoc.data != null
         && (
-          get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == uid
-          || uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberIds
-          || uid in get(/databases/$(database)/documents/teams/$(teamId)).data.adminIds
+          teamDoc.data.ownerId == uid
+          || ('memberIds' in teamDoc.data && teamDoc.data.memberIds is list && uid in teamDoc.data.memberIds)
+          || ('adminIds' in teamDoc.data && teamDoc.data.adminIds is list && uid in teamDoc.data.adminIds)
         );
     }
 
     // Création autorisée : admin OU utilisateur authentifié propriétaire.
-    // NB : le champ `userId` doit être présent pour les collections métier.
     function canWriteOwnResource() {
       return isAdmin() || (isSignedIn() && isNewOwner());
     }
@@ -68,7 +67,7 @@ service cloud.firestore {
     // ===========================================
     match /companies/{companyId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && (canWriteOwnResource() || isAdmin());
+      allow create: if canWriteOwnResource();
       allow update, delete: if isAdmin() || isOwner()
         || (companyId == 'default_company' && isAdmin());
     }
@@ -130,24 +129,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Un utilisateur peut créer/lire/mettre à jour SON propre profil.
-    // Il ne peut JAMAIS s'auto-attribuer un rôle admin (hasAdminPrivileges).
-    // `subscriptionId` est modifiable (activation d'abonnement), mais pas
-    // `isActive` (réservé à l'admin/backend).
+    // Un utilisateur peut lire/mettre à jour SON propre profil.
+    // L'utilisateur ne peut NI s'attribuer des privilèges admin NI modifier `isActive`.
     match /users/{userId} {
       allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
       allow create: if isSignedIn() && request.auth.uid == userId
-        && !hasAdminPrivileges(request.resource.data);
-      // ✅ Mise à jour : admin, ou le propriétaire lui-même.
-      // Le propriétaire ne peut NI s'auto-attribuer des privilèges admin,
-      // NI modifier `isActive` SI ce champ existait déjà (réservé à l'admin).
-      // En revanche, si `isActive` était absent (document partiel créé lors
-      // d'une première connexion), il peut être renseigné pour compléter le profil.
+        && !hasAdminPrivileges(request.resource.data)
+        && !('isActive' in request.resource.data);
       allow update: if isAdmin()
         || (isSignedIn() && request.auth.uid == userId
             && !hasAdminPrivileges(request.resource.data)
-            && (!('isActive' in resource.data)
-                || resource.data.isActive == request.resource.data.isActive));
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isActive']));
     }
 
     // ===========================================
@@ -156,7 +148,7 @@ service cloud.firestore {
     match /teams/{teamId} {
       allow read: if isSignedIn() && (isAdmin()
         || resource.data.ownerId == request.auth.uid
-        || request.auth.uid in resource.data.memberIds);
+        || ('memberIds' in resource.data && request.auth.uid in resource.data.memberIds));
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
       allow update, delete: if isAdmin()
@@ -164,15 +156,8 @@ service cloud.firestore {
     }
     match /shared_invoices/{sharedId} {
       allow read: if isSignedIn() && (isAdmin()
-        || request.auth.uid in resource.data.sharedWith
+        || ('sharedWith' in resource.data && request.auth.uid in resource.data.sharedWith)
         || resource.data.sharedBy == request.auth.uid);
-      // 🔒 Création : l'émetteur doit être membre de l'équipe (anti-spam /
-      // anti-partage vers des équipes dont on ne fait pas partie).
-      // NB : la liste des destinataires n'est pas itérable dans les règles
-      // Firestore ; la protection des destinataires est assurée par la règle
-      // d'écriture des notifications (@mention intra-équipe) et par le fait
-      // que seul le propriétaire peut marquer un document comme partagé
-      // (sharedWithUsers) pour donner l'accès.
       allow create: if isSignedIn()
         && request.resource.data.sharedBy == request.auth.uid
         && request.resource.data.teamId is string
@@ -184,9 +169,6 @@ service cloud.firestore {
     // ===========================================
     // INVITATIONS D'ÉQUIPE
     // ===========================================
-    // Créées et traitées par le SERVEUR (SDK admin, contourne les règles).
-    // Le client peut seulement LIRE les invitations qui le concernent
-    // (invité) ou celles de ses équipes (pour afficher les statuts).
     match /team_invitations/{invitationId} {
       allow read: if isSignedIn() && (isAdmin()
         || resource.data.inviteeUid == request.auth.uid
@@ -195,25 +177,17 @@ service cloud.firestore {
     }
 
     // ===========================================
-    // 💬 MESSAGERIE D'ÉQUIPE (conversations de groupe)
+    // MESSAGERIE D'ÉQUIPE
     // ===========================================
-    // Les messages vivent dans `team_messages/{teamId}/messages` — les
-    // règles Firestore ne s'héritent PAS des documents parents → match
-    // explicite requis (sinon deny-by-default : chat bloqué en prod).
-    // Lecture/écriture réservées aux membres de l'équipe (propriétaire,
-    // admins, membres) ; l'admin global a tous les droits.
     match /team_messages/{teamId} {
       allow read, write: if isAdmin()
         || isTeamMember(teamId, request.auth.uid);
 
       match /messages/{messageId} {
-        // 🔒 Seuls les membres de l'équipe voient les messages.
         allow read: if isAdmin() || isTeamMember(teamId, request.auth.uid);
-        // ✍️ Un membre ne peut écrire que SON propre nom (anti-usurpation).
         allow create: if isSignedIn()
           && isTeamMember(teamId, request.auth.uid)
           && request.resource.data.senderId == request.auth.uid;
-        // 🛠️ Modification/suppression : admin global OU l'auteur du message.
         allow update, delete: if isAdmin()
           || (isTeamMember(teamId, request.auth.uid)
               && resource.data.senderId == request.auth.uid);
@@ -232,22 +206,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /notifications/{notificationId} {
-      // Lecture : admin, propriétaire, ou destinataire @mentionné.
       allow read: if isSignedIn() && (isAdmin() || isOwner()
-        || (request.auth.uid in resource.data.recipients));
-      // 🔒 Écriture : admin, propriétaire, ou @mention intra-équipe —
-      // l'émetteur ET le destinataire doivent être membres de la même équipe
-      // (anti-spam de notifications vers des inconnus).
-      allow write: if isAdmin() || isSignedIn() && (isNewOwner()
+        || ('recipients' in resource.data && resource.data.recipients is list && request.auth.uid in resource.data.recipients));
+      allow write: if isAdmin() || (isSignedIn() && (isNewOwner()
         || (request.resource.data.createdBy == request.auth.uid
             && request.resource.data.teamId is string
             && isTeamMember(request.resource.data.teamId, request.auth.uid)
             && request.resource.data.userId is string
-            && isTeamMember(request.resource.data.teamId, request.resource.data.userId)));
+            && isTeamMember(request.resource.data.teamId, request.resource.data.userId))));
     }
-    // 🔔 Tokens FCM (notifications push) : chaque utilisateur gère SES
-    // propres tokens. Le serveur (SDK admin) lit `fcm_tokens` pour envoyer
-    // les push — il contourne les règles.
     match /fcm_tokens/{tokenId} {
       allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
       allow create: if isSignedIn()
@@ -261,38 +228,32 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /drive_sync/{syncId} {
-      allow read: if isSignedIn() && (isAdmin()
-        || resource.data.userId == request.auth.uid);
+      allow read: if isSignedIn() && (isAdmin() || isOwner());
       allow write: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
     }
-    // Compteurs de numérotation : chaque utilisateur n'écrit que le sien.
     match /counters/{counterId} {
       allow read, write: if isSignedIn() && request.auth.uid == counterId;
     }
 
     // ===========================================
-    // PORTEFEUILLE MARCHAND (encaissement client)
+    // PORTEFEUILLE MARCHAND
     // ===========================================
     match /wallets/{userId} {
       allow read: if isSignedIn()
         && (request.auth.uid == userId || isAdmin());
-      // 🔒 Seule la plateforme (serveur / SDK admin) modifie le solde —
-      // un utilisateur ne peut PLUS s'auto-créditer un montant arbitraire.
       allow write: if isAdmin();
     }
     match /wallet_transactions/{id} {
       allow read: if isSignedIn()
-        && (isAdmin() || resource.data.userId == request.auth.uid);
-      // 🔒 Écriture serveur uniquement (crédit/débit vérifiés par le serveur).
+        && (isAdmin() || isOwner());
       allow create: if isAdmin();
     }
     match /wallet_withdrawals/{id} {
       allow read: if isSignedIn()
-        && (isAdmin() || resource.data.userId == request.auth.uid);
+        && (isAdmin() || isOwner());
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
-      // La plateforme (admin) met à jour le statut (paid / rejected).
       allow update: if isAdmin();
     }
   }

@@ -123,17 +123,42 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       ...adminTemplates,
     ];
 
-    // ✅ Modèle actif choisi (boutique / aperçu) — sélection persistante.
-    final activeId = await TemplateSelectionService.getActiveTemplateId();
+    // ✅ Choix du modèle : priorité au template enregistré sur la facture
+    //    (invoice.templateId), sinon le modèle actif global.
+    final String? activeTemplateId =
+        await TemplateSelectionService.getActiveTemplateId();
     InvoiceTemplate? selected;
-    if (activeId != null && _templates.any((t) => t.id == activeId)) {
-      selected = _templates.firstWhere((t) => t.id == activeId);
-    } else if (_templates.isNotEmpty) {
+
+    // 1) Priorité : template stocké sur la facture.
+    if (_invoice != null && _invoice!.templateId != null) {
+      final matching = _templates.firstWhere(
+        (t) => t.id == _invoice!.templateId,
+        orElse: () => _templates.first,
+      );
+      if (matching.id == _invoice!.templateId) {
+        selected = matching;
+      }
+    }
+
+    // 2) Sinon : modèle actif global.
+    if (selected == null && activeTemplateId != null) {
+      final found = _templates.firstWhere(
+        (t) => t.id == activeTemplateId,
+        orElse: () => _templates.first,
+      );
+      if (found.id == activeTemplateId) {
+        selected = found;
+      }
+    }
+
+    // 3) Sinon : premier template par défaut, sinon le premier de la liste.
+    if (selected == null && _templates.isNotEmpty) {
       selected = _templates.firstWhere(
-        (t) => t.isDefault,
+        (t) => t.isDefault || _templates.indexOf(t) == 0,
         orElse: () => _templates.first,
       );
     }
+
     if (selected != null) {
       _selectedTemplate = await _applyCustomisation(selected);
     }

@@ -1,4 +1,5 @@
 // lib/screens/auth/register_screen.dart
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -137,7 +138,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Rejoignez NOI OHADA Invoice Pro',
+                        'Rejoignez NOI Invoice Pro',
                         style: TextStyle(fontSize: 13, color: sub, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 28),
@@ -226,11 +227,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  'J\'accepte les conditions d\'utilisation',
-                                  style: TextStyle(fontSize: 13, color: sub, fontWeight: FontWeight.w500),
+                                child: RichText(
+                                  text: TextSpan(
+                                    text: 'J\'accepte les ',
+                                    style: TextStyle(color: sub, fontSize: 13),
+                                    children: [
+                                      TextSpan(
+                                        text: 'conditions d\'utilisation',
+                                        style: TextStyle(color: primary, fontWeight: FontWeight.bold),
+                                        recognizer: TapGestureRecognizer()..onTap = () => context.go('/support/legal/mentions'),
+                                      ),
+                                      const TextSpan(text: ' et la ', style: TextStyle(fontWeight: FontWeight.normal)),
+                                      TextSpan(
+                                        text: 'politique de confidentialité',
+                                        style: TextStyle(color: primary, fontWeight: FontWeight.bold),
+                                        recognizer: TapGestureRecognizer()..onTap = () => context.go('/support/legal/privacy'),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ), 
                             ],
                           ),
                         ),

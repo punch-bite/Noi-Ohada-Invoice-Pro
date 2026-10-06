@@ -24,10 +24,12 @@ class Invoice {
   @HiveField(13) final String terms;
   @HiveField(14) final bool isDevis;
   @HiveField(15) final String notes;
-  @HiveField(19) final bool isSynced; // 🔥 Flag local/cloud
-  @HiveField(16) final DateTime? syncedAt;
-  @HiveField(17) final DateTime updatedAt; // Champ critique pour la synchro
-  @HiveField(18) final DateTime createdAt; // Date de création (quotas mensuels)
+  @HiveField(16) final String? userId;
+  @HiveField(17) final bool isSynced; // 🔥 Flag local/cloud
+  @HiveField(18) final DateTime? syncedAt;
+  @HiveField(19) final DateTime updatedAt; // Champ critique pour la synchro
+  @HiveField(20) final DateTime createdAt; // Date de création (quotas mensuels)
+  @HiveField(21) final String? templateId; // Modèle actif utilisé pour cette facture
 
   Invoice({
     String? id,
@@ -46,8 +48,10 @@ class Invoice {
     this.terms = 'Paiement à 30 jours',
     this.isDevis = false,
     this.notes = '',
+    this.userId,
     this.syncedAt,
     this.isSynced = false,
+    this.templateId,
     DateTime? updatedAt,
     DateTime? createdAt,
   }) : id = id ?? const Uuid().v4(),
@@ -72,10 +76,12 @@ class Invoice {
       'terms': terms,
       'isDevis': isDevis,
       'notes': notes,
+      'userId': userId ?? '',
       'isSynced': isSynced,
       'syncedAt': syncedAt != null ? Timestamp.fromDate(syncedAt!) : null,
       'updatedAt': Timestamp.fromDate(updatedAt),
       'createdAt': Timestamp.fromDate(createdAt),
+      'templateId': templateId,
     };
   }
 
@@ -97,10 +103,12 @@ class Invoice {
       terms: map['terms'] ?? 'Paiement à 30 jours',
       isDevis: map['isDevis'] ?? false,
       notes: map['notes'] ?? '',
+      userId: map['userId'],
       syncedAt: map['syncedAt'] != null ? _parseDateTime(map['syncedAt']) : null,
       updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(),
       createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
       isSynced: map['isSynced'] ?? false,
+      templateId: map['templateId'],
     );
   }
 
@@ -119,7 +127,8 @@ class Invoice {
     DateTime? syncedAt,
     DateTime? dueDate,
     String? notes,
-    // ... autres champs
+    String? userId,
+    String? templateId,
   }) {
     return Invoice(
       id: id,
@@ -138,10 +147,12 @@ class Invoice {
       terms: terms,
       isDevis: isDevis,
       notes: notes ?? this.notes,
+      userId: userId ?? this.userId,
       syncedAt: syncedAt ?? this.syncedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       createdAt: createdAt,
       isSynced: isSynced ?? this.isSynced,
+      templateId: templateId ?? this.templateId,
     );
   }
 }

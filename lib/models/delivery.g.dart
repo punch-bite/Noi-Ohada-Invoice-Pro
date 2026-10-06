@@ -29,13 +29,14 @@ class DeliveryAdapter extends TypeAdapter<Delivery> {
       createdAt: fields[9] as DateTime?,
       completedAt: fields[10] as DateTime?,
       createdBy: fields[11] as String?,
+      userId: fields[12] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Delivery obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +60,9 @@ class DeliveryAdapter extends TypeAdapter<Delivery> {
       ..writeByte(10)
       ..write(obj.completedAt)
       ..writeByte(11)
-      ..write(obj.createdBy);
+      ..write(obj.createdBy)
+      ..writeByte(12)
+      ..write(obj.userId);
   }
 
   @override
