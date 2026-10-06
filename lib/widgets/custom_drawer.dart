@@ -262,7 +262,7 @@ class CustomDrawer extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'OHADA Invoice Pro v1.0.0',
+              'Noi Invoice Pro v1.0.0',
               style: TextStyle(
                 fontSize: 11,
                 color: isDark ? Colors.grey[600] : Colors.grey[400],
@@ -276,10 +276,10 @@ class CustomDrawer extends StatelessWidget {
 
   /// Partage un lien de téléchargement de l'application.
   static Future<void> _shareApp(BuildContext context) async {
-    const message = '🚀 Découvrez OHADA Invoice Pro — la facturation conforme '
+    const message = '🚀 Découvrez Noi Invoice Pro — la facturation conforme '
         'OHADA/SYSCOHADA : factures, devis, clients, stock, équipe et '
         'paiement Mobile Money (Orange / MTN / carte).\n\n'
-        '👉 Téléchargez-la : https://ohada-invoice-pro.com';
+        '👉 Téléchargez-la : https://noi-ohada-pwa.vercel.app';
     try {
       await SharePlus.instance.share(ShareParams(text: message));
     } catch (e) {
