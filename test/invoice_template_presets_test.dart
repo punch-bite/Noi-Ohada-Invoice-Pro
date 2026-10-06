@@ -18,8 +18,10 @@ import 'package:noi_ohada_invoice_pro/models/client.dart';
 import 'package:noi_ohada_invoice_pro/models/company.dart';
 import 'package:noi_ohada_invoice_pro/models/invoice.dart';
 import 'package:noi_ohada_invoice_pro/models/invoice_layout.dart';
+import 'package:noi_ohada_invoice_pro/models/invoice_settings.dart';
 import 'package:noi_ohada_invoice_pro/models/invoice_template.dart';
 import 'package:noi_ohada_invoice_pro/models/line_item.dart';
+import 'package:noi_ohada_invoice_pro/services/invoice_render_service.dart';
 import 'package:noi_ohada_invoice_pro/services/printing_service.dart';
 
 /// 🏢 Société émettrice minimale (sans logo : `showLogo` retombe sur un vide).
@@ -141,11 +143,39 @@ void main() {
       }
       expect(p['blocks_sections'], isA<List>(),
           reason: '${t.id} : « blocks_sections » manquant');
+        expect(p['header_sections'], isA<List>(),
+          reason: '${t.id} : « header_sections » manquant');
       expect(p['blocks_order'], isA<List>(),
           reason: '${t.id} : « blocks_order » manquant');
       expect(p['header_elements_order'], isA<List>(),
           reason: '${t.id} : « header_elements_order » manquant');
     }
+  });
+
+  test('les positions appliquées utilisent la priorité unique override > custom > template', () async {
+    final template = templates.first;
+    final customPositions = <String, dynamic>{
+      'header_style': 'band',
+      'table_style': 'zebra',
+      'custom_logo_base64': 'custom-logo',
+    };
+    final overridePositions = <String, dynamic>{
+      'header_style': 'dark',
+      'table_style': 'cards',
+      'footer_style': 'banner',
+    };
+
+    final resolved = await InvoiceRenderService.resolveRenderState(
+      template: template,
+      customPositions: customPositions,
+      overridePositions: overridePositions,
+      invoiceSettings: InvoiceSettings.defaultSettings,
+    );
+
+    expect(resolved.positions['header_style'], 'dark');
+    expect(resolved.positions['table_style'], 'cards');
+    expect(resolved.positions['footer_style'], 'banner');
+    expect(resolved.positions['custom_logo_base64'], 'custom-logo');
   });
 
   test('sections : blocs connus, sans doublon, cohérents avec visibilité', () {
@@ -185,6 +215,14 @@ void main() {
 
   test('en-tête : ordre complet, largeurs et alignements connus', () {
     for (final t in templates) {
+      final sections =
+        InvoiceTemplate.decodeSections(t.positions['header_sections']);
+      expect(sections, isNotEmpty, reason: '${t.id} : rangs d’en-tête absents');
+      final flattened = sections.expand((section) => section).toList();
+      expect(flattened.toSet(), hasLength(flattened.length),
+        reason: '${t.id} : élément d’en-tête dupliqué');
+      expect(_knownHeaderElements, containsAll(flattened),
+        reason: '${t.id} : élément d’en-tête inconnu');
       final order =
           List<String>.from(t.positions['header_elements_order'] as List);
       expect(order.toSet(), containsAll(_knownHeaderElements),

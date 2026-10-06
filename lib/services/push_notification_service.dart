@@ -20,10 +20,12 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../firebase_options.dart';
 import '../router/app_router.dart';
 
 /// 📢 Canal Android des notifications push (doit matcher le meta-data du
@@ -37,6 +39,11 @@ const String kPushChannelName = 'Notifications NOI OHADA Invoice Pro';
 /// affichés par le système ; ce hook sert de trace + data-only futur.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
   debugPrint('🔔 Push arrière-plan: ${message.messageId} / ${message.data}');
 }
 

@@ -23,6 +23,7 @@ import '../../providers/subscription_provider.dart';
 import '../../services/template_cart.dart';
 import '../../services/template_custom_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/invoice_render_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
@@ -96,40 +97,39 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   }
 
   Future<void> _loadData() async {
-    // 🧩 Personnalisations sauvegardées du modèle (positions drag & drop +
-    // fond image/préreéglage) — mêmes sources que le workspace et le PDF.
-    final custom = await TemplateCustomService.loadCustom(widget.template.id);
-    if (!mounted) return;
-    // 1️⃣ Affichage IMMÉDIAT avec le modèle brut (ne jamais bloquer l'aperçu
-    // sur le chargement des paramètres globaux).
-    // 🧩 Positions EFFECTIVES : personnalisation locale de l'utilisateur si
-    // elle existe, sinon celles embarquées dans le modèle (presets). Même
-    // priorité que l'impression, l'écran de détail et l'atelier.
-    final positions = InvoiceTemplate.effectivePositions(
-      customPositions: custom.positions,
-      templatePositions: widget.template.positions,
-    );
-    setState(() {
-      _positions = positions;
-      if (positions.isNotEmpty) {
-        _layoutConfig = InvoiceLayoutConfig.fromMap(positions);
-      }
-      _backgroundSettings = custom.background;
-      _isLoading = false;
-    });
-    // 2️⃣ Puis les paramètres globaux (couleurs / police / filigrane) sont
-    // appliqués en arrière-plan : le template effectif se met à jour.
     try {
-      final settings = await SettingsService.instance.loadSettings();
+      final render = await InvoiceRenderService.resolveRenderState(
+        template: widget.template,
+        invoiceSettings: await SettingsService.instance.loadSettings(),
+      );
       if (!mounted) return;
       setState(() {
-        _effectiveTemplate =
-            SettingsService.applyToTemplate(widget.template, settings);
-        _watermarkText = settings.watermarkText;
-        _showWatermark = settings.showWatermark;
+        _positions = render.positions;
+        if (_positions.isNotEmpty) {
+          _layoutConfig = InvoiceLayoutConfig.fromMap(_positions);
+        }
+        _backgroundSettings = render.backgroundSettings;
+        _effectiveTemplate = render.effectiveTemplate;
+        _watermarkText = render.watermarkText;
+        _showWatermark = render.showWatermark;
+        _isLoading = false;
       });
     } catch (_) {
-      // Repli silencieux : le design du modèle reste utilisé.
+      final custom = await TemplateCustomService.loadCustom(widget.template.id);
+      if (!mounted) return;
+      final positions = InvoiceTemplate.effectivePositions(
+        customPositions: custom.positions,
+        templatePositions: widget.template.positions,
+      );
+      setState(() {
+        _positions = positions;
+        if (positions.isNotEmpty) {
+          _layoutConfig = InvoiceLayoutConfig.fromMap(positions);
+        }
+        _backgroundSettings = custom.background;
+        _effectiveTemplate = widget.template;
+        _isLoading = false;
+      });
     }
   }
 

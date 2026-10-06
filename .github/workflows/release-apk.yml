@@ -172,12 +172,11 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
-            echo "✅ Keystore écrit dans $RUNNER_TEMP/upload-keystore.jks"
-          else
-            echo "⚠️ Secret KEYSTORE_BASE64 absent — build en signature DEBUG (non publiable)."
-          fi
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "Secret KEYSTORE_BASE64 manquant"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
+          test -s "$RUNNER_TEMP/upload-keystore.jks"
+          echo "✅ Keystore release décodé"
 
       - name: 🔐 Injecter les infos de signature dans local.properties
         env:
@@ -185,22 +184,21 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ] && [ -f "$RUNNER_TEMP/upload-keystore.jks" ]; then
-            {
-              echo "sdk.dir=$ANDROID_HOME"
-              echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")"
-              echo "release.keystore.storeFile=$RUNNER_TEMP/upload-keystore.jks"
-              echo "release.keystore.password=$KEYSTORE_PASSWORD"
-              echo "release.key.alias=$KEY_ALIAS"
-              echo "release.key.password=$KEY_PASSWORD"
-            } > android/local.properties
-            echo "✅ local.properties configuré pour signature RELEASE :"
-            # On affiche sans révéler les secrets (chemins + clés uniquement).
-            grep -vE 'password=|key.alias=|key.password=' android/local.properties
-            echo "  (mots de passe et alias masqués)"
-          else
-            echo "⚠️ Signatures incomplètes — le build utilisera la signature DEBUG."
-          fi
+          set -euo pipefail
+          test -n "$KEYSTORE_PASSWORD" || { echo "Secret KEYSTORE_PASSWORD manquant"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Secret KEY_ALIAS manquant"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Secret KEY_PASSWORD manquant"; exit 1; }
+          keytool -list -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "sdk.dir=$ANDROID_HOME"
+            echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")"
+            echo "release.keystore.storeFile=$RUNNER_TEMP/upload-keystore.jks"
+            echo "release.keystore.password=$KEYSTORE_PASSWORD"
+            echo "release.key.alias=$KEY_ALIAS"
+            echo "release.key.password=$KEY_PASSWORD"
+          } > android/local.properties
+          echo "✅ Keystore et alias vérifiés, signature RELEASE configurée"
 
       # ---------------- Build ----------------
       - name: 🏗️ Build APK (release, obfusqué)
@@ -306,6 +304,18 @@ jobs:
             exit 1
           fi
           echo "### ✅ Build AAB OK" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ✅ Vérifier APK et AAB signés
+        run: |
+          set -euo pipefail
+          APK=$(find build/app/outputs/flutter-apk -name '*.apk' -print -quit)
+          AAB=$(find build/app/outputs/bundle/release -name '*.aab' -print -quit)
+          test -n "$APK"
+          test -n "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          jarsigner -verify "$AAB" | grep -q 'jar verified.'
+          echo "✅ APK et AAB signés et vérifiés"
 
       - name: 📤 Upload artefact Android (APK)
         uses: actions/upload-artifact@v4
@@ -554,14 +564,6 @@ jobs:
 
       - name: 📋 Contenu à publier
         run: ls -laR dist || true
-
-      - name: ✅ Vérifier la signature APK (best effort)
-        run: |
-          # `apksigner` est parfois indisponible ; on ne bloque pas la
-          # publication si la vérification échoue.
-          (command -v apksigner >/dev/null 2>&1 && \
-            $ANDROID_HOME/build-tools/*/apksigner verify --print-certs dist/*.apk) \
-            || echo "Vérification de signature non exécutée"
 
       - name: 📦 Créer la GitHub Release + artefacts
         uses: softprops/action-gh-release@v2

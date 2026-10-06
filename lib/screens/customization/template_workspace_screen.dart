@@ -391,14 +391,42 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     _sectionsLayout = sections;
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({InvoiceTemplate? template}) async {
+    final selectedTemplate = template ?? _workingTemplate;
     final company = await _db.getCompany();
-    final loaded = await TemplateCustomService.loadCustom(widget.template.id);
+    final loaded = await TemplateCustomService.loadCustom(selectedTemplate.id);
 
     final mergedPositions = <String, dynamic>{
-      ...widget.template.positions,
+      ...selectedTemplate.positions,
       ...loaded.positions,
     };
+    final templateOverrides = mergedPositions['template_overrides'];
+    var effectiveTemplate = selectedTemplate;
+    if (templateOverrides is Map) {
+      int? colorValue(String key) {
+        final value = templateOverrides[key];
+        return value is num ? value.toInt() : null;
+      }
+
+      effectiveTemplate = selectedTemplate.copyWith(
+        primaryColor: colorValue('primaryColorValue') == null
+            ? null
+            : Color(colorValue('primaryColorValue')!),
+        textColor: colorValue('textColorValue') == null
+            ? null
+            : Color(colorValue('textColorValue')!),
+        backgroundColor: colorValue('backgroundColorValue') == null
+            ? null
+            : Color(colorValue('backgroundColorValue')!),
+        showLogo: templateOverrides['showLogo'] as bool?,
+        showTaxDetails: templateOverrides['showTaxDetails'] as bool?,
+        showPaymentTerms: templateOverrides['showPaymentTerms'] as bool?,
+        showPaymentQR: templateOverrides['showPaymentQR'] as bool?,
+        showBorder: templateOverrides['showBorder'] as bool?,
+        fontFamily: templateOverrides['fontFamily'] as String?,
+        fontSize: (templateOverrides['fontSize'] as num?)?.toDouble(),
+      );
+    }
 
     final templates = InvoiceTemplate.getDefaultTemplates();
     Uint8List? storedSignature;
@@ -410,24 +438,90 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     if (!mounted) return;
 
     setState(() {
-      _company = company;
+      _workingTemplate = effectiveTemplate;
+      _customFontSize =
+          ((mergedPositions['custom_font_size'] as num?) ?? selectedTemplate.fontSize)
+              .toDouble()
+              .clamp(6.0, 40.0);
+      _layoutConfig = InvoiceLayoutConfig.defaultLayout();
+      _headerSections = [
+        ['logo', 'company_info', 'invoice_title'],
+      ];
+      _sectionsLayout = [
+        ['billing_info', 'invoice_meta'],
+        ['items_table'],
+        ['totals'],
+        ['legal_mentions', 'signature_block', 'qr_block'],
+      ];
+      _blockVisibility
+        ..clear()
+        ..addAll({
+          'billing_info': true,
+          'invoice_meta': true,
+          'items_table': true,
+          'totals': true,
+          'legal_mentions': true,
+          'signature_block': true,
+          'qr_block': true,
+        });
+      _blockAlignment
+        ..clear()
+        ..addAll({
+          'billing_info': TextAlign.left,
+          'invoice_meta': TextAlign.right,
+          'items_table': TextAlign.left,
+          'totals': TextAlign.right,
+          'legal_mentions': TextAlign.left,
+          'signature_block': TextAlign.center,
+          'qr_block': TextAlign.center,
+        });
+      _blockWidth.clear();
+      _blockBg.clear();
+      _blockText.clear();
+      _blockFonts.clear();
+      _blockFontScales.clear();
+      _headerWidth.clear();
+      _headerAlign.clear();
+      _headerVisibility.clear();
+      _customTexts.clear();
+      _paragraphs.clear();
+      _titleExtraKeys = [];
+      _textSeq = 0;
+      _qrPosition = 'totals';
+      _customLegalText =
+          'Paiement sous 30 jours net. Pénalités de retard applicables selon normes SYSCOHADA.';
+      _stampText = 'PAYÉ';
+      _signatoryTitle = 'Direction Générale';
+      _showPaidStamp = true;
+      _showSignatureLine = true;
+      _signatureImageBytes = null;
+      _customLogoBytes = null;
+      _logoSize = 46;
+      _headerStyle = 'flat';
+      _tableStyle = 'plain';
+      _footerStyle = 'simple';
+      _accentBorder = '';
+      _showThankYou = false;
+      _thankYouText = 'Merci pour votre confiance !';
+      _bankName = '';
+      _bankAccount = '';
+      _invoiceTitleText = 'FACTURE';
+      _invoiceSubtitle = '';
       _companyName = company?.name ?? 'Noi Concept digital';
       _companyAddress = company?.address ?? 'Doww Essos Yaoundé Cameroun';
       _companyPhone = company?.phone ?? '+237620409383';
       _companyEmail = company?.email ?? 'contact@noiconcept.com';
+      _clientName = 'Client Exemple SARL';
+      _company = company;
 
       if (mergedPositions.isNotEmpty) {
         _layoutConfig = InvoiceLayoutConfig.fromMap(mergedPositions);
 
         // ── Header ──
         if (mergedPositions['header_sections'] is List) {
-          final raw = mergedPositions['header_sections'] as List;
-          final parsed = <List<String>>[];
-          for (final r in raw) {
-            if (r is List) {
-              parsed.add(List<String>.from(r.whereType<String>()));
-            }
-          }
+          final parsed = InvoiceTemplate.decodeSections(
+            mergedPositions['header_sections'],
+          );
           if (parsed.isNotEmpty) _headerSections = parsed;
         } else if (mergedPositions['header_elements_order'] is List) {
           _headerSections = [
@@ -663,6 +757,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     } catch (_) {}
   }
 
+  Future<void> _selectTemplate(InvoiceTemplate template) async {
+    if (template.id == _workingTemplate.id) return;
+    await _saveConfig();
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    await _loadData(template: template);
+  }
+
   // ── 📝 PARAGRAPHES ──
   List<_Paragraph> _paragraphsOf(String key) {
     if (!_paragraphs.containsKey(key)) {
@@ -854,6 +956,19 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     updatedPositions['show_paid_stamp'] = _showPaidStamp;
     updatedPositions['show_signature_line'] = _showSignatureLine;
     updatedPositions['logo_size'] = _logoSize;
+    updatedPositions['custom_font_size'] = _customFontSize;
+    updatedPositions['template_overrides'] = {
+      'primaryColorValue': _workingTemplate.primaryColorValue,
+      'textColorValue': _workingTemplate.textColorValue,
+      'backgroundColorValue': _workingTemplate.backgroundColorValue,
+      'showLogo': _workingTemplate.showLogo,
+      'showTaxDetails': _workingTemplate.showTaxDetails,
+      'showPaymentTerms': _workingTemplate.showPaymentTerms,
+      'showPaymentQR': _workingTemplate.showPaymentQR,
+      'showBorder': _workingTemplate.showBorder,
+      'fontFamily': _workingTemplate.fontFamily,
+      'fontSize': _workingTemplate.fontSize,
+    };
     updatedPositions['company_name'] = _companyName;
     updatedPositions['client_name'] = _clientName;
     updatedPositions['invoice_title_text'] = _invoiceTitleText;
@@ -892,42 +1007,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
       mapping: _workingTemplate.mapping,
       background: _background,
     );
-
-    try {
-      final t = _workingTemplate;
-      final s = _invoiceSettings;
-      final differs = s.primaryColorValue != t.primaryColorValue ||
-          s.textColorValue != t.textColorValue ||
-          s.backgroundColorValue != t.backgroundColorValue ||
-          s.fontFamily != t.fontFamily ||
-          s.fontSize != t.fontSize ||
-          s.showLogo != t.showLogo ||
-          s.showBorder != t.showBorder ||
-          s.showTaxDetails != t.showTaxDetails ||
-          s.showPaymentTerms != t.showPaymentTerms ||
-          s.showPaymentQR != t.showPaymentQR;
-      if (differs) {
-        _invoiceSettings = await SettingsService.instance
-            .updateSettings((cur) => cur.copyWith(
-                  primaryColor: t.primaryColor,
-                  textColor: t.textColor,
-                  backgroundColor: t.backgroundColor,
-                  fontFamily: t.fontFamily,
-                  fontSize: t.fontSize,
-                  showLogo: t.showLogo,
-                  showBorder: t.showBorder,
-                  showTaxDetails: t.showTaxDetails,
-                  showPaymentTerms: t.showPaymentTerms,
-                  showPaymentQR: t.showPaymentQR,
-                ));
-      }
-    } catch (e, st) {
-      debugPrint('⚠️ Sync InvoiceSettings (atelier) échouée: $e');
-      assert(() {
-        debugPrintStack(stackTrace: st);
-        return true;
-      }());
-    }
 
     if (!showFeedback || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -3578,6 +3657,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                 fontSize: (_customFontSize * 0.60).clamp(6.5, 9.0),
                 fontWeight: FontWeight.w700,
                 color: _onSurfaceVariant)),
+        if (_signatureImageBytes != null && _signatureImageBytes!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Image.memory(
+              _signatureImageBytes!,
+              width: 130,
+              height: 52,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          ),
         const SizedBox(height: 14),
         Container(
             width: 90,
@@ -3822,7 +3912,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
           final t = templates[i];
           final isSel = _workingTemplate.id == t.id;
           return GestureDetector(
-            onTap: () => setState(() => _workingTemplate = t),
+            onTap: () => _selectTemplate(t),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 76,
@@ -5013,6 +5103,78 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
     );
   }
 
+  void _applyComposition(String composition) {
+    final bodyBlocks = switch (composition) {
+      'hero' => <List<String>>[
+          ['billing_info'],
+          ['invoice_meta'],
+          ['items_table'],
+          ['legal_mentions', 'totals'],
+          ['signature_block'],
+        ],
+      'ledger' => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['legal_mentions', 'totals'],
+          ['signature_block'],
+        ],
+      'magazine' => <List<String>>[
+          ['invoice_meta'],
+          ['billing_info'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+      'compact' => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+      _ => <List<String>>[
+          ['billing_info', 'invoice_meta'],
+          ['items_table'],
+          ['totals'],
+          ['legal_mentions', 'signature_block'],
+        ],
+    };
+    final header = switch (composition) {
+      'hero' => <List<String>>[
+          ['logo'],
+          ['company_info', 'invoice_title'],
+        ],
+      'ledger' => <List<String>>[
+          ['logo', 'company_info', 'invoice_title'],
+        ],
+      'magazine' => <List<String>>[
+          ['logo', 'invoice_title'],
+          ['company_info'],
+        ],
+      'compact' => <List<String>>[
+          ['invoice_title', 'logo'],
+          ['company_info'],
+        ],
+      _ => <List<String>>[
+          ['logo', 'company_info'],
+          ['invoice_title'],
+        ],
+    };
+
+    final customBodyBlocks = _customTexts.keys
+        .where((key) => !_headerElements.contains(key))
+        .toList();
+    bodyBlocks.insertAll(
+      bodyBlocks.length - 1,
+      customBodyBlocks.map((key) => [key]),
+    );
+
+    setState(() {
+      _headerSections = header;
+      _sectionsLayout = bodyBlocks;
+    });
+    _saveConfig(showFeedback: true);
+  }
+
   void _showStyleSheet() {
     setState(() => _activeTool = 'style');
     showModalBottomSheet(
@@ -5049,6 +5211,29 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
                 ),
                 const SizedBox(height: 14),
+                _styleSectionTitle('Composition de la page'),
+                Text(
+                  'Choisissez une grille de départ, puis affinez-la par glisser-déposer.',
+                  style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ('editorial', 'Éditorial'),
+                    ('hero', 'Titre dominant'),
+                    ('ledger', 'Registre OHADA'),
+                    ('magazine', 'Magazine'),
+                    ('compact', 'Compact'),
+                  ].map((option) => ActionChip(
+                        avatar: const Icon(Icons.dashboard_customize_outlined,
+                            size: 16),
+                        label: Text(option.$2),
+                        onPressed: () => _applyComposition(option.$1),
+                      )).toList(),
+                ),
+                const SizedBox(height: 16),
                 _styleSectionTitle('En-tête'),
                 _styleChoices<String>(
                   current: _headerStyle,
@@ -5262,21 +5447,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                     return GestureDetector(
                       onTap: () {
                         setState(() {
-                          _workingTemplate = InvoiceTemplate(
-                            id: _workingTemplate.id,
-                            name: _workingTemplate.name,
-                            description: _workingTemplate.description,
-                            primaryColor: color,
-                            textColor: _workingTemplate.textColor,
-                            backgroundColor: _workingTemplate.backgroundColor,
-                            showLogo: _workingTemplate.showLogo,
-                            showTaxDetails: _workingTemplate.showTaxDetails,
-                            showPaymentTerms: _workingTemplate.showPaymentTerms,
-                            showPaymentQR: _workingTemplate.showPaymentQR,
-                            isPremium: _workingTemplate.isPremium,
-                            category: _workingTemplate.category,
-                            price: _workingTemplate.price,
-                          );
+                          _workingTemplate =
+                              _workingTemplate.copyWith(primaryColor: color);
                         });
                         setSS(() {});
                         _saveConfig();
@@ -5329,19 +5501,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   activeThumbColor: _primary,
                   onChanged: (val) {
                     setState(() {
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id,
-                        name: _workingTemplate.name,
-                        description: _workingTemplate.description,
-                        primaryColor: _workingTemplate.primaryColor,
-                        textColor: _workingTemplate.textColor,
-                        backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: val,
-                        showTaxDetails: _workingTemplate.showTaxDetails,
-                        showPaymentTerms: _workingTemplate.showPaymentTerms,
-                        showPaymentQR: _workingTemplate.showPaymentQR,
-                        isPremium: _workingTemplate.isPremium,
-                      );
+                      _workingTemplate = _workingTemplate.copyWith(showLogo: val);
                     });
                     setSS(() {});
                     _saveConfig();
@@ -5431,20 +5591,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   onChanged: (val) {
                     setState(() {
                       _customFontSize = val;
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id,
-                        name: _workingTemplate.name,
-                        description: _workingTemplate.description,
-                        primaryColor: _workingTemplate.primaryColor,
-                        textColor: _workingTemplate.textColor,
-                        backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: _workingTemplate.showLogo,
-                        showTaxDetails: _workingTemplate.showTaxDetails,
-                        showPaymentTerms: _workingTemplate.showPaymentTerms,
-                        showPaymentQR: _workingTemplate.showPaymentQR,
-                        fontSize: val,
-                        isPremium: _workingTemplate.isPremium,
-                      );
+                      _workingTemplate =
+                          _workingTemplate.copyWith(fontSize: val);
                     });
                     setSS(() => _customFontSize = val);
                     _saveConfig();
@@ -5764,18 +5912,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   activeThumbColor: _primary,
                   onChanged: (val) {
                     setState(() {
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id,
-                        name: _workingTemplate.name,
-                        description: _workingTemplate.description,
-                        primaryColor: _workingTemplate.primaryColor,
-                        textColor: _workingTemplate.textColor,
-                        backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: _workingTemplate.showLogo,
+                      _workingTemplate = _workingTemplate.copyWith(
                         showTaxDetails: val,
-                        showPaymentTerms: _workingTemplate.showPaymentTerms,
-                        showPaymentQR: _workingTemplate.showPaymentQR,
-                        isPremium: _workingTemplate.isPremium,
                       );
                     });
                     setSS(() {});
@@ -5788,18 +5926,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   activeThumbColor: _primary,
                   onChanged: (val) {
                     setState(() {
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id,
-                        name: _workingTemplate.name,
-                        description: _workingTemplate.description,
-                        primaryColor: _workingTemplate.primaryColor,
-                        textColor: _workingTemplate.textColor,
-                        backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: _workingTemplate.showLogo,
-                        showTaxDetails: _workingTemplate.showTaxDetails,
+                      _workingTemplate = _workingTemplate.copyWith(
                         showPaymentTerms: val,
-                        showPaymentQR: _workingTemplate.showPaymentQR,
-                        isPremium: _workingTemplate.isPremium,
                       );
                     });
                     setSS(() {});
@@ -5850,18 +5978,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen>
                   activeThumbColor: _primary,
                   onChanged: (val) {
                     setState(() {
-                      _workingTemplate = InvoiceTemplate(
-                        id: _workingTemplate.id,
-                        name: _workingTemplate.name,
-                        description: _workingTemplate.description,
-                        primaryColor: _workingTemplate.primaryColor,
-                        textColor: _workingTemplate.textColor,
-                        backgroundColor: _workingTemplate.backgroundColor,
-                        showLogo: _workingTemplate.showLogo,
-                        showTaxDetails: _workingTemplate.showTaxDetails,
-                        showPaymentTerms: _workingTemplate.showPaymentTerms,
+                      _workingTemplate = _workingTemplate.copyWith(
                         showPaymentQR: val,
-                        isPremium: _workingTemplate.isPremium,
                       );
                     });
                     setSS(() {});

@@ -155,7 +155,6 @@ class _DriveSyncScreenState extends State<DriveSyncScreen> {
     setState(() {
       _connected = false;
       _googleEmail = null;
-      _lastSyncLabel = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

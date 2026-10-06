@@ -23,8 +23,16 @@ workflows:
     scripts:
       - name: Décoder le Keystore JKS
         script: |
-          echo "Recréation du fichier de clé..."
-          echo $KEYSTORE_BASE64 | base64 --decode > android/app/upload-keystore.jks
+          set -eu
+          : "${KEYSTORE_BASE64:?Variable KEYSTORE_BASE64 manquante}"
+          : "${KEYSTORE_PASSWORD:?Variable KEYSTORE_PASSWORD manquante}"
+          : "${KEY_ALIAS:?Variable KEY_ALIAS manquante}"
+          : "${KEY_PASSWORD:?Variable KEY_PASSWORD manquante}"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          test -s android/app/upload-keystore.jks
+          keytool -list -keystore android/app/upload-keystore.jks \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          echo "✅ Keystore release et alias vérifiés"
 
       - name: Générer local.properties pour Gradle
         script: |
@@ -98,11 +106,15 @@ workflows:
 
       - name: Vérifier la signature
         script: |
-          if [ -f "android/app/upload-keystore.jks" ]; then
-            echo "✅ Keystore trouvé"
-          else
-            echo "⚠️ Keystore non trouvé, APK non signé"
-          fi
+          set -eu
+          APK=$(find build/app/outputs/flutter-apk -name '*.apk' -print -quit)
+          AAB=$(find build/app/outputs/bundle/release -name '*.aab' -print -quit)
+          test -n "$APK"
+          test -n "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          jarsigner -verify "$AAB" | grep -q 'jar verified.'
+          echo "✅ APK et AAB signés et vérifiés"
 
     artifacts:
       - build/app/outputs/flutter-apk/*.apk

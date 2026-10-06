@@ -35,8 +35,8 @@ import '../models/invoice_template.dart';
 import '../models/line_item.dart';
 import '../widgets/template_background_palette.dart';
 import 'invoice_layout_engine.dart' show A4Dimensions;
+import 'invoice_render_service.dart';
 import 'template_custom_service.dart';
-import 'settings_service.dart';
 
 class PrintingService {
   // ═════════════════════════════════════════════════════════════
@@ -281,35 +281,20 @@ class PrintingService {
     final pdf = pw.Document();
     final fonts = fontFamily ?? await _loadFontFamily();
 
-    final custom = await TemplateCustomService.loadCustom(template.id);
-    final settings =
-        invoiceSettings ?? await SettingsService.instance.loadSettings();
-    final effectiveTemplate =
-        SettingsService.applyToTemplate(template, settings);
+    final render = await InvoiceRenderService.resolveRenderState(
+      template: template,
+      customPositions: customPositions,
+      customMapping: customMapping,
+      backgroundSettings: customBackground,
+      invoiceSettings: invoiceSettings,
+    );
 
-    final positions = customPositions?.isNotEmpty == true
-        ? customPositions!
-        : InvoiceTemplate.effectivePositions(
-            customPositions: custom.positions,
-            templatePositions: template.positions,
-          );
-
-    final mapping = customMapping?.isNotEmpty == true
-        ? customMapping!
-        : <String, String>{
-            ...template.mapping,
-            ...custom.mapping,
-          };
-
-    final bgSettings = customBackground ?? custom.background;
-    Uint8List? bgBytes;
-    if (bgSettings.hasCustomImage) {
-      try {
-        bgBytes = base64Decode(bgSettings.fileData);
-      } catch (_) {
-        bgBytes = null;
-      }
-    }
+    final settings = render.invoiceSettings;
+    final effectiveTemplate = render.effectiveTemplate;
+    final positions = render.positions;
+    final mapping = render.mapping;
+    final bgSettings = render.backgroundSettings;
+    Uint8List? bgBytes = render.backgroundImage;
 
     final wantsNoBackground = customBackground != null &&
         !bgSettings.hasCustomImage &&
@@ -345,6 +330,21 @@ class PrintingService {
     }
 
     final blockConfig = _blockLayoutFromCustom(positions);
+    final blockFonts = <String, pw.Font>{};
+    final rawBlockFonts = positions['block_fonts'];
+    if (rawBlockFonts is Map) {
+      for (final rawName in rawBlockFonts.values) {
+        final name = rawName?.toString() ?? '';
+        if (name.isEmpty || blockFonts.containsKey(name)) continue;
+        try {
+          final assetName = name == 'Roboto' ? 'Roboto-Regular' : name;
+          final data = await rootBundle.load('assets/fonts/$assetName.ttf');
+          blockFonts[name] = pw.Font.ttf(data);
+        } catch (e) {
+          debugPrint('⚠️ Police PDF $name indisponible: $e');
+        }
+      }
+    }
 
     List<List<String>>? workspaceSections;
     Map<String, bool>? workspaceVisibility;
@@ -382,7 +382,10 @@ class PrintingService {
             italic: fonts.medium,
             boldItalic: fonts.bold,
           ),
-          margin: margin,
+          // Les layouts WYSIWYG calculent leurs coordonnées sur toute la page
+          // A4 et appliquent déjà leur propre padding. Une marge de Page ici
+          // décalerait les positions et rétrécirait une seconde fois la grille.
+          margin: pw.EdgeInsets.zero,
           build: (pw.Context context) {
             if (workspaceSections != null) {
               return _buildWorkspaceBlocksPdf(
@@ -394,6 +397,7 @@ class PrintingService {
                 template: effectiveTemplate,
                 mapping: mapping,
                 customPositions: positions,
+                blockFonts: blockFonts,
                 background: background,
                 settings: settings,
                 isFreePlan: isFreePlan,
@@ -835,10 +839,20 @@ class PrintingService {
 
     final elts = _workspaceBlockElements[key];
     if (elts != null) {
-      final alignEnd = key == 'totals';
+      final alignmentMap = customPositions['block_alignment'];
+      final configuredAlignment = alignmentMap is Map
+          ? alignmentMap[key]?.toString()
+          : null;
+      final crossAxisAlignment = switch (configuredAlignment) {
+        'center' => pw.CrossAxisAlignment.center,
+        'right' => pw.CrossAxisAlignment.end,
+        'left' => pw.CrossAxisAlignment.start,
+        _ => key == 'totals'
+            ? pw.CrossAxisAlignment.end
+            : pw.CrossAxisAlignment.start,
+      };
       return pw.Column(
-        crossAxisAlignment:
-            alignEnd ? pw.CrossAxisAlignment.end : pw.CrossAxisAlignment.start,
+        crossAxisAlignment: crossAxisAlignment,
         children: [
           for (final e in elts)
             _pdfElement(e, invoice, client, company, template,
@@ -872,6 +886,7 @@ class PrintingService {
     required InvoiceTemplate template,
     required Map<String, String> mapping,
     required Map<String, dynamic> customPositions,
+    required Map<String, pw.Font> blockFonts,
     required pw.Widget? background,
     required InvoiceSettings settings,
     required bool isFreePlan,
@@ -933,6 +948,7 @@ class PrintingService {
         template,
         mapping: mapping,
         customPositions: customPositions,
+        blockFonts: blockFonts,
         fs: fs,
         text: text,
         sub: sub,
@@ -954,6 +970,7 @@ class PrintingService {
           template,
           mapping: mapping,
           customPositions: customPositions,
+          blockFonts: blockFonts,
           fs: fs,
           text: text,
           sub: sub,
@@ -1255,6 +1272,23 @@ class PrintingService {
     final PdfColor companyColor = coloredBg ? PdfColors.white : primary;
 
     final order = InvoiceTemplate.visibleHeaderElements(customPositions);
+    final visibleOrder = order.toSet();
+    final decodedSections =
+        InvoiceTemplate.decodeSections(customPositions['header_sections']);
+    final headerRows = <List<String>>[];
+    final assigned = <String>{};
+    for (final section in decodedSections) {
+      final row = section
+          .where((key) => visibleOrder.contains(key) && assigned.add(key))
+          .toList();
+      if (row.isNotEmpty) headerRows.add(row);
+    }
+    final missing = order.where((key) => assigned.add(key)).toList();
+    if (headerRows.isEmpty) {
+      headerRows.add(missing.isNotEmpty ? missing : order);
+    } else if (missing.isNotEmpty) {
+      headerRows.last.addAll(missing);
+    }
 
     double hweight(String k) {
       final m = customPositions['header_widths'];
@@ -1273,10 +1307,6 @@ class PrintingService {
       if (v == 'right' || (v == null && k == 'invoice_title')) return 1.0;
       return -1.0;
     }
-
-    final htotal = order.fold<double>(0, (a, k) => a + hweight(k));
-    final havail =
-        order.isEmpty ? 0.0 : contentW - gap * (order.length - 1);
 
     String companyName() {
       final o = customPositions['company_name'] as String?;
@@ -1377,23 +1407,33 @@ class PrintingService {
       }
     }
 
-    final rowChildren = <pw.Widget>[];
-    for (var i = 0; i < order.length; i++) {
-      final key = order[i];
-      if (i > 0) rowChildren.add(pw.SizedBox(width: gap));
-      final w = order.isEmpty ? contentW : havail * hweight(key) / htotal;
-      rowChildren.add(pw.SizedBox(
-        width: w,
-        child: pw.Align(
-          alignment: pw.Alignment(hdx(key), 0),
-          child: content(key),
-        ),
+    final rows = <pw.Widget>[];
+    for (final keys in headerRows) {
+      final htotal = keys.fold<double>(0, (a, k) => a + hweight(k));
+      final havail = contentW - gap * (keys.length - 1);
+      final rowChildren = <pw.Widget>[];
+      for (var i = 0; i < keys.length; i++) {
+        final key = keys[i];
+        if (i > 0) rowChildren.add(pw.SizedBox(width: gap));
+        final w = havail * hweight(key) / htotal;
+        rowChildren.add(pw.SizedBox(
+          width: w,
+          child: pw.Align(
+            alignment: pw.Alignment(hdx(key), 0),
+            child: content(key),
+          ),
+        ));
+      }
+      if (rows.isNotEmpty) rows.add(pw.SizedBox(height: 4));
+      rows.add(pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: rowChildren,
       ));
     }
 
-    final row = pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: rowChildren,
+    final row = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: rows,
     );
 
     // ✅ Wrap selon `header_style`.
@@ -1474,6 +1514,7 @@ class PrintingService {
     InvoiceTemplate template, {
     required Map<String, String> mapping,
     required Map<String, dynamic> customPositions,
+    required Map<String, pw.Font> blockFonts,
     required double fs,
     required PdfColor text,
     required PdfColor sub,
@@ -1525,6 +1566,47 @@ class PrintingService {
         text: kText,
         sub: kSub,
       );
+
+      if (cell != null) {
+        final rawScales = customPositions['block_font_scales'];
+        final rawScale = rawScales is Map ? rawScales[key] : null;
+        final scale = rawScale is num ? rawScale.toDouble().clamp(0.6, 1.8) : 1.0;
+        if (scale != 1.0) {
+          cell = pw.Transform(
+            transform: Matrix4.diagonal3Values(scale, scale, 1),
+            adjustLayout: true,
+            child: cell,
+          );
+        }
+        final rawFonts = customPositions['block_fonts'];
+        final fontName = rawFonts is Map ? rawFonts[key]?.toString() : null;
+        final font = fontName == null ? null : blockFonts[fontName];
+        if (font != null) {
+          cell = pw.Theme(
+            data: pw.ThemeData.withFont(
+              base: font,
+              bold: font,
+              italic: font,
+              boldItalic: font,
+            ),
+            child: cell,
+          );
+        }
+      }
+
+      final alignmentMap = customPositions['block_alignment'];
+      final alignmentName = alignmentMap is Map
+          ? alignmentMap[key]?.toString()
+          : null;
+      final cellAlignment = switch (alignmentName) {
+        'center' => pw.Alignment.center,
+        'right' => pw.Alignment.centerRight,
+        'left' => pw.Alignment.centerLeft,
+        _ => pw.Alignment.centerLeft,
+      };
+      if (cell != null) {
+        cell = pw.Align(alignment: cellAlignment, child: cell);
+      }
 
       final kBg = colorFrom('block_bg_colors', key);
       if (cell != null && kBg != null) {
@@ -1966,18 +2048,34 @@ class PrintingService {
 
     switch (id) {
       case 'logo':
-        if (!template.showLogo || company.logoPath.isEmpty) return null;
-        final bytes = _logoBytesFromPath(company.logoPath);
+        if (!template.showLogo) return null;
+        final customLogo = customPositions['custom_logo_base64'] as String?;
+        Uint8List? bytes;
+        if (customLogo != null && customLogo.isNotEmpty) {
+          try {
+            bytes = base64Decode(customLogo);
+          } catch (_) {
+            bytes = null;
+          }
+        }
+        bytes ??= _logoBytesFromPath(company.logoPath);
         if (bytes == null) return null;
+        final logoSize =
+            ((customPositions['logo_size'] as num?)?.toDouble() ?? 46.0)
+                .clamp(24.0, 100.0) *
+            (72 / 46);
         return pw.Image(
           pw.MemoryImage(bytes),
-          width: 72 * scale,
-          height: 72 * scale,
+          width: logoSize * scale,
+          height: logoSize * scale,
           fit: pw.BoxFit.contain,
         );
       case 'company_name':
+        final nameOverride = customPositions['company_name'] as String?;
         return pw.Text(
-          _sanitizeText(company.name),
+          _sanitizeText(nameOverride?.trim().isNotEmpty == true
+              ? nameOverride!.trim()
+              : company.name),
           style: pw.TextStyle(
             fontSize: 18 * scale,
             fontWeight: pw.FontWeight.bold,

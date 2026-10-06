@@ -11,14 +11,12 @@
 // ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
@@ -31,6 +29,8 @@ import '../../services/template_custom_service.dart';
 import '../../services/signature_service.dart';
 import '../../services/wallet_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/invoice_render_service.dart';
+import 'invoice_print_preview_screen.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_settings.dart';
 import '../../models/client.dart';
@@ -61,8 +61,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Company? _company;
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
-  List<InvoiceTemplate> _templates = [];
-
   List<Team> _cachedTeams = [];
 
   Uint8List? _previewBackground;
@@ -124,6 +122,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _loadTemplates() async {
+    final settings = await SettingsService.instance.loadSettings();
     final defaults = InvoiceTemplate.getDefaultTemplates();
     List<InvoiceTemplate> adminTemplates = [];
     try {
@@ -157,12 +156,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     InvoiceTemplate? applied;
     if (selected != null) {
-      applied = await _applyCustomisation(selected);
+      applied = await _applyCustomisation(selected, settings: settings);
     }
     if (!mounted) return;
 
     setState(() {
-      _templates = merged;
+      _invoiceSettings = settings;
       if (applied != null) _selectedTemplate = applied;
     });
   }
@@ -171,22 +170,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   /// de l'utilisateur (`custom.positions`). Garantit que les styles
   /// (`header_style`, `table_style`, etc.) du preset sont respectés tant
   /// que l'utilisateur n'a pas explicitement sauvegardé une personnalisation.
-  Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
-    final custom = await TemplateCustomService.loadCustom(template.id);
-
-    // ✅ Fusion ordonnée : preset d'abord, puis personnalisation user.
-    //    Les clés ABSENTES de la personnalisation gardent la valeur du preset.
-    final mergedPositions = <String, dynamic>{
-      ...template.positions,
-      ...custom.positions,
-    };
-
-    final applied = template.copyWith(
-      positions: mergedPositions,
-      mapping: {...template.mapping, ...custom.mapping},
+  Future<InvoiceTemplate> _applyCustomisation(
+    InvoiceTemplate template, {
+    required InvoiceSettings settings,
+  }) async {
+    final render = await InvoiceRenderService.resolveRenderState(
+      template: template,
+      invoiceSettings: settings,
     );
 
-    final positions = Map<String, dynamic>.from(mergedPositions);
+    final positions = Map<String, dynamic>.from(render.positions);
 
     // Signature : repli sur SignatureService si absente.
     if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
@@ -202,15 +195,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ? InvoiceLayoutConfig.fromMap(positions)
         : InvoiceLayoutConfig.defaultLayout();
 
-    _backgroundSettings = custom.background;
+    _backgroundSettings = render.backgroundSettings;
     _customPositions = positions;
 
-    final hasCustomImage = custom.background.hasCustomImage;
-    final hasPreset = custom.background.presetId.isNotEmpty &&
-        MultiBackgroundPreset.byId(custom.background.presetId) != null;
+    final hasCustomImage = render.backgroundSettings.hasCustomImage;
+    final hasPreset = render.backgroundSettings.presetId.isNotEmpty &&
+        MultiBackgroundPreset.byId(render.backgroundSettings.presetId) != null;
 
     if (hasCustomImage) {
-      _previewBackground = _safeDecodeImage(custom.background.fileData);
+      _previewBackground = render.backgroundImage;
     } else if (hasPreset) {
       _previewBackground = null;
     } else if (template.fileData.isNotEmpty && template.fileType != 'pdf') {
@@ -219,7 +212,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       _previewBackground = null;
     }
 
-    return applied;
+    return render.effectiveTemplate;
   }
 
   static Uint8List? _safeDecodeImage(String? data) {
@@ -310,28 +303,19 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Future<void> _previewAndPrint() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
-    final messenger = ScaffoldMessenger.of(context);
-    final freePlan = _isFreePlan();
-    try {
-      await PrintingService.printInvoice(
+    await context.push(
+      '/dashboard/invoices/${widget.invoiceId}/print',
+      extra: InvoicePrintPreviewArgs(
         invoice: _invoice!,
         client: _client!,
         company: _company!,
         template: _selectedTemplate!,
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
-        customBackground: _backgroundSettings,
-        isFreePlan: freePlan,
+        background: _backgroundSettings,
         invoiceSettings: _invoiceSettings,
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Erreur d\'impression: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+        isFreePlan: _isFreePlan(),
+      ),
+    );
   }
 
   Future<void> _shareInvoice() async {
@@ -346,18 +330,24 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         company: _company!,
         template: _selectedTemplate!,
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
         isFreePlan: freePlan,
         invoiceSettings: _invoiceSettings,
       );
-      final tempDir = await getTemporaryDirectory();
-      final file =
-          File('${tempDir.path}/facture_${_invoice!.invoiceNumber}.pdf');
-      await file.writeAsBytes(pdfData);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Facture ${_invoice!.invoiceNumber} - OHADA Invoice Pro',
+      final fileName =
+          '${_invoice!.isDevis ? "Devis" : "Facture"}_${_invoice!.invoiceNumber}.pdf';
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              pdfData,
+              mimeType: 'application/pdf',
+              name: fileName,
+            ),
+          ],
+          fileNameOverrides: [fileName],
+          text: 'Facture ${_invoice!.invoiceNumber} - OHADA Invoice Pro',
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -381,7 +371,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         company: _company!,
         template: _selectedTemplate!,
         customPositions: _customPositions,
-        customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
         isFreePlan: freePlan,
         invoiceSettings: _invoiceSettings,

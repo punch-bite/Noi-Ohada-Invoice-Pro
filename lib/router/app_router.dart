@@ -37,6 +37,7 @@ import '../screens/dashboard/client_detail_screen.dart';
 import '../screens/dashboard/invoices_screen.dart';
 import '../screens/dashboard/create_invoice_screen.dart';
 import '../screens/dashboard/invoice_detail_screen.dart';
+import '../screens/dashboard/invoice_print_preview_screen.dart';
 import '../screens/dashboard/suppliers/suppliers_screen.dart';
 import '../screens/dashboard/suppliers/create_supplier_screen.dart';
 
@@ -498,6 +499,18 @@ class AppRouter {
       GoRoute(
         path: '/dashboard/invoices/create',
         builder: (context, state) => const CreateInvoiceScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard/invoices/:id/print',
+        builder: (context, state) {
+          final args = state.extra;
+          if (args is InvoicePrintPreviewArgs) {
+            return InvoicePrintPreviewScreen(args: args);
+          }
+          return InvoiceDetailScreen(
+            invoiceId: state.pathParameters['id']!,
+          );
+        },
       ),
       GoRoute(
         path: '/dashboard/invoices/:id',

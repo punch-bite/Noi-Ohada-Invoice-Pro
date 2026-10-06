@@ -61,7 +61,6 @@ class GoogleDriveSyncService {
       'enabled': enabled,
       'folderId': folderId ?? '',
       'intervalDays': intervalDays,
-      'lastSyncAt': enabled ? FieldValue.serverTimestamp() : null,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

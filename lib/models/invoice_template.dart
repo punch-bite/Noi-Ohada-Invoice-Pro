@@ -374,7 +374,7 @@ class InvoiceTemplate {
     double pagePadding = 24.0,
     bool showWatermark = false,
     String watermarkText = 'OHADA Invoice Pro',
-    String qrPosition = 'standalone',
+    String qrPosition = 'totals',
     int stampColor = 0xFFBAAB6D,
     double stampX = 0.5,
     double stampY = 0.5,
@@ -391,6 +391,7 @@ class InvoiceTemplate {
     String bankAccount = '',
     String footerContact = '',
     // ✨ Position des blocs du corps
+    List<List<String>>? headerSections,
     List<List<String>>? customSections,
     Map<String, String> blockAlignment = const {
       'billing_info': 'left',
@@ -428,6 +429,9 @@ class InvoiceTemplate {
       ...InvoiceLayoutConfig.defaultLayout().toMap(),
       'blocks_sections': encodeSections(sections),
       'blocks_order': [for (final s in sections) ...s],
+      'header_sections': encodeSections(
+        headerSections ?? [List<String>.from(headerOrder)],
+      ),
       'block_visibility': Map<String, bool>.from(blockVisibility)
         ..['signature_block'] = showSignatureLine
         ..['qr_block'] = showQr,
@@ -496,6 +500,16 @@ class InvoiceTemplate {
           invoiceTitle: 'INVOICE',
           invoiceSubtitle: '',
           signatoryTitle: 'Authorised Sign',
+          headerSections: const [
+            ['logo', 'company_info'],
+            ['invoice_title'],
+          ],
+          customSections: const [
+            ['billing_info', 'invoice_meta'],
+            ['items_table'],
+            ['totals'],
+            ['legal_mentions', 'signature_block'],
+          ],
           headerStyle: 'band',
           tableStyle: 'zebra',
           footerStyle: 'contact',
@@ -533,6 +547,17 @@ class InvoiceTemplate {
           invoiceTitle: 'INVOICE',
           invoiceSubtitle: 'Invoice No · Due Date · Invoice Date',
           signatoryTitle: 'Authorized Signature',
+          headerSections: const [
+            ['logo'],
+            ['company_info', 'invoice_title'],
+          ],
+          customSections: const [
+            ['billing_info'],
+            ['invoice_meta'],
+            ['items_table'],
+            ['legal_mentions', 'totals'],
+            ['signature_block'],
+          ],
           headerStyle: 'zigzag',
           tableStyle: 'plain',
           footerStyle: 'banner',
@@ -568,6 +593,15 @@ class InvoiceTemplate {
           invoiceTitle: 'INVOICE',
           invoiceSubtitle: 'BILL TO',
           signatoryTitle: 'AUTHORIZED SIGN',
+          headerSections: const [
+            ['logo', 'company_info', 'invoice_title'],
+          ],
+          customSections: const [
+            ['billing_info', 'invoice_meta'],
+            ['items_table'],
+            ['legal_mentions', 'totals'],
+            ['signature_block'],
+          ],
           headerStyle: 'bar',
           tableStyle: 'plain',
           footerStyle: 'simple',
@@ -602,6 +636,17 @@ class InvoiceTemplate {
           invoiceTitle: 'Invoice',
           invoiceSubtitle: 'Invoice: 0001593 · Date: 01/05/2029',
           signatoryTitle: 'Director',
+          headerSections: const [
+            ['logo', 'invoice_title'],
+            ['company_info'],
+          ],
+          customSections: const [
+            ['invoice_meta'],
+            ['billing_info'],
+            ['items_table'],
+            ['totals'],
+            ['legal_mentions', 'signature_block'],
+          ],
           headerStyle: 'zigzag',
           tableStyle: 'plain',
           footerStyle: 'contact',
@@ -636,6 +681,15 @@ class InvoiceTemplate {
         positions: _presetPositions(
           invoiceTitle: 'Invoice',
           signatoryTitle: 'Authorized Sign',
+          headerSections: const [
+            ['company_info', 'invoice_title'],
+          ],
+          customSections: const [
+            ['billing_info', 'invoice_meta'],
+            ['items_table'],
+            ['legal_mentions', 'totals'],
+            ['signature_block'],
+          ],
           headerStyle: 'flat',
           tableStyle: 'zebra',
           footerStyle: 'simple',
@@ -670,6 +724,16 @@ class InvoiceTemplate {
         positions: _presetPositions(
           invoiceTitle: 'INVOICE',
           signatoryTitle: 'Signature',
+          headerSections: const [
+            ['logo', 'company_info', 'invoice_title'],
+          ],
+          customSections: const [
+            ['invoice_meta', 'billing_info'],
+            ['items_table'],
+            ['totals'],
+            ['legal_mentions'],
+            ['signature_block'],
+          ],
           headerStyle: 'flat',
           tableStyle: 'numbered',
           footerStyle: 'icons',
@@ -707,6 +771,16 @@ class InvoiceTemplate {
           invoiceTitle: 'INVOICE',
           invoiceSubtitle: 'Brand Slogan Here',
           signatoryTitle: 'Surname Here',
+          headerSections: const [
+            ['logo'],
+            ['company_info', 'invoice_title'],
+          ],
+          customSections: const [
+            ['billing_info', 'invoice_meta'],
+            ['items_table'],
+            ['totals', 'legal_mentions'],
+            ['signature_block'],
+          ],
           headerStyle: 'bar',
           tableStyle: 'plain',
           footerStyle: 'icons',
@@ -744,6 +818,16 @@ class InvoiceTemplate {
         positions: _presetPositions(
           invoiceTitle: 'INVOICE',
           signatoryTitle: 'Authorized Sign',
+          headerSections: const [
+            ['invoice_title', 'logo'],
+            ['company_info'],
+          ],
+          customSections: const [
+            ['billing_info', 'invoice_meta'],
+            ['items_table'],
+            ['totals'],
+            ['legal_mentions', 'signature_block'],
+          ],
           headerStyle: 'dark',
           tableStyle: 'cards',
           footerStyle: 'banner',
