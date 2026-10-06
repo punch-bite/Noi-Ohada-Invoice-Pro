@@ -74,7 +74,7 @@ class InvoiceTemplate {
   final double rating;
   final int designVersion;
 
-  static const int kRoyalDesignVersion = 2;
+  static const int kRoyalDesignVersion = 3;
 
   static bool presetPositionsNeedBackfill({
     required Map<String, dynamic>? storedPositions,
@@ -85,7 +85,7 @@ class InvoiceTemplate {
   }
 
   // ============================================================
-  //  🧩 SECTIONS DE BLOCS (compat Firestore)
+  //  🧩 SECTIONS DE BLOCS
   // ============================================================
   static const String kSectionSeparator = '|';
 
@@ -112,7 +112,6 @@ class InvoiceTemplate {
     return sections;
   }
 
-  /// 🧩 Positions effectives : custom > template.
   static Map<String, dynamic> effectivePositions({
     required Map<String, dynamic> customPositions,
     required Map<String, dynamic> templatePositions,
@@ -122,7 +121,7 @@ class InvoiceTemplate {
           : Map<String, dynamic>.from(templatePositions);
 
   // ============================================================
-  //  🧩 EN-TÊTE : éléments déplaçables
+  //  🧩 EN-TÊTE
   // ============================================================
   static const List<String> headerElements = [
     'logo',
@@ -206,9 +205,6 @@ class InvoiceTemplate {
     'Élégant',
     'Premium',
     'Corporate',
-    'Menthe',
-    'Marbre',
-    'Charbon',
   ];
 
   Color get primaryColor => Color(primaryColorValue);
@@ -355,19 +351,8 @@ class InvoiceTemplate {
   }
 
   // ============================================================
-  //  🧩 CONFIGURATION « positions » d'un modèle prédéfini
+  //  🧩 _presetPositions : génère TOUTES les clés de position/style
   // ============================================================
-  //
-  // 🔄 v3 : ajout des nouvelles clés exploitées par le `PrintingService` :
-  //   • `page_padding` — marge de page (24 par défaut)
-  //   • `show_watermark` — filigrane ON/OFF
-  //   • `watermark_text` — texte du filigrane
-  //   • `stamp_x/y/rotation/scale/color` — tampon PAYÉ déplaçable
-  //   • `qr_position` — 'standalone' | 'header' | 'footer'
-  //   • `signature_image` — base64 (rempli par SignatureService)
-  //
-  // Le preset reste un « document complet » exploitable directement par
-  // l'aperçu et le PDF, sans passer par l'atelier.
   static Map<String, dynamic> _presetPositions({
     required String invoiceTitle,
     String invoiceSubtitle = '',
@@ -386,7 +371,6 @@ class InvoiceTemplate {
       'company_info': 'left',
       'invoice_title': 'right',
     },
-    // ✅ Nouveaux paramètres
     double pagePadding = 24.0,
     bool showWatermark = false,
     String watermarkText = 'OHADA Invoice Pro',
@@ -396,39 +380,59 @@ class InvoiceTemplate {
     double stampY = 0.5,
     double stampRotation = -0.15,
     double stampScale = 1.0,
+    // ✨ Styles PRO
+    String headerStyle = 'flat',
+    String tableStyle = 'plain',
+    String footerStyle = 'simple',
+    String accentBorder = '',
+    bool showThankYou = false,
+    String thankYouText = 'Merci pour votre confiance !',
+    String bankName = '',
+    String bankAccount = '',
+    String footerContact = '',
+    // ✨ Position des blocs du corps
+    List<List<String>>? customSections,
+    Map<String, String> blockAlignment = const {
+      'billing_info': 'left',
+      'invoice_meta': 'right',
+      'items_table': 'left',
+      'totals': 'right',
+      'legal_mentions': 'left',
+      'signature_block': 'center',
+      'qr_block': 'center',
+    },
+    Map<String, double> blockWidths = const {},
+    Map<String, bool> blockVisibility = const {
+      'billing_info': true,
+      'invoice_meta': true,
+      'items_table': true,
+      'totals': true,
+      'legal_mentions': true,
+      'signature_block': true,
+      'qr_block': true,
+    },
   }) {
-    final sections = <List<String>>[
-      const ['billing_info', 'invoice_meta'],
-      const ['items_table'],
-      const ['totals'],
-      if (showQr) const ['qr_block'],
-      const ['legal_mentions'],
-      if (showSignatureLine) const ['signature_block'],
-    ];
+    // Sections par défaut : 2 colonnes (client + méta), items, totaux,
+    // mentions légales, signature.
+    final sections = customSections ??
+        <List<String>>[
+          const ['billing_info', 'invoice_meta'],
+          const ['items_table'],
+          const ['totals'],
+          if (showQr) const ['qr_block'],
+          const ['legal_mentions'],
+          if (showSignatureLine) const ['signature_block'],
+        ];
 
     return <String, dynamic>{
-      // Base identique à celle produite par l'atelier.
       ...InvoiceLayoutConfig.defaultLayout().toMap(),
       'blocks_sections': encodeSections(sections),
       'blocks_order': [for (final s in sections) ...s],
-      'block_visibility': <String, bool>{
-        'billing_info': true,
-        'invoice_meta': true,
-        'items_table': true,
-        'totals': true,
-        'legal_mentions': true,
-        'signature_block': showSignatureLine,
-        'qr_block': showQr,
-      },
-      'block_alignment': const <String, String>{
-        'billing_info': 'left',
-        'invoice_meta': 'right',
-        'items_table': 'left',
-        'totals': 'right',
-        'legal_mentions': 'left',
-        'signature_block': 'center',
-        'qr_block': 'center',
-      },
+      'block_visibility': Map<String, bool>.from(blockVisibility)
+        ..['signature_block'] = showSignatureLine
+        ..['qr_block'] = showQr,
+      'block_alignment': Map<String, String>.from(blockAlignment),
+      'block_widths': Map<String, double>.from(blockWidths),
       'header_elements_order': List<String>.from(headerOrder),
       'header_widths': Map<String, double>.from(headerWidths),
       'header_alignments': Map<String, String>.from(headerAlignments),
@@ -440,7 +444,6 @@ class InvoiceTemplate {
       'show_paid_stamp': showPaidStamp,
       'show_signature_line': showSignatureLine,
       'qr_position': qrPosition,
-      // ✅ Nouvelles clés exploitées par le PrintingService.
       'page_padding': pagePadding,
       'show_watermark': showWatermark,
       'watermark_text': watermarkText,
@@ -449,22 +452,35 @@ class InvoiceTemplate {
       'stamp_y': stampY,
       'stamp_rotation': stampRotation,
       'stamp_scale': stampScale,
+      // ✨ Styles PRO
+      'header_style': headerStyle,
+      'table_style': tableStyle,
+      'footer_style': footerStyle,
+      'accent_border': accentBorder,
+      'show_thank_you': showThankYou,
+      'thank_you_text': thankYouText,
+      'bank_name': bankName,
+      'bank_account': bankAccount,
+      'footer_contact': footerContact,
     };
   }
 
   // ============================================================
-  //  MODÈLES PAR DÉFAUT
+  //  8 PRESETS — inspirés des images fournies
   // ============================================================
   static List<InvoiceTemplate> getDefaultTemplates() {
     return [
+      // ─────────────────────────────────────────────────────────
+      //  1. BANDE ORANGE — image 1 : bandeau orange haut-gauche,
+      //     titre noir à droite, zebra, footer contact orange
+      // ─────────────────────────────────────────────────────────
       InvoiceTemplate(
         id: 'default_1',
-        name: 'Améthyste',
-        description:
-            'Classique raffiné aux tons améthyste — conforme SYSCOHADA',
-        primaryColor: const Color.fromARGB(76, 48, 5, 70),
+        name: 'Bande Orange',
+        description: 'Bandeau orange — corporate dynamique',
+        primaryColor: const Color(0xFFF5A623),
         textColor: const Color(0xFF1E1A1F),
-        backgroundColor: const Color(0xFFFFF7FC),
+        backgroundColor: const Color(0xFFFFFFFF),
         fontSize: 12.5,
         fontFamily: 'WorkSans',
         isDefault: true,
@@ -474,186 +490,267 @@ class InvoiceTemplate {
         showBorder: false,
         category: 'Classique',
         price: 0,
-        rating: 4.5,
-        designVersion: 2,
+        rating: 4.6,
+        designVersion: 3,
         positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          signatoryTitle: 'Direction Générale',
+          invoiceTitle: 'INVOICE',
+          invoiceSubtitle: '',
+          signatoryTitle: 'Authorised Sign',
+          headerStyle: 'band',
+          tableStyle: 'zebra',
+          footerStyle: 'contact',
+          accentBorder: '',
+          showThankYou: true,
+          thankYouText: 'Thank You For Your Business',
+          bankName: 'Bank of Africa',
+          bankAccount: '123 456 789',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.6, 'invoice_title': 1.4},
         ),
       ),
+
+      // ─────────────────────────────────────────────────────────
+      //  2. MODERNE ZIGZAG — image 2 : bandeau diagonal orange/bleu,
+      //     footer banner, items plain
+      // ─────────────────────────────────────────────────────────
       InvoiceTemplate(
         id: 'default_2',
-        name: 'Moderne Violet',
-        description: 'Design contemporain, accents vifs et tableaux épurés',
-        primaryColor: const Color(0xFF6C3AED),
+        name: 'Moderne Zigzag',
+        description: 'Bandeau diagonal orange & bleu — moderne',
+        primaryColor: const Color(0xFF1B4965),
         textColor: const Color(0xFF1E1A1F),
-        backgroundColor: const Color(0xFFF5F3FF),
+        backgroundColor: const Color(0xFFFFFFFF),
         fontSize: 12.5,
         fontFamily: 'WorkSans',
         showLogo: true,
         showTaxDetails: true,
         showPaymentTerms: true,
-        showBorder: true,
+        showBorder: false,
         category: 'Moderne',
         price: 0,
-        rating: 4.0,
-        designVersion: 2,
+        rating: 4.7,
+        designVersion: 3,
         positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Document commercial',
-          signatoryTitle: 'Service Commercial',
+          invoiceTitle: 'INVOICE',
+          invoiceSubtitle: 'Invoice No · Due Date · Invoice Date',
+          signatoryTitle: 'Authorized Signature',
+          headerStyle: 'zigzag',
+          tableStyle: 'plain',
+          footerStyle: 'banner',
+          accentBorder: 'top',
+          bankName: 'Your Bank',
+          bankAccount: '000 000 000',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.4, 'invoice_title': 1.4},
         ),
       ),
+
+      // ─────────────────────────────────────────────────────────
+      //  3. CLASSIQUE OR — image 3 : bandeau or/black, cadre,
+      //     items plain, footer simple
+      // ─────────────────────────────────────────────────────────
       InvoiceTemplate(
         id: 'default_3',
-        name: 'Élégance Or',
-        description: 'Style sophistiqué champagne & or — idéal grands comptes',
-        primaryColor: const Color(0xFF6A5E28),
-        textColor: const Color(0xFF211B00),
-        backgroundColor: const Color(0xFFFDF8EC),
-        fontSize: 12.5,
+        name: 'Classique Or',
+        description: 'Or & noir — intemporel raffiné',
+        primaryColor: const Color(0xFFD4A017),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFFFF),
+        fontSize: 12.0,
         fontFamily: 'WorkSans',
         showLogo: true,
         showTaxDetails: true,
         showPaymentTerms: true,
         showBorder: false,
         category: 'Élégant',
-        price: 0,
+        price: 500,
         rating: 4.8,
-        designVersion: 2,
+        designVersion: 3,
         positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Prestige & Excellence',
-          signatoryTitle: 'La Direction',
+          invoiceTitle: 'INVOICE',
+          invoiceSubtitle: 'BILL TO',
+          signatoryTitle: 'AUTHORIZED SIGN',
+          headerStyle: 'bar',
+          tableStyle: 'plain',
+          footerStyle: 'simple',
+          accentBorder: 'frame',
+          bankName: 'Bank Details',
+          bankAccount: '1234 5678 90',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.6, 'invoice_title': 1.4},
         ),
       ),
+
+      // ─────────────────────────────────────────────────────────
+      //  4. BANDEAU BLEU — image 4 : vague orange/bleu, footer contact
+      // ─────────────────────────────────────────────────────────
       InvoiceTemplate(
         id: 'default_4',
-        name: 'Nuit Royale',
-        description: 'Encre bleutée & améthyste claire — édition premium',
-        primaryColor: const Color(0xFFE6B4FD),
-        textColor: const Color(0xFFF7EEF5),
-        backgroundColor: const Color(0xFF171216),
+        name: 'Bandeau Bleu',
+        description: 'Vagues bleu marine & or — élégance',
+        primaryColor: const Color(0xFF1B4965),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFFFF),
         fontSize: 12.5,
         fontFamily: 'WorkSans',
         showLogo: true,
         showTaxDetails: true,
         showPaymentTerms: true,
+        showBorder: false,
+        category: 'Moderne',
+        price: 0,
+        rating: 4.5,
+        designVersion: 3,
+        positions: _presetPositions(
+          invoiceTitle: 'Invoice',
+          invoiceSubtitle: 'Invoice: 0001593 · Date: 01/05/2029',
+          signatoryTitle: 'Director',
+          headerStyle: 'zigzag',
+          tableStyle: 'plain',
+          footerStyle: 'contact',
+          accentBorder: '',
+          bankName: 'Bank of Africa',
+          bankAccount: '0123 4567 8901',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.4, 'invoice_title': 1.6},
+        ),
+      ),
+
+      // ─────────────────────────────────────────────────────────
+      //  5. MINIMAL TWO-COL — image 5 : deux colonnes épurées,
+      //     zebra léger, footer simple
+      // ─────────────────────────────────────────────────────────
+      InvoiceTemplate(
+        id: 'default_5',
+        name: 'Minimal Two-Col',
+        description: 'Deux colonnes épurées — idéal freelances',
+        primaryColor: const Color(0xFFE67E22),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFFFF),
+        fontSize: 12.0,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        category: 'Classique',
+        price: 0,
+        rating: 4.4,
+        designVersion: 3,
+        positions: _presetPositions(
+          invoiceTitle: 'Invoice',
+          signatoryTitle: 'Authorized Sign',
+          headerStyle: 'flat',
+          tableStyle: 'zebra',
+          footerStyle: 'simple',
+          accentBorder: '',
+          bankName: 'Bank of America',
+          bankAccount: '14000 15661 4565',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.6, 'invoice_title': 1.4},
+        ),
+      ),
+
+      // ─────────────────────────────────────────────────────────
+      //  6. COMPACT PRO — image 6 : items numérotés, footer icônes,
+      //     merci en bas
+      // ─────────────────────────────────────────────────────────
+      InvoiceTemplate(
+        id: 'default_6',
+        name: 'Compact Pro',
+        description: 'Tableau numéroté & entête or — denses',
+        primaryColor: const Color(0xFFF5A623),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFFFF),
+        fontSize: 12.0,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        category: 'Corporate',
+        price: 0,
+        rating: 4.5,
+        designVersion: 3,
+        positions: _presetPositions(
+          invoiceTitle: 'INVOICE',
+          signatoryTitle: 'Signature',
+          headerStyle: 'flat',
+          tableStyle: 'numbered',
+          footerStyle: 'icons',
+          accentBorder: '',
+          showThankYou: true,
+          thankYouText: 'Thank you for business!',
+          bankName: 'Bank Name Here',
+          bankAccount: '00 000 000 000',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.6, 'invoice_title': 1.4},
+        ),
+      ),
+
+      // ─────────────────────────────────────────────────────────
+      //  7. CARTE DORÉE — image 7 : bandeau or, footer icônes,
+      //     items plain, merci centré
+      // ─────────────────────────────────────────────────────────
+      InvoiceTemplate(
+        id: 'default_7',
+        name: 'Carte Dorée',
+        description: 'Bandeau or & pied icônes — discrète élégance',
+        primaryColor: const Color(0xFFE8A33D),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFBF2),
+        fontSize: 12.0,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showBorder: false,
+        category: 'Élégant',
+        price: 500,
+        rating: 4.7,
+        designVersion: 3,
+        positions: _presetPositions(
+          invoiceTitle: 'INVOICE',
+          invoiceSubtitle: 'Brand Slogan Here',
+          signatoryTitle: 'Surname Here',
+          headerStyle: 'bar',
+          tableStyle: 'plain',
+          footerStyle: 'icons',
+          accentBorder: '',
+          showThankYou: true,
+          thankYouText: 'Thank you for business!',
+          bankName: 'BANK NAME',
+          bankAccount: '00000000',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.4, 'invoice_title': 1.6},
+        ),
+      ),
+
+      // ─────────────────────────────────────────────────────────
+      //  8. BANDEAU SOMBRE — image 8 : header navy, cards, footer banner
+      // ─────────────────────────────────────────────────────────
+      InvoiceTemplate(
+        id: 'default_8',
+        name: 'Bandeau Sombre',
+        description: 'Header navy profond — premium moderne',
+        primaryColor: const Color(0xFF0F2027),
+        textColor: const Color(0xFF1E1A1F),
+        backgroundColor: const Color(0xFFFFFFFF),
+        fontSize: 12.5,
+        fontFamily: 'WorkSans',
+        showLogo: true,
+        showTaxDetails: true,
+        showPaymentTerms: true,
+        showPaymentQR: false,
         showBorder: false,
         isPremium: true,
         category: 'Premium',
-        price: 500,
-        rating: 5.0,
-        designVersion: 2,
-        positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Édition Premium',
-          signatoryTitle: 'Direction Générale',
-          showWatermark: true,
-          watermarkText: 'ÉDITION PREMIUM',
-        ),
-      ),
-      InvoiceTemplate(
-        id: 'default_5',
-        name: 'Saphir Corporate',
-        description:
-            'Autorité et confiance — design institutionnel bleu saphir',
-        primaryColor: const Color(0xFF1E3A8A),
-        textColor: const Color(0xFF1E1A1F),
-        backgroundColor: const Color(0xFFEFF6FF),
-        fontSize: 12.5,
-        fontFamily: 'WorkSans',
-        showLogo: true,
-        showTaxDetails: true,
-        showPaymentTerms: true,
-        showBorder: true,
-        category: 'Corporate',
-        price: 1000,
-        rating: 4.3,
-        designVersion: 2,
-        positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Société & Institution',
-          signatoryTitle: 'La Direction Générale',
-        ),
-      ),
-      InvoiceTemplate(
-        id: 'default_6',
-        name: 'Menthe Royale',
-        description: 'Fraîcheur émeraude — apaisant, naturel et élégant',
-        primaryColor: const Color(0xFF059669),
-        textColor: const Color(0xFF0F2E1D),
-        backgroundColor: const Color(0xFFF0FDF4),
-        fontSize: 12.5,
-        fontFamily: 'WorkSans',
-        showLogo: true,
-        showTaxDetails: true,
-        showPaymentTerms: true,
-        showPaymentQR: true,
-        showBorder: false,
-        category: 'Menthe',
-        price: 0,
-        rating: 4.6,
-        designVersion: 2,
-        positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Paiement par QR sécurisé',
-          showQr: true,
-          signatoryTitle: 'Service Comptabilité',
-          qrPosition: 'standalone',
-        ),
-      ),
-      InvoiceTemplate(
-        id: 'default_7',
-        name: 'Marbre Perle',
-        description: 'Subtilité marbre — papier perle et fins reliefs',
-        primaryColor: const Color(0xFF334155),
-        textColor: const Color(0xFF0F172A),
-        backgroundColor: const Color(0xFFF8FAFC),
-        fontSize: 12.5,
-        fontFamily: 'WorkSans',
-        showLogo: true,
-        showTaxDetails: true,
-        showPaymentTerms: true,
-        showPaymentQR: true,
-        showBorder: false,
-        category: 'Marbre',
-        price: 500,
-        rating: 4.7,
-        designVersion: 2,
-        positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Paiement par QR sécurisé',
-          showQr: true,
-          signatoryTitle: 'Direction Financière',
-          qrPosition: 'footer',
-        ),
-      ),
-      InvoiceTemplate(
-        id: 'default_8',
-        name: 'Obsidienne',
-        description: 'Contraste nocturne profond, accents ambre & or',
-        primaryColor: const Color(0xFFF3E29F),
-        textColor: const Color(0xFFF7EEF5),
-        backgroundColor: const Color(0xFF0B0E14),
-        fontSize: 12.5,
-        fontFamily: 'WorkSans',
-        showLogo: true,
-        showTaxDetails: true,
-        showPaymentTerms: true,
-        showBorder: false,
-        isPremium: true,
-        category: 'Charbon',
         price: 1000,
         rating: 4.9,
-        designVersion: 2,
+        designVersion: 3,
         positions: _presetPositions(
-          invoiceTitle: 'FACTURE',
-          invoiceSubtitle: 'Édition Signature',
-          signatoryTitle: 'Direction Générale',
-          showWatermark: true,
-          watermarkText: 'SIGNATURE',
-          stampColor: 0xFFF3E29F,
+          invoiceTitle: 'INVOICE',
+          signatoryTitle: 'Authorized Sign',
+          headerStyle: 'dark',
+          tableStyle: 'cards',
+          footerStyle: 'banner',
+          accentBorder: 'top',
+          showThankYou: true,
+          thankYouText: 'Thank you for your business',
+          headerWidths: const {'logo': 1.0, 'company_info': 1.6, 'invoice_title': 1.4},
         ),
       ),
     ];

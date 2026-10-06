@@ -59,11 +59,20 @@ class Plan {
   @HiveField(17)
   final bool hasClientRelance;
 
-  /// Limite de fournisseurs (-1 = illimité). Ajouté avec @HiveField(18) :
-  /// les données Hive existantes sans ce champ tombent sur la valeur par
-  /// défaut via le cast null-safe de PlanAdapter.
   @HiveField(18)
   final int maxSuppliers;
+
+  /// 🎨 Couleur HEX d'accent (badge, gradient, icône). Stockée comme int.
+  @HiveField(19)
+  final int accentColorValue;
+
+  /// 🏷️ Slogan court affiché sous le nom (ex: "Pour bien démarrer").
+  @HiveField(20)
+  final String tagline;
+
+  /// 🎁 Nombre de relances clients incluses par mois (-1 = illimité).
+  @HiveField(21)
+  final int maxMonthlyRelances;
 
   Plan({
     required this.id,
@@ -85,7 +94,15 @@ class Plan {
     this.features = const [],
     this.isPopular = false,
     this.isActive = true,
+    this.accentColorValue = 0xFF4338CA,
+    this.tagline = '',
+    this.maxMonthlyRelances = 0,
   });
+
+  // ─── Color getter (utilisable côté UI) ───
+  // ignore: avoid_getters_with_parameter
+  // (défini ici pour simplifier le code UI)
+  int get accentColorInt => accentColorValue;
 
   Map<String, dynamic> toMap() {
     return {
@@ -108,6 +125,9 @@ class Plan {
       'features': features,
       'isPopular': isPopular,
       'isActive': isActive,
+      'accentColorValue': accentColorValue,
+      'tagline': tagline,
+      'maxMonthlyRelances': maxMonthlyRelances,
     };
   }
 
@@ -132,6 +152,11 @@ class Plan {
       features: List<String>.from(map['features'] ?? []),
       isPopular: map['isPopular'] ?? false,
       isActive: map['isActive'] ?? true,
+      accentColorValue:
+          (map['accentColorValue'] as num?)?.toInt() ?? 0xFF4338CA,
+      tagline: map['tagline'] ?? '',
+      maxMonthlyRelances:
+          (map['maxMonthlyRelances'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -155,6 +180,9 @@ class Plan {
     List<String>? features,
     bool? isPopular,
     bool? isActive,
+    int? accentColorValue,
+    String? tagline,
+    int? maxMonthlyRelances,
   }) {
     return Plan(
       id: id ?? this.id,
@@ -176,13 +204,23 @@ class Plan {
       features: features ?? this.features,
       isPopular: isPopular ?? this.isPopular,
       isActive: isActive ?? this.isActive,
+      accentColorValue: accentColorValue ?? this.accentColorValue,
+      tagline: tagline ?? this.tagline,
+      maxMonthlyRelances: maxMonthlyRelances ?? this.maxMonthlyRelances,
     );
   }
 
   String getFormattedPrice() {
     if (price == 0) return 'Gratuit';
-    final priceStr = price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
+    final priceStr =
+        price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
     return '$priceStr $currency';
+  }
+
+  /// Prix sans devise (utile pour affichage stylisé).
+  String getPriceNumber() {
+    if (price == 0) return '0';
+    return price % 1 == 0 ? price.toStringAsFixed(0) : price.toStringAsFixed(2);
   }
 
   bool get isFree => price == 0;
@@ -196,11 +234,16 @@ class Plan {
   bool isUnlimitedProducts() => maxProducts <= 0;
   bool isUnlimitedSuppliers() => maxSuppliers <= 0;
 
+  // ═══════════════════════════════════════════════════════════
+  //  🎨 PLANS PRÉDÉFINIS
+  // ═══════════════════════════════════════════════════════════
+
   static Plan getFreePlan() {
     return Plan(
       id: 'free',
       name: 'Gratuit',
-      description: 'Pour démarrer avec OHADA Invoice Pro',
+      tagline: 'Découvrir',
+      description: 'Pour tester toutes les fonctionnalités essentielles.',
       price: 0.0,
       currency: 'XAF',
       interval: 'month',
@@ -219,11 +262,81 @@ class Plan {
         '3 produits',
         '2 fournisseurs',
         'Export PDF',
-        'Stockage Firestore',
         'Sauvegarde Google Drive',
       ],
       isPopular: false,
       isActive: true,
+      accentColorValue: 0xFF64748B, // slate
+    );
+  }
+
+  static Plan getStarterPlan() {
+    return Plan(
+      id: 'starter',
+      name: 'Starter',
+      tagline: 'Bien démarrer',
+      description: 'L\'essentiel pour les indépendants et artisans.',
+      price: 2800.0,
+      currency: 'XAF',
+      interval: 'month',
+      maxInvoices: 30,
+      maxClients: 20,
+      maxProducts: 10,
+      maxSuppliers: 5,
+      hasPdfExport: true,
+      hasCloudSync: false, // ❌ Pas de Firestore
+      hasTeamAccess: false,
+      maxTeamMembers: 0,
+      hasGoogleDriveSync: true,
+      hasClientRelance: false,
+      features: [
+        '30 factures / mois',
+        '20 clients',
+        '10 produits',
+        '5 fournisseurs',
+        'Export PDF illimité',
+        'Sauvegarde Google Drive',
+      ],
+      isPopular: false,
+      isActive: true,
+      accentColorValue: 0xFF06B6D4, // cyan
+    );
+  }
+
+  static Plan getEssentialPlan() {
+    return Plan(
+      id: 'essential',
+      name: 'Essentiel',
+      tagline: 'Recommandé',
+      description:
+          'Cloud + relances clients. Idéal pour les petits commerces.',
+      price: 3100.0,
+      currency: 'XAF',
+      interval: 'month',
+      maxInvoices: 60,
+      maxClients: 40,
+      maxProducts: 20,
+      maxSuppliers: 10,
+      hasPdfExport: true,
+      hasCloudSync: true, // ✅ Firestore multi-appareils
+      hasTeamAccess: false,
+      maxTeamMembers: 0,
+      hasGoogleDriveSync: true,
+      hasClientRelance: true,
+      maxMonthlyRelances: 50,
+      features: [
+        '60 factures / mois',
+        '40 clients',
+        '20 produits',
+        '10 fournisseurs',
+        'Export PDF illimité',
+        'Synchronisation cloud Firestore',
+        'Sauvegarde Google Drive',
+        '50 relances clients / mois',
+      ],
+      isPopular: true, // Le nouveau "best-seller" d'entrée
+      isActive: true,
+      accentColorValue: 0xFF10B981, // emerald
     );
   }
 
@@ -231,7 +344,8 @@ class Plan {
     return Plan(
       id: 'pro',
       name: 'Pro',
-      description: 'Pour les PME en croissance',
+      tagline: 'PME en croissance',
+      description: 'Pour les PME qui veulent aller plus vite.',
       price: 9900.0,
       currency: 'XAF',
       interval: 'month',
@@ -245,6 +359,7 @@ class Plan {
       maxTeamMembers: 0,
       hasGoogleDriveSync: true,
       hasClientRelance: true,
+      maxMonthlyRelances: -1,
       features: [
         'Factures illimitées',
         '200 clients',
@@ -253,10 +368,12 @@ class Plan {
         'Export PDF illimité',
         'Synchronisation cloud',
         'Sauvegarde Google Drive',
-        'Relance clients (email / WhatsApp / SMS)',
+        'Relances clients illimitées',
         'Support prioritaire',
       ],
-      isPopular: true,
+      isPopular: false,
+      isActive: true,
+      accentColorValue: 0xFF4338CA, // indigo
     );
   }
 
@@ -264,7 +381,8 @@ class Plan {
     return Plan(
       id: 'business',
       name: 'Business',
-      description: 'Pour les entreprises et équipes',
+      tagline: 'Entreprises & équipes',
+      description: 'Toutes les fonctionnalités, sans aucune limite.',
       price: 49000.0,
       currency: 'XAF',
       interval: 'year',
@@ -278,19 +396,29 @@ class Plan {
       maxTeamMembers: 20,
       hasGoogleDriveSync: true,
       hasClientRelance: true,
+      maxMonthlyRelances: -1,
       features: [
         'Tout le plan Pro',
-        'Clients / produits / fournisseurs / factures illimités',
+        'Factures / clients / produits illimités',
         'Module équipe (20 utilisateurs)',
         'Invitation par lien e-mail',
         'Sauvegarde Google Drive',
-        'Relance clients (email / WhatsApp / SMS)',
+        'Relances clients illimitées',
         'Support dédié 24/7',
       ],
+      isPopular: false,
+      isActive: true,
+      accentColorValue: 0xFFBAAB6D, // or royal
     );
   }
 
   static List<Plan> getDefaultPlans() {
-    return [getFreePlan(), getProPlan(), getBusinessPlan()];
+    return [
+      getFreePlan(),
+      getStarterPlan(),
+      getEssentialPlan(),
+      getProPlan(),
+      getBusinessPlan(),
+    ];
   }
 }

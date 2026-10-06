@@ -36,13 +36,16 @@ class PlanAdapter extends TypeAdapter<Plan> {
       features: (fields[12] as List).cast<String>(),
       isPopular: fields[13] as bool,
       isActive: fields[14] as bool,
+      accentColorValue: fields[19] as int,
+      tagline: fields[20] as String,
+      maxMonthlyRelances: fields[21] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, Plan obj) {
     writer
-      ..writeByte(19)
+      ..writeByte(22)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -80,7 +83,13 @@ class PlanAdapter extends TypeAdapter<Plan> {
       ..writeByte(17)
       ..write(obj.hasClientRelance)
       ..writeByte(18)
-      ..write(obj.maxSuppliers);
+      ..write(obj.maxSuppliers)
+      ..writeByte(19)
+      ..write(obj.accentColorValue)
+      ..writeByte(20)
+      ..write(obj.tagline)
+      ..writeByte(21)
+      ..write(obj.maxMonthlyRelances);
   }
 
   @override

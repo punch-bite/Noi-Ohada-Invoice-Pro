@@ -1,19 +1,13 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
 //
-// 🎨 Refonte « Aperçu Facture » — maquette Stitch
-//   • AppBar minimaliste : retour + « Aperçu » + bouton « sauver »
-//   • Canvas sombre contenant la facture A4 (`StitchA4InvoicePreview`)
-//   • Barre basse sombre : Éditer + Personnaliser (boutons ronds)
-//   • Toutes les actions : PDF/impression, partage, email, mentions légales,
-//     image de fond, modèles premium, suppression.
+// 🎨 Aperçu Facture — respecte les positions et styles de chaque preset.
 //
-// ✨ Corrections (voir historique) :
-//   - `_savePreview` distinct de `_previewAndPrint`
-//   - `_applyCustomisation` / `_persistBackground` ne perdent plus les positions
-//   - `_loadTemplates` regroupe toutes les mutations dans un `setState` unique
-//   - Navigation GoRouter sécurisée après fermeture de bottom sheets
-//   - Captures `messenger`/`navigator`/`router` avant tout `await`
-//   - Compatibilité `MultiBackgroundPreset` (catalogue multi-modèles)
+// ✅ Modification clé : `_applyCustomisation` fusionne les positions du
+//    preset (`template.positions`) avec celles de l'utilisateur
+//    (`custom.positions`), puis propage TOUTES les clés (`header_style`,
+//    `table_style`, `footer_style`, `accent_border`, `show_thank_you`,
+//    `bank_name`, `bank_account`) à l'aperçu et au PDF.
+//
 // ignore_for_file: dead_null_aware_expression, deprecated_member_use
 
 import 'dart:convert';
@@ -69,24 +63,19 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   InvoiceTemplate? _selectedTemplate;
   List<InvoiceTemplate> _templates = [];
 
-  // Équipes chargées pour le bottom sheet « Partager la facture ».
   List<Team> _cachedTeams = [];
 
-  // 🖼️ Arrière-plan personnalisé (workspace / modèle admin) pour l'aperçu.
   Uint8List? _previewBackground;
   TemplateBackgroundSettings _backgroundSettings =
       const TemplateBackgroundSettings();
 
-  /// 📐 Positions drag & drop du modèle actif (WYSIWYG avec l'impression PDF).
+  /// 📐 Positions effectives (preset + user) — contient TOUTES les clés
+  /// de style (`header_style`, `table_style`, `footer_style`, etc.).
   Map<String, dynamic> _customPositions = const {};
 
-  // 🧩 Layout drag & drop du modèle actif — partagé avec le workspace.
   InvoiceLayoutConfig _layoutConfig = InvoiceLayoutConfig.defaultLayout();
-
-  // 📦 Paramètres de facture (filigrane, couleurs…) — SettingsService.
   InvoiceSettings _invoiceSettings = InvoiceSettings.defaultSettings;
 
-  // 🔍 Zoom de l'aperçu papier.
   double _zoom = 1.0;
 
   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
@@ -103,9 +92,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  CHARGEMENT DES DONNÉES
+  //  CHARGEMENT
   // ============================================================
-
   Future<void> _loadData() async {
     if (mounted) setState(() => _isLoading = true);
     try {
@@ -135,9 +123,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-  /// ✅ Charge templates + sélection + personnalisation, puis un SEUL setState.
   Future<void> _loadTemplates() async {
-    // Fusion : templates par défaut + ceux créés par l'admin (boutique).
     final defaults = InvoiceTemplate.getDefaultTemplates();
     List<InvoiceTemplate> adminTemplates = [];
     try {
@@ -156,7 +142,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       ...adminTemplates,
     ];
 
-    // ✅ Modèle actif choisi (boutique / aperçu) — sélection persistante.
     final activeId = await TemplateSelectionService.getActiveTemplateId();
     if (!mounted) return;
 
@@ -170,7 +155,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
     }
 
-    // ✅ Applique la customisation AVANT setState.
     InvoiceTemplate? applied;
     if (selected != null) {
       applied = await _applyCustomisation(selected);
@@ -183,40 +167,41 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     });
   }
 
-  /// Applique les personnalisations locales (positions / mapping / fond).
-  /// ✅ N'écrase jamais des positions valides par du vide.
+  /// ✅ FUSIONNE les positions du preset (`template.positions`) avec celles
+  /// de l'utilisateur (`custom.positions`). Garantit que les styles
+  /// (`header_style`, `table_style`, etc.) du preset sont respectés tant
+  /// que l'utilisateur n'a pas explicitement sauvegardé une personnalisation.
   Future<InvoiceTemplate> _applyCustomisation(InvoiceTemplate template) async {
     final custom = await TemplateCustomService.loadCustom(template.id);
 
-    // ✅ Positions effectives : custom > template (jamais écraser par du vide).
-    final basePositions = InvoiceTemplate.effectivePositions(
-      customPositions: custom.positions,
-      templatePositions: template.positions,
-    );
+    // ✅ Fusion ordonnée : preset d'abord, puis personnalisation user.
+    //    Les clés ABSENTES de la personnalisation gardent la valeur du preset.
+    final mergedPositions = <String, dynamic>{
+      ...template.positions,
+      ...custom.positions,
+    };
+
     final applied = template.copyWith(
-      positions: basePositions,
+      positions: mergedPositions,
       mapping: {...template.mapping, ...custom.mapping},
     );
 
-    // 🖊️ Signature de l'émetteur (repli si le modèle n'en a pas).
-    final positions = Map<String, dynamic>.from(basePositions);
+    final positions = Map<String, dynamic>.from(mergedPositions);
+
+    // Signature : repli sur SignatureService si absente.
     if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
       try {
         final signatureBytes = await SignatureService().loadSignatureBytes();
         if (signatureBytes != null && signatureBytes.isNotEmpty) {
           positions['signature_image'] = base64Encode(signatureBytes);
         }
-      } catch (_) {
-        // Signature illisible : la facture reste imprimable sans image.
-      }
+      } catch (_) {}
     }
 
-    // ✅ Reconstruit le layout config.
     _layoutConfig = positions.isNotEmpty
         ? InvoiceLayoutConfig.fromMap(positions)
         : InvoiceLayoutConfig.defaultLayout();
 
-    // ✅ Background : priorité custom > preset multi > template > rien.
     _backgroundSettings = custom.background;
     _customPositions = positions;
 
@@ -227,7 +212,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (hasCustomImage) {
       _previewBackground = _safeDecodeImage(custom.background.fileData);
     } else if (hasPreset) {
-      // Le preset est rendu par le widget d'aperçu → pas d'image.
       _previewBackground = null;
     } else if (template.fileData.isNotEmpty && template.fileType != 'pdf') {
       _previewBackground = _safeDecodeImage(template.fileData);
@@ -238,7 +222,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     return applied;
   }
 
-  /// ✅ Décode une image base64 en bytes — jamais d'exception remontée.
   static Uint8List? _safeDecodeImage(String? data) {
     if (data == null || data.isEmpty) return null;
     try {
@@ -256,9 +239,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  NAVIGATION & PERSONNALISATION
+  //  NAVIGATION
   // ============================================================
-
   Future<void> _openTemplatePicker() async {
     await context.push('/templates/select');
     if (mounted) await _loadTemplates();
@@ -304,10 +286,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  IMPRESSION / SAUVEGARDE / PARTAGE
+  //  IMPRESSION / PARTAGE
   // ============================================================
-
-  /// ✅ Bouton « sauver » de l'AppBar : recharge les données et l'aperçu.
   Future<void> _savePreview() async {
     await _loadData();
     await _loadTemplates();
@@ -322,10 +302,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
+  bool _isFreePlan() {
+    final sub = context.read<SubscriptionProvider>();
+    return !sub.canAccessPremiumTemplates;
+  }
+
   Future<void> _previewAndPrint() async {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final freePlan = _isFreePlan();
     try {
       await PrintingService.printInvoice(
         invoice: _invoice!,
@@ -335,6 +321,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
+        isFreePlan: freePlan,
+        invoiceSettings: _invoiceSettings,
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -350,6 +338,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final freePlan = _isFreePlan();
     try {
       final pdfData = await PrintingService.generateInvoicePdf(
         invoice: _invoice!,
@@ -359,6 +348,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
+        isFreePlan: freePlan,
+        invoiceSettings: _invoiceSettings,
       );
       final tempDir = await getTemporaryDirectory();
       final file =
@@ -382,6 +373,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (_invoice == null || _client == null || _company == null) return;
     if (_selectedTemplate == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final freePlan = _isFreePlan();
     try {
       final pdfData = await PrintingService.generateInvoicePdf(
         invoice: _invoice!,
@@ -391,6 +383,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         customPositions: _customPositions,
         customMapping: _selectedTemplate!.mapping,
         customBackground: _backgroundSettings,
+        isFreePlan: freePlan,
+        invoiceSettings: _invoiceSettings,
       );
       final htmlBody = MailService.getInvoiceTemplate(
         _client!.name,
@@ -432,9 +426,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   // ============================================================
-  //  PARTAGE À L'ÉQUIPE
+  //  PARTAGE ÉQUIPE
   // ============================================================
-
   Future<void> _showShareDialog() async {
     if (_invoice == null) return;
 
@@ -692,7 +685,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         onPressed: selectedTeamId == null || selectedMembers.isEmpty
             ? null
             : () async {
-                // ✅ Captures AVANT le premier await.
                 final navigator = Navigator.of(sheetCtx);
                 final messenger = ScaffoldMessenger.of(context);
                 final invoiceId = _invoice?.id;
@@ -748,9 +740,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   // ============================================================
-  //  🎨 UI — Aperçu Facture (maquette Stitch)
+  //  BUILD
   // ============================================================
-
   @override
   Widget build(BuildContext context) {
     final c = RoyalScheme.of(context);
@@ -821,7 +812,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           Expanded(
             child: Stack(
               children: [
-                // Canvas scrollable contenant la facture A4.
                 Positioned.fill(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -835,7 +825,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     ),
                   ),
                 ),
-                // Bouton zoom flottant (haut droite, sous la barre).
                 Positioned(top: 10, right: 16, child: _zoomButton(c)),
               ],
             ),
@@ -846,7 +835,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// AppBar maquette : retour fin + « Aperçu » + « sauver » à droite.
   PreferredSizeWidget _appBar(RoyalScheme c) {
     return AppBar(
       backgroundColor: c.surface,
@@ -875,7 +863,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ),
       ),
       actions: [
-        // ✅ « sauver » : rafraîchit les données et l'aperçu.
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: TextButton(
@@ -898,7 +885,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             ),
           ),
         ),
-        // Menu contextuel « … ».
         PopupMenuButton<String>(
           icon: Icon(Icons.more_vert, color: c.onSurface, size: 22),
           onSelected: (value) {
@@ -953,12 +939,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// 🗑️ Suppression définitive de la facture.
   Future<void> _confirmDeleteInvoice() async {
     final invoice = _invoice;
     if (invoice == null) return;
 
-    // ✅ Captures AVANT tout await.
     final uid = context.read<AppAuthProvider>().user?.id ?? '';
     final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
@@ -1073,8 +1057,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-  /// Papier A4 : widget Stitch partagé, alimenté par la facture réelle et
-  /// les personnalisations sauvegardées du modèle actif.
+  /// ✅ Papier A4 : passe `_customPositions` (preset + custom fusionnés)
+  ///    à `StitchA4InvoicePreview` → styles du preset RESPECTÉS.
   Widget _buildInvoicePaper(RoyalScheme c) {
     final template = _selectedTemplate;
     final effective = template == null
@@ -1086,7 +1070,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       company: _company,
     );
 
-    // ✅ Détection fond : image custom OU preset multi-catalogue.
     final hasCustomImage =
         _backgroundSettings.hasCustomImage && _previewBackground != null;
     final hasPreset = _backgroundSettings.presetId.isNotEmpty &&
@@ -1095,7 +1078,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     return Column(
       children: [
-        // Bandeau du modèle actif (tap = changer de modèle).
         if (template != null) ...[
           GestureDetector(
             onTap: _openTemplatePicker,
@@ -1141,7 +1123,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             ),
           ),
         ],
-        // Papier de la facture.
         StitchA4InvoicePreview(
           data: stitchData,
           accentColor: effective?.primaryColor,
@@ -1158,6 +1139,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           backgroundImage: _previewBackground,
           watermarkText: _invoiceSettings.watermarkText,
           showWatermark: _invoiceSettings.showWatermark,
+          // ✅ TOUTES les clés de style (header_style, table_style, etc.)
+          //    sont transmises via cette map.
           customPositions: _customPositions,
         ),
         if (!hasDecoratedBg) ...[
@@ -1175,7 +1158,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Bouton zoom flottant (pilule translucide bordée).
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
@@ -1227,7 +1209,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Action de la barre basse : bouton rond + libellé (feedback tactile).
   Widget _bottomAction(
     RoyalScheme c, {
     required IconData icon,
@@ -1278,7 +1259,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// Barre basse sombre : Éditer + Personnaliser.
   Widget _buildBottomBar(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
@@ -1346,11 +1326,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     await _loadData();
   }
 
-  // ============================================================
-  //  MENU PERSONNALISATION
-  // ============================================================
-
-  /// Menu « Personnaliser » : workspace, image de fond, mention légale, modèles.
   void _openCustomizationMenu() {
     final c = RoyalScheme.of(context);
     showModalBottomSheet(
@@ -1453,7 +1428,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  // ✅ Navigation sécurisée après fermeture du bottom sheet (animation).
   Future<void> _openWorkspaceFromMenu(BuildContext sheetCtx) async {
     Navigator.pop(sheetCtx);
     await Future<void>.delayed(const Duration(milliseconds: 180));
@@ -1489,14 +1463,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  /// ✅ Ne perd JAMAIS les positions : utilise `_customPositions` effectif.
+  /// ✅ Ne perd JAMAIS les positions ni les clés de style.
   Future<void> _persistBackground(TemplateBackgroundSettings next) async {
     final template = _selectedTemplate;
     if (template == null) return;
 
     final custom = await TemplateCustomService.loadCustom(template.id);
 
-    // Positions effectives : _customPositions (résolues) > custom > template.
+    // ✅ Fusion : _customPositions (résolues) > custom > template
     final effectivePositions = _customPositions.isNotEmpty
         ? _customPositions
         : (custom.positions.isNotEmpty
@@ -1524,7 +1498,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     });
   }
 
-  /// 📜 Éditeur « Mention légale & conditions » — texte légal, RCCM, N° contrib.
   Future<void> _showLegalEditor() async {
     final company = _company;
     if (company == null || !mounted) return;
@@ -1611,7 +1584,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ),
       );
     } finally {
-      // ✅ Dispose garanti même si le sheet se ferme par swipe / tap extérieur.
       legalCtrl.dispose();
       rccmCtrl.dispose();
       taxCtrl.dispose();

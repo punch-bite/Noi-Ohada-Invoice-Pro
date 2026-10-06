@@ -1,5 +1,9 @@
 // lib/screens/subscription/subscription_screen.dart
+//
+// 🎨 Écran d'abonnement — refonte moderne avec sélection visuelle.
+
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/plan.dart';
@@ -23,9 +27,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   @override
   void initState() {
     super.initState();
+    // Sélectionne le plan "recommandé" par défaut
     _selectedPlan = _plans.firstWhere(
       (plan) => plan.isPopular,
-      orElse: () => _plans[1],
+      orElse: () => _plans.length > 2 ? _plans[2] : _plans.first,
     );
   }
 
@@ -36,348 +41,492 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final primaryColor = themeProvider.primaryColor;
     final textColor = themeProvider.textColor;
     final subTextColor = themeProvider.subTextColor;
-    final cardColor = themeProvider.cardColor;
     final bgColor = themeProvider.backgroundColor;
-    final shadowColor = themeProvider.shadowColor;
     final subscriptionProvider = context.watch<SubscriptionProvider>();
     final authProvider = context.watch<AppAuthProvider>();
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        title: Text(
-          'Abonnement',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: textColor),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // En-tête
-            Text(
-              'Choisissez le plan qui vous convient',
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // ── HERO ──
+          SliverAppBar(
+            backgroundColor: bgColor,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            pinned: true,
+            expandedHeight: 160,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  size: 20, color: textColor),
+              onPressed: () => context.pop(),
+            ),
+            title: Text(
+              'Abonnement',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
                 color: textColor,
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                letterSpacing: -0.4,
               ),
             ),
-            const SizedBox(height: 8),
-                        Text(
-              'Passez à la vitesse supérieure avec nos offres',
-              style: TextStyle(
-                fontSize: 14,
-                color: subTextColor,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Bannière de transparence sur le stockage des données
-            CloudStorageInfoBanner(
-              isFreePlan: _isFreePlan(subscriptionProvider),
-            ),
-            const SizedBox(height: 16),
-
-            // Plans
-            ..._plans.map((plan) => _buildPlanCard(
-              plan,
-              isDark,
-              textColor,
-              subTextColor,
-              primaryColor,
-              cardColor,
-              shadowColor,
-            )),
-            const SizedBox(height: 24),
-
-            // Bouton de souscription (dégradé indigo→violet + flèche)
-            Container(
-              width: double.infinity,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.35),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
+            centerTitle: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      primaryColor,
+                      primaryColor.withValues(alpha: 0.75),
+                      const Color(0xFF7C3AED),
+                    ],
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: _selectedPlan != null && !_selectedPlan!.isFree
-                      ? () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => PaymentScreen(
-                                plan: _selectedPlan!,
-                                onPaymentComplete: () {
-                                  // Recharger les données après paiement
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                      : _selectedPlan != null && _selectedPlan!.isFree
-                          ? () {
-                              _activateFreePlan(
-                                context,
-                                authProvider,
-                                subscriptionProvider,
-                                primaryColor,
-                              );
-                            }
-                          : null,
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 60, 24, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Text(
-                            _selectedPlan != null && _selectedPlan!.isFree
-                                ? 'Activer le plan gratuit'
-                                : 'Souscrire à ${_selectedPlan?.name ?? ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Passez à la vitesse\nsupérieure.',
+                          style: TextStyle(
+                            fontSize: 22,
+                            height: 1.2,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.6,
+                            color: Colors.white,
                           ),
-                        ),
-                        if (_selectedPlan != null &&
-                            !_selectedPlan!.isFree) ...[
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_rounded,
-                              color: Colors.white, size: 20),
-                        ],
+                        )
+                            .animate()
+                            .fadeIn(duration: 500.ms)
+                            .slideY(begin: 0.2, end: 0),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Des offres adaptées à chaque étape de votre activité.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                            .animate()
+                            .fadeIn(delay: 200.ms)
+                            .slideY(begin: 0.15, end: 0),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+          ),
 
-            const SizedBox(height: 16),
-
-            // Sécurité
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.lock_outline, size: 14, color: subTextColor),
-                const SizedBox(width: 6),
-                Text(
-                  'Paiement sécurisé via E-nkap • Données cryptées',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: subTextColor,
-                  ),
+          // ── CONTENU ──
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                CloudStorageInfoBanner(
+                  isFreePlan: _isFreePlan(subscriptionProvider),
                 ),
-              ],
+                const SizedBox(height: 20),
+                ..._plans.asMap().entries.map(
+                      (e) => _buildPlanCard(
+                        e.value,
+                        e.key,
+                        isDark,
+                        textColor,
+                        subTextColor,
+                        primaryColor,
+                      ),
+                    ),
+                const SizedBox(height: 8),
+                _buildCTA(authProvider, subscriptionProvider),
+                const SizedBox(height: 20),
+                _buildSecurityNote(subTextColor),
+              ]),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
+  // ═══════════════════════════════════════════════════════════
+  //  CARTE PLAN
+  // ═══════════════════════════════════════════════════════════
   Widget _buildPlanCard(
     Plan plan,
+    int index,
     bool isDark,
     Color textColor,
     Color subTextColor,
     Color primaryColor,
-    Color cardColor,
-    Color shadowColor,
   ) {
     final isSelected = _selectedPlan?.id == plan.id;
     final isPopular = plan.isPopular;
     final isFree = plan.isFree;
+    final accent = Color(plan.accentColorValue);
 
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedPlan = plan);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? primaryColor
-                : (isPopular
-                    ? primaryColor.withValues(alpha: 0.4)
-                    : (isDark ? Colors.grey[700]! : Colors.grey[200]!)),
-            width: isSelected ? 2 : (isPopular ? 1.5 : 1),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedPlan = plan),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.03)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? accent
+                  : isPopular
+                      ? accent.withValues(alpha: 0.4)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.05)),
+              width: isSelected ? 2 : (isPopular ? 1.5 : 1),
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.20),
+                      blurRadius: 22,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : null,
           ),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.18),
-                blurRadius: 24,
-                offset: const Offset(0, 6),
-              )
-            else if (isPopular)
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── En-tête ──
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                plan.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                  color: isSelected ? accent : textColor,
+                                ),
+                              ),
+                            ),
+                            if (isPopular) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: accent.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'RECOMMANDÉ',
+                                  style: TextStyle(
+                                    color: accent,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (plan.tagline.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            plan.tagline,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: accent,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: isSelected ? accent : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? accent
+                            : (isDark
+                                ? Colors.white.withValues(alpha: 0.2)
+                                : Colors.black.withValues(alpha: 0.15)),
+                        width: 2,
+                      ),
+                    ),
+                    child: isSelected
+                        ? const Icon(Icons.check_rounded,
+                            size: 14, color: Colors.white)
+                        : null,
+                  ),
+                ],
               ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // En-tête du plan
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        plan.name,
+              const SizedBox(height: 12),
+
+              // ── Description ──
+              Text(
+                plan.description,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                  color: subTextColor,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // ── Prix ──
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (isFree)
+                    Text(
+                      'Gratuit',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1,
+                        color: const Color(0xFF10B981),
+                      ),
+                    )
+                  else ...[
+                    Text(
+                      plan.getPriceNumber(),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1.2,
+                        height: 1,
+                        color: isSelected ? accent : textColor,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        'FCFA',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? primaryColor : textColor,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: (isSelected ? accent : textColor)
+                              .withValues(alpha: 0.7),
                         ),
                       ),
-                      Text(
-                        plan.description,
+                    ),
+                    const SizedBox(width: 5),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '/ ${plan.interval == 'year' ? 'an' : 'mois'}',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 11.5,
                           color: subTextColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // ── Features ──
+              ...plan.features.map(
+                (feature) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.check_circle_rounded,
+                          size: 15,
+                          color: isSelected
+                              ? accent
+                              : const Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          feature,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.4,
+                            color: subTextColor,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (isPopular)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: primaryColor.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      'POPULAIRE',
-                      style: TextStyle(
-                        color: primaryColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                if (isSelected)
-                  const SizedBox(width: 8),
-                if (isSelected)
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(
+          delay: Duration(milliseconds: 60 * index),
+          duration: 400.ms,
+        )
+        .slideY(
+          begin: 0.15,
+          end: 0,
+          delay: Duration(milliseconds: 60 * index),
+          duration: 400.ms,
+          curve: Curves.easeOutCubic,
+        );
+  }
 
-            // Prix
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  isFree ? 'Gratuit' : plan.getFormattedPrice(),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: isFree ? Colors.green[700] : primaryColor,
-                  ),
-                ),
-                if (!isFree) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    '/ ${plan.interval == 'year' ? 'an' : 'mois'}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: subTextColor,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
+  // ═══════════════════════════════════════════════════════════
+  //  CTA PRINCIPAL
+  // ═══════════════════════════════════════════════════════════
+  Widget _buildCTA(
+    AppAuthProvider authProvider,
+    SubscriptionProvider subscriptionProvider,
+  ) {
+    final isFree = _selectedPlan?.isFree ?? false;
+    final accent = _selectedPlan != null
+        ? Color(_selectedPlan!.accentColorValue)
+        : const Color(0xFF4338CA);
 
-            // Features
-            ...plan.features.map((feature) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [accent, accent.withValues(alpha: 0.75)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.35),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _selectedPlan == null
+                ? null
+                : isFree
+                    ? () => _activateFreePlan(
+                          context,
+                          authProvider,
+                          subscriptionProvider,
+                          accent,
+                        )
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PaymentScreen(
+                              plan: _selectedPlan!,
+                              onPaymentComplete: () {},
+                            ),
+                          ),
+                        );
+                      },
+            child: Center(
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: isSelected ? primaryColor : Colors.green[600],
+                    isFree
+                        ? Icons.explore_rounded
+                        : Icons.rocket_launch_rounded,
+                    color: Colors.white,
+                    size: 18,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    feature,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: subTextColor,
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      isFree
+                          ? 'Activer le plan gratuit'
+                          : 'Souscrire à ${_selectedPlan?.name ?? ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
               ),
-            )),
-          ],
+            ),
+          ),
         ),
       ),
-    );
+    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2, end: 0);
   }
 
-    /// Détermine si l'utilisateur est sur le plan gratuit (ou aucun plan actif).
+  Widget _buildSecurityNote(Color subTextColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.lock_outline_rounded, size: 13, color: subTextColor),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            'Paiement sécurisé via E-nkap • Données cryptées',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: subTextColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 500.ms);
+  }
+
+  /// Détermine si l'utilisateur est sur le plan gratuit (ou aucun plan actif).
   bool _isFreePlan(SubscriptionProvider subscriptionProvider) {
     final plan = subscriptionProvider.currentPlan;
-    // Pas d'abonnement actif ou plan gratuit → sauvegarde locale uniquement.
     return plan == null || plan.isFree;
   }
 
-  // 🔥 UNE SEULE VERSION DE LA MÉTHODE
   void _activateFreePlan(
     BuildContext context,
     AppAuthProvider authProvider,
@@ -390,8 +539,25 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        title: const Text('Activer le plan gratuit'),
-        // ⚠️ Avertissement transparent sur la sauvegarde locale.
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.explore_rounded,
+                size: 18,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Plan gratuit',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,28 +565,31 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             const Text(
               'Avec le plan gratuit, vos données sont sauvegardées '
               'uniquement dans la mémoire de votre téléphone.',
-              style: TextStyle(fontSize: 14),
+              style: TextStyle(fontSize: 13.5, height: 1.5),
             ),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                  width: 1,
+                  color: Colors.orange.withValues(alpha: 0.25),
                 ),
               ),
               child: const Text(
-                '⚠️ Si vous supprimez l\'application, vous perdrez : '
-                'vos fournisseurs, produits, clients et factures. '
-                'Votre entreprise, elle, est conservée.\n\n'
+                '⚠️ Si vous supprimez l\'application, vous perdrez vos '
+                'fournisseurs, produits, clients et factures. '
+                'Votre entreprise est conservée.\n\n'
                 'En souscrivant à un plan payant, vos données sont '
-                'sauvegardées dans le cloud et vous pourrez les retrouver '
-                'même en cas de perte ou de changement de téléphone.',
-                style: TextStyle(fontSize: 12.5, color: Colors.orange, height: 1.4),
+                'sauvegardées dans le cloud.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -430,10 +599,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Annuler'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              // Simuler l'activation du plan gratuit
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Plan gratuit activé avec succès !'),
@@ -441,8 +609,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
               );
             },
-            style: TextButton.styleFrom(
-              foregroundColor: primaryColor,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Activer'),
           ),

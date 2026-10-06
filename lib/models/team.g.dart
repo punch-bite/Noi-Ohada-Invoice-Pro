@@ -27,8 +27,8 @@ class TeamAdapter extends TypeAdapter<Team> {
       createdAt: fields[7] as DateTime?,
       updatedAt: fields[8] as DateTime?,
       isActive: fields[9] as bool,
-      memberPermission: fields[10] as String? ?? 'read',
-      adminPermission: fields[11] as String? ?? 'write',
+      memberPermission: fields[10] as String,
+      adminPermission: fields[11] as String,
     );
   }
 
