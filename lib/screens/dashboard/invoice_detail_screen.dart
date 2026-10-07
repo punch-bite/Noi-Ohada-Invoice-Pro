@@ -58,7 +58,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
   List<InvoiceTemplate> _templates = [];
-  List<Team> _cachedTeams = [];
+  final List<Team> _cachedTeams = [];
 
   Map<String, dynamic> _customPositions = const {};
   TemplateBackgroundSettings _backgroundSettings =

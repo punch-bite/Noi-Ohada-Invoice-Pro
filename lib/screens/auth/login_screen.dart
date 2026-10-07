@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                     const SizedBox(height: 18),
                     Text(
-                      'OHADA Invoice Pro',
+                      'Noi Invoice Pro',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 22,

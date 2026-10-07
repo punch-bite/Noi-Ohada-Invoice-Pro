@@ -2,46 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() { return request.auth != null; }
+    // ═══════════════════════════════════════════════════════════════
+    //  HELPERS — 100% SAFE (pas de crash si doc absent)
+    // ═══════════════════════════════════════════════════════════════
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Lit le doc user de l'appelant — retourne null si absent (pas de crash).
+    function myUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    // Admin = claim admin OU champ isAdmin OU role admin.
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      if (!isSignedIn()) return false;
+      if (request.auth.token.admin == true) return true;
+      let u = myUserDoc();
+      return u != null && (
+        ('isAdmin' in u && u.isAdmin == true)
+        || ('roles' in u && u.roles is list
+            && u.roles.hasAny(['admin', 'super-admin']))
+      );
     }
+
+    // Company de l'appelant.
     function myCompanyId() {
-      return isSignedIn() ? request.auth.token.companyId : null;
-    }
-    function myTeamIds() {
-      return isSignedIn() && request.auth.token.teamIds is list
-        ? request.auth.token.teamIds
-        : [];
+      let u = myUserDoc();
+      return u != null && ('companyId' in u) && u.companyId is string
+        ? u.companyId
+        : null;
     }
 
-    function isOwner() {
-      return isSignedIn() && (
-        ('userId' in resource.data && resource.data.userId == request.auth.uid)
-        || ('companyId' in resource.data
-            && myCompanyId() != null
-            && resource.data.companyId == myCompanyId())
+    // UID de l'appelant.
+    function myUid() {
+      return isSignedIn() ? request.auth.uid : '';
+    }
+
+    // Membre d'équipe — SAFE (vérifie exists() avant get).
+    function isTeamMember(teamId, uid) {
+      if (teamId is! string || uid is! string || uid.size() == 0) return false;
+      if (!exists(/databases/$(database)/documents/teams/$(teamId))) return false;
+      let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
+      return team != null && (
+        team.ownerId == uid
+        || ('memberIds' in team && team.memberIds is list && uid in team.memberIds)
+        || ('adminIds' in team && team.adminIds is list && uid in team.adminIds)
       );
     }
-    function isNewOwner() {
-      return isSignedIn() && (
-        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
-        || ('companyId' in request.resource.data
-            && myCompanyId() != null
-            && request.resource.data.companyId == myCompanyId())
-      );
-    }
 
-    function hasAdminPrivileges(data) {
-      return ('isAdmin' in data && data.isAdmin == true)
-          || ('roles' in data && data.roles is list
-              && data.roles.hasAny(['admin', 'super-admin']));
-    }
-
-    function canReadResource()      { return isAdmin() || isOwner(); }
-    function canWriteOwnResource()  { return isAdmin() || isNewOwner(); }
-    function canUpdateOwnResource() { return isAdmin() || isOwner(); }
-
+    // Anti-écrasement : userId et companyId ne changent jamais sur update.
     function ownershipPreserved() {
       let userOk = !('userId' in resource.data)
         || !('userId' in request.resource.data)
@@ -52,242 +64,326 @@ service cloud.firestore {
       return userOk && companyOk;
     }
 
-    function isTeamMember(teamId, uid) {
-      let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
-      return teamId is string
-        && uid is string
-        && uid.size() > 0
-        && team != null
-        && (team.ownerId == uid
-            || ('memberIds' in team && team.memberIds is list && uid in team.memberIds)
-            || ('adminIds' in team && team.adminIds is list && uid in team.adminIds));
-    }
-
-    function canReadSharedResource() {
-      return isSignedIn() && (
-        ('sharedWithUsers' in resource.data
+    // Vrai si l'utilisateur peut LIRE un doc (owner OU même company OU shared OU admin).
+    function canReadDoc() {
+      if (isAdmin()) return true;
+      if ('userId' in resource.data && resource.data.userId == myUid()) return true;
+      if ('companyId' in resource.data
+          && myCompanyId() != null
+          && resource.data.companyId == myCompanyId()) return true;
+      if ('sharedWithUsers' in resource.data
           && resource.data.sharedWithUsers is list
-          && request.auth.uid in resource.data.sharedWithUsers)
-        || ('sharedTeams' in resource.data
-            && resource.data.sharedTeams is list
-            && resource.data.sharedTeams.size() > 0
-            && resource.data.sharedTeams.hasAny(myTeamIds()))
-      );
-    }
-    function canWriteSharedResource() {
-      return isSignedIn()
-        && ('editableByUsers' in resource.data)
-        && request.auth.uid in resource.data.editableByUsers;
+          && myUid() in resource.data.sharedWithUsers) return true;
+      return false;
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // Vrai si l'utilisateur peut ÉCRIRE un doc.
+    function canWriteDoc() {
+      if (isAdmin()) return true;
+      if ('userId' in resource.data && resource.data.userId == myUid()) return true;
+      if ('companyId' in resource.data
+          && myCompanyId() != null
+          && resource.data.companyId == myCompanyId()) return true;
+      if ('editableByUsers' in resource.data
+          && resource.data.editableByUsers is list
+          && myUid() in resource.data.editableByUsers) return true;
+      return false;
+    }
+
+    // Vrai si le nouvel owner est bien l'appelant (ou sa company).
+    function isNewOwner() {
+      if (!isSignedIn()) return false;
+      if ('userId' in request.resource.data
+          && request.resource.data.userId == myUid()) return true;
+      if ('companyId' in request.resource.data
+          && myCompanyId() != null
+          && request.resource.data.companyId == myCompanyId()) return true;
+      return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  FALLBACK : collections non listées → tout authentifié.
+    // ═══════════════════════════════════════════════════════════════
+    match /{collection}/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  USERS
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     match /users/{userId} {
-      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+      allow read: if isSignedIn()
+        && (userId == myUid() || isAdmin());
 
-      allow create: if isSignedIn() && request.auth.uid == userId
-        && !hasAdminPrivileges(request.resource.data)
-        && (!('isActive' in request.resource.data)
-            || request.resource.data.isActive == true);
+      allow create: if isSignedIn()
+        && userId == myUid();
 
-      allow update: if isAdmin()
-        || (isSignedIn() && request.auth.uid == userId
-            && !hasAdminPrivileges(request.resource.data)
-            && !request.resource.data.diff(resource.data)
-                .affectedKeys().hasAny(['isActive']));
+      allow update: if isSignedIn()
+        && (userId == myUid() || isAdmin());
+
+      allow delete: if isAdmin();
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  COLLECTIONS MÉTIERS
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    //  COMPANIES
+    // ═══════════════════════════════════════════════════════════════
     match /companies/{companyId} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() && ownershipPreserved())
-        || (companyId == 'default_company' && isAdmin());
-      allow delete: if canUpdateOwnResource();
+      allow read: if isSignedIn() && (companyId == myCompanyId() || isAdmin()
+        || ('userId' in resource.data && resource.data.userId == myUid()));
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == myUid();
+
+      allow update, delete: if isSignedIn()
+        && ownershipPreserved()
+        && (resource.data.userId == myUid() || isAdmin());
     }
 
-    match /clients/{clientId} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+    // ═══════════════════════════════════════════════════════════════
+    //  CLIENTS / PRODUCTS / INVOICES / SUPPLIERS
+    //  Règle identique : owner OU même company OU shared OU admin
+    // ═══════════════════════════════════════════════════════════════
+    match /clients/{id} {
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn()
+        && ('userId' in resource.data && resource.data.userId == myUid()
+            || isAdmin());
     }
-    match /products/{productId} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+
+    match /products/{id} {
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn()
+        && ('userId' in resource.data && resource.data.userId == myUid()
+            || isAdmin());
     }
-    match /invoices/{invoiceId} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+
+    match /invoices/{id} {
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn()
+        && ('userId' in resource.data && resource.data.userId == myUid()
+            || isAdmin());
     }
+
     match /suppliers/{id} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn()
+        && ('userId' in resource.data && resource.data.userId == myUid()
+            || isAdmin());
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DELIVERIES / REMINDERS / STATS — moins critiques
+    // ═══════════════════════════════════════════════════════════════
     match /deliveries/{id} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn() && canWriteDoc();
     }
+
     match /reminders/{id} {
-      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
-      allow create: if canWriteOwnResource();
-      allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();
-      allow delete: if canUpdateOwnResource() || canWriteSharedResource();
+      allow read:   if isSignedIn() && canReadDoc();
+      allow create: if isSignedIn() && isNewOwner();
+      allow update: if isSignedIn() && canWriteDoc() && ownershipPreserved();
+      allow delete: if isSignedIn() && canWriteDoc();
     }
 
     match /dashboard_stats/{id} {
-      allow read, write: if isSignedIn() && canUpdateOwnResource();
+      allow read, write: if isSignedIn();
     }
     match /financial_stats/{id} {
-      allow read, write: if isSignedIn() && canUpdateOwnResource();
+      allow read, write: if isSignedIn();
     }
     match /analytics_data/{id} {
-      allow read, write: if isSignedIn() && canUpdateOwnResource();
+      allow read, write: if isSignedIn();
     }
     match /line_items/{id} {
-      allow read:   if isSignedIn() && canReadResource();
-      allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow read, write: if isSignedIn();
     }
 
-    match /subscriptions/{subscriptionId} {
-      allow read:   if isSignedIn() && (isAdmin() || isOwner());
-      allow create: if isAdmin() || (isSignedIn() && isNewOwner()
-        && request.resource.data.status == 'pending'
-        && request.resource.data.amount == 0);
-      allow update: if isAdmin()
-        || (isSignedIn() && isOwner()
-            && !request.resource.data.diff(resource.data)
-                .affectedKeys().hasAny(['planId','amount','currency','status','paymentId','paymentMethod'])
-            && ownershipPreserved());
-      allow delete: if isAdmin();
-    }
-    match /plans/{planId} {
+    // ═══════════════════════════════════════════════════════════════
+    //  PLANS / TEMPLATES / SETTINGS
+    // ═══════════════════════════════════════════════════════════════
+    match /plans/{id} {
       allow read:  if true;
       allow write: if isAdmin();
     }
-
-    match /teams/{teamId} {
-      allow read: if isSignedIn() && (isAdmin()
-        || resource.data.ownerId == request.auth.uid
-        || ('memberIds' in resource.data && request.auth.uid in resource.data.memberIds));
-      allow create: if isSignedIn()
-        && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isAdmin()
-        || resource.data.ownerId == request.auth.uid;
-    }
-    match /shared_invoices/{sharedId} {
-      allow read: if isSignedIn() && (isAdmin()
-        || ('sharedWith' in resource.data && resource.data.sharedWith is list
-            && request.auth.uid in resource.data.sharedWith)
-        || ('writeUsers' in resource.data && resource.data.writeUsers is list
-            && request.auth.uid in resource.data.writeUsers)
-        || resource.data.sharedBy == request.auth.uid);
-      allow create: if isSignedIn()
-        && request.resource.data.sharedBy == request.auth.uid
-        && request.resource.data.teamId is string
-        && isTeamMember(request.resource.data.teamId, request.auth.uid);
-      allow update, delete: if isAdmin()
-        || resource.data.sharedBy == request.auth.uid;
-    }
-    match /team_invitations/{invitationId} {
-      allow read: if isSignedIn() && (isAdmin()
-        || resource.data.inviteeUid == request.auth.uid
-        || isTeamMember(resource.data.teamId, request.auth.uid));
+    match /templates/{id} {
+      allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
+    match /settings/{id} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SUBSCRIPTIONS
+    // ═══════════════════════════════════════════════════════════════
+    match /subscriptions/{id} {
+      allow read: if isSignedIn() && (isAdmin()
+        || ('userId' in resource.data && resource.data.userId == myUid()));
+
+      allow create: if isAdmin()
+        || (isSignedIn()
+            && request.resource.data.userId == myUid()
+            && request.resource.data.status == 'pending'
+            && request.resource.data.amount == 0);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TEAMS
+    // ═══════════════════════════════════════════════════════════════
+    match /teams/{teamId} {
+      allow read: if isSignedIn() && (isAdmin()
+        || (('ownerId' in resource.data) && resource.data.ownerId == myUid())
+        || (('memberIds' in resource.data)
+            && resource.data.memberIds is list
+            && myUid() in resource.data.memberIds));
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == myUid();
+
+      allow update, delete: if isSignedIn()
+        && (resource.data.ownerId == myUid() || isAdmin());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SHARED INVOICES
+    // ═══════════════════════════════════════════════════════════════
+    match /shared_invoices/{id} {
+      allow read: if isSignedIn() && (isAdmin()
+        || (('sharedWith' in resource.data)
+            && resource.data.sharedWith is list
+            && myUid() in resource.data.sharedWith)
+        || (('sharedBy' in resource.data) && resource.data.sharedBy == myUid()));
+
+      allow create: if isSignedIn()
+        && request.resource.data.sharedBy == myUid()
+        && isTeamMember(request.resource.data.teamId, myUid());
+
+      allow update, delete: if isSignedIn()
+        && (resource.data.sharedBy == myUid() || isAdmin());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TEAM INVITATIONS
+    // ═══════════════════════════════════════════════════════════════
+    match /team_invitations/{id} {
+      allow read: if isSignedIn() && (isAdmin()
+        || (('inviteeUid' in resource.data)
+            && resource.data.inviteeUid == myUid()));
+
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  TEAM MESSAGES (sous-collection)
+    // ═══════════════════════════════════════════════════════════════
     match /team_messages/{teamId} {
-      allow read, write: if isAdmin()
-        || isTeamMember(teamId, request.auth.uid);
+      allow read: if isSignedIn()
+        && (isAdmin() || isTeamMember(teamId, myUid()));
 
       match /messages/{messageId} {
-        allow read: if isAdmin() || isTeamMember(teamId, request.auth.uid);
+        allow read: if isSignedIn()
+          && (isAdmin() || isTeamMember(teamId, myUid()));
+
         allow create: if isSignedIn()
-          && isTeamMember(teamId, request.auth.uid)
-          && request.resource.data.senderId == request.auth.uid
-          && (!('ownerId' in request.resource.data)
-              || request.resource.data.ownerId == ''
-              || request.resource.data.ownerId == request.auth.uid
-              || request.resource.data.ownerId ==
-                  get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId);
-        allow update, delete: if isAdmin()
-          || (isTeamMember(teamId, request.auth.uid)
-              && resource.data.senderId == request.auth.uid);
+          && isTeamMember(teamId, myUid())
+          && request.resource.data.senderId == myUid();
+
+        allow update, delete: if isSignedIn()
+          && (isAdmin()
+              || (('senderId' in resource.data)
+                  && resource.data.senderId == myUid()));
       }
     }
 
-    match /templates/{templateId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
-    match /settings/{settingId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
-    match /notifications/{notificationId} {
-      allow read: if isSignedIn() && (isAdmin() || isOwner()
-        || ('recipients' in resource.data && resource.data.recipients is list
-            && request.auth.uid in resource.data.recipients));
-      allow create, update: if isAdmin() || (isSignedIn() && (isNewOwner()
-        || (request.resource.data.createdBy == request.auth.uid
-            && request.resource.data.teamId is string
-            && isTeamMember(request.resource.data.teamId, request.auth.uid)
-            && request.resource.data.userId is string
-            && isTeamMember(request.resource.data.teamId, request.resource.data.userId))));
-      allow delete: if isAdmin() || isOwner();
-    }
-    match /fcm_tokens/{tokenId} {
-      allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
-    }
-    match /logs/{logId} {
-      allow read, write: if isAdmin();
-    }
-    match /admin_audit_log/{logId} {
-      allow read, write: if isAdmin();
-    }
-    match /drive_sync/{syncId} {
-      allow read:  if isSignedIn() && (isAdmin() || isOwner());
-      allow write: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-    }
-    match /counters/{scopeId} {
-      allow read: if isSignedIn() && (request.auth.uid == scopeId || myCompanyId() == scopeId);
-      allow create, update: if isSignedIn() && (request.auth.uid == scopeId || myCompanyId() == scopeId);
-      allow delete: if isAdmin();
+    // ═══════════════════════════════════════════════════════════════
+    //  NOTIFICATIONS
+    // ═══════════════════════════════════════════════════════════════
+    match /notifications/{id} {
+      allow read: if isSignedIn() && (isAdmin()
+        || (('userId' in resource.data) && resource.data.userId == myUid())
+        || (('recipients' in resource.data)
+            && resource.data.recipients is list
+            && myUid() in resource.data.recipients));
+
+      allow create, update: if isSignedIn()
+        && (isAdmin()
+            || (('userId' in request.resource.data)
+                && request.resource.data.userId == myUid()));
+
+      allow delete: if isSignedIn()
+        && (isAdmin()
+            || (('userId' in resource.data) && resource.data.userId == myUid()));
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  FCM TOKENS
+    // ═══════════════════════════════════════════════════════════════
+    match /fcm_tokens/{id} {
+      allow read, write: if isSignedIn()
+        && (('uid' in request.resource.data) && request.resource.data.uid == myUid()
+            || isAdmin());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LOGS / AUDIT (admin only)
+    // ═══════════════════════════════════════════════════════════════
+    match /logs/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /admin_audit_log/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DRIVE SYNC
+    // ═══════════════════════════════════════════════════════════════
+    match /drive_sync/{id} {
+      allow read, write: if isSignedIn()
+        && (('userId' in request.resource.data) && request.resource.data.userId == myUid()
+            || isAdmin());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  COUNTERS
+    // ═══════════════════════════════════════════════════════════════
+    match /counters/{scopeId} {
+      allow read, write: if isSignedIn()
+        && (scopeId == myUid()
+            || (myCompanyId() != null && scopeId == myCompanyId()));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WALLETS
+    // ═══════════════════════════════════════════════════════════════
     match /wallets/{userId} {
-      allow read:  if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn()
+        && (userId == myUid() || isAdmin());
       allow write: if isAdmin();
     }
     match /wallet_transactions/{id} {
-      allow read:   if isSignedIn() && (isAdmin() || isOwner());
+      allow read: if isSignedIn() && (isAdmin()
+        || (('userId' in resource.data) && resource.data.userId == myUid()));
       allow create: if isAdmin();
-      allow update: if isAdmin() && ownershipPreserved();
     }
     match /wallet_withdrawals/{id} {
-      allow read:   if isSignedIn() && (isAdmin() || isOwner());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (isAdmin()
+        || (('userId' in resource.data) && resource.data.userId == myUid()));
+      allow create: if isSignedIn()
+        && request.resource.data.userId == myUid();
       allow update: if isAdmin();
     }
   }

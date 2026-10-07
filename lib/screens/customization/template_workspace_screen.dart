@@ -79,7 +79,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
 
   double _zoom = 1.0;
   bool _showGrid = true;
-  double _paperRadius = 12;
+  final double _paperRadius = 12;
 
   /// 🎯 Outil actif (pour la coloration de la pastille dans la bottom bar).
   String _activeTool = '';
@@ -150,8 +150,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   String _companyAddress = '';
   String _companyPhone = '';
   String _companyEmail = '';
-  String _clientName = 'Client Exemple SARL';
-  String _clientAddress = 'RCCM: CM-DOU-2024-B123\nDouala, Cameroun';
+  final String _clientName = 'Client Exemple SARL';
+  final String _clientAddress = 'RCCM: CM-DOU-2024-B123\nDouala, Cameroun';
   String _invoiceTitle = 'FACTURE';
   String _invoiceSubtitle = '';
   Uint8List? _customLogoBytes;

@@ -1572,7 +1572,7 @@ class PrintingService {
           pw.Padding(
             padding: pw.EdgeInsets.only(top: _s(8)),
             child: pw.Text(
-              '${bankName} ${bankAccount}'.trim(),
+              '$bankName $bankAccount'.trim(),
               style: pw.TextStyle(
                 fontSize: _s(fs * 0.75),
                 color: _withOpacity(textColor, 0.65),

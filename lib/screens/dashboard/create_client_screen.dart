@@ -21,7 +21,6 @@ import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/quota_enforcement_service.dart';
-import '../../services/contact_import_types.dart';
 // 🎯 Import conditionnel : en fonction de la plateforme, on tire
 //    soit le stub (mobile) soit la vraie implémentation (web).
 import '../../services/contact_import_web_stub.dart'
