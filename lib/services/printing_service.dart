@@ -1,19 +1,24 @@
 // lib/services/printing_service.dart
 //
-// CHANGELOG (v7 — REFONTE MAGNÉTIQUE) :
-//   • PDF 100% WYSIWYG avec le workspace et StitchA4InvoicePreview.
-//   • Support complet des 10 styles d'en-tête, 5 de tableau, 6 de pied.
-//   • Grille 8pt respectée : marges = page_padding, gaps = 10/12pt.
-//   • Suppression de l'ancien layout par blocs / positionné — UN SEUL
-//     chemin de rendu : `_renderWorkspacePdf` (appelé par tous les modes).
-//   • `_sanitizeText` conservé (retire les emojis non supportés par Roboto).
+// 🖨️ Rendu PDF HYBRIDE — Solution A (image) + Solution B (vector).
+//
+// CHANGELOG v11 :
+//   • Enum `InvoiceRenderMode { vector, image }`.
+//   • Mode `vector` : PDF texte sélectionnable (WYSIWYG strict v10).
+//   • Mode `image`  : capture PNG du widget A4 → PDF (parité 100%).
+//   • `captureWidgetToPng(key)` : screenshot via RenderRepaintBoundary.
+//   • `generateInvoicePdfFromCapture(png)` : insère l'image dans un A4.
+//   • Conversion d'échelle Flutter↔PDF conservée (ratio 0.7497).
 //
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:noi_ohada_invoice_pro/services/template_custom_service.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -25,57 +30,128 @@ import '../models/invoice_settings.dart';
 import '../models/invoice_template.dart';
 import '../widgets/template_background_palette.dart';
 import 'invoice_render_service.dart';
-import 'template_custom_service.dart';
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MODE DE RENDU
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Mode de rendu du PDF.
+enum InvoiceRenderMode {
+  /// 📝 Texte sélectionnable, léger, rendu vectoriel.
+  vector,
+
+  /// 🖼️ Image fidèle (capture du widget Flutter), parité pixel-perfect.
+  image,
+}
+
+const double _kPdfScale = 595.28 / 794.0; // ≈ 0.7497
 
 class PrintingService {
-  // ═══════════════════════════════════════════════════════════════
-  //  POLICE
-  // ═══════════════════════════════════════════════════════════════
-  static Future<({pw.Font base, pw.Font bold, pw.Font medium})>
-      _loadFontFamily() async {
+  // ═══════════════════════════════════════════════════════════════════
+  //  API PUBLIQUE UNIFIÉE
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// 📄 Génère un PDF (mode `vector` par défaut).
+  ///
+  /// En mode `image`, cette méthode retombe sur `vector` : la capture
+  /// d'image doit être faite côté UI (voir `generateInvoicePdfFromCapture`).
+  static Future<Uint8List> generateInvoicePdf({
+    required Invoice invoice,
+    required Client client,
+    required Company company,
+    required InvoiceTemplate template,
+    bool isFreePlan = false,
+    Map<String, dynamic>? customPositions,
+    Map<String, String>? customMapping,
+    TemplateBackgroundSettings? customBackground,
+    InvoiceSettings? invoiceSettings,
+  }) async {
+    return _generateVectorPdf(
+      invoice: invoice,
+      client: client,
+      company: company,
+      template: template,
+      isFreePlan: isFreePlan,
+      customPositions: customPositions,
+      customMapping: customMapping,
+      customBackground: customBackground,
+      invoiceSettings: invoiceSettings,
+    );
+  }
+
+  /// 🖼️ Capture un widget Flutter (RenderRepaintBoundary) en PNG.
+  ///
+  /// Le widget DOIT être enveloppé dans un `RepaintBoundary` avec le
+  /// `GlobalKey` passé en paramètre.
+  static Future<Uint8List?> captureWidgetToPng(
+    GlobalKey repaintKey, {
+    double pixelRatio = 3.0,
+  }) async {
     try {
-      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
-      final bold = await rootBundle.load('assets/fonts/Roboto-Bold.ttf');
-      final medium = await rootBundle.load('assets/fonts/Roboto-Medium.ttf');
-      return (
-        base: pw.Font.ttf(regular),
-        bold: pw.Font.ttf(bold),
-        medium: pw.Font.ttf(medium),
-      );
-    } catch (_) {
-      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
-      final f = pw.Font.ttf(regular);
-      return (base: f, bold: f, medium: f);
+      // Petit délai pour laisser Flutter peindre le widget.
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      final boundary = repaintKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null) {
+        debugPrint('⚠️ captureWidgetToPng : boundary null');
+        return null;
+      }
+
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('⚠️ captureWidgetToPng : $e');
+      return null;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  SANITIZE
-  // ═══════════════════════════════════════════════════════════════
-  static String _sanitize(String input) {
-    if (input.isEmpty) return input;
-    final buf = StringBuffer();
-    for (final rune in input.runes) {
-      if (_isSafe(rune)) buf.writeCharCode(rune);
-    }
-    return buf.toString();
+  /// 🖼️ Génère un PDF depuis un PNG capturé (mode image).
+  ///
+  /// Le PNG est inséré en plein A4, préservant le rendu exact du widget.
+  static Future<Uint8List> generateInvoicePdfFromCapture({
+    required Uint8List pngBytes,
+    bool isFreePlan = false,
+  }) async {
+    final pdf = pw.Document();
+    final image = pw.MemoryImage(pngBytes);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.zero,
+        build: (ctx) => pw.Stack(
+          children: [
+            pw.Positioned.fill(
+              child: pw.Image(image, fit: pw.BoxFit.fill),
+            ),
+            if (isFreePlan)
+              pw.Positioned(
+                bottom: 6,
+                left: 0,
+                right: 0,
+                child: pw.Center(
+                  child: pw.Text(
+                    'Généré par OHADA Invoice Pro — Version Gratuite',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    return pdf.save();
   }
 
-  static bool _isSafe(int r) {
-    if (r == 0x09 || r == 0x0A || r == 0x0D) return true;
-    if (r >= 0x20 && r <= 0x7E) return true;
-    if (r >= 0x00A0 && r <= 0x024F) return true;
-    if (r >= 0x2000 && r <= 0x206F) return true;
-    if (r >= 0x20A0 && r <= 0x20CF) return true;
-    if (r >= 0x2190 && r <= 0x21FF) return true;
-    if (r >= 0x25A0 && r <= 0x25FF) return true;
-    if (r >= 0x2700 && r <= 0x27BF) return true;
-    return false;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  API PUBLIQUE
-  // ═══════════════════════════════════════════════════════════════
+  /// 🖨️ Impression directe.
   static Future<void> printInvoice({
     required Invoice invoice,
     required Client client,
@@ -110,7 +186,62 @@ class PrintingService {
     }
   }
 
-  static Future<Uint8List> generateInvoicePdf({
+  // ═══════════════════════════════════════════════════════════════════
+  //  HELPERS
+  // ═══════════════════════════════════════════════════════════════════
+  static double _s(num v) => v * _kPdfScale;
+  static PdfColor _c(Color c) => PdfColor(c.r, c.g, c.b);
+  static PdfColor _withOpacity(PdfColor c, double op) =>
+      PdfColor(c.red, c.green, c.blue, op);
+  static PdfColor _darken(PdfColor c, double amount) => PdfColor(
+        (c.red * (1 - amount)).clamp(0.0, 1.0),
+        (c.green * (1 - amount)).clamp(0.0, 1.0),
+        (c.blue * (1 - amount)).clamp(0.0, 1.0),
+      );
+
+  static String _sanitize(String input) {
+    if (input.isEmpty) return input;
+    final buf = StringBuffer();
+    for (final rune in input.runes) {
+      if (_isSafe(rune)) buf.writeCharCode(rune);
+    }
+    return buf.toString();
+  }
+
+  static bool _isSafe(int r) {
+    if (r == 0x09 || r == 0x0A || r == 0x0D) return true;
+    if (r >= 0x20 && r <= 0x7E) return true;
+    if (r >= 0x00A0 && r <= 0x024F) return true;
+    if (r >= 0x2000 && r <= 0x206F) return true;
+    if (r >= 0x20A0 && r <= 0x20CF) return true;
+    if (r >= 0x2190 && r <= 0x21FF) return true;
+    if (r >= 0x25A0 && r <= 0x25FF) return true;
+    if (r >= 0x2700 && r <= 0x27BF) return true;
+    return false;
+  }
+
+  static Future<({pw.Font base, pw.Font bold, pw.Font medium})>
+      _loadFonts() async {
+    try {
+      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      final bold = await rootBundle.load('assets/fonts/Roboto-Bold.ttf');
+      final medium = await rootBundle.load('assets/fonts/Roboto-Medium.ttf');
+      return (
+        base: pw.Font.ttf(regular),
+        bold: pw.Font.ttf(bold),
+        medium: pw.Font.ttf(medium),
+      );
+    } catch (_) {
+      final regular = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+      final f = pw.Font.ttf(regular);
+      return (base: f, bold: f, medium: f);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  MODE B — RENDU VECTORIEL
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<Uint8List> _generateVectorPdf({
     required Invoice invoice,
     required Client client,
     required Company company,
@@ -122,9 +253,8 @@ class PrintingService {
     InvoiceSettings? invoiceSettings,
   }) async {
     final pdf = pw.Document();
-    final fonts = await _loadFontFamily();
+    final fonts = await _loadFonts();
 
-    // Résolution des positions (une seule source de vérité).
     final render = await InvoiceRenderService.resolveRenderState(
       template: template,
       customPositions: customPositions,
@@ -137,30 +267,9 @@ class PrintingService {
     final positions = render.positions;
     final bgSettings = render.backgroundSettings;
     Uint8List? bgBytes = render.backgroundImage;
-
-    // Background par preset si pas d'image
-    final preset = bgBytes == null
+    final preset = bgBytes == null && bgSettings.presetId.isNotEmpty
         ? MultiBackgroundPreset.byId(bgSettings.presetId)
         : null;
-
-    pw.Widget? background;
-    if (bgBytes != null) {
-      background = pw.Positioned.fill(
-        child: pw.Opacity(
-          opacity: bgSettings.opacity.clamp(0.0, 1.0),
-          child: pw.Image(pw.MemoryImage(bgBytes), fit: pw.BoxFit.fill),
-        ),
-      );
-    } else if (preset != null) {
-      background = pw.Positioned.fill(
-        child: pw.Opacity(
-          opacity: bgSettings.opacity.clamp(0.0, 1.0),
-          child: preset.toPdfWidget(),
-        ),
-      );
-    }
-
-    final effectiveTemplate = render.effectiveTemplate;
 
     pdf.addPage(
       pw.Page(
@@ -172,14 +281,16 @@ class PrintingService {
           boldItalic: fonts.bold,
         ),
         margin: pw.EdgeInsets.zero,
-        build: (ctx) => _renderWorkspacePdf(
+        build: (ctx) => _renderA4(
           invoice: invoice,
           client: client,
           company: company,
-          template: effectiveTemplate,
+          template: render.effectiveTemplate,
           positions: positions,
           settings: settings,
-          background: background,
+          bgBytes: bgBytes,
+          preset: preset,
+          bgOpacity: bgSettings.opacity,
           isFreePlan: isFreePlan,
         ),
       ),
@@ -188,117 +299,123 @@ class PrintingService {
     return pdf.save();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  RENDU PRINCIPAL
-  // ═══════════════════════════════════════════════════════════════
-  static pw.Widget _renderWorkspacePdf({
+  // ═══════════════════════════════════════════════════════════════════
+  //  RENDU VECTORIEL A4 (complet, identique v10)
+  // ═══════════════════════════════════════════════════════════════════
+  static pw.Widget _renderA4({
     required Invoice invoice,
     required Client client,
     required Company company,
     required InvoiceTemplate template,
     required Map<String, dynamic> positions,
     required InvoiceSettings settings,
-    required pw.Widget? background,
+    required Uint8List? bgBytes,
+    required MultiBackgroundPreset? preset,
+    required double bgOpacity,
     required bool isFreePlan,
   }) {
     final pageW = PdfPageFormat.a4.width;
     final pageH = PdfPageFormat.a4.height;
-    final pad = ((positions['page_padding'] as num?)?.toDouble() ?? 24)
-        .clamp(8.0, 80.0);
-    final fs = template.fontSize.clamp(6.0, 40.0).toDouble();
-    final cText = _pdf(template.textColor);
-    final cSub = _withOpacity(cText, 0.65);
-    final accent = _pdf(template.primaryColor);
+    final pagePadding =
+        (positions['page_padding'] as num?)?.toDouble() ?? 32.0;
 
-    final headerStyle = positions['header_style']?.toString() ?? 'flat';
-    final tableStyle = positions['table_style']?.toString() ?? 'plain';
-    final footerStyle = positions['footer_style']?.toString() ?? 'simple';
+    final primary = _c(template.primaryColor);
+    final textColor = _c(template.textColor);
+    final bgColor = _c(template.backgroundColor);
+    final fs = template.fontSize.clamp(6.0, 40.0);
     final accentBorder = positions['accent_border']?.toString() ?? '';
 
-    return pw.Stack(
-      children: [
-        pw.SizedBox(width: pageW, height: pageH),
-        if (background != null) background,
-
-        // Bordure d'accent
-        ..._accentBorderPdf(accentBorder, accent, pageW, pageH),
-
-        // Contenu
-        pw.Padding(
-          padding: pw.EdgeInsets.all(pad),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              _buildHeaderPdf(
-                invoice: invoice,
-                company: company,
-                template: template,
-                positions: positions,
-                headerStyle: headerStyle,
-                accent: accent,
-                cText: cText,
-                fs: fs,
-              ),
-              pw.SizedBox(height: 12),
-              pw.Expanded(
-                child: _buildBodyPdf(
-                  invoice: invoice,
-                  client: client,
-                  company: company,
-                  template: template,
-                  positions: positions,
-                  settings: settings,
-                  tableStyle: tableStyle,
-                  accent: accent,
-                  cText: cText,
-                  cSub: cSub,
-                  fs: fs,
-                ),
-              ),
-              _buildFooterPdf(
-                company: company,
-                positions: positions,
-                footerStyle: footerStyle,
-                accent: accent,
-                cText: cText,
-                cSub: cSub,
-                fs: fs,
-              ),
-            ],
-          ),
+    pw.Widget? background;
+    if (bgBytes != null) {
+      background = pw.Positioned.fill(
+        child: pw.Opacity(
+          opacity: bgOpacity.clamp(0.0, 1.0),
+          child: pw.Image(pw.MemoryImage(bgBytes), fit: pw.BoxFit.fill),
         ),
+      );
+    } else if (preset != null) {
+      background = pw.Positioned.fill(
+        child: pw.Opacity(
+          opacity: bgOpacity.clamp(0.0, 1.0),
+          child: preset.toPdfWidget(),
+        ),
+      );
+    }
 
-        // Tampon PAYÉ
-        if ((positions['show_paid_stamp'] as bool? ?? false) &&
-            invoice.status == 'paid')
-          _buildPaidStampPdf(positions, fs)!,
-
-        // Filigrane
-        if (settings.showWatermark && settings.watermarkText.isNotEmpty)
-          _buildWatermarkPdf(settings, cText),
-
-        // Bandeau "version gratuite"
-        if (isFreePlan)
-          pw.Positioned(
-            bottom: 6,
-            left: 0,
-            right: 0,
-            child: pw.Center(
-              child: pw.Text(
-                'Généré par OHADA Invoice Pro — Version Gratuite',
-                style: pw.TextStyle(
-                  fontSize: 8,
-                  color: _withOpacity(cText, 0.4),
-                  fontStyle: pw.FontStyle.italic,
-                ),
+    return pw.Container(
+      width: pageW,
+      height: pageH,
+      color: bgColor,
+      child: pw.Stack(
+        children: [
+          pw.SizedBox(width: pageW, height: pageH),
+          if (background != null) background,
+          ..._accentBorderWidgets(accentBorder, primary, pageW, pageH),
+          pw.Positioned.fill(
+            child: pw.Padding(
+              padding: pw.EdgeInsets.all(_s(pagePadding)),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(
+                    invoice: invoice,
+                    company: company,
+                    template: template,
+                    positions: positions,
+                    primary: primary,
+                    textColor: textColor,
+                    fs: fs,
+                  ),
+                  pw.SizedBox(height: _s(16)),
+                  _buildBody(
+                    invoice: invoice,
+                    client: client,
+                    company: company,
+                    template: template,
+                    settings: settings,
+                    positions: positions,
+                    primary: primary,
+                    textColor: textColor,
+                    fs: fs,
+                  ),
+                  pw.Spacer(),
+                  _buildFooter(
+                    positions: positions,
+                    primary: primary,
+                    textColor: textColor,
+                    fs: fs,
+                  ),
+                ],
               ),
             ),
           ),
-      ],
+          if ((positions['show_paid_stamp'] as bool? ?? false) &&
+              invoice.status == 'paid')
+            _buildPaidStamp(positions, pageW, pageH),
+          if (settings.showWatermark && settings.watermarkText.isNotEmpty)
+            _buildWatermark(settings, textColor),
+          if (isFreePlan)
+            pw.Positioned(
+              bottom: _s(6),
+              left: 0,
+              right: 0,
+              child: pw.Center(
+                child: pw.Text(
+                  'Généré par OHADA Invoice Pro — Version Gratuite',
+                  style: pw.TextStyle(
+                    fontSize: _s(8),
+                    color: _withOpacity(textColor, 0.4),
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  static List<pw.Widget> _accentBorderPdf(
+  static List<pw.Widget> _accentBorderWidgets(
     String style,
     PdfColor accent,
     double pageW,
@@ -311,7 +428,7 @@ class PrintingService {
             top: 0,
             left: 0,
             right: 0,
-            child: pw.Container(height: 10, color: accent),
+            child: pw.Container(height: _s(8), color: accent),
           ),
         ];
       case 'left':
@@ -320,18 +437,18 @@ class PrintingService {
             top: 0,
             bottom: 0,
             left: 0,
-            child: pw.Container(width: 10, color: accent),
+            child: pw.Container(width: _s(8), color: accent),
           ),
         ];
       case 'frame':
         return [
           pw.Positioned.fill(
             child: pw.Padding(
-              padding: const pw.EdgeInsets.all(6),
+              padding: pw.EdgeInsets.all(_s(6)),
               child: pw.Container(
                 decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: accent, width: 2),
-                  borderRadius: pw.BorderRadius.circular(4),
+                  border: pw.Border.all(color: accent, width: _s(2)),
+                  borderRadius: pw.BorderRadius.circular(_s(4)),
                 ),
               ),
             ),
@@ -344,8 +461,8 @@ class PrintingService {
             right: 0,
             bottom: 0,
             child: pw.SizedBox(
-              height: 14,
-              child: _rainbowStripPdf(accent, 24),
+              height: _s(14),
+              child: _rainbowStrip(accent, 20),
             ),
           ),
         ];
@@ -354,124 +471,144 @@ class PrintingService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  EN-TÊTE
-  // ═══════════════════════════════════════════════════════════════
-  static pw.Widget _buildHeaderPdf({
+  static pw.Widget _rainbowStrip(PdfColor accent, int stripes) {
+    const colors = [0xFFE8A33D, 0xFF1B4965, 0xFFE67E22, 0xFF111111];
+    return pw.Row(
+      children: [
+        for (var i = 0; i < stripes; i++)
+          pw.Expanded(
+            child: pw.Container(
+              color: PdfColor.fromInt(colors[i % colors.length]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ── En-tête ──
+  static pw.Widget _buildHeader({
     required Invoice invoice,
     required Company company,
     required InvoiceTemplate template,
     required Map<String, dynamic> positions,
-    required String headerStyle,
-    required PdfColor accent,
-    required PdfColor cText,
+    required PdfColor primary,
+    required PdfColor textColor,
     required double fs,
   }) {
-    final order = InvoiceTemplate.visibleHeaderElements(positions);
-    final sections =
+    final headerStyle = positions['header_style']?.toString() ?? 'flat';
+    final headerSections =
         InvoiceTemplate.decodeSections(positions['header_sections']);
-    final rows = <List<String>>[];
-    final seen = <String>{};
-    for (final s in sections) {
-      final r = s.where((k) => order.contains(k) && seen.add(k)).toList();
-      if (r.isNotEmpty) rows.add(r);
-    }
-    if (rows.isEmpty) rows.add(order);
+    final sections = headerSections.isNotEmpty
+        ? headerSections
+        : [
+            ['logo', 'company_info', 'invoice_title'],
+          ];
 
-    pw.Widget buildRow(List<String> keys, PdfColor onColor) {
-      final widths = positions['header_widths'];
-      double weightOf(String k) {
-        if (widths is Map && widths[k] is num) {
-          return (widths[k] as num).toDouble().clamp(0.4, 3.0);
-        }
-        return k == 'company_info' ? 2.0 : 1.0;
-      }
+    final widthMap = positions['header_widths'] as Map? ?? {};
+    final alignMap = positions['header_alignments'] as Map? ?? {};
+    final visMap = positions['header_visibility'] as Map? ?? {};
 
-      final total = keys.fold<double>(0, (a, k) => a + weightOf(k));
-      const gap = 10.0;
-      final avail = PdfPageFormat.a4.width - 2 * 24 - gap * (keys.length - 1);
+    double widthOf(String k) => widthMap[k] is num
+        ? (widthMap[k] as num).toDouble().clamp(0.4, 3.0)
+        : 1.0;
+    String alignOf(String k) =>
+        alignMap[k]?.toString() ?? (k == 'invoice_title' ? 'right' : 'left');
+    bool visOf(String k) => visMap[k] is bool ? visMap[k] as bool : true;
 
+    final hasFilledHeader = headerStyle == 'dark' ||
+        headerStyle == 'band' ||
+        headerStyle == 'wave' ||
+        headerStyle == 'split_orange_left';
+    final onColor = hasFilledHeader ? PdfColors.white : textColor;
+
+    pw.Widget buildRow(int r) {
+      final keys = sections[r];
       final children = <pw.Widget>[];
       for (var i = 0; i < keys.length; i++) {
-        if (i > 0) children.add(pw.SizedBox(width: gap));
         final key = keys[i];
-        final w = avail * weightOf(key) / total;
-        children.add(pw.SizedBox(
-          width: w,
-          child: _headerColPdf(
+        if (i > 0) children.add(pw.SizedBox(width: _s(8)));
+        if (!visOf(key)) continue;
+        final flex = (widthOf(key) * 10).round().clamp(4, 30);
+        children.add(pw.Expanded(
+          flex: flex,
+          child: _headerCol(
             key: key,
-            invoice: invoice,
             company: company,
-            template: template,
             positions: positions,
             onColor: onColor,
+            primary: primary,
+            textColor: textColor,
             fs: fs,
+            align: alignOf(key),
           ),
         ));
       }
-      return pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: children,
+      return pw.Padding(
+        padding: pw.EdgeInsets.only(bottom: _s(4)),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: children,
+        ),
       );
     }
 
-    final rowWidget = pw.Column(
+    final rows = <pw.Widget>[];
+    for (var r = 0; r < sections.length; r++) {
+      rows.add(buildRow(r));
+    }
+
+    final content = pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) pw.SizedBox(height: 6),
-          buildRow(rows[i], headerStyle == 'flat' ? cText : PdfColors.white),
-        ],
-      ],
+      children: rows,
     );
 
     switch (headerStyle) {
       case 'dark':
         return pw.Container(
           decoration: pw.BoxDecoration(
-            color: _darken(accent, 0.3),
-            borderRadius: pw.BorderRadius.circular(8),
+            color: _darken(primary, 0.3),
+            borderRadius: pw.BorderRadius.circular(_s(4)),
           ),
-          padding: const pw.EdgeInsets.all(14),
-          child: rowWidget,
+          padding: pw.EdgeInsets.all(_s(6)),
+          child: content,
         );
       case 'band':
         return pw.Container(
           decoration: pw.BoxDecoration(
-            color: accent,
-            borderRadius: pw.BorderRadius.circular(8),
+            color: primary,
+            borderRadius: pw.BorderRadius.circular(_s(4)),
           ),
-          padding: const pw.EdgeInsets.all(14),
-          child: rowWidget,
+          padding: pw.EdgeInsets.all(_s(6)),
+          child: content,
         );
       case 'wave':
       case 'split_orange_left':
         return pw.Container(
-          height: 90,
+          height: _s(90),
           decoration: pw.BoxDecoration(
             color: const PdfColor.fromInt(0xFF1B4965),
-            borderRadius: pw.BorderRadius.circular(8),
+            borderRadius: pw.BorderRadius.circular(_s(4)),
           ),
           child: pw.Stack(
             children: [
-              pw.Positioned.fill(
-                child: pw.CustomPaint(
-                  painter: (canvas, size) {
-                    // final path = PdfGraphics? 1 : null;
-                    // Vague simplifiée en PDF (diagonale)
-                    canvas.setFillColor(accent);
-                    canvas.moveTo(0, 0);
-                    canvas.lineTo(size.x * 0.55, 0);
-                    canvas.lineTo(size.x * 0.45, size.y);
-                    canvas.lineTo(0, size.y);
-                    canvas.closePath();
-                    canvas.fillPath();
-                  },
+              pw.Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: pw.Container(
+                  width: _s(240),
+                  decoration: pw.BoxDecoration(
+                    color: primary,
+                    borderRadius: pw.BorderRadius.only(
+                      topLeft: pw.Radius.circular(_s(4)),
+                      bottomLeft: pw.Radius.circular(_s(4)),
+                    ),
+                  ),
                 ),
               ),
               pw.Padding(
-                padding: const pw.EdgeInsets.all(14),
-                child: rowWidget,
+                padding: pw.EdgeInsets.all(_s(6)),
+                child: content,
               ),
             ],
           ),
@@ -479,124 +616,101 @@ class PrintingService {
       case 'orange_band_right':
         return pw.Container(
           decoration: pw.BoxDecoration(
-            color: _withOpacity(accent, 0.08),
-            border: pw.Border(right: pw.BorderSide(color: accent, width: 6)),
-            borderRadius: pw.BorderRadius.circular(6),
+            color: _withOpacity(primary, 0.08),
+            border: pw.Border(
+              right: pw.BorderSide(color: primary, width: _s(6)),
+            ),
+            borderRadius: pw.BorderRadius.circular(_s(4)),
           ),
-          padding: const pw.EdgeInsets.all(14),
-          child: rowWidget,
+          padding: pw.EdgeInsets.all(_s(6)),
+          child: content,
         );
-      case 'cursive_title':
-        return pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-          child: rowWidget,
-        );
-      case 'circle_accent_top_left':
-      case 'split_diagonal_corners':
-      case 'diamond_center':
-        // Simplification PDF : bandeau orange clair + accents
-        return pw.Container(
-          decoration: pw.BoxDecoration(
-            color: _withOpacity(accent, 0.06),
-            borderRadius: pw.BorderRadius.circular(6),
-          ),
-          padding: const pw.EdgeInsets.all(14),
-          child: rowWidget,
-        );
-      case 'flat':
       default:
-        return pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 6),
-          child: rowWidget,
+        return pw.Container(
+          padding: pw.EdgeInsets.all(_s(6)),
+          child: content,
         );
     }
   }
 
-  static pw.Widget _headerColPdf({
+  static pw.Widget _headerCol({
     required String key,
-    required Invoice invoice,
     required Company company,
-    required InvoiceTemplate template,
     required Map<String, dynamic> positions,
     required PdfColor onColor,
+    required PdfColor primary,
+    required PdfColor textColor,
     required double fs,
+    required String align,
   }) {
     switch (key) {
       case 'logo':
-        final custom = positions['custom_logo_base64'] as String?;
-        Uint8List? bytes;
-        if (custom != null && custom.isNotEmpty) {
-          try {
-            bytes = base64Decode(custom);
-          } catch (_) {}
-        }
-        bytes ??= _logoBytes(company.logoPath);
-        if (bytes == null) return pw.SizedBox();
-        return pw.Align(
-          alignment: pw.Alignment.centerLeft,
-          child: pw.Image(
-            pw.MemoryImage(bytes),
-            width: 52,
-            height: 52,
-            fit: pw.BoxFit.contain,
-          ),
-        );
+        return _logoPdf(positions, company, onColor, primary);
       case 'company_info':
-        final nameOverride = positions['company_name'] as String?;
+        final nameOverride = positions['company_name']?.toString();
         final name = (nameOverride != null && nameOverride.trim().isNotEmpty)
             ? nameOverride.trim()
             : company.name;
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
+          mainAxisSize: pw.MainAxisSize.min,
           children: [
-            pw.Text(
-              _sanitize(name),
-              maxLines: 2,
-              style: pw.TextStyle(
-                fontSize: fs + 4,
-                fontWeight: pw.FontWeight.bold,
-                color: onColor,
+            if (name.isNotEmpty)
+              pw.Text(
+                _sanitize(name),
+                style: pw.TextStyle(
+                  fontSize: _s(fs * 1.15),
+                  fontWeight: pw.FontWeight.bold,
+                  color: onColor,
+                ),
               ),
-            ),
             if (company.address.isNotEmpty)
-              pw.Text(_sanitize(company.address),
-                  style: pw.TextStyle(
-                      fontSize: fs - 1, color: _withOpacity(onColor, 0.85))),
+              _companyLinePdf(company.address, onColor, fs),
             if (company.phone.isNotEmpty)
-              pw.Text(_sanitize(company.phone),
-                  style: pw.TextStyle(
-                      fontSize: fs - 1, color: _withOpacity(onColor, 0.85))),
+              _companyLinePdf(company.phone, onColor, fs),
             if (company.email.isNotEmpty)
-              pw.Text(_sanitize(company.email),
-                  style: pw.TextStyle(
-                      fontSize: fs - 1, color: _withOpacity(onColor, 0.85))),
+              _companyLinePdf(company.email, onColor, fs),
           ],
         );
       case 'invoice_title':
-        final t = positions['invoice_title_text'] as String?;
-        final title = (t != null && t.trim().isNotEmpty)
-            ? t.trim()
-            : (invoice.isDevis ? 'DEVIS' : 'FACTURE');
-        final sub = positions['invoice_subtitle'] as String? ?? '';
+        final titleOverride = positions['invoice_title_text']?.toString();
+        final title =
+            (titleOverride != null && titleOverride.trim().isNotEmpty)
+                ? titleOverride.trim()
+                : 'INVOICE';
+        final sub = positions['invoice_subtitle']?.toString() ?? '';
         return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          crossAxisAlignment: align == 'center'
+              ? pw.CrossAxisAlignment.center
+              : (align == 'right'
+                  ? pw.CrossAxisAlignment.end
+                  : pw.CrossAxisAlignment.start),
+          mainAxisSize: pw.MainAxisSize.min,
           children: [
             pw.Text(
               _sanitize(title),
-              textAlign: pw.TextAlign.right,
               style: pw.TextStyle(
-                fontSize: fs + 10,
+                fontSize: _s(fs * 2.4),
                 fontWeight: pw.FontWeight.bold,
                 color: onColor,
+                letterSpacing: _s(-1),
               ),
+              textAlign: align == 'center'
+                  ? pw.TextAlign.center
+                  : (align == 'right'
+                      ? pw.TextAlign.right
+                      : pw.TextAlign.left),
             ),
             if (sub.trim().isNotEmpty)
-              pw.Text(
-                _sanitize(sub),
-                textAlign: pw.TextAlign.right,
-                style: pw.TextStyle(
-                  fontSize: fs,
-                  color: _withOpacity(onColor, 0.85),
+              pw.Padding(
+                padding: pw.EdgeInsets.only(top: _s(2)),
+                child: pw.Text(
+                  _sanitize(sub.trim()),
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(
+                    fontSize: _s(fs * 0.85),
+                    color: _withOpacity(onColor, 0.7),
+                  ),
                 ),
               ),
           ],
@@ -606,73 +720,184 @@ class PrintingService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CORPS
-  // ═══════════════════════════════════════════════════════════════
-  static pw.Widget _buildBodyPdf({
+  static pw.Widget _companyLinePdf(String text, PdfColor onColor, double fs) =>
+      pw.Padding(
+        padding: pw.EdgeInsets.only(top: _s(1)),
+        child: pw.Text(
+          _sanitize(text),
+          style: pw.TextStyle(
+            fontSize: _s(fs * 0.8),
+            color: _withOpacity(onColor, 0.7),
+          ),
+        ),
+      );
+
+  static pw.Widget _logoPdf(
+    Map<String, dynamic> positions,
+    Company company,
+    PdfColor onColor,
+    PdfColor primary,
+  ) {
+    final custom = positions['custom_logo_base64']?.toString();
+    Uint8List? bytes;
+    if (custom != null && custom.isNotEmpty) {
+      try {
+        bytes = base64Decode(custom);
+      } catch (_) {}
+    }
+    bytes ??= _logoBytes(company.logoPath);
+
+    final size = _s((positions['logo_size'] as num?)?.toDouble() ?? 46);
+
+    if (bytes != null) {
+      return pw.Align(
+        alignment: pw.Alignment.centerLeft,
+        child: pw.Container(
+          width: size,
+          height: size,
+          decoration: pw.BoxDecoration(
+            shape: pw.BoxShape.circle,
+            color: _withOpacity(onColor, 0.10),
+          ),
+          child: pw.ClipOval(
+            child: pw.Image(
+              pw.MemoryImage(bytes),
+              width: size,
+              height: size,
+              fit: pw.BoxFit.cover,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final initials = company.name.isNotEmpty
+        ? company.name
+            .substring(0, company.name.length >= 3 ? 3 : company.name.length)
+            .toUpperCase()
+        : 'ABC';
+
+    return pw.Align(
+      alignment: pw.Alignment.centerLeft,
+      child: pw.Container(
+        width: size,
+        height: size,
+        alignment: pw.Alignment.center,
+        decoration: pw.BoxDecoration(
+          shape: pw.BoxShape.circle,
+          color: _withOpacity(primary, 0.10),
+          border: pw.Border.all(
+            color: _withOpacity(primary, 0.3),
+            width: _s(1),
+          ),
+        ),
+        child: pw.Text(
+          initials,
+          style: pw.TextStyle(
+            color: primary,
+            fontWeight: pw.FontWeight.bold,
+            fontSize: size * 0.30,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Corps ──
+  static pw.Widget _buildBody({
     required Invoice invoice,
     required Client client,
     required Company company,
     required InvoiceTemplate template,
-    required Map<String, dynamic> positions,
     required InvoiceSettings settings,
-    required String tableStyle,
-    required PdfColor accent,
-    required PdfColor cText,
-    required PdfColor cSub,
+    required Map<String, dynamic> positions,
+    required PdfColor primary,
+    required PdfColor textColor,
     required double fs,
   }) {
-    final sections =
+    final bodySections =
         InvoiceTemplate.decodeSections(positions['blocks_sections']);
+    if (bodySections.isEmpty) return pw.SizedBox();
+
     final visMap = positions['block_visibility'] as Map? ?? {};
     final alignMap = positions['block_alignment'] as Map? ?? {};
     final widthMap = positions['block_widths'] as Map? ?? {};
 
+    bool visOf(String k) => visMap[k] is bool ? visMap[k] as bool : true;
+    String alignOf(String k) => alignMap[k]?.toString() ?? 'left';
     double widthOf(String k) => widthMap[k] is num
         ? (widthMap[k] as num).toDouble().clamp(0.3, 3.0)
         : 1.0;
-    String alignOf(String k) => alignMap[k]?.toString() ?? 'left';
-    bool visOf(String k) => visMap[k] is bool ? visMap[k] as bool : true;
 
     final rows = <pw.Widget>[];
-    for (final section in sections) {
+    for (final section in bodySections) {
       final visible = section.where(visOf).toList();
       if (visible.isEmpty) continue;
+
       final totalW = visible.fold<double>(0, (a, k) => a + widthOf(k));
-      const gap = 10.0;
       final avail =
-          PdfPageFormat.a4.width - 2 * 24 - gap * (visible.length - 1);
+          PdfPageFormat.a4.width - _s(64) - _s(8) * (visible.length - 1);
       final children = <pw.Widget>[];
+
       for (var i = 0; i < visible.length; i++) {
-        if (i > 0) children.add(pw.SizedBox(width: gap));
+        if (i > 0) children.add(pw.SizedBox(width: _s(8)));
         final key = visible[i];
-        final w = avail * widthOf(key) / totalW;
+
+        if (key.startsWith('__spacer')) {
+          final h = (positions['spacer_sizes'] as Map?)?[key];
+          final size = h is num ? h.toDouble().clamp(10.0, 400.0) : 40.0;
+          children.add(pw.Container(
+            width: _s(30),
+            height: _s(size),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(
+                color: _withOpacity(textColor, 0.08),
+                width: _s(0.5),
+              ),
+              borderRadius: pw.BorderRadius.circular(_s(4)),
+            ),
+          ));
+          continue;
+        }
+
+        if (key.startsWith('__divider')) {
+          final style = (positions['divider_styles'] as Map?)?[key]?.toString() ??
+              'solid';
+          children.add(pw.Expanded(child: _dividerPdf(style, textColor)));
+          continue;
+        }
+
+        final w = totalW == 0 ? avail : avail * widthOf(key) / totalW;
         children.add(pw.SizedBox(
           width: w,
           child: pw.Align(
-            alignment: _alignPdf(alignOf(key)),
-            child: _bodyBlockPdf(
+            alignment: alignOf(key) == 'center'
+                ? pw.Alignment.topCenter
+                : (alignOf(key) == 'right'
+                    ? pw.Alignment.topRight
+                    : pw.Alignment.topLeft),
+            child: _bodyBlock(
               key: key,
               invoice: invoice,
               client: client,
               company: company,
               template: template,
               settings: settings,
-              tableStyle: tableStyle,
-              accent: accent,
-              cText: cText,
-              cSub: cSub,
-              fs: fs,
               positions: positions,
+              primary: primary,
+              textColor: textColor,
+              fs: fs,
             ),
           ),
         ));
       }
-      rows.add(pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 10),
+
+      rows.add(pw.Container(
+        margin: pw.EdgeInsets.only(bottom: _s(10)),
+        padding: pw.EdgeInsets.symmetric(vertical: _s(4), horizontal: _s(2)),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: children,
+          children: children.isEmpty ? [pw.SizedBox()] : children,
         ),
       ));
     }
@@ -683,196 +908,219 @@ class PrintingService {
     );
   }
 
-  static pw.Alignment _alignPdf(String a) {
-    switch (a) {
-      case 'center':
-        return pw.Alignment.topCenter;
-      case 'right':
-        return pw.Alignment.topRight;
+  static pw.Widget _dividerPdf(String style, PdfColor textColor) {
+    switch (style) {
+      case 'dashed':
+        return pw.Padding(
+          padding: pw.EdgeInsets.symmetric(vertical: _s(6)),
+          child: pw.Row(
+            children: List.generate(
+              30,
+              (_) => pw.Expanded(
+                child: pw.Padding(
+                  padding: pw.EdgeInsets.symmetric(horizontal: _s(2)),
+                  child: pw.Container(
+                    height: _s(1.5),
+                    color: _withOpacity(textColor, 0.35),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      case 'dots':
+        return pw.Padding(
+          padding: pw.EdgeInsets.symmetric(vertical: _s(6)),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: List.generate(
+              20,
+              (_) => pw.Container(
+                width: _s(3),
+                height: _s(3),
+                margin: pw.EdgeInsets.symmetric(horizontal: _s(3)),
+                decoration: pw.BoxDecoration(
+                  color: _withOpacity(textColor, 0.35),
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+        );
       default:
-        return pw.Alignment.topLeft;
+        return pw.Container(
+          height: _s(1),
+          color: _withOpacity(textColor, 0.25),
+          margin: pw.EdgeInsets.symmetric(vertical: _s(6)),
+        );
     }
   }
 
-  static pw.Widget _bodyBlockPdf({
+  static pw.Widget _bodyBlock({
     required String key,
     required Invoice invoice,
     required Client client,
     required Company company,
     required InvoiceTemplate template,
     required InvoiceSettings settings,
-    required String tableStyle,
-    required PdfColor accent,
-    required PdfColor cText,
-    required PdfColor cSub,
-    required double fs,
     required Map<String, dynamic> positions,
+    required PdfColor primary,
+    required PdfColor textColor,
+    required double fs,
   }) {
     switch (key) {
       case 'billing_info':
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text('INVOICE TO:',
-                style: pw.TextStyle(
-                  fontSize: fs - 1,
-                  fontWeight: pw.FontWeight.bold,
-                  color: cSub,
-                )),
-            pw.SizedBox(height: 3),
-            pw.Text(_sanitize(client.name),
-                style: pw.TextStyle(
-                    fontSize: fs,
-                    fontWeight: pw.FontWeight.bold,
-                    color: cText)),
-            if (client.address.isNotEmpty)
-              pw.Text(_sanitize(client.address),
-                  style: pw.TextStyle(fontSize: fs - 1, color: cSub)),
-            if (client.phone.isNotEmpty)
-              pw.Text(_sanitize(client.phone),
-                  style: pw.TextStyle(fontSize: fs - 1, color: cSub)),
-          ],
-        );
+        return _billingPdf(client, primary, textColor, fs, positions);
       case 'invoice_meta':
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            _metaPdf('Invoice #', invoice.invoiceNumber, cText, cSub, fs),
-            _metaPdf('Date', _fmtDate(invoice.issueDate), cText, cSub, fs),
-            _metaPdf('Due Date', _fmtDate(invoice.dueDate), cText, cSub, fs),
-          ],
-        );
+        return _metaPdf(invoice, textColor, fs);
       case 'items_table':
-        return _itemsTablePdf(invoice, tableStyle, accent, cText, cSub, fs);
+        return _itemsTablePdf(
+          invoice,
+          positions['table_style']?.toString() ?? 'plain',
+          primary,
+          textColor,
+          fs,
+        );
       case 'totals':
-        return _totalsPdf(invoice, settings, accent, cText, cSub, fs);
+        return _totalsPdf(invoice, settings, primary, textColor, fs);
       case 'legal_mentions':
-        final custom = positions['custom_legal_text'] as String?;
-        final legal = (custom != null && custom.trim().isNotEmpty)
-            ? custom.trim()
-            : company.legalText;
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            if (settings.showPaymentTerms) ...[
-              pw.Text('TERMS & CONDITIONS',
-                  style: pw.TextStyle(
-                    fontSize: fs - 1,
-                    fontWeight: pw.FontWeight.bold,
-                    color: accent,
-                  )),
-              pw.SizedBox(height: 3),
-            ],
-            if (legal.isNotEmpty)
-              pw.Text(_sanitize(legal),
-                  style: pw.TextStyle(fontSize: fs - 1.5, color: cSub)),
-          ],
-        );
+        return _legalPdf(company, settings, textColor, primary, fs, positions);
       case 'signature_block':
-        final show = positions['show_signature_line'] as bool? ?? true;
-        if (!show) return pw.SizedBox();
-        final title = positions['signatory_title'] as String? ?? 'Signature';
-        final sigB64 = positions['signature_image'] as String?;
-        Uint8List? sigBytes;
-        if (sigB64 != null && sigB64.isNotEmpty) {
-          try {
-            sigBytes = base64Decode(sigB64);
-          } catch (_) {}
-        }
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            if (sigBytes != null)
-              pw.Image(
-                pw.MemoryImage(sigBytes),
-                width: 120,
-                height: 44,
-                fit: pw.BoxFit.contain,
-              ),
-            pw.Container(
-              width: 110,
-              height: 1,
-              color: _withOpacity(cSub, 0.6),
-            ),
-            pw.SizedBox(height: 3),
-            pw.Text(_sanitize(title),
-                style: pw.TextStyle(fontSize: fs - 1, color: cSub)),
-          ],
-        );
+        return _signaturePdf(positions, textColor, fs);
       case 'qr_block':
         if (!template.showPaymentQR) return pw.SizedBox();
-        return pw.Container(
-          width: 60,
-          height: 60,
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: accent, width: 0.6),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Center(
-            child: pw.Text(
-              'QR',
-              style: pw.TextStyle(
-                fontSize: fs,
-                fontWeight: pw.FontWeight.bold,
-                color: cText,
-              ),
-            ),
-          ),
-        );
+        return _qrPdf(textColor);
       default:
         if (key.startsWith('text_')) {
-          final rawTexts = positions['custom_texts'];
-          if (rawTexts is Map && rawTexts[key] is String) {
-            final t = _sanitize(rawTexts[key] as String);
-            if (t.isEmpty) return pw.SizedBox();
-            return pw.Text(t,
-                style: pw.TextStyle(fontSize: fs - 1, color: cText));
-          }
+          return _textBlockPdf(key, positions, textColor, fs);
         }
         return pw.SizedBox();
     }
   }
 
-  static pw.Widget _metaPdf(
-      String l, String v, PdfColor cText, PdfColor cSub, double fs) {
+  static pw.Widget _billingPdf(
+    Client client,
+    PdfColor primary,
+    PdfColor textColor,
+    double fs,
+    Map<String, dynamic> positions,
+  ) {
+    final clientOverride = positions['client_name']?.toString();
+    final name = (clientOverride != null && clientOverride.trim().isNotEmpty)
+        ? clientOverride.trim()
+        : client.name;
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 2),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.end,
+      padding: pw.EdgeInsets.symmetric(vertical: _s(4)),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisSize: pw.MainAxisSize.min,
         children: [
-          pw.Text('$l : ',
+          pw.Text(
+            'INVOICE TO:',
+            style: pw.TextStyle(
+              fontSize: _s(fs * 0.85),
+              fontWeight: pw.FontWeight.bold,
+              color: primary,
+              letterSpacing: _s(0.6),
+            ),
+          ),
+          pw.SizedBox(height: _s(4)),
+          pw.Text(
+            _sanitize(name),
+            style: pw.TextStyle(
+              fontSize: _s(fs),
+              fontWeight: pw.FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+          if (client.address.isNotEmpty)
+            pw.Text(
+              _sanitize(client.address),
               style: pw.TextStyle(
-                fontSize: fs - 1.5,
-                fontWeight: pw.FontWeight.bold,
-                color: cSub,
-              )),
-          pw.Text(_sanitize(v),
-              style: pw.TextStyle(fontSize: fs - 1, color: cText)),
+                fontSize: _s(fs * 0.85),
+                color: _withOpacity(textColor, 0.75),
+              ),
+            ),
+          if (client.phone.isNotEmpty)
+            pw.Text(
+              _sanitize(client.phone),
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.85),
+                color: _withOpacity(textColor, 0.75),
+              ),
+            ),
         ],
       ),
     );
   }
 
-    static pw.Widget _itemsTablePdf(
+  static pw.Widget _metaPdf(Invoice invoice, PdfColor textColor, double fs) =>
+      pw.Padding(
+        padding: pw.EdgeInsets.symmetric(vertical: _s(4)),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            _metaRowPdf('Invoice #', invoice.invoiceNumber, textColor, fs),
+            _metaRowPdf('Date', _fmtDate(invoice.issueDate), textColor, fs),
+            _metaRowPdf('Due Date', _fmtDate(invoice.dueDate), textColor, fs),
+          ],
+        ),
+      );
+
+  static pw.Widget _metaRowPdf(
+    String label,
+    String value,
+    PdfColor textColor,
+    double fs,
+  ) =>
+      pw.Padding(
+        padding: pw.EdgeInsets.only(bottom: _s(3)),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.end,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            pw.Text(
+              '$label : ',
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.8),
+                fontWeight: pw.FontWeight.bold,
+                color: _withOpacity(textColor, 0.65),
+              ),
+            ),
+            pw.Text(
+              _sanitize(value),
+              style: pw.TextStyle(fontSize: _s(fs * 0.85), color: textColor),
+            ),
+          ],
+        ),
+      );
+
+  static pw.Widget _itemsTablePdf(
     Invoice invoice,
     String style,
-    PdfColor accent,
-    PdfColor cText,
-    PdfColor cSub,       // ✅ AJOUT : nécessaire pour "+N autres…"
+    PdfColor primary,
+    PdfColor textColor,
     double fs,
   ) {
-    // ── Plafond : 12 lignes max pour ne pas déborder du A4.
     const maxRows = 12;
     final items = invoice.items;
-    final visibleItems = items.take(maxRows).toList();
-    final hiddenCount = items.length - visibleItems.length;
+    final visible = items.take(maxRows).toList();
+    final hidden = items.length - visible.length;
 
-    // ── En-tête du tableau.
-    final headerBg =
-        style == 'dark_header' ? const PdfColor.fromInt(0xFF1B4965) : accent;
+    final headerBg = style == 'dark_header'
+        ? const PdfColor.fromInt(0xFF1B4965)
+        : primary;
+
     final header = pw.Container(
       color: headerBg,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: pw.EdgeInsets.symmetric(horizontal: _s(10), vertical: _s(8)),
+      decoration: pw.BoxDecoration(
+        borderRadius: pw.BorderRadius.only(
+          topLeft: pw.Radius.circular(_s(4)),
+          topRight: pw.Radius.circular(_s(4)),
+        ),
+      ),
       child: pw.Row(
         children: [
           pw.Expanded(flex: 1, child: _thPdf('N°')),
@@ -887,31 +1135,39 @@ class PrintingService {
       ),
     );
 
-    // ── Lignes d'articles (limitées à maxRows).
     final rows = <pw.Widget>[];
-    for (var i = 0; i < visibleItems.length; i++) {   // ✅ boucle sur visibleItems
-      final item = visibleItems[i];
+    for (var i = 0; i < visible.length; i++) {
+      final item = visible[i];
       final isAlt = style == 'alternate_dark' && i.isEven;
       rows.add(pw.Container(
-        color: isAlt ? _withOpacity(cText, 0.05) : null,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        padding:
+            pw.EdgeInsets.symmetric(horizontal: _s(10), vertical: _s(8)),
+        decoration: pw.BoxDecoration(
+          color: isAlt ? _withOpacity(primary, 0.05) : null,
+          border: pw.Border(
+            bottom: pw.BorderSide(
+              color: _withOpacity(textColor, 0.08),
+              width: _s(0.5),
+            ),
+          ),
+        ),
         child: pw.Row(
           children: [
-            pw.Expanded(flex: 1, child: _tdPdf('${i + 1}', cText, fs)),
+            pw.Expanded(flex: 1, child: _tdPdf('${i + 1}', textColor, fs)),
             pw.Expanded(
                 flex: 5,
-                child: _tdPdf(_sanitize(item.description), cText, fs)),
+                child: _tdPdf(_sanitize(item.description), textColor, fs)),
             pw.Expanded(
                 flex: 2,
-                child: _tdPdf('${item.quantity}', cText, fs,
+                child: _tdPdf('${item.quantity}', textColor, fs,
                     align: pw.TextAlign.center)),
             pw.Expanded(
                 flex: 2,
-                child: _tdPdf(item.unitPrice.toStringAsFixed(0), cText, fs,
+                child: _tdPdf(_fmtNum(item.unitPrice), textColor, fs,
                     align: pw.TextAlign.right)),
             pw.Expanded(
                 flex: 2,
-                child: _tdPdf(item.total.toStringAsFixed(0), cText, fs,
+                child: _tdPdf(_fmtNum(item.total), textColor, fs,
                     align: pw.TextAlign.right, bold: true)),
           ],
         ),
@@ -919,33 +1175,36 @@ class PrintingService {
     }
 
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,   // ✅ indentation fixée
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         header,
-        ...rows,                                          // ✅ était bodyRows
-        if (hiddenCount > 0)
+        ...rows,
+        if (hidden > 0)
           pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 6),
+            padding: pw.EdgeInsets.only(top: _s(4)),
             child: pw.Text(
-              '+ $hiddenCount autre(s) article(s)…',
+              '+ $hidden autre(s) article(s)…',
               style: pw.TextStyle(
-                fontSize: fs - 1,
+                fontSize: _s(fs * 0.75),
+                color: _withOpacity(textColor, 0.5),
                 fontStyle: pw.FontStyle.italic,
-                color: cSub,                              // ✅ maintenant défini
               ),
             ),
           ),
       ],
     );
   }
-  static pw.Widget _thPdf(String t, {pw.TextAlign align = pw.TextAlign.left}) =>
+
+  static pw.Widget _thPdf(String t,
+          {pw.TextAlign align = pw.TextAlign.left}) =>
       pw.Text(
         t,
         textAlign: align,
         style: pw.TextStyle(
           color: PdfColors.white,
           fontWeight: pw.FontWeight.bold,
-          fontSize: 9.5,
+          fontSize: _s(10),
+          letterSpacing: _s(0.4),
         ),
       );
 
@@ -960,7 +1219,7 @@ class PrintingService {
         t,
         textAlign: align,
         style: pw.TextStyle(
-          fontSize: fs - 0.5,
+          fontSize: _s(10.5),
           color: color,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
         ),
@@ -969,257 +1228,372 @@ class PrintingService {
   static pw.Widget _totalsPdf(
     Invoice invoice,
     InvoiceSettings settings,
-    PdfColor accent,
-    PdfColor cText,
-    PdfColor cSub,
-    double fs,
-  ) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.end,
-      children: [
-        _totalLinePdf('Sub Total', invoice.subtotal, cSub, cText, fs),
-        if (settings.showTaxDetails)
-          _totalLinePdf('Tax (${invoice.taxRate.toStringAsFixed(0)}%)',
-              invoice.taxAmount, cSub, cText, fs),
-        if (invoice.discount > 0)
-          _totalLinePdf('Discount', -invoice.discount, cSub, cText, fs),
-        pw.SizedBox(height: 6),
-        pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: pw.BoxDecoration(
-            color: accent,
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Row(
-            mainAxisSize: pw.MainAxisSize.min,
-            children: [
-              pw.Text('TOTAL',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: fs - 0.5,
-                  )),
-              pw.SizedBox(width: 12),
-              pw.Text(invoice.totalAmount.toStringAsFixed(0),
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: fs,
-                  )),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  static pw.Widget _totalLinePdf(
-    String l,
-    double v,
-    PdfColor cSub,
-    PdfColor cText,
+    PdfColor primary,
+    PdfColor textColor,
     double fs,
   ) =>
       pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 2),
-        child: pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.end,
+        padding: pw.EdgeInsets.symmetric(vertical: _s(6)),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          mainAxisSize: pw.MainAxisSize.min,
           children: [
-            pw.Text('$l : ',
-                style: pw.TextStyle(fontSize: fs - 1, color: cSub)),
-            pw.Text(v.toStringAsFixed(0),
-                style: pw.TextStyle(fontSize: fs - 1, color: cText)),
+            _totalLinePdf(
+                'Sub Total', _fmtNum(invoice.subtotal), textColor, fs),
+            if (settings.showTaxDetails)
+              _totalLinePdf(
+                  'Tax (${invoice.taxRate.toStringAsFixed(0)}%)',
+                  _fmtNum(invoice.taxAmount),
+                  textColor,
+                  fs),
+            if (invoice.discount > 0)
+              _totalLinePdf('Discount', _fmtNum(invoice.discount), textColor, fs),
+            pw.SizedBox(height: _s(4)),
+            pw.Container(
+              padding: pw.EdgeInsets.symmetric(
+                  horizontal: _s(12), vertical: _s(8)),
+              decoration: pw.BoxDecoration(
+                color: primary,
+                borderRadius: pw.BorderRadius.circular(_s(4)),
+              ),
+              child: pw.Row(
+                mainAxisSize: pw.MainAxisSize.min,
+                children: [
+                  pw.Text(
+                    'TOTAL',
+                    style: pw.TextStyle(
+                      color: PdfColors.white,
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: _s(fs * 0.95),
+                    ),
+                  ),
+                  pw.SizedBox(width: _s(12)),
+                  pw.Text(
+                    _fmtNum(invoice.totalAmount),
+                    style: pw.TextStyle(
+                      color: PdfColors.white,
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: _s(fs * 1.1),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  PIED
-  // ═══════════════════════════════════════════════════════════════
-  static pw.Widget _buildFooterPdf({
-    required Company company,
-    required Map<String, dynamic> positions,
-    required String footerStyle,
-    required PdfColor accent,
-    required PdfColor cText,
-    required PdfColor cSub,
-    required double fs,
-  }) {
-    final widgets = <pw.Widget>[];
-
-    final bankName = positions['bank_name'] as String? ?? '';
-    final bankAccount = positions['bank_account'] as String? ?? '';
-    if (bankName.isNotEmpty || bankAccount.isNotEmpty) {
-      widgets.add(pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 6),
-        child: pw.Text(
-          '${bankName.isNotEmpty ? 'Bank: $bankName' : ''}'
-          '${bankName.isNotEmpty && bankAccount.isNotEmpty ? '   ' : ''}'
-          '${bankAccount.isNotEmpty ? 'Account: $bankAccount' : ''}',
-          style: pw.TextStyle(fontSize: fs - 1.5, color: cSub),
+  static pw.Widget _totalLinePdf(
+    String label,
+    String value,
+    PdfColor textColor,
+    double fs,
+  ) =>
+      pw.Padding(
+        padding: pw.EdgeInsets.only(bottom: _s(3)),
+        child: pw.Row(
+          mainAxisSize: pw.MainAxisSize.min,
+          mainAxisAlignment: pw.MainAxisAlignment.end,
+          children: [
+            pw.Text(
+              '$label : ',
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.85),
+                color: _withOpacity(textColor, 0.7),
+              ),
+            ),
+            pw.Text(
+              value,
+              style: pw.TextStyle(fontSize: _s(fs * 0.9), color: textColor),
+            ),
+          ],
         ),
-      ));
-    }
+      );
 
-    final showThankYou = positions['show_thank_you'] as bool? ?? false;
-    if (showThankYou) {
-      final text = _sanitize(positions['thank_you_text'] as String? ??
-          'Merci pour votre confiance !');
-      switch (footerStyle) {
-        case 'rainbow_strip':
-          widgets.add(pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 10),
-            child: pw.SizedBox(
-              height: 14,
-              child: _rainbowStripPdf(accent, 32),
-            ),
-          ));
-          widgets.add(pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 6),
-            child: pw.Center(
-              child: pw.Text(
-                text.toUpperCase(),
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: fs,
-                  color: accent,
-                ),
+  static pw.Widget _legalPdf(
+    Company company,
+    InvoiceSettings settings,
+    PdfColor textColor,
+    PdfColor primary,
+    double fs,
+    Map<String, dynamic> positions,
+  ) {
+    final custom = positions['custom_legal_text']?.toString();
+    final legal = (custom != null && custom.trim().isNotEmpty)
+        ? custom.trim()
+        : company.legalText;
+    return pw.Padding(
+      padding: pw.EdgeInsets.symmetric(vertical: _s(6)),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          if (settings.showPaymentTerms) ...[
+            pw.Text(
+              'TERMS & CONDITIONS',
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.85),
+                fontWeight: pw.FontWeight.bold,
+                color: primary,
               ),
             ),
-          ));
-          break;
-        case 'thick_orange_band':
-        case 'zigzag_thankyou':
-          widgets.add(pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 10),
-            child: pw.Container(
-              padding:
-                  const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: pw.BoxDecoration(
-                color: accent,
-                borderRadius: pw.BorderRadius.circular(4),
-              ),
-              child: pw.Center(
-                child: pw.Text(
-                  text,
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: fs,
-                  ),
-                ),
+            pw.SizedBox(height: _s(4)),
+          ],
+          if (legal.isNotEmpty)
+            pw.Text(
+              _sanitize(legal),
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.75),
+                color: _withOpacity(textColor, 0.75),
+                lineSpacing: _s(2),
               ),
             ),
-          ));
-          break;
-        default:
-          widgets.add(pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 8),
-            child: pw.Center(
-              child: pw.Text(
-                text,
-                style: pw.TextStyle(
-                  fontSize: fs,
-                  fontWeight: pw.FontWeight.bold,
-                  color: accent,
-                ),
-              ),
-            ),
-          ));
-      }
-    }
-
-    if (footerStyle == 'contact_bar_icons') {
-      widgets.add(pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 10),
-        child: pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: pw.BoxDecoration(
-            color: accent,
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              _footerContactPdf(company.email.isEmpty ? '' : company.email, fs),
-              _footerContactPdf(company.phone, fs),
-              _footerContactPdf(company.website, fs),
-            ],
-          ),
-        ),
-      ));
-    }
-
-    if (footerStyle == 'diagonal_bottom_stripes') {
-      widgets.add(pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 10),
-        child: pw.SizedBox(height: 14, child: _rainbowStripPdf(accent, 24)),
-      ));
-    }
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-      children: widgets,
+        ],
+      ),
     );
   }
 
-  static pw.Widget _footerContactPdf(String t, double fs) => pw.Text(
-        _sanitize(t),
-        style: pw.TextStyle(fontSize: fs - 1.5, color: PdfColors.white),
+  static pw.Widget _signaturePdf(
+    Map<String, dynamic> positions,
+    PdfColor textColor,
+    double fs,
+  ) {
+    final show = positions['show_signature_line'] as bool? ?? true;
+    if (!show) return pw.SizedBox();
+
+    final titleOverride = positions['signatory_title']?.toString();
+    final title = (titleOverride != null && titleOverride.trim().isNotEmpty)
+        ? titleOverride.trim()
+        : 'Authorized Sign';
+
+    final sigB64 = positions['signature_image']?.toString();
+    Uint8List? sigBytes;
+    if (sigB64 != null && sigB64.isNotEmpty) {
+      try {
+        sigBytes = base64Decode(sigB64);
+      } catch (_) {}
+    }
+
+    return pw.Padding(
+      padding: pw.EdgeInsets.symmetric(vertical: _s(6)),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.end,
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          if (sigBytes != null)
+            pw.Padding(
+              padding: pw.EdgeInsets.only(bottom: _s(4)),
+              child: pw.Image(
+                pw.MemoryImage(sigBytes),
+                width: _s(120),
+                height: _s(44),
+                fit: pw.BoxFit.contain,
+              ),
+            ),
+          pw.Container(
+            width: _s(110),
+            height: _s(1),
+            color: _withOpacity(textColor, 0.5),
+          ),
+          pw.SizedBox(height: _s(3)),
+          pw.Text(
+            _sanitize(title),
+            style: pw.TextStyle(
+              fontSize: _s(fs * 0.75),
+              color: _withOpacity(textColor, 0.75),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _qrPdf(PdfColor textColor) => pw.Container(
+        width: _s(60),
+        height: _s(60),
+        alignment: pw.Alignment.center,
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(
+            color: _withOpacity(textColor, 0.3),
+            width: _s(0.5),
+          ),
+          borderRadius: pw.BorderRadius.circular(_s(4)),
+        ),
+        child: pw.Text(
+          'QR',
+          style: pw.TextStyle(
+            fontSize: _s(14),
+            fontWeight: pw.FontWeight.bold,
+            color: textColor,
+          ),
+        ),
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  DÉCORATIONS
-  // ═══════════════════════════════════════════════════════════════
-  static pw.Widget _rainbowStripPdf(PdfColor accent, int stripes) {
-    const colors = [0xFFE8A33D, 0xFF1B4965, 0xFFE67E22, 0xFF111111];
-    return pw.Row(
+  static pw.Widget _textBlockPdf(
+    String key,
+    Map<String, dynamic> positions,
+    PdfColor textColor,
+    double fs,
+  ) {
+    final rawParas = positions['custom_paragraphs'];
+    if (rawParas is Map && rawParas[key] is List) {
+      final paras = rawParas[key] as List;
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          for (final p in paras)
+            if (p is Map && (p['text']?.toString() ?? '').isNotEmpty)
+              _paragraphPdf(
+                text: p['text'].toString(),
+                align: p['align']?.toString() ?? 'left',
+                bold: p['bold'] == true,
+                italic: p['italic'] == true,
+                textColor: textColor,
+                fs: fs,
+              ),
+        ],
+      );
+    }
+    final rawTexts = positions['custom_texts'];
+    if (rawTexts is Map && rawTexts[key] is String) {
+      final t = (rawTexts[key] as String).trim();
+      if (t.isEmpty) return pw.SizedBox();
+      return pw.Text(
+        _sanitize(t),
+        style: pw.TextStyle(fontSize: _s(fs * 0.85), color: textColor),
+      );
+    }
+    return pw.SizedBox();
+  }
+
+  static pw.Widget _paragraphPdf({
+    required String text,
+    required String align,
+    required bool bold,
+    required bool italic,
+    required PdfColor textColor,
+    required double fs,
+  }) {
+    final ta = align == 'center'
+        ? pw.TextAlign.center
+        : (align == 'right'
+            ? pw.TextAlign.right
+            : (align == 'justify'
+                ? pw.TextAlign.justify
+                : pw.TextAlign.left));
+    return pw.Padding(
+      padding: pw.EdgeInsets.only(bottom: _s(2)),
+      child: pw.Text(
+        _sanitize(text),
+        textAlign: ta,
+        style: pw.TextStyle(
+          fontSize: _s(fs * 0.85),
+          color: textColor,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          fontStyle: italic ? pw.FontStyle.italic : pw.FontStyle.normal,
+        ),
+      ),
+    );
+  }
+
+  // ── Pied ──
+  static pw.Widget _buildFooter({
+    required Map<String, dynamic> positions,
+    required PdfColor primary,
+    required PdfColor textColor,
+    required double fs,
+  }) {
+    final bankName = positions['bank_name']?.toString() ?? '';
+    final bankAccount = positions['bank_account']?.toString() ?? '';
+    final showThanks = positions['show_thank_you'] as bool? ?? false;
+    final thanksText = positions['thank_you_text']?.toString() ?? '';
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < stripes; i++)
-          pw.Expanded(
+        if (bankName.isNotEmpty || bankAccount.isNotEmpty)
+          pw.Padding(
+            padding: pw.EdgeInsets.only(top: _s(8)),
+            child: pw.Text(
+              '${bankName} ${bankAccount}'.trim(),
+              style: pw.TextStyle(
+                fontSize: _s(fs * 0.75),
+                color: _withOpacity(textColor, 0.65),
+              ),
+            ),
+          ),
+        if (showThanks)
+          pw.Padding(
+            padding: pw.EdgeInsets.only(top: _s(10)),
             child: pw.Container(
-              color: PdfColor.fromInt(colors[i % colors.length]),
+              padding: pw.EdgeInsets.symmetric(
+                  horizontal: _s(12), vertical: _s(8)),
+              decoration: pw.BoxDecoration(
+                color: primary,
+                borderRadius: pw.BorderRadius.circular(_s(4)),
+              ),
+              child: pw.Center(
+                child: pw.Text(
+                  _sanitize(thanksText.isNotEmpty
+                      ? thanksText
+                      : 'Merci pour votre confiance !'),
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: _s(12),
+                  ),
+                ),
+              ),
             ),
           ),
       ],
     );
   }
 
-  static pw.Widget? _buildPaidStampPdf(
-      Map<String, dynamic> positions, double fs) {
+  // ── Overlays ──
+  static pw.Widget _buildPaidStamp(
+    Map<String, dynamic> positions,
+    double pageW,
+    double pageH,
+  ) {
     final sx =
         ((positions['stamp_x'] as num?)?.toDouble() ?? 0.5).clamp(0.05, 0.95);
     final sy =
         ((positions['stamp_y'] as num?)?.toDouble() ?? 0.5).clamp(0.05, 0.95);
     final rot = ((positions['stamp_rotation'] as num?)?.toDouble() ?? -0.15);
-    final sc =
-        ((positions['stamp_scale'] as num?)?.toDouble() ?? 1.0).clamp(0.5, 3.0);
-    final text = _sanitize(positions['stamp_text'] as String? ?? 'PAYÉ');
-    final pageW = PdfPageFormat.a4.width;
-    final pageH = PdfPageFormat.a4.height;
+    final sc = ((positions['stamp_scale'] as num?)?.toDouble() ?? 1.0)
+        .clamp(0.5, 3.0);
+    final text = _sanitize(positions['stamp_text']?.toString() ?? 'PAYÉ');
+
     return pw.Positioned(
-      left: sx * pageW - 90 * sc,
-      top: sy * pageH - 30 * sc,
+      left: sx * pageW - _s(90) * sc,
+      top: sy * pageH - _s(30) * sc,
       child: pw.Transform.rotate(
         angle: rot,
         child: pw.Opacity(
           opacity: 0.85,
           child: pw.Container(
-            padding:
-                pw.EdgeInsets.symmetric(horizontal: 26 * sc, vertical: 10 * sc),
+            padding: pw.EdgeInsets.symmetric(
+              horizontal: _s(26) * sc,
+              vertical: _s(10) * sc,
+            ),
             decoration: pw.BoxDecoration(
               color: PdfColor.fromInt(0x1AFFFFFF),
               border: pw.Border.all(
-                  color: PdfColor.fromInt(0xFFBAAB6D), width: 4 * sc),
-              borderRadius: pw.BorderRadius.circular(8 * sc),
+                color: const PdfColor.fromInt(0xFFBAAB6D),
+                width: _s(4) * sc,
+              ),
+              borderRadius: pw.BorderRadius.circular(_s(8) * sc),
             ),
             child: pw.Text(
               text,
               style: pw.TextStyle(
-                fontSize: 40 * sc,
+                fontSize: _s(40) * sc,
                 fontWeight: pw.FontWeight.bold,
-                color: PdfColor.fromInt(0xFFBAAB6D),
-                letterSpacing: 6 * sc,
+                color: const PdfColor.fromInt(0xFFBAAB6D),
+                letterSpacing: _s(6) * sc,
               ),
             ),
           ),
@@ -1228,7 +1602,10 @@ class PrintingService {
     );
   }
 
-  static pw.Widget _buildWatermarkPdf(InvoiceSettings s, PdfColor cText) =>
+  static pw.Widget _buildWatermark(
+    InvoiceSettings settings,
+    PdfColor textColor,
+  ) =>
       pw.Positioned.fill(
         child: pw.Transform.rotate(
           angle: -0.5,
@@ -1236,11 +1613,11 @@ class PrintingService {
             child: pw.Opacity(
               opacity: 0.08,
               child: pw.Text(
-                _sanitize(s.watermarkText),
+                _sanitize(settings.watermarkText),
                 style: pw.TextStyle(
-                  fontSize: 48,
+                  fontSize: _s(48),
                   fontWeight: pw.FontWeight.bold,
-                  color: _withOpacity(cText, 0.5),
+                  color: _withOpacity(textColor, 0.5),
                 ),
               ),
             ),
@@ -1248,20 +1625,7 @@ class PrintingService {
         ),
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  UTILITAIRES
-  // ═══════════════════════════════════════════════════════════════
-  static PdfColor _pdf(Color c) => PdfColor(c.r, c.g, c.b);
-
-  static PdfColor _withOpacity(PdfColor c, double op) =>
-      PdfColor(c.red, c.green, c.blue, op);
-
-  static PdfColor _darken(PdfColor c, double amount) => PdfColor(
-        (c.red * (1 - amount)).clamp(0.0, 1.0),
-        (c.green * (1 - amount)).clamp(0.0, 1.0),
-        (c.blue * (1 - amount)).clamp(0.0, 1.0),
-      );
-
+  // ── Utilitaires ──
   static Uint8List? _logoBytes(String path) {
     if (path.isEmpty) return null;
     try {
@@ -1278,6 +1642,12 @@ class PrintingService {
     }
   }
 
-  static String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
+  static String _fmtDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
       '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  static String _fmtNum(double v) {
+    if (v % 1 == 0) return v.toStringAsFixed(0);
+    return v.toStringAsFixed(2);
+  }
 }

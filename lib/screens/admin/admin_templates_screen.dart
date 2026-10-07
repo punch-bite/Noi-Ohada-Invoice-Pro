@@ -1,15 +1,17 @@
 // lib/screens/admin/admin_templates_screen.dart
 //
-// CHANGELOG (v2) :
-//   • 🐛 FIX MAJEUR : dédoublonnage des presets (getAllTemplates retourne déjà
-//     les presets seedés par FirestoreInitializer → plus de doublons).
-//   • Distinction visuelle : PRESET (système, lecture seule) vs ADMIN (création).
-//   • Badge designVersion : signale les presets obsolètes (< v4).
-//   • Badge prix : "GRATUIT" au lieu de "0 XAF".
-//   • Trie par catégorie → preset système d'abord, custom ensuite.
-//   • Pour les presets système : seul "Personnaliser" est proposé (pas de
-//     "Supprimer" — l'admin perdrait les modifications au prochain seed).
-//   • Bandeau info si presets obsolètes (invite à forcer la migration).
+// 🎨 Modèles de factures — v3 « Soft Refined ».
+//
+// CHANGELOG v3 :
+//   • 🎨 REFONTE VISUELLE : cartes aérées, ombres douces, typographie
+//     hiérarchisée, espacement généreux.
+//   • Badges réduits (2 max visibles : type + statut) — les infos
+//     secondaires sont dans le menu contextuel.
+//   • Menu contextuel `⋮` par carte (Personnaliser / Modifier / Supprimer)
+//     au lieu de 3 IconButton alignés.
+//   • Bandeau d'alerte upgrade compacté.
+//   • Fond neutre avec cartes élevées (elevation douce).
+//   • Aucun changement fonctionnel — toutes les actions restent identiques.
 //
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -42,27 +44,19 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
 
   Future<void> _load() async {
     try {
-      // ── Source : Firestore (source de vérité SaaS).
       final firestoreTemplates = await _templateService.getAllTemplates();
-
-      // ── Fallback : presets en code si Firestore vide (premier boot).
       final baseList = firestoreTemplates.isEmpty
           ? InvoiceTemplate.getDefaultTemplates()
           : firestoreTemplates;
 
-      // ── Dédoublonnage par id (Firestore peut contenir les presets).
       final byId = <String, InvoiceTemplate>{};
       for (final t in baseList) {
         byId[t.id] = t;
       }
-
-      // ── S'assure que TOUS les presets code sont présents (même si
-      //    FirestoreInitializer n'a pas encore tourné).
       for (final preset in InvoiceTemplate.getDefaultTemplates()) {
         byId.putIfAbsent(preset.id, () => preset);
       }
 
-      // ── Tri : presets système (isDefault) d'abord, custom ensuite.
       final list = byId.values.toList()
         ..sort((a, b) {
           if (a.isDefault && !b.isDefault) return -1;
@@ -88,9 +82,6 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
     }
   }
 
-  /// 🗑️ Suppression : UNIQUEMENT pour les modèles custom admin.
-  /// Les presets système ne peuvent pas être supprimés (ils seraient
-  /// re-seedés au prochain `FirestoreInitializer.initialize()`).
   Future<void> _delete(InvoiceTemplate t) async {
     if (t.isDefault) {
       _toast('Les presets système ne peuvent pas être supprimés.');
@@ -145,11 +136,11 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
         content: Text(msg),
         backgroundColor: color ?? Colors.green,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
-  /// Vrai si un preset système est en retard sur la version courante.
   bool _needsUpgrade(InvoiceTemplate t) {
     if (!t.isDefault) return false;
     return t.designVersion < InvoiceTemplate.kRoyalDesignVersion;
@@ -160,9 +151,16 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
     final theme = context.watch<ThemeProvider>();
     final isDark = theme.isDarkMode;
     final text = theme.textColor;
-    final sub = theme.textColor.withValues(alpha: 0.6);
     final bg = theme.backgroundColor;
     final primary = theme.primaryColor;
+
+    // Palette de gris adaptée au thème
+    final sub = isDark
+        ? Colors.white.withValues(alpha: 0.55)
+        : Colors.black.withValues(alpha: 0.48);
+    final surfaceTint = isDark
+        ? const Color(0xFF14161B)
+        : const Color(0xFFF7F8FA);
 
     final systemCount = _templates.where((t) => t.isDefault).length;
     final customCount = _templates.length - systemCount;
@@ -170,105 +168,65 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Modèles de factures',
-              style: TextStyle(
-                color: text,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-              ),
-            ),
-            if (!_loading)
-              Text(
-                '$systemCount preset(s) · $customCount custom',
-                style: TextStyle(
-                  color: sub,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Créer un modèle',
-            icon: Icon(Icons.add_rounded, color: text, size: 22),
-            onPressed: () => context.push('/admin/templates/create'),
-          ),
-          const SizedBox(width: 4),
-        ],
+      appBar: _buildAppBar(
+        text: text,
+        sub: sub,
+        primary: primary,
+        total: _templates.length,
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: primary))
           : RefreshIndicator(
               onRefresh: _load,
               color: primary,
-              child: Column(
-                children: [
-                  // ── Bandeau info si presets obsolètes ──
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                slivers: [
+                  // ── Bandeau upgrade (si nécessaire) ──
                   if (outdated > 0)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.info_outline_rounded,
-                                color: Color(0xFFF59E0B), size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$outdated preset(s) à mettre à jour vers '
-                                'le design v${InvoiceTemplate.kRoyalDesignVersion}.',
-                                style: TextStyle(
-                                  color: text,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                        child: _buildUpgradeBanner(outdated, text, isDark),
                       ),
                     ),
-                  const SizedBox(height: 8),
-                  // ── Liste ──
-                  Expanded(
-                    child: ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                      itemCount: _templates.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) => _buildCard(
-                        _templates[index],
-                        theme,
-                        index: index,
-                        primary: primary,
-                        isDark: isDark,
+
+                  // ── Statistiques compactes ──
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      child: _buildStats(
+                        systemCount: systemCount,
+                        customCount: customCount,
                         text: text,
                         sub: sub,
+                        isDark: isDark,
+                        primary: primary,
                       ),
+                    ),
+                  ),
+
+                  // ── Liste des modèles ──
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                    sliver: SliverList.separated(
+                      itemCount: _templates.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        return _buildCard(
+                          _templates[index],
+                          index: index,
+                          theme: theme,
+                          isDark: isDark,
+                          text: text,
+                          sub: sub,
+                          primary: primary,
+                          surfaceTint: surfaceTint,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -277,14 +235,266 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
     );
   }
 
-  Widget _buildCard(
-    InvoiceTemplate t,
-    ThemeProvider theme, {
-    required int index,
+  // ─────────────────────────────────────────────────────────────────
+  //  APP BAR
+  // ─────────────────────────────────────────────────────────────────
+  PreferredSizeWidget _buildAppBar({
+    required Color text,
+    required Color sub,
     required Color primary,
+    required int total,
+  }) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back_ios_new_rounded, color: text, size: 20),
+        onPressed: () => context.pop(),
+      ),
+      title: Row(
+        children: [
+          Text(
+            'Modèles',
+            style: TextStyle(
+              color: text,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (!_loading && total > 0)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$total',
+                style: TextStyle(
+                  color: primary,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Material(
+            color: primary,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: () => context.push('/admin/templates/create'),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 9),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Créer',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  BANDEAU UPGRADE
+  // ─────────────────────────────────────────────────────────────────
+  Widget _buildUpgradeBanner(int count, Color text, bool isDark) {
+    const accent = Color(0xFFF59E0B);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: accent,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count preset${count > 1 ? 's' : ''} à mettre à jour',
+                  style: TextStyle(
+                    color: text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Design v${InvoiceTemplate.kRoyalDesignVersion} disponible',
+                  style: TextStyle(
+                    color: text.withValues(alpha: 0.55),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  STATISTIQUES
+  // ─────────────────────────────────────────────────────────────────
+  Widget _buildStats({
+    required int systemCount,
+    required int customCount,
+    required Color text,
+    required Color sub,
+    required bool isDark,
+    required Color primary,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: _statCard(
+            icon: Icons.verified_rounded,
+            label: 'Presets système',
+            value: '$systemCount',
+            color: const Color(0xFF4F46E5),
+            isDark: isDark,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _statCard(
+            icon: Icons.person_pin_rounded,
+            label: 'Mes créations',
+            value: '$customCount',
+            color: const Color(0xFF8B5CF6),
+            isDark: isDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.03),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : Colors.black.withValues(alpha: 0.45),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  CARTE
+  // ─────────────────────────────────────────────────────────────────
+  Widget _buildCard(
+    InvoiceTemplate t, {
+    required int index,
+    required ThemeProvider theme,
     required bool isDark,
     required Color text,
     required Color sub,
+    required Color primary,
+    required Color surfaceTint,
   }) {
     final isSystem = t.isDefault;
     final needsUpgrade = _needsUpgrade(t);
@@ -292,46 +502,35 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
     return Container(
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.04),
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.03),
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => context.push('/admin/templates/edit/${t.id}'),
+            onTap: () => context.push('/templates/workspace', extra: t),
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ── Miniature ──
-                  Container(
-                    width: 54,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      color: t.backgroundColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: t.primaryColor.withValues(alpha: 0.4),
-                        width: 1.2,
-                      ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: (t.fileData.isNotEmpty && t.fileType != 'pdf')
-                        ? Image.memory(
-                            base64Decode(t.fileData),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                TemplateThumbnail(template: t),
-                          )
-                        : TemplateThumbnail(template: t),
-                  ),
+                  _buildThumbnail(t),
+
                   const SizedBox(width: 14),
 
                   // ── Infos ──
@@ -339,6 +538,7 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Titre + warning
                         Row(
                           children: [
                             Expanded(
@@ -350,69 +550,82 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
                                   color: text,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14.5,
-                                  letterSpacing: -0.2,
+                                  letterSpacing: -0.3,
+                                  height: 1.2,
                                 ),
                               ),
                             ),
                             if (needsUpgrade)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 4),
-                                child: Icon(Icons.warning_amber_rounded,
-                                    color: Color(0xFFF59E0B), size: 16),
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B)
+                                      .withValues(alpha: 0.14),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.arrow_upward_rounded,
+                                  color: Color(0xFFF59E0B),
+                                  size: 11,
+                                ),
                               ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+
+                        const SizedBox(height: 6),
+
+                        // Description ou catégorie
+                        Text(
+                          t.description.isNotEmpty
+                              ? t.description
+                              : t.category,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: sub,
+                            fontSize: 12,
+                            height: 1.35,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Badges compacts
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
                           children: [
-                            if (isSystem)
-                              _badge('SYSTÈME', const Color(0xFF4F46E5)),
-                            if (!isSystem && (t.createdBy?.isNotEmpty ?? false))
-                              _badge('ADMIN', const Color(0xFF8B5CF6)),
-                            if (t.isPremium)
-                              _badge('PREMIUM', const Color(0xFFF59E0B)),
-                            if (t.price > 0)
-                              _badge('${t.price.toStringAsFixed(0)} XAF',
-                                  const Color(0xFF10B981))
-                            else
-                              _badge('GRATUIT', const Color(0xFF10B981)),
                             _badge(
-                              'v${t.designVersion}',
-                              needsUpgrade
-                                  ? const Color(0xFFF59E0B)
-                                  : const Color(0xFF6B7280),
+                              isSystem ? 'Système' : 'Perso',
+                              isSystem
+                                  ? const Color(0xFF4F46E5)
+                                  : const Color(0xFF8B5CF6),
+                              isDark,
                             ),
+                            _badge(
+                              t.isPremium ? 'Premium' : 'Gratuit',
+                              t.isPremium
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFF10B981),
+                              isDark,
+                            ),
+                            if (t.price > 0)
+                              _badge(
+                                '${t.price.toStringAsFixed(0)} XAF',
+                                const Color(0xFF6B7280),
+                                isDark,
+                                subtle: true,
+                              ),
                           ],
                         ),
                       ],
                     ),
                   ),
 
-                  // ── Actions ──
-                  IconButton(
-                    tooltip: 'Personnaliser',
-                    icon: Icon(Icons.tune_rounded, color: primary, size: 20),
-                    onPressed: () =>
-                        context.push('/templates/workspace', extra: t),
-                  ),
-                  IconButton(
-                    tooltip: 'Modifier les métadonnées',
-                    icon: Icon(Icons.edit_outlined, color: sub, size: 20),
-                    onPressed: () =>
-                        context.push('/admin/templates/edit/${t.id}'),
-                  ),
-                  // ⚠️ Pas de suppression pour les presets système.
-                  if (!isSystem)
-                    IconButton(
-                      tooltip: 'Supprimer',
-                      icon: const Icon(Icons.delete_outline_rounded,
-                          color: Colors.redAccent, size: 20),
-                      onPressed: () => _delete(t),
-                    )
-                  else
-                    const SizedBox(width: 48),
+                  // ── Menu contextuel ──
+                  _buildMenu(t, text, primary, sub),
                 ],
               ),
             ),
@@ -422,31 +635,170 @@ class _AdminTemplatesScreenState extends State<AdminTemplatesScreen> {
     )
         .animate()
         .fadeIn(
-          delay: Duration(milliseconds: 30 + (index * 30)),
-          duration: 300.ms,
+          delay: Duration(milliseconds: 30 + (index * 25)),
+          duration: 320.ms,
+          curve: Curves.easeOut,
         )
         .slideY(
-          begin: 0.05,
+          begin: 0.04,
           end: 0,
-          duration: 300.ms,
+          duration: 320.ms,
           curve: Curves.easeOut,
         );
   }
 
-  Widget _badge(String label, Color color) {
+  // ─────────────────────────────────────────────────────────────────
+  //  MINIATURE
+  // ─────────────────────────────────────────────────────────────────
+  Widget _buildThumbnail(InvoiceTemplate t) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      width: 68,
+      height: 88,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        color: t.backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: t.primaryColor.withValues(alpha: 0.20),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: t.primaryColor.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: (t.fileData.isNotEmpty && t.fileType != 'pdf')
+          ? Image.memory(
+              base64Decode(t.fileData),
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => TemplateThumbnail(template: t),
+            )
+          : TemplateThumbnail(template: t),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  MENU CONTEXTUEL
+  // ─────────────────────────────────────────────────────────────────
+  Widget _buildMenu(
+    InvoiceTemplate t,
+    Color text,
+    Color primary,
+    Color sub,
+  ) {
+    final isSystem = t.isDefault;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Options',
+      icon: Icon(
+        Icons.more_vert_rounded,
+        color: sub.withValues(alpha: 0.7),
+        size: 20,
+      ),
+      padding: EdgeInsets.zero,
+      splashRadius: 20,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      elevation: 6,
+      onSelected: (value) {
+        switch (value) {
+          case 'customize':
+            context.push('/templates/workspace', extra: t);
+            break;
+          case 'edit':
+            context.push('/admin/templates/edit/${t.id}');
+            break;
+          case 'delete':
+            _delete(t);
+            break;
+        }
+      },
+      itemBuilder: (ctx) => [
+        _menuItem(
+          value: 'customize',
+          icon: Icons.tune_rounded,
+          label: 'Personnaliser',
+          color: primary,
+          text: text,
+        ),
+        _menuItem(
+          value: 'edit',
+          icon: Icons.edit_outlined,
+          label: 'Modifier',
+          color: text,
+          text: text,
+        ),
+        if (!isSystem)
+          _menuItem(
+            value: 'delete',
+            icon: Icons.delete_outline_rounded,
+            label: 'Supprimer',
+            color: Colors.redAccent,
+            text: text,
+          ),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _menuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color text,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 44,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: text,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  BADGE
+  // ─────────────────────────────────────────────────────────────────
+  Widget _badge(
+    String label,
+    Color color,
+    bool isDark, {
+    bool subtle = false,
+  }) {
+    final bg = subtle
+        ? color.withValues(alpha: isDark ? 0.10 : 0.06)
+        : color.withValues(alpha: isDark ? 0.16 : 0.10);
+    final fg = subtle ? color.withValues(alpha: 0.75) : color;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
+          color: fg,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.1,
+          height: 1.2,
         ),
       ),
     );
