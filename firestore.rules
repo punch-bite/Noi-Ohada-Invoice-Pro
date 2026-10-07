@@ -42,7 +42,6 @@ service cloud.firestore {
     function canWriteOwnResource()  { return isAdmin() || isNewOwner(); }
     function canUpdateOwnResource() { return isAdmin() || isOwner(); }
 
-    // 🔒 Propriété préservée sur update
     function ownershipPreserved() {
       let userOk = !('userId' in resource.data)
         || !('userId' in request.resource.data)
@@ -82,19 +81,16 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  🎯 FIX : users/{userId}
+    //  USERS
     // ═══════════════════════════════════════════════════════════════════
     match /users/{userId} {
       allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
 
-      // ✅ FIX : on autorise `isActive` sur create (il vaut true par défaut),
-      //    on bloque UNIQUEMENT les privilèges admin.
       allow create: if isSignedIn() && request.auth.uid == userId
         && !hasAdminPrivileges(request.resource.data)
         && (!('isActive' in request.resource.data)
             || request.resource.data.isActive == true);
 
-      // ✅ Update : bloque toujours la modification de `isActive` et des privilèges admin.
       allow update: if isAdmin()
         || (isSignedIn() && request.auth.uid == userId
             && !hasAdminPrivileges(request.resource.data)
@@ -103,7 +99,7 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  AUTRES COLLECTIONS
+    //  COLLECTIONS MÉTIERS
     // ═══════════════════════════════════════════════════════════════════
     match /companies/{companyId} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
@@ -230,7 +226,7 @@ service cloud.firestore {
               || request.resource.data.ownerId == ''
               || request.resource.data.ownerId == request.auth.uid
               || request.resource.data.ownerId ==
-                 get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId);
+                  get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId);
         allow update, delete: if isAdmin()
           || (isTeamMember(teamId, request.auth.uid)
               && resource.data.senderId == request.auth.uid);
@@ -249,12 +245,13 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isAdmin() || isOwner()
         || ('recipients' in resource.data && resource.data.recipients is list
             && request.auth.uid in resource.data.recipients));
-      allow write: if isAdmin() || (isSignedIn() && (isNewOwner()
+      allow create, update: if isAdmin() || (isSignedIn() && (isNewOwner()
         || (request.resource.data.createdBy == request.auth.uid
             && request.resource.data.teamId is string
             && isTeamMember(request.resource.data.teamId, request.auth.uid)
             && request.resource.data.userId is string
             && isTeamMember(request.resource.data.teamId, request.resource.data.userId))));
+      allow delete: if isAdmin() || isOwner();
     }
     match /fcm_tokens/{tokenId} {
       allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
@@ -274,8 +271,9 @@ service cloud.firestore {
       allow write: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
     match /counters/{scopeId} {
-      allow read, write: if isSignedIn()
-        && (request.auth.uid == scopeId || myCompanyId() == scopeId);
+      allow read: if isSignedIn() && (request.auth.uid == scopeId || myCompanyId() == scopeId);
+      allow create, update: if isSignedIn() && (request.auth.uid == scopeId || myCompanyId() == scopeId);
+      allow delete: if isAdmin();
     }
 
     match /wallets/{userId} {

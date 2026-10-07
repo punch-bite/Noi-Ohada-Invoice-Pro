@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "OHADA Invoice Pro",
-  "short_name": "OHADA Invoice",
+  "name": "Noi Invoice Pro",
+  "short_name": "Noi Invoice",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
