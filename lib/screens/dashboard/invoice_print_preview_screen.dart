@@ -7,7 +7,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:noi_ohada_invoice_pro/models/invoice_layout.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
@@ -16,6 +15,7 @@ import '../../models/company.dart';
 import '../../models/invoice.dart';
 import '../../models/invoice_settings.dart';
 import '../../models/invoice_template.dart';
+import '../../models/invoice_layout.dart'; // ✅ AJOUT
 import '../../services/printing_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../theme/royal_ledger.dart';
