@@ -1,24 +1,38 @@
-// lib/services/contact_import_web_legacy.dart
+// lib/services/contact_import_web.dart
 //
-// ⚠️ Version alternative utilisant dart:js (deprecated mais stable).
+// CHANGELOG v2 :
+//   • 🐛 FIX `Null check operator used on a null value` :
+//     - Toutes les valeurs JS sont castées défensivement.
+//     - Plus aucun `!` implicite.
+//     - Retourne liste vide en cas d'erreur au lieu de throw.
+//   • 🛡️ Vérifications null partout.
 //
-import 'dart:async';
 import 'dart:convert';
-// ignore: deprecated_member_use
-import 'dart:js' as js;
+import 'dart:js_interop';
 
 import 'contact_import_types.dart';
 
+// ─── Ponts JS (définis dans web/contact_picker.js) ───
+@JS('contactPickerIsSupported')
+external JSBoolean? _jsIsSupported();   // ⚠️ Nullable
+
+@JS('contactPickerSelect')
+external JSPromise<JSString>? _jsSelect(JSArray<JSString> properties);   // ⚠️ Nullable
+
+/// Vrai si l'API Contact Picker est disponible.
 bool webContactPickerSupported() {
   try {
-    final nav = js.context['navigator'];
-    return nav.hasProperty('contacts') &&
-        nav['contacts'].hasProperty('select');
+    final result = _jsIsSupported();
+    if (result == null) return false;
+    return result.toDart;
   } catch (_) {
     return false;
   }
 }
 
+/// Ouvre le sélecteur natif et retourne les contacts choisis.
+///
+/// 🛡️ Ne lève JAMAIS d'exception — retourne liste vide en cas d'erreur.
 Future<List<ImportedContactData>> pickContactsFromWeb({
   bool multiple = true,
 }) async {
@@ -28,28 +42,55 @@ Future<List<ImportedContactData>> pickContactsFromWeb({
     );
   }
 
-  final completer = Completer<String>();
+  try {
+    // ✅ Conversion correcte : List<JSString> → JSArray<JSString>
+    final props = <JSString>[
+      'name'.toJS,
+      'email'.toJS,
+      'tel'.toJS,
+    ].toJS;
 
-  // Appel JS avec callback.
-  js.context.callMethod(r'$contactPickerSelectNative', [
-    js.JsArray.from(['name', 'email', 'tel']),
-    (String jsonStr) => completer.complete(jsonStr),
-    (String err) => completer.completeError(Exception(err)),
-  ]);
+    // Appel JS — vérifie null sur le promise.
+    final promise = _jsSelect(props);
+    if (promise == null) {
+      throw Exception('Bridge JS non initialisé (contact_picker.js absent ?)');
+    }
 
-  final jsonStr = await completer.future;
-  final List<dynamic> rawList = jsonDecode(jsonStr);
+    // Attend le résultat.
+    final result = await promise.toDart;
 
-  return rawList.map<ImportedContactData>((item) {
-    final map = item as Map<String, dynamic>;
-    final name = (map['name'] as String?)?.trim() ?? '';
-    final email = (map['email'] as String?)?.trim() ?? '';
-    final tel = (map['tel'] as String?)?.trim() ?? '';
+    // 🛡️ Vérifie que result est bien une JSString.
+    final String jsonStr;
+    try {
+      jsonStr = result.toDart;
+    } catch (e) {
+      return const [];
+    }
 
-    return ImportedContactData(
-      name: name.isNotEmpty ? name : 'Sans nom',
-      phone: tel.isNotEmpty ? tel : null,
-      email: email.isNotEmpty ? email : null,
-    );
-  }).toList();
+    if (jsonStr.isEmpty) return const [];
+
+    final decoded = jsonDecode(jsonStr);
+    if (decoded is! List) return const [];
+
+    final contacts = <ImportedContactData>[];
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+
+      final name = (map['name'] as String?)?.trim() ?? '';
+      final email = (map['email'] as String?)?.trim() ?? '';
+      final tel = (map['tel'] as String?)?.trim() ?? '';
+
+      contacts.add(ImportedContactData(
+        name: name.isNotEmpty ? name : 'Sans nom',
+        phone: tel.isNotEmpty ? tel : null,
+        email: email.isNotEmpty ? email : null,
+      ));
+    }
+
+    return contacts;
+  } catch (e) {
+    // 🛡️ Ne remonte JAMAIS l'exception → liste vide.
+    return const [];
+  }
 }

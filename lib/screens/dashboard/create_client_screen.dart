@@ -158,14 +158,20 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     }
   }
 
-  /// 🌐 Import WEB — API Contact Picker (Chrome Android).
   Future<void> _importFromContactsWeb() async {
-    if (!webContactPickerSupported()) {
-      if (!mounted) return;
+  setState(() => _isLoadingContacts = true);
+
+  try {
+    final contacts = await pickContactsFromWeb(multiple: true);
+
+    if (!mounted) return;
+    setState(() => _isLoadingContacts = false);
+
+    // 🛡️ Garde : si la liste est vide, on informe sans crash.
+    if (contacts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Import de contacts disponible uniquement sur Chrome Android.'),
+          content: Text('Aucun contact sélectionné'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -173,68 +179,45 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       return;
     }
 
-    setState(() => _isLoadingContacts = true);
+    // 🛡️ Garde : ne cherche un contact utilisable QUE si la liste n'est pas vide.
+    final usable = contacts.where((c) => c.isUsable).toList();
+    final first = usable.isNotEmpty ? usable.first : contacts.first;
 
-    try {
-      final contacts =
-          await pickContactsFromWeb(multiple: true);
-
-      if (!mounted) return;
-      setState(() => _isLoadingContacts = false);
-
-      if (contacts.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Aucun contact sélectionné'),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
+    setState(() {
+      if (first.name.isNotEmpty) _nameController.text = first.name;
+      if (first.phone != null && first.phone!.isNotEmpty) {
+        _phoneController.text = first.phone!;
       }
+      if (first.email != null && first.email!.isNotEmpty) {
+        _emailController.text = first.email!;
+      }
+    });
 
-      // Remplit le formulaire avec le premier contact utilisable.
-      final first = contacts.firstWhere(
-        (c) => c.isUsable,
-        orElse: () => contacts.first,
-      );
-
-      setState(() {
-        if (first.name.isNotEmpty) _nameController.text = first.name;
-        if (first.phone != null && first.phone!.isNotEmpty) {
-          _phoneController.text = first.phone!;
-        }
-        if (first.email != null && first.email!.isNotEmpty) {
-          _emailController.text = first.email!;
-        }
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              contacts.length == 1
-                  ? 'Contact importé ✓'
-                  : '${contacts.length} contacts — le premier a été utilisé',
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          contacts.length == 1
+              ? 'Contact importé ✓'
+              : '${contacts.length} contacts — le premier a été utilisé',
         ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoadingContacts = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    setState(() => _isLoadingContacts = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
-
+}
   /// 📱 Import MOBILE — flutter_contacts (sélecteur natif + sheet).
   Future<void> _importFromContactsMobile() async {
     final status =

@@ -2,11 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ═══════════════════════════════════════════════════════════════════
-    // FONCTIONS UTILITAIRES
-    // ═══════════════════════════════════════════════════════════════════
     function isSignedIn() { return request.auth != null; }
-
     function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
@@ -17,32 +13,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.teamIds is list
         ? request.auth.token.teamIds
         : [];
-    }
-
-    // 🔒 FIX CRITIQUE : Le `userId` d'un document ne peut JAMAIS changer
-    //    sur un update. Peu importe qui écrit (admin, membre d'équipe, etc.),
-    //    le propriétaire d'origine est PRÉSERVÉ. C'est la protection la plus
-    //    fiable contre l'écrasement accidentel.
-    //
-    //    ⚠️ Si le champ n'existe pas dans l'ancien doc (migration initiale),
-    //    on autorise la première écriture qui le pose.
-    function userIdUnchanged() {
-      return !('userId' in resource.data)
-        || !('userId' in request.resource.data)
-        || request.resource.data.userId == resource.data.userId;
-    }
-
-    // 🔒 Le `companyId` suit la même règle : on ne change pas d'entreprise
-    //    en modifiant un document.
-    function companyIdUnchanged() {
-      return !('companyId' in resource.data)
-        || !('companyId' in request.resource.data)
-        || request.resource.data.companyId == resource.data.companyId;
-    }
-
-    // 🔒 Vérifie que les champs sensibles d'ownership sont préservés.
-    function ownershipPreserved() {
-      return userIdUnchanged() && companyIdUnchanged();
     }
 
     function isOwner() {
@@ -71,6 +41,17 @@ service cloud.firestore {
     function canReadResource()      { return isAdmin() || isOwner(); }
     function canWriteOwnResource()  { return isAdmin() || isNewOwner(); }
     function canUpdateOwnResource() { return isAdmin() || isOwner(); }
+
+    // 🔒 Propriété préservée sur update
+    function ownershipPreserved() {
+      let userOk = !('userId' in resource.data)
+        || !('userId' in request.resource.data)
+        || request.resource.data.userId == resource.data.userId;
+      let companyOk = !('companyId' in resource.data)
+        || !('companyId' in request.resource.data)
+        || request.resource.data.companyId == resource.data.companyId;
+      return userOk && companyOk;
+    }
 
     function isTeamMember(teamId, uid) {
       let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
@@ -101,59 +82,80 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // RESSOURCES "PAR UTILISATEUR / ENTREPRISE"
+    //  🎯 FIX : users/{userId}
+    // ═══════════════════════════════════════════════════════════════════
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+
+      // ✅ FIX : on autorise `isActive` sur create (il vaut true par défaut),
+      //    on bloque UNIQUEMENT les privilèges admin.
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && !hasAdminPrivileges(request.resource.data)
+        && (!('isActive' in request.resource.data)
+            || request.resource.data.isActive == true);
+
+      // ✅ Update : bloque toujours la modification de `isActive` et des privilèges admin.
+      allow update: if isAdmin()
+        || (isSignedIn() && request.auth.uid == userId
+            && !hasAdminPrivileges(request.resource.data)
+            && !request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['isActive']));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  AUTRES COLLECTIONS
     // ═══════════════════════════════════════════════════════════════════
     match /companies/{companyId} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if (canUpdateOwnResource() && ownershipPreserved())
+      allow update: if (canUpdateOwnResource() && ownershipPreserved())
         || (companyId == 'default_company' && isAdmin());
+      allow delete: if canUpdateOwnResource();
     }
 
     match /clients/{clientId} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /products/{productId} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /invoices/{invoiceId} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /suppliers/{id} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /deliveries/{id} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /reminders/{id} {
       allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update: if (canUpdateOwnResource() || canWriteSharedResource())
-        && ownershipPreserved();  // 🔒
+        && ownershipPreserved();
       allow delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
 
-    // ─── Les stats / analytics restent sans la contrainte ownership ───
     match /dashboard_stats/{id} {
       allow read, write: if isSignedIn() && canUpdateOwnResource();
     }
@@ -169,9 +171,6 @@ service cloud.firestore {
       allow update, delete: if canUpdateOwnResource();
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // ABONNEMENTS / PLANS
-    // ═══════════════════════════════════════════════════════════════════
     match /subscriptions/{subscriptionId} {
       allow read:   if isSignedIn() && (isAdmin() || isOwner());
       allow create: if isAdmin() || (isSignedIn() && isNewOwner()
@@ -181,7 +180,7 @@ service cloud.firestore {
         || (isSignedIn() && isOwner()
             && !request.resource.data.diff(resource.data)
                 .affectedKeys().hasAny(['planId','amount','currency','status','paymentId','paymentMethod'])
-            && ownershipPreserved());  // 🔒
+            && ownershipPreserved());
       allow delete: if isAdmin();
     }
     match /plans/{planId} {
@@ -189,23 +188,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // USERS
-    // ═══════════════════════════════════════════════════════════════════
-    match /users/{userId} {
-      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
-      allow create: if isSignedIn() && request.auth.uid == userId
-        && !hasAdminPrivileges(request.resource.data)
-        && !('isActive' in request.resource.data);
-      allow update: if isAdmin()
-        || (isSignedIn() && request.auth.uid == userId
-            && !hasAdminPrivileges(request.resource.data)
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isActive']));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // TEAMS / PARTAGES
-    // ═══════════════════════════════════════════════════════════════════
     match /teams/{teamId} {
       allow read: if isSignedIn() && (isAdmin()
         || resource.data.ownerId == request.auth.uid
@@ -255,9 +237,6 @@ service cloud.firestore {
       }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // SYSTÈME
-    // ═══════════════════════════════════════════════════════════════════
     match /templates/{templateId} {
       allow read:  if isSignedIn();
       allow write: if isAdmin();
@@ -288,8 +267,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /admin_audit_log/{logId} {
-      allow read:  if isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
     match /drive_sync/{syncId} {
       allow read:  if isSignedIn() && (isAdmin() || isOwner());
@@ -300,9 +278,6 @@ service cloud.firestore {
         && (request.auth.uid == scopeId || myCompanyId() == scopeId);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // PORTEFEUILLE
-    // ═══════════════════════════════════════════════════════════════════
     match /wallets/{userId} {
       allow read:  if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
