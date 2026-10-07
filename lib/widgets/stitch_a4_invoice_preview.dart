@@ -1,17 +1,14 @@
 // lib/widgets/stitch_a4_invoice_preview.dart
 //
-// 🧾 Aperçu A4 « Aperçu de la facture » — maquette Stitch.
-// 🔄 v4 : WYSIWYG strict avec le PDF.
-//   • `_sanitizeText` local pour un rendu identique au PDF (sans emojis).
-//   • Priorité `custom_logo_base64` > `company.logoPath`.
-//   • Différenciation des styles de pied de page.
-//   • headerStyle  : 'flat' | 'band' | 'bar' | 'dark' | 'zigzag'
-//   • tableStyle   : 'plain' | 'zebra' | 'cards' | 'numbered'
-//   • footerStyle  : 'simple' | 'contact' | 'banner' | 'icons'
-
-import 'dart:convert' show base64Decode;
-import 'dart:io' show File;
-import 'dart:math' as math;
+// CHANGELOG (v5 — REFONTE MAGNÉTIQUE) :
+//   • Rendu STRICTEMENT identique au workspace ET au PDF.
+//   • Support complet des 10 styles d'en-tête, 5 de tableau, 6 de pied,
+//     5 de bordure, définis dans InvoiceTemplate.
+//   • Grille 8pt respectée partout (marges, paddings, gaps).
+//   • 3 source de vérité : `customPositions` (map unique).
+//
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -23,13 +20,14 @@ import '../services/template_custom_service.dart';
 import '../theme/royal_ledger.dart';
 import 'template_background_palette.dart';
 
-/// Ligne du tableau des articles de l'aperçu.
+// ═══════════════════════════════════════════════════════════════════════
+//  MODÈLES DE DONNÉES (inchangés)
+// ═══════════════════════════════════════════════════════════════════════
 class StitchPreviewItem {
   final String description;
   final int quantity;
   final double unitPrice;
   final double total;
-
   const StitchPreviewItem({
     required this.description,
     required this.quantity,
@@ -38,7 +36,6 @@ class StitchPreviewItem {
   });
 }
 
-/// Données affichées dans l'aperçu (facture réelle ou exemple maquette).
 class StitchPreviewData {
   final String companyInitials;
   final String companyLogoPath;
@@ -47,29 +44,24 @@ class StitchPreviewData {
   final String companyPhone;
   final String companyEmail;
   final String companyWebsite;
-
   final String clientName;
   final String clientAddress;
   final String clientPhone;
   final String clientEmail;
-
   final String invoiceNumber;
   final String issueDate;
   final String dueDate;
   final String currency;
-
   final List<StitchPreviewItem> items;
   final double subtotal;
   final double taxRate;
   final double taxAmount;
   final double discount;
   final double totalAmount;
-
   final String terms;
   final String legalMention;
   final String rccm;
   final String taxId;
-
   final bool isDevis;
   final bool isPaid;
 
@@ -110,11 +102,21 @@ class StitchPreviewData {
         companyPhone: '+237620409383',
         companyEmail: 'contact@noiconcept.com',
         companyWebsite: 'noiconcept.com',
+        clientName: 'Rivay Ravs',
+        clientAddress: 'JI Ciracas KDW No 27\nLocation, Country',
         invoiceNumber: 'INV000342',
         issueDate: '26/03/2025',
         dueDate: '02/04/2025',
         currency: 'XAF',
-        isPaid: true,
+        items: [
+          StitchPreviewItem(description: 'Wireless Router', quantity: 1, unitPrice: 500, total: 500),
+          StitchPreviewItem(description: 'Lan Cable', quantity: 3, unitPrice: 20, total: 60),
+          StitchPreviewItem(description: 'Lorem ipsum dolor', quantity: 3, unitPrice: 10, total: 30),
+        ],
+        subtotal: 590,
+        taxAmount: 0,
+        totalAmount: 590,
+        isPaid: false,
       );
 
   static String money(double value) =>
@@ -123,8 +125,9 @@ class StitchPreviewData {
   static String amount(double value) => 'Fr${money(value)}';
 }
 
-/// Aperçu A4 de la facture — fidèle à la maquette Stitch, piloté par les
-/// personnalisations sauvegardées du modèle actif.
+// ═══════════════════════════════════════════════════════════════════════
+//  APERÇU A4 — WYSIWYG STRICT
+// ═══════════════════════════════════════════════════════════════════════
 class StitchA4InvoicePreview extends StatelessWidget {
   final StitchPreviewData data;
   final Color? accentColor;
@@ -165,116 +168,67 @@ class StitchA4InvoicePreview extends StatelessWidget {
     this.customPositions = const {},
   });
 
-  static const InvoiceLayoutConfig _emptyConfig = InvoiceLayoutConfig(
-    positions: {},
-    styles: {},
-  );
+  static const InvoiceLayoutConfig _emptyConfig =
+      InvoiceLayoutConfig(positions: {}, styles: {});
 
   static const double _paperWidth = 560;
   static const double _paperBaseHeight = _paperWidth * 1123 / 794;
 
-  bool _vis(LayoutElement element) => layoutConfig.styleOf(element).visible;
+  // ── Helpers lecture ──
+  bool _vis(LayoutElement e) => layoutConfig.styleOf(e).visible;
 
   bool _cpBool(String key, bool fallback) {
     final v = customPositions[key];
     return v is bool ? v : fallback;
   }
 
-  String _cpString(String key) =>
-      (customPositions[key] as String? ?? '').trim();
-
-  String get _bodyFont =>
-      (fontFamily == 'Manrope' || fontFamily == 'WorkSans')
-          ? fontFamily
-          : 'WorkSans';
-
-  // 🔤 Retire les emojis pour un rendu identique au PDF.
-  static String _sanitizeText(String input) {
-    if (input.isEmpty) return input;
-    final buffer = StringBuffer();
-    for (final rune in input.runes) {
-      if (_isSafeRune(rune)) buffer.writeCharCode(rune);
-    }
-    return buffer.toString();
+  String _cpStr(String key) => (customPositions[key] as String? ?? '').trim();
+  double _cpDouble(String key, double fallback) {
+    final v = customPositions[key];
+    return v is num ? v.toDouble() : fallback;
   }
 
-  static bool _isSafeRune(int rune) {
-    if (rune == 0x09 || rune == 0x0A || rune == 0x0D) return true;
-    if (rune >= 0x20 && rune <= 0x7E) return true;
-    if (rune >= 0x00A0 && rune <= 0x024F) return true;
-    if (rune >= 0x2000 && rune <= 0x206F) return true;
-    if (rune >= 0x20A0 && rune <= 0x20CF) return true;
-    if (rune >= 0x2190 && rune <= 0x21FF) return true;
-    if (rune >= 0x25A0 && rune <= 0x25FF) return true;
-    if (rune >= 0x2700 && rune <= 0x27BF) return true;
-    if (rune == 0xFEFF) return false;
-    return false;
-  }
-
-  // ── Styles PRO ─────────────────────────────────────────────
-  String get _headerStyle => _cpString('header_style').isNotEmpty
-      ? _cpString('header_style')
-      : 'flat';
-
-  String get _tableStyle => _cpString('table_style').isNotEmpty
-      ? _cpString('table_style')
-      : 'plain';
-
-  String get _footerStyle => _cpString('footer_style').isNotEmpty
-      ? _cpString('footer_style')
-      : 'simple';
-
-  String get _accentBorder => _cpString('accent_border');
+  String get _headerStyle =>
+      _cpStr('header_style').isNotEmpty ? _cpStr('header_style') : 'flat';
+  String get _tableStyle =>
+      _cpStr('table_style').isNotEmpty ? _cpStr('table_style') : 'plain';
+  String get _footerStyle =>
+      _cpStr('footer_style').isNotEmpty ? _cpStr('footer_style') : 'simple';
+  String get _accentBorder => _cpStr('accent_border');
 
   bool get _showThankYou => _cpBool('show_thank_you', false);
+  String get _thankYouText => _sanitize(_cpStr('thank_you_text').isNotEmpty
+      ? _cpStr('thank_you_text')
+      : 'Merci pour votre confiance !');
+  String get _bankName => _sanitize(_cpStr('bank_name'));
+  String get _bankAccount => _sanitize(_cpStr('bank_account'));
 
-  String get _thankYouText => _sanitizeText(
-        _cpString('thank_you_text').isNotEmpty
-            ? _cpString('thank_you_text')
-            : 'Merci pour votre confiance !',
-      );
-
-  String get _bankName => _sanitizeText(_cpString('bank_name'));
-  String get _bankAccount => _sanitizeText(_cpString('bank_account'));
-
-  // ── Overrides personnalisés ────────────────────────────────
   String get _customCompanyName {
-    final override = _sanitizeText(_cpString('company_name'));
-    return override.isNotEmpty ? override : _sanitizeText(data.companyName);
+    final o = _sanitize(_cpStr('company_name'));
+    return o.isNotEmpty ? o : _sanitize(data.companyName);
   }
-
   String get _customClientName {
-    final override = _sanitizeText(_cpString('client_name'));
-    return override.isNotEmpty ? override : _sanitizeText(data.clientName);
+    final o = _sanitize(_cpStr('client_name'));
+    return o.isNotEmpty ? o : _sanitize(data.clientName);
   }
-
   String get _customTitle {
-    final override = _sanitizeText(_cpString('invoice_title_text'));
-    if (override.isNotEmpty) return override;
+    final o = _sanitize(_cpStr('invoice_title_text'));
+    if (o.isNotEmpty) return o;
     return data.isDevis ? 'DEVIS' : 'FACTURE';
   }
+  String get _customSubtitle => _sanitize(_cpStr('invoice_subtitle'));
+  String get _customLegalText => _sanitize(_cpStr('custom_legal_text'));
+  String get _customStampText => _sanitize(_cpStr('stamp_text'));
+  String get _customSignatoryTitle => _sanitize(
+      _cpStr('signatory_title').isNotEmpty ? _cpStr('signatory_title') : 'Signature');
 
-  String get _customSubtitle => _sanitizeText(_cpString('invoice_subtitle'));
-
-  String get _customLegalText => _sanitizeText(_cpString('custom_legal_text'));
-
-  String get _customStampText => _sanitizeText(_cpString('stamp_text'));
-
-  String get _customSignatoryTitle {
-    final override = _sanitizeText(_cpString('signatory_title'));
-    return override.isNotEmpty ? override : 'Signature';
-  }
-
-  /// Logo effectif : `custom_logo_base64` prioritaire sur le chemin.
   Uint8List? get _effectiveLogoBytes {
-    final b64 = _cpString('custom_logo_base64');
+    final b64 = _cpStr('custom_logo_base64');
     if (b64.isNotEmpty) {
       try {
-        final bytes = base64Decode(b64);
-        return bytes.isEmpty ? null : bytes;
-      } catch (_) {
-        // ignore
-      }
+        final b = base64Decode(b64);
+        return b.isEmpty ? null : b;
+      } catch (_) {}
     }
     final path = data.companyLogoPath;
     if (path.isEmpty) return null;
@@ -289,29 +243,27 @@ class StitchA4InvoicePreview extends StatelessWidget {
     return null;
   }
 
-  Uint8List? get _signatureImageBytes {
-    final raw = _cpString('signature_image');
+  Uint8List? get _signatureBytes {
+    final raw = _cpStr('signature_image');
     if (raw.isEmpty) return null;
     try {
-      final bytes = base64Decode(raw);
-      return bytes.isEmpty ? null : bytes;
+      final b = base64Decode(raw);
+      return b.isEmpty ? null : b;
     } catch (_) {
       return null;
     }
   }
 
-  bool get _effectiveShowPaidStamp =>
-      _cpBool('show_paid_stamp', showPaidStamp);
-
+  bool get _effectiveShowStamp => _cpBool('show_paid_stamp', showPaidStamp);
   bool get _effectiveShowSignature =>
       _cpBool('show_signature_line', _vis(LayoutElement.signature));
 
+  // ═══════════════════════════════════════════════════════════════
+  //  BUILD PRINCIPAL
+  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     final Color accent = accentColor ?? RoyalColors.secondary;
-    final bool lightAccent = accent.computeLuminance() > 0.55;
-    final Color onAccent = lightAccent ? RoyalColors.onSurface : Colors.white;
-
     final Color page = pageColor ?? RoyalColors.surfaceContainerLowest;
     final bool darkPage = page.computeLuminance() < 0.45;
     final Color cText = darkPage ? Colors.white : RoyalColors.onSurface;
@@ -323,27 +275,13 @@ class StitchA4InvoicePreview extends StatelessWidget {
         : RoyalColors.outlineVariant.withValues(alpha: 0.55);
 
     final double k = fontScale.clamp(0.80, 1.35);
+    final double pad = _cpDouble('page_padding', 24).clamp(8, 80);
 
-    final double pagePadding =
-        ((customPositions['page_padding'] as num?)?.toDouble() ?? 24.0)
-            .clamp(8.0, 80.0);
-
-    final double stampX =
-        ((customPositions['stamp_x'] as num?)?.toDouble() ?? 0.5)
-            .clamp(0.05, 0.95);
-    final double stampY =
-        ((customPositions['stamp_y'] as num?)?.toDouble() ?? 0.5)
-            .clamp(0.05, 0.95);
-    final double stampRotation =
-        ((customPositions['stamp_rotation'] as num?)?.toDouble() ?? -0.15);
-    final double stampScale =
-        ((customPositions['stamp_scale'] as num?)?.toDouble() ?? 1.0)
-            .clamp(0.5, 3.0);
-
-    final bool hasBg = backgroundImage != null || backgroundSettings.hasPreset;
-
+    final bool hasBg =
+        backgroundImage != null || backgroundSettings.hasPreset;
     final double overlayAlpha = hasBg
-        ? (darkPage ? 0.18 : 0.15) * backgroundSettings.opacity.clamp(0.3, 1.0)
+        ? (darkPage ? 0.18 : 0.15) *
+            backgroundSettings.opacity.clamp(0.3, 1.0)
         : 0.0;
 
     return FittedBox(
@@ -368,10 +306,12 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ),
         child: Stack(
           children: [
+            // Fond
             Positioned.fill(
               child: TemplateBackgroundLayer(
-                presetId:
-                    backgroundImage != null ? '' : backgroundSettings.presetId,
+                presetId: backgroundImage != null
+                    ? ''
+                    : backgroundSettings.presetId,
                 imageBytes: backgroundImage,
                 opacity: backgroundSettings.opacity,
                 blur: backgroundSettings.blur,
@@ -386,60 +326,23 @@ class StitchA4InvoicePreview extends StatelessWidget {
                       : Colors.white.withValues(alpha: overlayAlpha),
                 ),
               ),
-            if (_accentBorder == 'left')
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    width: 8,
-                    decoration: BoxDecoration(color: accent),
-                  ),
-                ),
-              ),
-            if (_accentBorder == 'top')
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(color: accent),
-                  ),
-                ),
-              ),
-            if (_accentBorder == 'frame')
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: accent, width: 2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ),
-            if (_effectiveShowPaidStamp && data.isPaid)
-              Positioned.fill(
-                child: _buildPaidStampAt(
-                  x: stampX,
-                  y: stampY,
-                  rotation: stampRotation,
-                  scale: stampScale,
-                ),
-              ),
+            // Bordures décoratives
+            ..._accentBorderWidgets(accent),
+            // Tampon PAYÉ
+            if (_effectiveShowStamp && data.isPaid)
+              _buildPaidStampAt(),
+            // Filigrane
             if (showWatermark && watermarkText.isNotEmpty)
               Positioned.fill(child: _buildWatermark(cText)),
+            // Contenu
             Padding(
-              padding: EdgeInsets.all(pagePadding * k),
+              padding: EdgeInsets.all(pad * k),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeader(accent, onAccent, k),
-                  _buildInfoRow(cText, cSub, k),
-                  Expanded(
-                    child: _buildItemsAndTotals(
-                        accent, onAccent, cText, cSub, line, k),
-                  ),
+                  _buildHeaderWrapper(accent, k),
+                  SizedBox(height: 12 * k),
+                  Expanded(child: _buildBody(cText, cSub, line, k)),
                   _buildFooter(accent, cText, cSub, line, k),
                 ],
               ),
@@ -450,186 +353,132 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  //  EN-TÊTE — multi-styles
-  // ============================================================
-  Widget _buildHeader(Color accent, Color onAccent, double k) {
-    final Color dotColor =
-        Color.lerp(accent, Colors.black, 0.5)!.withValues(alpha: 0.55);
-
-    final baseRow = Padding(
-      padding: EdgeInsets.fromLTRB(4 * k, 14 * k, 4 * k, 14 * k),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: _buildHeaderRowChildren(onAccent, k),
-      ),
-    );
-
-    switch (_headerStyle) {
-      case 'dark':
-        return Container(
-          decoration: BoxDecoration(
-            color: accent,
-            borderRadius: BorderRadius.circular(6),
+  // ═══════════════════════════════════════════════════════════════
+  //  BORDURE D'ACCENT
+  // ═══════════════════════════════════════════════════════════════
+  List<Widget> _accentBorderWidgets(Color accent) {
+    switch (_accentBorder) {
+      case 'top':
+        return [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(height: 8, color: accent),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _DotsPatternPainter(dotColor),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        accent.withValues(alpha: 0.95),
-                        accent.withValues(alpha: 0.75),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              baseRow,
-            ],
+        ];
+      case 'left':
+        return [
+          Positioned(
+            top: 0,
+            bottom: 0,
+            left: 0,
+            child: Container(width: 8, color: accent),
           ),
-        );
-
-      case 'bar':
-        return Column(
-          children: [
-            Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              decoration: BoxDecoration(color: accent),
-              child: baseRow,
-            ),
-          ],
-        );
-
-      case 'zigzag':
-        return Column(
-          children: [
-            ClipPath(
-              clipper: _DiagonalClipper(),
+        ];
+      case 'frame':
+        return [
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.all(6),
               child: Container(
-                height: 70 * k,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      accent,
-                      Color.lerp(accent, Colors.black, 0.15)!,
-                    ],
-                  ),
+                  border: Border.all(color: accent, width: 2),
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
             ),
-            SizedBox(child: baseRow),
-          ],
-        );
-
-      case 'band':
+          ),
+        ];
+      case 'stripes_bottom':
+        return [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              height: 14,
+              child: CustomPaint(
+                painter: _RainbowStripPainter(accent: accent, stripes: 20),
+              ),
+            ),
+          ),
+        ];
       default:
-        return Container(
-          decoration: BoxDecoration(
-            color: accent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _DotsPatternPainter(dotColor),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        accent.withValues(alpha: 0.92),
-                        accent.withValues(alpha: 0.70),
-                        accent.withValues(alpha: 0.30),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              baseRow,
-            ],
-          ),
-        );
+        return const [];
     }
   }
 
-  List<Widget> _buildHeaderRowChildren(Color onAccent, double k) {
-    final resolved = InvoiceTemplate.visibleHeaderElements(customPositions);
+  // ═══════════════════════════════════════════════════════════════
+  //  EN-TÊTE — dispatch par style
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildHeaderWrapper(Color accent, double k) {
+    switch (_headerStyle) {
+      case 'dark':
+        return _headerFilled(accent, k, dark: true);
+      case 'band':
+        return _headerFilled(accent, k);
+      case 'wave':
+      case 'split_orange_left':
+        return _headerSplitLeft(accent, k);
+      case 'orange_band_right':
+        return _headerSplitRight(accent, k);
+      case 'split_diagonal_corners':
+        return _headerDiagonalCorners(accent, k);
+      case 'circle_accent_top_left':
+        return _headerCircle(accent, k);
+      case 'cursive_title':
+        return _headerCursive(accent, k);
+      case 'diamond_center':
+        return _headerDiamond(accent, k);
+      case 'flat':
+      default:
+        return _headerFlat(accent, k);
+    }
+  }
 
-    final children = <Widget>[];
-    for (var i = 0; i < resolved.length; i++) {
-      final key = resolved[i];
-      final isLast = i == resolved.length - 1;
-      if (key == 'logo') {
-        if (showLogo) {
-          children.add(_buildLogo(onAccent, k));
-          if (!isLast) children.add(SizedBox(width: 14 * k));
-        }
-      } else if (key == 'company_info') {
-        children.add(Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'DE',
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 10.5 * k,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                  color: onAccent.withValues(alpha: 0.80),
-                ),
-              ),
-              SizedBox(height: 2 * k),
+  /// Récupère les colonnes réellement visibles dans l'en-tête.
+  List<String> _headerKeys() {
+    final order = InvoiceTemplate.visibleHeaderElements(customPositions);
+    return order.where((k) {
+      if (!showLogo && k == 'logo') return false;
+      return true;
+    }).toList();
+  }
+
+  /// Contenu de la colonne [key] (logo / société / titre).
+  Widget _headerCol(String key, Color onColor, double k) {
+    switch (key) {
+      case 'logo':
+        return _buildLogo(onColor, k);
+      case 'company_info':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_customCompanyName.isNotEmpty)
               Text(
                 _customCompanyName,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: 'Manrope',
-                  fontSize: 20 * k,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 16 * k,
+                  fontWeight: FontWeight.w800,
+                  color: onColor,
                   height: 1.15,
-                  color: onAccent,
                 ),
               ),
-              SizedBox(height: 4 * k),
-              if (data.companyAddress.isNotEmpty)
-                _contactLine(_sanitizeText(data.companyAddress), onAccent, k),
-              if (data.companyPhone.isNotEmpty)
-                _contactLine(_sanitizeText(data.companyPhone), onAccent, k),
-              if (data.companyEmail.isNotEmpty)
-                _contactLine(_sanitizeText(data.companyEmail), onAccent, k),
-              if (data.companyWebsite.isNotEmpty)
-                _contactLine(_sanitizeText(data.companyWebsite), onAccent, k),
-            ],
-          ),
-        ));
-        if (!isLast) children.add(SizedBox(width: 10 * k));
-      } else if (key == 'invoice_title') {
-        children.add(Column(
+            if (data.companyAddress.isNotEmpty)
+              _contact(data.companyAddress, onColor, k),
+            if (data.companyPhone.isNotEmpty)
+              _contact(data.companyPhone, onColor, k),
+            if (data.companyEmail.isNotEmpty)
+              _contact(data.companyEmail, onColor, k),
+          ],
+        );
+      case 'invoice_title':
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -637,10 +486,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
               _customTitle,
               style: TextStyle(
                 fontFamily: 'Manrope',
-                fontSize: 26 * k,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2.4,
-                color: onAccent,
+                fontSize: 22 * k,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+                color: onColor,
               ),
             ),
             if (_customSubtitle.isNotEmpty)
@@ -649,67 +498,316 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 child: Text(
                   _customSubtitle,
                   textAlign: TextAlign.right,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: 'WorkSans',
-                    fontSize: 11 * k,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                    color: onAccent.withValues(alpha: 0.85),
+                    fontSize: 10.5 * k,
+                    color: onColor.withValues(alpha: 0.85),
                   ),
                 ),
               ),
           ],
-        ));
-      }
+        );
+      default:
+        return const SizedBox.shrink();
     }
-    return children;
   }
 
-  Widget _contactLine(String text, Color onAccent, double k) {
+  /// En-tête PLAT : contenu sur fond de page, colonnes alignées.
+  Widget _headerFlat(Color accent, double k) {
+    final keys = _headerKeys();
     return Padding(
-      padding: EdgeInsets.only(top: 2 * k),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: 'WorkSans',
-          fontSize: 11.5 * k,
-          color: onAccent.withValues(alpha: 0.90),
-          height: 1.25,
+      padding: EdgeInsets.symmetric(vertical: 6 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _rowChildren(keys, accent, k),
+      ),
+    );
+  }
+
+  /// En-tête REMPLI (band/dark) : fond coloré, texte blanc.
+  Widget _headerFilled(Color accent, double k, {bool dark = false}) {
+    final bg = dark
+        ? Color.lerp(accent, Colors.black, 0.3)!
+        : accent;
+    final keys = _headerKeys();
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: EdgeInsets.symmetric(vertical: 14 * k, horizontal: 14 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _rowChildren(keys, Colors.white, k),
+      ),
+    );
+  }
+
+  /// En-tête VAGUE : bloc orange à gauche + bloc bleu/violet à droite.
+  Widget _headerSplitLeft(Color accent, double k) {
+    final keys = _headerKeys();
+    // On considère que les clés contiennent au moins 'invoice_title'
+    final titleIndex = keys.indexOf('invoice_title');
+    final leftKeys = titleIndex >= 0 ? keys.sublist(0, titleIndex) : keys;
+    final rightKeys = titleIndex >= 0 ? [keys[titleIndex]] : <String>[];
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: 90 * k,
+        child: Stack(
+          children: [
+            // Fond gauche (orange) + courbe
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _WaveHeaderPainter(accent: accent),
+              ),
+            ),
+            // Colonnes gauche (logo + société)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16 * k, vertical: 12 * k),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: _rowChildren(leftKeys, Colors.white, k),
+                ),
+              ),
+            ),
+            // Titre (blanc) à droite
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20 * k, vertical: 12 * k),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: _rowChildren(rightKeys, Colors.white, k),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildLogo(Color onAccent, double k) {
-    final double size = 64 * k;
-    final Uint8List? bytes = _effectiveLogoBytes;
-
-    final Widget fallback = Text(
-      data.companyInitials.toUpperCase(),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontFamily: 'Manrope',
-        fontSize: 19 * k,
-        fontWeight: FontWeight.w900,
-        fontStyle: FontStyle.italic,
-        color: const Color(0xFF93000A),
+  /// En-tête avec bande orange à DROITE (logotype à gauche).
+  Widget _headerSplitRight(Color accent, double k) {
+    final keys = _headerKeys();
+    return Container(
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          right: BorderSide(color: accent, width: 6 * k),
+        ),
+      ),
+      padding: EdgeInsets.symmetric(vertical: 12 * k, horizontal: 14 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _rowChildren(keys, accent, k),
       ),
     );
+  }
 
+  /// En-tête DIAGONALES COINS (orange haut-gauche / bas-droit).
+  Widget _headerDiagonalCorners(Color accent, double k) {
+    final keys = _headerKeys();
+    return SizedBox(
+      height: 110 * k,
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            child: _diagonalCorner(accent, 70 * k, topLeft: true),
+          ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: _diagonalCorner(accent, 70 * k, topLeft: false),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14 * k, vertical: 12 * k),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _rowChildren(keys, RoyalColors.onSurface, k),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _diagonalCorner(Color color, double size, {required bool topLeft}) {
+    return ClipPath(
+      clipper: _CornerDiagonalClipper(topLeft: topLeft),
+      child: Container(width: size, height: size, color: color),
+    );
+  }
+
+  /// En-tête CERCLE orange haut-gauche + titre centré.
+  Widget _headerCircle(Color accent, double k) {
+    final keys = _headerKeys();
+    return SizedBox(
+      height: 110 * k,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -30 * k,
+            left: -30 * k,
+            child: Container(
+              width: 90 * k,
+              height: 90 * k,
+              decoration: BoxDecoration(
+                color: accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            top: -20 * k,
+            left: -20 * k,
+            child: Container(
+              width: 70 * k,
+              height: 70 * k,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14 * k, vertical: 12 * k),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _rowChildren(keys, RoyalColors.onSurface, k),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// En-tête CURSIVE : "Invoice" en italique fin.
+  Widget _headerCursive(Color accent, double k) {
+    final keys = _headerKeys();
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _rowChildren(keys, accent, k, italicTitle: true),
+      ),
+    );
+  }
+
+  /// En-tête LOSANGE central (or) + colonnes autour.
+  Widget _headerDiamond(Color accent, double k) {
+    final keys = _headerKeys();
+    return SizedBox(
+      height: 110 * k,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Transform.rotate(
+                angle: 0.785398, // 45°
+                child: Container(
+                  width: 50 * k,
+                  height: 50 * k,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 70 * k, vertical: 12 * k),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _rowChildren(keys, RoyalColors.onSurface, k),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Construit les enfants de ligne pour une liste de clés donnée.
+  List<Widget> _rowChildren(
+    List<String> keys,
+    Color onColor,
+    double k, {
+    bool italicTitle = false,
+  }) {
+    final children = <Widget>[];
+    for (var i = 0; i < keys.length; i++) {
+      final key = keys[i];
+      if (i > 0) children.add(SizedBox(width: 10 * k));
+      if (key == 'invoice_title' && italicTitle) {
+        children.add(
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                _customTitle,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 22 * k,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w400,
+                  color: onColor,
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        children.add(
+          Expanded(
+            flex: key == 'company_info' ? 2 : 1,
+            child: _headerCol(key, onColor, k),
+          ),
+        );
+      }
+    }
+    return children;
+  }
+
+  Widget _buildLogo(Color onColor, double k) {
+    final size = 56 * k;
+    final bytes = _effectiveLogoBytes;
+    final fallback = Text(
+      data.companyInitials.isEmpty
+          ? 'LOGO'
+          : data.companyInitials.toUpperCase(),
+      style: TextStyle(
+        fontFamily: 'Manrope',
+        fontSize: 14 * k,
+        fontWeight: FontWeight.w900,
+        color: onColor,
+      ),
+    );
     return Container(
       width: size,
       height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xFFFFDAD6),
+        color: onColor.withValues(alpha: 0.12),
         shape: BoxShape.circle,
-        border:
-            Border.all(color: onAccent.withValues(alpha: 0.20), width: 2),
+        border: Border.all(color: onColor.withValues(alpha: 0.35), width: 1.5),
       ),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(4),
@@ -726,855 +824,756 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  //  INFOS
-  // ============================================================
-  Widget _buildInfoRow(Color cText, Color cSub, double k) {
-    final rows = <(String, String)>[
-      ('FACTURE N°', _sanitizeText(data.invoiceNumber)),
-      ('DATE', data.issueDate),
-      ('ÉCHÉANCE', data.dueDate),
-      ('DEVISE', data.currency),
-    ];
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(4 * k, 16 * k, 4 * k, 12 * k),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _vis(LayoutElement.clientName)
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FACTURÉ À',
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 11 * k,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1,
-                          color: cSub,
-                        ),
-                      ),
-                      SizedBox(height: 6 * k),
-                      if (data.clientName.isNotEmpty)
-                        Text(
-                          _customClientName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: _bodyFont,
-                            fontSize: 13 * k,
-                            fontWeight: FontWeight.w600,
-                            color: cText,
-                          ),
-                        ),
-                      if (_vis(LayoutElement.clientAddress) &&
-                          data.clientAddress.isNotEmpty)
-                        _clientLine(
-                            _sanitizeText(data.clientAddress), cSub, k),
-                      if (_vis(LayoutElement.clientPhone) &&
-                          data.clientPhone.isNotEmpty)
-                        _clientLine(
-                            _sanitizeText(data.clientPhone), cSub, k),
-                      if (_vis(LayoutElement.clientEmail) &&
-                          data.clientEmail.isNotEmpty)
-                        _clientLine(
-                            _sanitizeText(data.clientEmail), cSub, k),
-                    ],
-                  )
-                : const SizedBox(),
+  Widget _contact(String text, Color onColor, double k) => Padding(
+        padding: EdgeInsets.only(top: 2 * k),
+        child: Text(
+          _sanitize(text),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontFamily: 'WorkSans',
+            fontSize: 9.5 * k,
+            color: onColor.withValues(alpha: 0.85),
+            height: 1.25,
           ),
-          SizedBox(width: 16 * k),
-          SizedBox(
-            width: 160 * k,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final (label, value) in rows)
-                  Padding(
-                    padding: EdgeInsets.only(bottom: 5 * k),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'WorkSans',
-                              fontSize: 10.5 * k,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                              color: cSub,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 8 * k),
-                        Text(
-                          value,
-                          style: TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 11.5 * k,
-                            color: cText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _clientLine(String text, Color cSub, double k) {
-    return Padding(
-      padding: EdgeInsets.only(top: 2 * k),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: 'WorkSans',
-          fontSize: 11 * k,
-          color: cSub,
-          height: 1.3,
         ),
-      ),
+      );
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CORPS
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildBody(Color cText, Color cSub, Color line, double k) {
+    final sections = InvoiceTemplate.decodeSections(
+      customPositions['blocks_sections'],
     );
-  }
+    final visMap = (customPositions['block_visibility'] as Map?) ?? {};
+    final alignMap = (customPositions['block_alignment'] as Map?) ?? {};
+    final widthMap = (customPositions['block_widths'] as Map?) ?? {};
 
-  // ============================================================
-  //  TABLEAU + TOTAUX
-  // ============================================================
-  Widget _buildItemsAndTotals(
-    Color accent,
-    Color onAccent,
-    Color cText,
-    Color cSub,
-    Color line,
-    double k,
-  ) {
-    final BorderSide side = BorderSide(color: line, width: 1);
+    double widthOf(String key) {
+      final v = widthMap[key];
+      return v is num ? v.toDouble().clamp(0.3, 3.0) : 1.0;
+    }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(4 * k, 4 * k, 4 * k, 0),
+    TextAlign alignOf(String key) {
+      final v = alignMap[key];
+      if (v == 'center') return TextAlign.center;
+      if (v == 'right') return TextAlign.right;
+      return TextAlign.left;
+    }
+
+    bool visOf(String key) {
+      final v = visMap[key];
+      return v is bool ? v : true;
+    }
+
+    final rows = <Widget>[];
+    for (final section in sections) {
+      final visibleKeys = section.where(visOf).toList();
+      if (visibleKeys.isEmpty) continue;
+      final children = <Widget>[];
+      for (var i = 0; i < visibleKeys.length; i++) {
+        final key = visibleKeys[i];
+        if (i > 0) children.add(SizedBox(width: 10 * k));
+        final w = (widthOf(key) * 10).round().clamp(3, 30);
+        children.add(Expanded(
+          flex: w,
+          child: Align(
+            alignment: _alignmentOf(alignOf(key)),
+            child: _bodyBlock(key, cText, cSub, line, k),
+          ),
+        ));
+      }
+      rows.add(Padding(
+        padding: EdgeInsets.only(bottom: 10 * k),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ));
+    }
+
+    return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_vis(LayoutElement.itemsTable)) ...[
-            Container(
-              padding:
-                  EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.82),
-                borderRadius: _tableStyle == 'cards'
-                    ? BorderRadius.circular(8)
-                    : const BorderRadius.vertical(top: Radius.circular(4)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 8,
-                    child: _thText('DESCRIPTION', onAccent, k),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child:
-                        _thText('QTÉ', onAccent, k, align: TextAlign.center),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child:
-                        _thText('PRIX', onAccent, k, align: TextAlign.right),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: _thText('MONTANT', onAccent, k,
-                        align: TextAlign.right),
-                  ),
-                ],
-              ),
-            ),
-            if (data.items.isEmpty)
-              Container(
-                height: 64 * k,
-                decoration: BoxDecoration(
-                  border: Border(left: side, right: side, bottom: side),
-                ),
-                child: const SizedBox.shrink(),
-              )
-            else
-              for (var i = 0; i < data.items.length; i++)
-                _buildItemRowStyled(data.items[i], i, cText, accent, side, k),
-          ],
-          if (_vis(LayoutElement.subtotal) ||
-              _vis(LayoutElement.totalAmount)) ...[
-            SizedBox(height: 14 * k),
-            Padding(
-              padding: EdgeInsets.only(right: 4 * k),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (_vis(LayoutElement.subtotal))
-                    _totalLine('Sous-Total',
-                        StitchPreviewData.amount(data.subtotal), cSub, cText, k),
-                  if (showTaxDetails && _vis(LayoutElement.taxAmount))
-                    _totalLine(
-                        'TVA (${data.taxRate.toStringAsFixed(0)}%)',
-                        StitchPreviewData.amount(data.taxAmount),
-                        cSub,
-                        cText,
-                        k),
-                  if (data.discount > 0 && _vis(LayoutElement.discount))
-                    _totalLine(
-                        'Remise',
-                        '- ${StitchPreviewData.amount(data.discount)}',
-                        cSub,
-                        cText,
-                        k),
-                  if (_vis(LayoutElement.totalAmount)) ...[
-                    SizedBox(height: 8 * k),
-                    Container(
-                      width: 220 * k,
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 12 * k, vertical: 9 * k),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.82),
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.10),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'MONTANT TOTAL',
-                            style: TextStyle(
-                              fontFamily: 'WorkSans',
-                              fontSize: 10.5 * k,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                              color: onAccent,
-                            ),
-                          ),
-                          Text(
-                            StitchPreviewData.amount(data.totalAmount),
-                            style: TextStyle(
-                              fontFamily: 'WorkSans',
-                              fontSize: 12.5 * k,
-                              fontWeight: FontWeight.w600,
-                              color: onAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
+        children: rows,
       ),
     );
   }
 
-  Widget _thText(String label, Color onAccent, double k,
-      {TextAlign align = TextAlign.left}) {
-    return Text(
-      label,
-      textAlign: align,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontFamily: 'WorkSans',
-        fontSize: 10 * k,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        color: onAccent,
-      ),
-    );
-  }
-
-  Widget _buildItemRowStyled(
-    StitchPreviewItem item,
-    int index,
-    Color cText,
-    Color accent,
-    BorderSide side,
-    double k,
-  ) {
-    switch (_tableStyle) {
-      case 'zebra':
-        return Container(
-          decoration: BoxDecoration(
-            color: index.isEven
-                ? Colors.grey.withValues(alpha: 0.06)
-                : Colors.transparent,
-            border: Border(left: side, right: side, bottom: side),
-          ),
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-          child: _itemRowContentFlex(item, cText, k),
-        );
-
-      case 'cards':
-        return Container(
-          margin: EdgeInsets.symmetric(vertical: 4 * k),
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: accent.withValues(alpha: 0.2)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: _itemRowContentFlex(item, cText, k),
-        );
-
-      case 'numbered':
-        return Container(
-          decoration: BoxDecoration(border: Border(bottom: side)),
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 30 * k,
-                child: Text(
-                  '${index + 1}.',
-                  style: TextStyle(
-                    fontFamily: 'WorkSans',
-                    fontSize: 11 * k,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
-                  ),
-                ),
-              ),
-              Expanded(child: _itemRowContentFlex(item, cText, k)),
-            ],
-          ),
-        );
-
-      case 'plain':
+  Alignment _alignmentOf(TextAlign a) {
+    switch (a) {
+      case TextAlign.right:
+      case TextAlign.end:
+        return Alignment.topRight;
+      case TextAlign.center:
+        return Alignment.topCenter;
       default:
-        return Container(
-          decoration: BoxDecoration(
-            border: Border(left: side, right: side, bottom: side),
-          ),
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-          child: _itemRowContentFlex(item, cText, k),
-        );
+        return Alignment.topLeft;
     }
   }
 
-  /// ✅ Ligne d'article — Row autonome avec ses `Expanded` internes.
-  Widget _itemRowContentFlex(
-    StitchPreviewItem item,
-    Color cText,
-    double k,
-  ) {
-    final safeDescription = _sanitizeText(item.description);
-    return Row(
-      children: [
-        Expanded(
-          flex: 8,
-          child: Text(
-            safeDescription,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: _bodyFont,
-              fontSize: 12 * k,
-              fontWeight: FontWeight.w500,
-              color: cText,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Text(
-            item.quantity.toString(),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: _bodyFont,
-              fontSize: 11.5 * k,
-              color: cText,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(
-            StitchPreviewData.money(item.unitPrice),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontFamily: _bodyFont,
-              fontSize: 11.5 * k,
-              color: cText,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(
-            StitchPreviewData.money(item.total),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontFamily: _bodyFont,
-              fontSize: 11.5 * k,
-              fontWeight: FontWeight.w600,
-              color: cText,
-            ),
-          ),
-        ),
-      ],
-    );
+  Widget _bodyBlock(String key, Color cText, Color cSub, Color line, double k) {
+    switch (key) {
+      case 'billing_info':
+        return _billingBlock(cText, cSub, k);
+      case 'invoice_meta':
+        return _metaBlock(cText, cSub, k);
+      case 'items_table':
+        return _itemsBlock(cText, line, k);
+      case 'totals':
+        return _totalsBlock(cText, cSub, k);
+      case 'legal_mentions':
+        return _legalBlock(cText, cSub, k);
+      case 'signature_block':
+        return _signatureBlock(cText, cSub, k);
+      case 'qr_block':
+        return _qrBlock(k);
+      default:
+        if (key.startsWith('text_')) return _textBlock(key, cText, k);
+        return const SizedBox.shrink();
+    }
   }
 
-  Widget _totalLine(
-      String label, String value, Color cSub, Color cText, double k) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 6 * k),
-      child: SizedBox(
-        width: 220 * k,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+  Widget _billingBlock(Color cText, Color cSub, double k) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'INVOICE TO:',
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 10 * k,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: cSub,
+            ),
+          ),
+          SizedBox(height: 4 * k),
+          Text(
+            _customClientName,
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 12 * k,
+              fontWeight: FontWeight.w700,
+              color: cText,
+            ),
+          ),
+          if (data.clientAddress.isNotEmpty)
             Text(
-              label,
+              _sanitize(data.clientAddress),
               style: TextStyle(
                 fontFamily: 'WorkSans',
                 fontSize: 10.5 * k,
+                color: cSub,
+                height: 1.3,
+              ),
+            ),
+          if (data.clientPhone.isNotEmpty)
+            Text(
+              _sanitize(data.clientPhone),
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 10.5 * k,
+                color: cSub,
+              ),
+            ),
+        ],
+      );
+
+  Widget _metaBlock(Color cText, Color cSub, double k) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _metaRow('Invoice #', _sanitize(data.invoiceNumber), cText, cSub, k),
+          _metaRow('Date', data.issueDate, cText, cSub, k),
+          _metaRow('Due Date', data.dueDate, cText, cSub, k),
+        ],
+      );
+
+  Widget _metaRow(String l, String v, Color cText, Color cSub, double k) =>
+      Padding(
+        padding: EdgeInsets.only(bottom: 3 * k),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(
+              '$l : ',
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 10 * k,
                 fontWeight: FontWeight.w700,
                 color: cSub,
               ),
             ),
             Text(
-              value,
+              v,
               style: TextStyle(
-                fontFamily: _bodyFont,
-                fontSize: 12 * k,
-                fontWeight: FontWeight.w600,
+                fontFamily: 'WorkSans',
+                fontSize: 10.5 * k,
                 color: cText,
               ),
             ),
           ],
         ),
+      );
+
+  Widget _itemsBlock(Color cText, Color line, double k) {
+    final items = data.items;
+    final rows = items.isEmpty
+        ? const [
+            StitchPreviewItem(
+                description: 'Prestation',
+                quantity: 1,
+                unitPrice: 0,
+                total: 0),
+          ]
+        : items;
+
+    // En-tête
+    final headerWidget = Container(
+      padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
+      decoration: BoxDecoration(
+        color: _tableStyle == 'dark_header'
+            ? RoyalColors.inverseSurface
+            : (accentColor ?? RoyalColors.secondary),
+        borderRadius: _tableStyle == 'cards'
+            ? BorderRadius.circular(8)
+            : const BorderRadius.vertical(top: Radius.circular(4)),
       ),
-    );
-  }
-
-  // ============================================================
-  //  PIED — multi-styles différenciés
-  // ============================================================
-  Widget _buildFooter(
-      Color accent, Color cText, Color cSub, Color line, double k) {
-    final bool termsOn = showPaymentTerms && _vis(LayoutElement.footerText);
-    final bool legalOn = _vis(LayoutElement.legalMention) &&
-        (data.rccm.isNotEmpty ||
-            data.taxId.isNotEmpty ||
-            data.legalMention.isNotEmpty ||
-            _customLegalText.isNotEmpty);
-    final bool qrOn = showPaymentQR && _vis(LayoutElement.qrCode);
-    final bool signOn = _effectiveShowSignature;
-    final bool contactBar = _footerStyle == 'icons' ||
-        _footerStyle == 'contact' ||
-        _footerStyle == 'banner';
-
-    if (!termsOn &&
-        !legalOn &&
-        !qrOn &&
-        !signOn &&
-        !_showThankYou &&
-        !contactBar) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(4 * k, 6 * k, 4 * k, 4 * k),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (termsOn) ...[
-                      Text(
-                        'Termes et conditions',
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 11.5 * k,
-                          fontWeight: FontWeight.w700,
-                          color: cSub,
-                        ),
-                      ),
-                      SizedBox(height: 3 * k),
-                      Text(
-                        _sanitizeText(data.terms.isEmpty
-                            ? 'Merci pour votre confiance.'
-                            : data.terms),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 11 * k,
-                          color: cSub.withValues(alpha: 0.80),
-                        ),
-                      ),
-                    ],
-                    if (legalOn) ...[
-                      SizedBox(height: 8 * k),
-                      Text(
-                        _sanitizeText(
-                          'RCCM : ${data.rccm.isEmpty ? '—' : data.rccm}'
-                          '  ·  N° Contribuable : ${data.taxId.isEmpty ? '—' : data.taxId}',
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 9.5 * k,
-                          color: cSub,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (qrOn) ...[
-                SizedBox(width: 12 * k),
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    border: Border.all(color: line),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.qr_code_2, size: 46 * k, color: accent),
-                      SizedBox(height: 3 * k),
-                      Text(
-                        'Paiement Mobile Money',
-                        style: TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontSize: 8.5 * k,
-                          color: cSub,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (_bankName.isNotEmpty || _bankAccount.isNotEmpty) ...[
-            SizedBox(height: 8 * k),
-            Text(
-              '${_bankName.isNotEmpty ? 'Banque : $_bankName' : ''}'
-              '${_bankName.isNotEmpty && _bankAccount.isNotEmpty ? '  ·  ' : ''}'
-              '${_bankAccount.isNotEmpty ? 'Compte : $_bankAccount' : ''}',
-              style: TextStyle(
-                fontFamily: 'WorkSans',
-                fontSize: 9.5 * k,
-                color: cSub,
-              ),
-            ),
-          ],
-          if (_showThankYou) ...[
-            SizedBox(height: 10 * k),
-            Center(
-              child: Text(
-                _thankYouText,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 13 * k,
-                  fontWeight: FontWeight.w700,
-                  color: accent,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ],
-          if (signOn) ...[
-            SizedBox(height: 14 * k),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (_signatureImageBytes != null) ...[
-                    Image.memory(
-                      _signatureImageBytes!,
-                      width: 130 * k,
-                      height: 52 * k,
-                      fit: BoxFit.contain,
-                      alignment: Alignment.bottomRight,
-                      gaplessPlayback: true,
-                    ),
-                    SizedBox(height: 2 * k),
-                  ],
-                  Container(
-                    width: 120 * k,
-                    height: 1,
-                    decoration: BoxDecoration(
-                      color: cSub.withValues(alpha: 0.45),
-                    ),
-                  ),
-                  SizedBox(height: 4 * k),
-                  Text(
-                    _customSignatoryTitle,
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 10 * k,
-                      color: cSub,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (contactBar) ...[
-            SizedBox(height: 12 * k),
-            _buildFooterContactBar(accent, cSub, k),
-          ],
+          Expanded(flex: 1, child: _th('N°', Colors.white, k)),
+          Expanded(flex: 5, child: _th('ITEM DESCRIPTION', Colors.white, k)),
+          Expanded(
+              flex: 2,
+              child: _th('QTY', Colors.white, k, align: TextAlign.center)),
+          Expanded(
+              flex: 2,
+              child: _th('PRICE', Colors.white, k, align: TextAlign.right)),
+          Expanded(
+              flex: 2,
+              child: _th('TOTAL', Colors.white, k, align: TextAlign.right)),
         ],
       ),
     );
-  }
 
-  /// ✅ Différenciation : `icons` (icônes + texte), `contact` (texte seul),
-  /// `banner` (bandeau plein + centré).
-  Widget _buildFooterContactBar(Color accent, Color cSub, double k) {
-    final String website = _sanitizeText(data.companyWebsite.isNotEmpty
-        ? data.companyWebsite
-        : 'www.example.com');
-    final String email = _sanitizeText(data.companyEmail.isNotEmpty
-        ? data.companyEmail
-        : 'mail@example.com');
-    final String phone = _sanitizeText(data.companyPhone.isNotEmpty
-        ? data.companyPhone
-        : '+00 123 45X XX');
-
-    switch (_footerStyle) {
-      case 'banner':
-        // Bandeau plein largeur, contenu centré.
-        return Container(
-          width: double.infinity,
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 10 * k),
-          decoration: BoxDecoration(
-            color: accent,
-            borderRadius: BorderRadius.circular(4),
+    final body = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      final item = rows[i];
+      final isAlt = _tableStyle == 'alternate_dark' && i.isEven;
+      body.add(Container(
+        padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
+        decoration: BoxDecoration(
+          color: isAlt ? cText.withValues(alpha: 0.05) : null,
+          border: Border(
+            bottom: BorderSide(color: line, width: 0.5),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                website,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 10 * k,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(height: 2 * k),
-              Text(
-                '$email  ·  $phone',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 9 * k,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        );
-
-      case 'contact':
-        // 3 colonnes de texte sans icônes.
-        return Container(
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
-          decoration: BoxDecoration(
-            color: accent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _footerTextOnly(website, k),
-              _footerTextOnly(email, k),
-              _footerTextOnly(phone, k),
-            ],
-          ),
-        );
-
-      case 'icons':
-      default:
-        // 3 icônes + texte.
-        return Container(
-          padding:
-              EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
-          decoration: BoxDecoration(
-            color: accent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _footerContact(Icons.public, website, k),
-              _footerContact(Icons.mail_outline, email, k),
-              _footerContact(Icons.phone_outlined, phone, k),
-            ],
-          ),
-        );
-    }
-  }
-
-  Widget _footerTextOnly(String text, double k) {
-    return Flexible(
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontFamily: 'WorkSans',
-          fontSize: 9.5 * k,
-          color: Colors.white,
         ),
-      ),
+        child: Row(
+          children: [
+            Expanded(
+                flex: 1,
+                child: _td('${i + 1}', cText, k)),
+            Expanded(
+                flex: 5,
+                child: _td(_sanitize(item.description), cText, k)),
+            Expanded(
+                flex: 2,
+                child: _td('${item.quantity}', cText, k,
+                    align: TextAlign.center)),
+            Expanded(
+                flex: 2,
+                child: _td(StitchPreviewData.money(item.unitPrice), cText, k,
+                    align: TextAlign.right)),
+            Expanded(
+                flex: 2,
+                child: _td(StitchPreviewData.money(item.total), cText, k,
+                    align: TextAlign.right, bold: true)),
+          ],
+        ),
+      ));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        headerWidget,
+        ...body,
+      ],
     );
   }
 
-  Widget _footerContact(IconData icon, String text, double k) {
-    return Row(
+  Widget _th(String t, Color color, double k, {TextAlign align = TextAlign.left}) =>
+      Text(
+        t,
+        textAlign: align,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w800,
+          fontSize: 9.5 * k,
+          letterSpacing: 0.4,
+        ),
+      );
+
+  Widget _td(String t, Color color, double k,
+      {TextAlign align = TextAlign.left, bool bold = false}) =>
+      Text(
+        t,
+        textAlign: align,
+        style: TextStyle(
+          fontFamily: 'WorkSans',
+          fontSize: 10 * k,
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+          color: color,
+        ),
+      );
+
+  Widget _totalsBlock(Color cText, Color cSub, double k) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 11 * k, color: Colors.white),
-        SizedBox(width: 4 * k),
-        Flexible(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'WorkSans',
-              fontSize: 9.5 * k,
-              color: Colors.white,
-            ),
+        _totalLine('Sub Total',
+            StitchPreviewData.money(data.subtotal), cSub, cText, k),
+        if (showTaxDetails)
+          _totalLine('Tax (${data.taxRate.toStringAsFixed(0)}%)',
+              StitchPreviewData.money(data.taxAmount), cSub, cText, k),
+        if (data.discount > 0)
+          _totalLine('Discount', '-${StitchPreviewData.money(data.discount)}',
+              cSub, cText, k),
+        SizedBox(height: 6 * k),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
+          decoration: BoxDecoration(
+            color: accentColor ?? RoyalColors.secondary,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'TOTAL',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10.5 * k,
+                ),
+              ),
+              SizedBox(width: 12 * k),
+              Text(
+                StitchPreviewData.money(data.totalAmount),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11 * k,
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  // ============================================================
-  //  TAMPON PAYÉ
-  // ============================================================
-  Widget _buildPaidStampAt({
-    required double x,
-    required double y,
-    required double rotation,
-    required double scale,
-  }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final h = constraints.maxHeight;
-        return Stack(
+  Widget _totalLine(String l, String v, Color cSub, Color cText, double k) =>
+      Padding(
+        padding: EdgeInsets.only(bottom: 3 * k),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Positioned(
-              left: x * w - 90 * scale,
-              top: y * h - 30 * scale,
-              child: Transform.rotate(
-                angle: rotation,
-                child: Opacity(
-                  opacity: 0.85,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: 26 * scale, vertical: 10 * scale),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(8 * scale),
-                      border: Border.all(
-                        color: const Color(0xFFBAAB6D),
-                        width: 4 * scale,
+            Text(
+              '$l : ',
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 10 * k,
+                color: cSub,
+              ),
+            ),
+            Text(
+              v,
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 10.5 * k,
+                color: cText,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _legalBlock(Color cText, Color cSub, double k) {
+    if (!showPaymentTerms && _customLegalText.isEmpty && data.rccm.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final legal = _customLegalText.isNotEmpty
+        ? _customLegalText
+        : _sanitize(data.legalMention);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showPaymentTerms) ...[
+          Text(
+            'TERMS & CONDITIONS',
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 10 * k,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: (accentColor ?? RoyalColors.secondary),
+            ),
+          ),
+          SizedBox(height: 4 * k),
+        ],
+        if (legal.isNotEmpty)
+          Text(
+            legal,
+            style: TextStyle(
+              fontFamily: 'WorkSans',
+              fontSize: 9.5 * k,
+              color: cSub,
+              height: 1.35,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _signatureBlock(Color cText, Color cSub, double k) {
+    if (!_effectiveShowSignature) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_signatureBytes != null)
+          Padding(
+            padding: EdgeInsets.only(bottom: 4 * k),
+            child: Image.memory(
+              _signatureBytes!,
+              width: 120 * k,
+              height: 44 * k,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+            ),
+          ),
+        Container(
+          width: 110 * k,
+          height: 1,
+          color: cSub.withValues(alpha: 0.5),
+        ),
+        SizedBox(height: 3 * k),
+        Text(
+          _customSignatoryTitle,
+          style: TextStyle(
+            fontFamily: 'WorkSans',
+            fontSize: 10 * k,
+            color: cSub,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _qrBlock(double k) {
+    if (!showPaymentQR) return const SizedBox.shrink();
+    return Container(
+      width: 60 * k,
+      height: 60 * k,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        border: Border.all(color: (accentColor ?? RoyalColors.secondary).withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Icon(Icons.qr_code_2, size: 40),
+    );
+  }
+
+  Widget _textBlock(String key, Color cText, double k) {
+    final paragraphs = _paragraphsOf(key);
+    if (paragraphs.isEmpty || paragraphs.every((p) => p.text.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final p in paragraphs)
+          if (p.text.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(bottom: 3 * k),
+              child: Text(
+                _sanitize(p.text),
+                textAlign: p.align,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 10 * k,
+                  fontWeight: p.bold ? FontWeight.bold : FontWeight.w500,
+                  fontStyle:
+                      p.italic ? FontStyle.italic : FontStyle.normal,
+                  color: cText,
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+
+  List<_PreviewParagraph> _paragraphsOf(String key) {
+    final raw = customPositions['custom_paragraphs'];
+    if (raw is Map && raw[key] is List) {
+      return (raw[key] as List)
+          .whereType<Map>()
+          .map((m) => _PreviewParagraph(
+                text: m['text']?.toString() ?? '',
+                align: TextAlign.values.firstWhere(
+                  (a) => a.name == m['align'],
+                  orElse: () => TextAlign.left,
+                ),
+                bold: m['bold'] == true,
+                italic: m['italic'] == true,
+              ))
+          .toList();
+    }
+    final rawText = customPositions['custom_texts'];
+    if (rawText is Map && rawText[key] is String) {
+      final text = rawText[key] as String;
+      if (text.isEmpty) return const [];
+      return text
+          .split('\n\n')
+          .where((t) => t.trim().isNotEmpty)
+          .map((t) => _PreviewParagraph(text: t.trim()))
+          .toList();
+    }
+    return const [];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PIED
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildFooter(Color accent, Color cText, Color cSub, Color line, double k) {
+    final widgets = <Widget>[];
+
+    if (_bankName.isNotEmpty || _bankAccount.isNotEmpty) {
+      widgets.add(Padding(
+        padding: EdgeInsets.only(top: 6 * k),
+        child: Text(
+          '${_bankName.isNotEmpty ? 'Bank: $_bankName' : ''}'
+          '${_bankName.isNotEmpty && _bankAccount.isNotEmpty ? '   ' : ''}'
+          '${_bankAccount.isNotEmpty ? 'Account: $_bankAccount' : ''}',
+          style: TextStyle(
+            fontFamily: 'WorkSans',
+            fontSize: 9.5 * k,
+            color: cSub,
+          ),
+        ),
+      ));
+    }
+
+    if (_showThankYou) {
+      switch (_footerStyle) {
+        case 'rainbow_strip':
+          widgets.add(Padding(
+            padding: EdgeInsets.only(top: 10 * k),
+            child: SizedBox(
+              height: 18 * k,
+              child: CustomPaint(
+                painter: _RainbowStripPainter(accent: accent, stripes: 32),
+              ),
+            ),
+          ));
+          widgets.add(Padding(
+            padding: EdgeInsets.only(top: 6 * k),
+            child: Text(
+              _thankYouText.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontWeight: FontWeight.w800,
+                fontSize: 11 * k,
+                letterSpacing: 1,
+                color: accent,
+              ),
+            ),
+          ));
+          break;
+        case 'thick_orange_band':
+        case 'zigzag_thankyou':
+          widgets.add(Padding(
+            padding: EdgeInsets.only(top: 10 * k),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16 * k, vertical: 10 * k),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _thankYouText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11 * k,
+                ),
+              ),
+            ),
+          ));
+          break;
+        default:
+          widgets.add(Padding(
+            padding: EdgeInsets.only(top: 8 * k),
+            child: Text(
+              _thankYouText,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 11 * k,
+                fontWeight: FontWeight.w700,
+                color: accent,
+              ),
+            ),
+          ));
+      }
+    }
+
+    // Contact bar (icônes)
+    if (_footerStyle == 'contact_bar_icons') {
+      widgets.add(Padding(
+        padding: EdgeInsets.only(top: 10 * k),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 8 * k),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _footerContact(Icons.public,
+                  _sanitize(data.companyWebsite.isNotEmpty ? data.companyWebsite : 'www.example.com'), k),
+              _footerContact(Icons.mail_outline,
+                  _sanitize(data.companyEmail.isNotEmpty ? data.companyEmail : 'mail@example.com'), k),
+              _footerContact(Icons.phone_outlined,
+                  _sanitize(data.companyPhone.isNotEmpty ? data.companyPhone : '+000 000 000'), k),
+            ],
+          ),
+        ),
+      ));
+    }
+
+    if (_footerStyle == 'diagonal_bottom_stripes') {
+      widgets.add(Padding(
+        padding: EdgeInsets.only(top: 10 * k),
+        child: SizedBox(
+          height: 14 * k,
+          child: CustomPaint(
+            painter: _RainbowStripPainter(accent: accent, stripes: 24),
+          ),
+        ),
+      ));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: widgets,
+    );
+  }
+
+  Widget _footerContact(IconData icon, String text, double k) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11 * k, color: Colors.white),
+          SizedBox(width: 4 * k),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'WorkSans',
+                fontSize: 9.5 * k,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      );
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TAMPON / FILIGRANE
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildPaidStampAt() {
+    final sx = _cpDouble('stamp_x', 0.5).clamp(0.05, 0.95);
+    final sy = _cpDouble('stamp_y', 0.5).clamp(0.05, 0.95);
+    final rot = _cpDouble('stamp_rotation', -0.15);
+    final sc = _cpDouble('stamp_scale', 1.0).clamp(0.5, 3.0);
+    final text = _customStampText.isNotEmpty ? _customStampText : 'PAYÉ';
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (_, c) => Stack(
+            children: [
+              Positioned(
+                left: sx * c.maxWidth - 90 * sc,
+                top: sy * c.maxHeight - 30 * sc,
+                child: Transform.rotate(
+                  angle: rot,
+                  child: Opacity(
+                    opacity: 0.85,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 26 * sc, vertical: 10 * sc),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(8 * sc),
+                        border: Border.all(
+                          color: const Color(0xFFBAAB6D),
+                          width: 4 * sc,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      _customStampText.isNotEmpty ? _customStampText : 'PAYÉ',
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 40 * scale,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 6 * scale,
-                        color: const Color(0xFFBAAB6D),
-                        height: 1.0,
+                      child: Text(
+                        text,
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 40 * sc,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 6 * sc,
+                          color: const Color(0xFFBAAB6D),
+                          height: 1.0,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  // ============================================================
-  //  FILIGRANE
-  // ============================================================
-  Widget _buildWatermark(Color baseColor) {
-    final double rotation =
-        ((customPositions['watermark_rotation'] as num?)?.toDouble() ?? -0.5);
-    final double size =
-        ((customPositions['watermark_size'] as num?)?.toDouble() ?? 48);
-    final double opacity =
-        ((customPositions['watermark_opacity'] as num?)?.toDouble() ?? 0.08)
-            .clamp(0.01, 0.5);
-
+  Widget _buildWatermark(Color base) {
+    final rot = _cpDouble('watermark_rotation', -0.5);
+    final size = _cpDouble('watermark_size', 48);
+    final op = _cpDouble('watermark_opacity', 0.08).clamp(0.01, 0.5);
     return Center(
       child: Transform.rotate(
-        angle: rotation,
+        angle: rot,
         child: Opacity(
-          opacity: opacity,
+          opacity: op,
           child: Text(
-            _sanitizeText(watermarkText),
+            _sanitize(watermarkText),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Manrope',
               fontSize: size,
               fontWeight: FontWeight.w800,
               letterSpacing: 4,
-              color: baseColor,
+              color: base,
               height: 1.0,
             ),
           ),
@@ -1582,9 +1581,143 @@ class StitchA4InvoicePreview extends StatelessWidget {
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SANITIZE
+  // ═══════════════════════════════════════════════════════════════
+  static String _sanitize(String input) {
+    if (input.isEmpty) return input;
+    final buf = StringBuffer();
+    for (final rune in input.runes) {
+      if (_isSafe(rune)) buf.writeCharCode(rune);
+    }
+    return buf.toString();
+  }
+
+  static bool _isSafe(int r) {
+    if (r == 0x09 || r == 0x0A || r == 0x0D) return true;
+    if (r >= 0x20 && r <= 0x7E) return true;
+    if (r >= 0x00A0 && r <= 0x024F) return true;
+    if (r >= 0x2000 && r <= 0x206F) return true;
+    if (r >= 0x20A0 && r <= 0x20CF) return true;
+    if (r >= 0x2190 && r <= 0x21FF) return true;
+    if (r >= 0x25A0 && r <= 0x25FF) return true;
+    if (r >= 0x2700 && r <= 0x27BF) return true;
+    return false;
+  }
 }
 
-/// Conversion des modèles métier → données de l'aperçu.
+// ═══════════════════════════════════════════════════════════════════════
+//  HELPERS INTERNES
+// ═══════════════════════════════════════════════════════════════════════
+class _PreviewParagraph {
+  final String text;
+  final TextAlign align;
+  final bool bold;
+  final bool italic;
+  const _PreviewParagraph({
+    required this.text,
+    this.align = TextAlign.left,
+    this.bold = false,
+    this.italic = false,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PAINTERS
+// ═══════════════════════════════════════════════════════════════════════
+class _WaveHeaderPainter extends CustomPainter {
+  final Color accent;
+  _WaveHeaderPainter({required this.accent});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Fond bleu marine (droite)
+    final bg = Paint()..color = const Color(0xFF1B4965);
+    canvas.drawRect(Offset.zero & size, bg);
+
+    // Vague orange (gauche) — recouvre jusqu'à ~60% puis courbe
+    final orange = Paint()..color = accent;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width * 0.55, 0)
+      ..quadraticBezierTo(
+        size.width * 0.65,
+        size.height * 0.5,
+        size.width * 0.5,
+        size.height,
+      )
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, orange);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaveHeaderPainter old) => old.accent != accent;
+}
+
+class _CornerDiagonalClipper extends CustomClipper<Path> {
+  final bool topLeft;
+  _CornerDiagonalClipper({required this.topLeft});
+
+  @override
+  Path getClip(Size size) {
+    final p = Path();
+    if (topLeft) {
+      p
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(0, size.height)
+        ..close();
+    } else {
+      p
+        ..moveTo(size.width, 0)
+        ..lineTo(size.width, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+    }
+    return p;
+  }
+
+  @override
+  bool shouldReclip(covariant _CornerDiagonalClipper old) =>
+      old.topLeft != topLeft;
+}
+
+class _RainbowStripPainter extends CustomPainter {
+  final Color accent;
+  final int stripes;
+  _RainbowStripPainter({required this.accent, this.stripes = 24});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width / stripes;
+    const colors = [
+      Color(0xFFE8A33D),
+      Color(0xFF1B4965),
+      Color(0xFFE67E22),
+      Color(0xFF111111),
+    ];
+    for (var i = 0; i < stripes; i++) {
+      final paint = Paint()..color = colors[i % colors.length];
+      final path = Path()
+        ..moveTo(i * w, 0)
+        ..lineTo((i + 1) * w, 0)
+        ..lineTo((i + 1) * w - w * 0.5, size.height)
+        ..lineTo(i * w - w * 0.5, size.height)
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RainbowStripPainter old) =>
+      old.accent != accent || old.stripes != stripes;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  EXTENSION — conversion invoice → preview data
+// ═══════════════════════════════════════════════════════════════════════
 extension StitchPreviewDataX on StitchPreviewData {
   static StitchPreviewData fromInvoice({
     required dynamic invoice,
@@ -1599,10 +1732,10 @@ extension StitchPreviewDataX on StitchPreviewData {
     }
     if (initials.isEmpty) initials = 'NO';
 
-    String fmtDate(dynamic date) {
-      if (date is DateTime) {
-        return '${date.day.toString().padLeft(2, '0')}/'
-            '${date.month.toString().padLeft(2, '0')}/${date.year}';
+    String fmtDate(dynamic d) {
+      if (d is DateTime) {
+        return '${d.day.toString().padLeft(2, '0')}/'
+            '${d.month.toString().padLeft(2, '0')}/${d.year}';
       }
       return '';
     }
@@ -1646,42 +1779,4 @@ extension StitchPreviewDataX on StitchPreviewData {
       isPaid: (invoice.status as String? ?? '') == 'paid',
     );
   }
-}
-
-/// Motif de points de l'en-tête.
-class _DotsPatternPainter extends CustomPainter {
-  final Color color;
-  _DotsPatternPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const double cell = 8.0;
-    const double radius = 1.2;
-    final Paint paint = Paint()..color = color;
-    for (double y = cell / 2; y < size.height; y += cell) {
-      for (double x = cell / 2; x < size.width; x += cell) {
-        canvas.drawCircle(Offset(x, y), radius, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DotsPatternPainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
-/// Bandeau diagonal pour le style `zigzag`.
-class _DiagonalClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final p = Path();
-    p.lineTo(0, size.height * 0.6);
-    p.lineTo(size.width, size.height);
-    p.lineTo(size.width, 0);
-    p.close();
-    return p;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

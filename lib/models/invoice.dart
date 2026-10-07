@@ -1,4 +1,11 @@
 // lib/models/invoice.dart
+//
+// CHANGELOG :
+//   • Ajout `companyId` (rattachement SaaS — pilote la numérotation par
+//     entreprise, plus par utilisateur → plus de doublons).
+//   • Ajout `sharedWithUsers`, `sharedTeams`, `editableByUsers`,
+//     `editableTeams` (mêmes champs que les autres ressources partageables).
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
@@ -8,16 +15,16 @@ part 'invoice.g.dart';
 
 @HiveType(typeId: 7)
 class Invoice {
-  @HiveField(0) final String id;
-  @HiveField(1) final String companyId;
-  @HiveField(2) final String clientId;
-  @HiveField(3) final String invoiceNumber;
-  @HiveField(4) final DateTime issueDate;
-  @HiveField(5) final DateTime dueDate;
-  @HiveField(6) final String status;
-  @HiveField(7) final List<LineItem> items;
-  @HiveField(8) final double subtotal;
-  @HiveField(9) final double taxRate;
+  @HiveField(0)  final String id;
+  @HiveField(1)  final String companyId;
+  @HiveField(2)  final String clientId;
+  @HiveField(3)  final String invoiceNumber;
+  @HiveField(4)  final DateTime issueDate;
+  @HiveField(5)  final DateTime dueDate;
+  @HiveField(6)  final String status;
+  @HiveField(7)  final List<LineItem> items;
+  @HiveField(8)  final double subtotal;
+  @HiveField(9)  final double taxRate;
   @HiveField(10) final double taxAmount;
   @HiveField(11) final double discount;
   @HiveField(12) final double totalAmount;
@@ -25,11 +32,17 @@ class Invoice {
   @HiveField(14) final bool isDevis;
   @HiveField(15) final String notes;
   @HiveField(16) final String? userId;
-  @HiveField(17) final bool isSynced; // 🔥 Flag local/cloud
+  @HiveField(17) final bool isSynced;
   @HiveField(18) final DateTime? syncedAt;
-  @HiveField(19) final DateTime updatedAt; // Champ critique pour la synchro
-  @HiveField(20) final DateTime createdAt; // Date de création (quotas mensuels)
-  @HiveField(21) final String? templateId; // Modèle actif utilisé pour cette facture
+  @HiveField(19) final DateTime updatedAt;
+  @HiveField(20) final DateTime createdAt;
+  @HiveField(21) final String? templateId;
+
+  // 🔑 NOUVEAU — partages SaaS
+  @HiveField(22) final List<String> sharedWithUsers;
+  @HiveField(23) final List<String> sharedTeams;
+  @HiveField(24) final List<String> editableByUsers;
+  @HiveField(25) final List<String> editableTeams;
 
   Invoice({
     String? id,
@@ -54,9 +67,13 @@ class Invoice {
     this.templateId,
     DateTime? updatedAt,
     DateTime? createdAt,
-  }) : id = id ?? const Uuid().v4(),
-       updatedAt = updatedAt ?? DateTime.now(),
-       createdAt = createdAt ?? DateTime.now();
+    this.sharedWithUsers = const [],
+    this.sharedTeams = const [],
+    this.editableByUsers = const [],
+    this.editableTeams = const [],
+  })  : id = id ?? const Uuid().v4(),
+        updatedAt = updatedAt ?? DateTime.now(),
+        createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
     return {
@@ -82,6 +99,10 @@ class Invoice {
       'updatedAt': Timestamp.fromDate(updatedAt),
       'createdAt': Timestamp.fromDate(createdAt),
       'templateId': templateId,
+      'sharedWithUsers': sharedWithUsers,
+      'sharedTeams': sharedTeams,
+      'editableByUsers': editableByUsers,
+      'editableTeams': editableTeams,
     };
   }
 
@@ -94,7 +115,11 @@ class Invoice {
       issueDate: _parseDateTime(map['issueDate']),
       dueDate: _parseDateTime(map['dueDate']),
       status: map['status'] ?? 'draft',
-      items: (map['items'] as List?)?.map((e) => LineItem.fromMap(Map<String, dynamic>.from(e))).toList() ?? [],
+      items: (map['items'] as List?)
+              ?.map((e) =>
+                  LineItem.fromMap(Map<String, dynamic>.from(e)))
+              .toList() ??
+          [],
       subtotal: (map['subtotal'] as num?)?.toDouble() ?? 0.0,
       taxRate: (map['taxRate'] as num?)?.toDouble() ?? 18.0,
       taxAmount: (map['taxAmount'] as num?)?.toDouble() ?? 0.0,
@@ -104,11 +129,21 @@ class Invoice {
       isDevis: map['isDevis'] ?? false,
       notes: map['notes'] ?? '',
       userId: map['userId'],
-      syncedAt: map['syncedAt'] != null ? _parseDateTime(map['syncedAt']) : null,
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : DateTime.now(),
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
+      syncedAt: map['syncedAt'] != null
+          ? _parseDateTime(map['syncedAt'])
+          : null,
+      updatedAt: map['updatedAt'] != null
+          ? _parseDateTime(map['updatedAt'])
+          : DateTime.now(),
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : DateTime.now(),
       isSynced: map['isSynced'] ?? false,
       templateId: map['templateId'],
+      sharedWithUsers: List<String>.from(map['sharedWithUsers'] ?? const []),
+      sharedTeams: List<String>.from(map['sharedTeams'] ?? const []),
+      editableByUsers: List<String>.from(map['editableByUsers'] ?? const []),
+      editableTeams: List<String>.from(map['editableTeams'] ?? const []),
     );
   }
 
@@ -129,10 +164,15 @@ class Invoice {
     String? notes,
     String? userId,
     String? templateId,
+    String? companyId,
+    List<String>? sharedWithUsers,
+    List<String>? sharedTeams,
+    List<String>? editableByUsers,
+    List<String>? editableTeams,
   }) {
     return Invoice(
       id: id,
-      companyId: companyId,
+      companyId: companyId ?? this.companyId,
       clientId: clientId,
       invoiceNumber: invoiceNumber,
       issueDate: issueDate,
@@ -153,6 +193,10 @@ class Invoice {
       createdAt: createdAt,
       isSynced: isSynced ?? this.isSynced,
       templateId: templateId ?? this.templateId,
+      sharedWithUsers: sharedWithUsers ?? this.sharedWithUsers,
+      sharedTeams: sharedTeams ?? this.sharedTeams,
+      editableByUsers: editableByUsers ?? this.editableByUsers,
+      editableTeams: editableTeams ?? this.editableTeams,
     );
   }
 }

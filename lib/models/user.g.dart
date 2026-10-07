@@ -29,13 +29,15 @@ class AppUserAdapter extends TypeAdapter<AppUser> {
       lastLoginAt: fields[9] as DateTime?,
       isActive: fields[10] as bool,
       roles: (fields[11] as List).cast<String>(),
+      companyId: fields[12] as String?,
+      teamIds: (fields[13] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, AppUser obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +61,11 @@ class AppUserAdapter extends TypeAdapter<AppUser> {
       ..writeByte(10)
       ..write(obj.isActive)
       ..writeByte(11)
-      ..write(obj.roles);
+      ..write(obj.roles)
+      ..writeByte(12)
+      ..write(obj.companyId)
+      ..writeByte(13)
+      ..write(obj.teamIds);
   }
 
   @override
@@ -94,6 +100,11 @@ AppUser _$AppUserFromJson(Map<String, dynamic> json) => AppUser(
       roles:
           (json['roles'] as List<dynamic>?)?.map((e) => e as String).toList() ??
               const ['user'],
+      companyId: json['companyId'] as String?,
+      teamIds: (json['teamIds'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
     );
 
 Map<String, dynamic> _$AppUserToJson(AppUser instance) => <String, dynamic>{
@@ -109,4 +120,6 @@ Map<String, dynamic> _$AppUserToJson(AppUser instance) => <String, dynamic>{
       'lastLoginAt': instance.lastLoginAt?.toIso8601String(),
       'isActive': instance.isActive,
       'roles': instance.roles,
+      'companyId': instance.companyId,
+      'teamIds': instance.teamIds,
     };

@@ -2,7 +2,6 @@
 //
 // 🎨 Plan form — épuré, corrections : context après await, checkbox unifiée.
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';

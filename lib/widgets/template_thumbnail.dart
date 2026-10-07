@@ -1,15 +1,14 @@
 // lib/widgets/template_thumbnail.dart
 //
-// 🖼️ Vignette visuelle d'un modèle de facture pour la boutique et les
-// galeries de modèles.
+// CHANGELOG (v4) :
+//   • Rend fidèlement les 10 styles d'en-tête, 5 styles de tableau et
+//     6 styles de pied définis dans InvoiceTemplate v4.
+//   • Décode `positions` du preset (header_style, table_style, footer_style,
+//     accent_border, show_thank_you) → identité visuelle parfaite entre la
+//     miniature et le rendu final.
+//   • Fallback : si le preset embarque une image (`fileData`), elle est
+//     affichée en couverture.
 //
-// • Si le modèle embarque une image (`fileData` base64 jpeg/png, téléversée
-//   par l'admin) → elle est affichée en couverture.
-// • Sinon → une mini-facture STYLISÉE est dessinée à partir des couleurs et
-//   options du modèle (couleur principale, couleurs texte/fond, bordure,
-//   logo, QR) : en-tête coloré, tableau simulé, bloc totaux, pied QR.
-//
-// Léger (pur Container/Row/Column) : conçu pour des grilles de cartes.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -19,6 +18,17 @@ import '../models/invoice_template.dart';
 class TemplateThumbnail extends StatelessWidget {
   final InvoiceTemplate template;
   const TemplateThumbnail({super.key, required this.template});
+
+  // ── Helpers lecture positions ──
+  String _style(String key, String fallback) {
+    final v = template.positions[key];
+    return v is String && v.isNotEmpty ? v : fallback;
+  }
+
+  bool _flag(String key, bool fallback) {
+    final v = template.positions[key];
+    return v is bool ? v : fallback;
+  }
 
   bool get _hasImage {
     final t = template.fileType.toLowerCase();
@@ -45,210 +55,696 @@ class TemplateThumbnail extends StatelessWidget {
     return _drawn();
   }
 
-  // ── Mini-facture stylisée ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  RENDU PRINCIPAL
+  // ═══════════════════════════════════════════════════════════════
   Widget _drawn() {
     final t = template;
+    final headerStyle = _style('header_style', 'flat');
+    final tableStyle = _style('table_style', 'plain');
+    final footerStyle = _style('footer_style', 'simple');
+    final accentBorder = _style('accent_border', '');
+    final showThankYou = _flag('show_thank_you', false);
+
     final onPrimary = t.primaryColor.computeLuminance() > 0.55
-        ? const Color(0xFF1E1A1F)
+        ? const Color(0xFF1F2937)
         : Colors.white;
     final line = t.textColor.withValues(alpha: 0.22);
-    final lineSoft = t.textColor.withValues(alpha: 0.12);
+    final lineSoft = t.textColor.withValues(alpha: 0.10);
 
     return Container(
       width: double.infinity,
       height: double.infinity,
       color: t.backgroundColor,
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
         children: [
-          // ── En-tête coloré : logo + nom entreprise + FACTURE ──
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: t.primaryColor,
-              borderRadius: BorderRadius.circular(6),
+          // ── Bande décorative (accent_border) ──
+          if (accentBorder == 'top')
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(height: 4, color: t.primaryColor),
             ),
-            child: Row(
+          if (accentBorder == 'left')
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: Container(width: 4, color: t.primaryColor),
+            ),
+          if (accentBorder == 'frame')
+            Positioned.fill(
+              child: Container(
+                margin: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: t.primaryColor.withValues(alpha: 0.6),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          if (accentBorder == 'stripes_bottom')
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SizedBox(
+                height: 6,
+                child: _RainbowStrip(color: t.primaryColor),
+              ),
+            ),
+
+          // ── Contenu ──
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (t.showLogo) ...[
-                  Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: onPrimary.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                          height: 4.5,
-                          width: 54,
-                          color: onPrimary.withValues(alpha: 0.9)),
-                      const SizedBox(height: 3),
-                      Container(
-                          height: 3,
-                          width: 38,
-                          color: onPrimary.withValues(alpha: 0.5)),
-                    ],
-                  ),
-                ),
-                Text(
-                  'FACTURE',
-                  style: TextStyle(
-                    color: onPrimary,
-                    fontSize: 6.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                  ),
-                ),
+                _buildHeader(t, headerStyle, onPrimary),
+                const SizedBox(height: 6),
+                _buildClientMeta(t, line, lineSoft),
+                const SizedBox(height: 6),
+                _buildItemsTable(t, tableStyle, line, lineSoft),
+                const Spacer(),
+                _buildTotals(t),
+                if (showThankYou || footerStyle != 'simple')
+                  const SizedBox(height: 6),
+                if (showThankYou || footerStyle != 'simple')
+                  _buildFooter(t, footerStyle),
               ],
             ),
           ),
-          const SizedBox(height: 5),
-
-          // ── Bloc client / méta ──
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                        height: 3,
-                        width: 30,
-                        color: t.primaryColor.withValues(alpha: 0.8)),
-                    const SizedBox(height: 3),
-                    Container(height: 3, width: 44, color: lineSoft),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(height: 3, width: 26, color: lineSoft),
-                  const SizedBox(height: 3),
-                  Container(height: 3, width: 26, color: lineSoft),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          _tableSection(t, line, lineSoft),
         ],
       ),
     );
   }
 
-  // ── Tableau simulé + totaux + pied QR/termes ──────────────────────────────
-  Widget _tableSection(InvoiceTemplate t, Color line, Color lineSoft) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                border: t.showBorder
-                    ? Border.all(color: t.primaryColor.withValues(alpha: 0.4))
-                    : Border.all(color: lineSoft),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              padding: const EdgeInsets.all(5),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(height: 2.5, width: 34, color: line),
-                      Container(height: 2.5, width: 12, color: line),
-                      Container(height: 2.5, width: 20, color: line),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  ...List.generate(3, (i) {
-                    final w = 70.0 - i * 8;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          Container(height: 3, width: w, color: lineSoft),
-                          const Spacer(),
-                          Container(height: 3, width: 16, color: lineSoft),
-                        ],
-                      ),
-                    );
-                  }),
-                  const Spacer(),
-                  Container(height: 3, color: line),
-                  const SizedBox(height: 5),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Container(height: 3, width: 28, color: lineSoft),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: t.primaryColor,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          'TOTAL',
-                          style: TextStyle(
-                            color: t.primaryColor.computeLuminance() > 0.55
-                                ? const Color(0xFF1E1A1F)
-                                : Colors.white,
-                            fontSize: 5.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+  // ═══════════════════════════════════════════════════════════════
+  //  EN-TÊTE — dispatch par style
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildHeader(InvoiceTemplate t, String style, Color onPrimary) {
+    final headerContent = Row(
+      children: [
+        if (t.showLogo) ...[
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              color: onPrimary.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
-          if (t.showPaymentQR || t.showPaymentTerms) ...[
-            const SizedBox(height: 5),
-            Row(
+          const SizedBox(width: 5),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                  height: 4,
+                  width: 46,
+                  color: onPrimary.withValues(alpha: 0.9)),
+              const SizedBox(height: 2.5),
+              Container(
+                  height: 2.5,
+                  width: 32,
+                  color: onPrimary.withValues(alpha: 0.5)),
+            ],
+          ),
+        ),
+        Text(
+          'INVOICE',
+          style: TextStyle(
+            color: onPrimary,
+            fontSize: 6,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
+    );
+
+    switch (style) {
+      // 🔵 Band / Dark : bandeau plein largeur
+      case 'band':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          decoration: BoxDecoration(
+            color: t.primaryColor,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: headerContent,
+        );
+      case 'dark':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          decoration: BoxDecoration(
+            color: Color.lerp(t.primaryColor, Colors.black, 0.3),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: headerContent,
+        );
+
+      // 🌊 Wave / Split Orange Left : vague orange sur fond bleu marine
+      case 'wave':
+      case 'split_orange_left':
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 32,
+            child: Stack(
               children: [
-                if (t.showPaymentQR)
-                  Container(
-                    width: 15,
-                    height: 15,
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _ThumbWavePainter(accent: t.primaryColor),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 4),
+                  child: headerContent,
+                ),
+              ],
+            ),
+          ),
+        );
+
+      // 🔶 Orange Band Right : bande orange à droite
+      case 'orange_band_right':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: BoxDecoration(
+            color: t.primaryColor.withValues(alpha: 0.08),
+            border: Border(
+              right: BorderSide(color: t.primaryColor, width: 3.5),
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: headerContent,
+        );
+
+      // ⬛ Split Diagonal Corners : 2 triangles
+      case 'split_diagonal_corners':
+        return SizedBox(
+          height: 36,
+          child: Stack(
+            children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                child: ClipPath(
+                  clipper: _ThumbCornerClipper(topLeft: true),
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    color: t.primaryColor,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: ClipPath(
+                  clipper: _ThumbCornerClipper(topLeft: false),
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    color: t.primaryColor,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 4),
+                child: headerContent,
+              ),
+            ],
+          ),
+        );
+
+      // 🟠 Circle Accent Top Left
+      case 'circle_accent_top_left':
+        return SizedBox(
+          height: 36,
+          child: Stack(
+            children: [
+              Positioned(
+                top: -12,
+                left: -12,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: t.primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 4),
+                child: headerContent,
+              ),
+            ],
+          ),
+        );
+
+      // ✒️ Cursive Title : "Invoice" en italique fin
+            case 'cursive_title':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              if (t.showLogo) ...[
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: t.primaryColor.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 3.5,
+                      width: 40,
+                      color: t.primaryColor,
+                    ),
+                    const SizedBox(height: 2),
+                    // ✅ Fix : self-contained, ne dépend plus de `lineSoft`
+                    Container(
+                      height: 2.5,
+                      width: 28,
+                      color: t.textColor.withValues(alpha: 0.10),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Invoice',
+                style: TextStyle(
+                  color: t.primaryColor,
+                  fontSize: 9,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        );
+      // 💠 Diamond Center : losange central or
+      case 'diamond_center':
+        return SizedBox(
+          height: 36,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(
+                left: 0,
+                child: Transform.rotate(
+                  angle: 0.785398,
+                  child: Container(
+                    width: 18,
+                    height: 18,
                     decoration: BoxDecoration(
-                      border: Border.all(color: line, width: 1),
+                      color: t.primaryColor,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                if (t.showPaymentTerms) ...[
-                  if (t.showPaymentQR) const SizedBox(width: 5),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(height: 2.5, width: 50, color: lineSoft),
-                        const SizedBox(height: 2.5),
-                        Container(height: 2.5, width: 36, color: lineSoft),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 26, right: 4),
+                child: headerContent,
+              ),
+            ],
+          ),
+        );
+
+      // 🔳 Flat (défaut)
+      case 'flat':
+      default:
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: headerContent,
+        );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CLIENT / MÉTA
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildClientMeta(InvoiceTemplate t, Color line, Color lineSoft) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                  height: 2.5,
+                  width: 24,
+                  color: t.primaryColor.withValues(alpha: 0.8)),
+              const SizedBox(height: 2.5),
+              Container(height: 2.5, width: 38, color: lineSoft),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Container(height: 2.5, width: 22, color: lineSoft),
+            const SizedBox(height: 2.5),
+            Container(height: 2.5, width: 22, color: lineSoft),
           ],
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TABLEAU — dispatch par style
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildItemsTable(
+      InvoiceTemplate t, String style, Color line, Color lineSoft) {
+    final headerBg = style == 'dark_header'
+        ? const Color(0xFF1B4965)
+        : t.primaryColor;
+
+    final header = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      decoration: BoxDecoration(
+        color: headerBg,
+        borderRadius: style == 'cards'
+            ? BorderRadius.circular(4)
+            : const BorderRadius.vertical(top: Radius.circular(2)),
+      ),
+      child: Row(
+        children: [
+          _thumbCell(Colors.white, 24, 2),
+          const Spacer(),
+          _thumbCell(Colors.white, 12, 2),
+          const SizedBox(width: 6),
+          _thumbCell(Colors.white, 16, 2),
         ],
       ),
+    );
+
+    final bodyRows = <Widget>[];
+    for (var i = 0; i < 3; i++) {
+      final isAlt = style == 'alternate_dark' && i.isEven;
+      final showNumbered = style == 'numbered';
+      bodyRows.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          decoration: BoxDecoration(
+            color: isAlt ? t.textColor.withValues(alpha: 0.05) : null,
+            border: Border(
+              bottom: BorderSide(color: line.withValues(alpha: 0.4), width: 0.5),
+            ),
+          ),
+          child: Row(
+            children: [
+              if (showNumbered) ...[
+                Text(
+                  '${i + 1}.',
+                  style: TextStyle(
+                    color: t.primaryColor,
+                    fontSize: 5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 3),
+              ],
+              _thumbCell(lineSoft, 34 - i * 4, 2),
+              const Spacer(),
+              _thumbCell(lineSoft, 8, 2),
+              const SizedBox(width: 6),
+              _thumbCell(lineSoft, 12, 2),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (style == 'cards') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          const SizedBox(height: 3),
+          for (var i = 0; i < 2; i++)
+            Container(
+              margin: const EdgeInsets.only(bottom: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(
+                    color: t.primaryColor.withValues(alpha: 0.2), width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  _thumbCell(lineSoft, 30, 2),
+                  const Spacer(),
+                  _thumbCell(lineSoft, 8, 2),
+                  const SizedBox(width: 6),
+                  _thumbCell(lineSoft, 12, 2),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [header, ...bodyRows],
+    );
+  }
+
+  Widget _thumbCell(Color color, double w, double h) => Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(1),
+        ),
+      );
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TOTAUX
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildTotals(InvoiceTemplate t) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(height: 2.5, width: 24, color: t.textColor.withValues(alpha: 0.2)),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: t.primaryColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(
+              'TOTAL',
+              style: TextStyle(
+                color: t.primaryColor.computeLuminance() > 0.55
+                    ? const Color(0xFF1F2937)
+                    : Colors.white,
+                fontSize: 5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PIED — dispatch par style
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildFooter(InvoiceTemplate t, String style) {
+    switch (style) {
+      case 'contact_bar_icons':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          decoration: BoxDecoration(
+            color: t.primaryColor,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _thumbIcon(Colors.white),
+              _thumbIcon(Colors.white),
+              _thumbIcon(Colors.white),
+            ],
+          ),
+        );
+
+      case 'zigzag_thankyou':
+      case 'thick_orange_band':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          decoration: BoxDecoration(
+            color: t.primaryColor,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Center(
+            child: Container(
+              height: 2.5,
+              width: 50,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+        );
+
+      case 'rainbow_strip':
+        return SizedBox(
+          height: 6,
+          child: _RainbowStrip(color: t.primaryColor),
+        );
+
+      case 'diagonal_bottom_stripes':
+        return SizedBox(
+          height: 5,
+          child: _RainbowStrip(color: t.primaryColor),
+        );
+
+      default:
+        return Row(
+          children: [
+            if (t.showPaymentQR)
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                      color: t.textColor.withValues(alpha: 0.2), width: 0.6),
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+              ),
+            if (t.showPaymentTerms) ...[
+              if (t.showPaymentQR) const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 2, width: 40, color: t.textColor.withValues(alpha: 0.12)),
+                    const SizedBox(height: 2),
+                    Container(height: 2, width: 30, color: t.textColor.withValues(alpha: 0.12)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+    }
+  }
+
+  Widget _thumbIcon(Color c) => Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          color: c,
+          shape: BoxShape.circle,
+        ),
+      );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  PAINTERS / CLIPPERS
+// ═══════════════════════════════════════════════════════════════════════
+class _ThumbWavePainter extends CustomPainter {
+  final Color accent;
+  _ThumbWavePainter({required this.accent});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Fond bleu marine
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF1B4965));
+    // Vague orange à gauche
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width * 0.55, 0)
+      ..quadraticBezierTo(
+        size.width * 0.65,
+        size.height * 0.5,
+        size.width * 0.5,
+        size.height,
+      )
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = accent);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThumbWavePainter old) => old.accent != accent;
+}
+
+class _ThumbCornerClipper extends CustomClipper<Path> {
+  final bool topLeft;
+  _ThumbCornerClipper({required this.topLeft});
+
+  @override
+  Path getClip(Size size) {
+    final p = Path();
+    if (topLeft) {
+      p
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(0, size.height)
+        ..close();
+    } else {
+      p
+        ..moveTo(size.width, 0)
+        ..lineTo(size.width, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+    }
+    return p;
+  }
+
+  @override
+  bool shouldReclip(covariant _ThumbCornerClipper old) =>
+      old.topLeft != topLeft;
+}
+
+class _RainbowStrip extends StatelessWidget {
+  final Color color;
+  const _RainbowStrip({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    const stripes = 16;
+    const colors = [
+      Color(0xFFE8A33D),
+      Color(0xFF1B4965),
+      Color(0xFFE67E22),
+      Color(0xFF111111),
+    ];
+    return Row(
+      children: [
+        for (var i = 0; i < stripes; i++)
+          Expanded(
+            child: Container(color: colors[i % colors.length]),
+          ),
+      ],
     );
   }
 }

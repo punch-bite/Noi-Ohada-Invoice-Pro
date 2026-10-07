@@ -1,3 +1,11 @@
+// lib/models/client.dart
+//
+// CHANGELOG :
+//   • Ajout `companyId` (rattachement SaaS).
+//   • Ajout `sharedWithUsers`, `sharedTeams`, `editableByUsers`,
+//     `editableTeams` (mêmes champs que les autres ressources partageables,
+//     pour cohérence avec les règles Firestore).
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
@@ -6,17 +14,24 @@ part 'client.g.dart';
 
 @HiveType(typeId: 0)
 class Client {
-  @HiveField(0) final String id;
-  @HiveField(1) final String userId;
-  @HiveField(2) final String name;
-  @HiveField(3) final String address;
-  @HiveField(4) final String taxId;
-  @HiveField(5) final String phone;
-  @HiveField(6) final String email;
-  @HiveField(7) final DateTime createdAt;
-  @HiveField(8) final DateTime? updatedAt;
-  @HiveField(9) final bool isActive;
+  @HiveField(0)  final String id;
+  @HiveField(1)  final String userId;
+  @HiveField(2)  final String name;
+  @HiveField(3)  final String address;
+  @HiveField(4)  final String taxId;
+  @HiveField(5)  final String phone;
+  @HiveField(6)  final String email;
+  @HiveField(7)  final DateTime createdAt;
+  @HiveField(8)  final DateTime? updatedAt;
+  @HiveField(9)  final bool isActive;
   @HiveField(10) final bool isSynced;
+
+  // 🔑 NOUVEAU
+  @HiveField(11) final String? companyId;
+  @HiveField(12) final List<String> sharedWithUsers;
+  @HiveField(13) final List<String> sharedTeams;
+  @HiveField(14) final List<String> editableByUsers;
+  @HiveField(15) final List<String> editableTeams;
 
   Client({
     String? id,
@@ -30,6 +45,11 @@ class Client {
     this.updatedAt,
     this.isActive = true,
     this.isSynced = false,
+    this.companyId,
+    this.sharedWithUsers = const [],
+    this.sharedTeams = const [],
+    this.editableByUsers = const [],
+    this.editableTeams = const [],
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -37,6 +57,7 @@ class Client {
     return {
       'id': id,
       'userId': userId,
+      'companyId': companyId,
       'name': name,
       'address': address,
       'taxId': taxId,
@@ -46,6 +67,10 @@ class Client {
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
       'isSynced': isSynced,
+      'sharedWithUsers': sharedWithUsers,
+      'sharedTeams': sharedTeams,
+      'editableByUsers': editableByUsers,
+      'editableTeams': editableTeams,
     };
   }
 
@@ -53,15 +78,24 @@ class Client {
     return Client(
       id: documentId ?? map['id'] ?? const Uuid().v4(),
       userId: map['userId'] ?? '',
+      companyId: map['companyId'],
       name: map['name'] ?? '',
       address: map['address'] ?? '',
       taxId: map['taxId'] ?? '',
       phone: map['phone'] ?? '',
       email: map['email'] ?? '',
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? _parseDateTime(map['updatedAt'])
+          : null,
       isActive: map['isActive'] ?? true,
       isSynced: map['isSynced'] ?? false,
+      sharedWithUsers: List<String>.from(map['sharedWithUsers'] ?? const []),
+      sharedTeams: List<String>.from(map['sharedTeams'] ?? const []),
+      editableByUsers: List<String>.from(map['editableByUsers'] ?? const []),
+      editableTeams: List<String>.from(map['editableTeams'] ?? const []),
     );
   }
 
@@ -73,19 +107,37 @@ class Client {
     return DateTime.now();
   }
 
-  Client copyWith({String? name, String? address, String? phone, String? email, bool? isActive, bool? isSynced, required String taxId}) {
+  Client copyWith({
+    String? name,
+    String? address,
+    String? phone,
+    String? email,
+    String? taxId,
+    bool? isActive,
+    bool? isSynced,
+    String? companyId,
+    List<String>? sharedWithUsers,
+    List<String>? sharedTeams,
+    List<String>? editableByUsers,
+    List<String>? editableTeams,
+  }) {
     return Client(
       id: id,
       userId: userId,
+      companyId: companyId ?? this.companyId,
       name: name ?? this.name,
       address: address ?? this.address,
-      taxId: taxId,
+      taxId: taxId ?? this.taxId,
       phone: phone ?? this.phone,
       email: email ?? this.email,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
       isSynced: isSynced ?? this.isSynced,
+      sharedWithUsers: sharedWithUsers ?? this.sharedWithUsers,
+      sharedTeams: sharedTeams ?? this.sharedTeams,
+      editableByUsers: editableByUsers ?? this.editableByUsers,
+      editableTeams: editableTeams ?? this.editableTeams,
     );
   }
 }

@@ -1,12 +1,16 @@
 // lib/services/notification_service.dart
 //
-// ✅ Notifications — FIRESTORE (plus de Hive).
-// Les notifications sont stockées dans la collection `notifications`,
-// scopée par l'UID, et gardées en mémoire pour une UI réactive.
+// CHANGELOG (v4 — SaaS) :
+//   • `addNotificationForUser()` accepte désormais `teamId` — requis par les
+//     règles Firestore pour valider qu'un émetteur ne notifie qu'un membre de
+//     SA team (fail-closed).
+//   • Conservation intégrale du comportement de toast live (invitations).
+//   • `stopListening()` correctement appelé au logout (déjà géré par main.dart).
 //
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../models/notification.dart';
 import '../services/database_service.dart';
 import '../widgets/app_toast.dart';
@@ -14,10 +18,10 @@ import '../widgets/app_toast.dart';
 class NotificationService extends ChangeNotifier {
   final DatabaseService _db = DatabaseService();
 
-  // Utilisation d'une liste locale pour optimiser l'accès UI (cache mémoire)
+  // ── Cache mémoire (UI réactive).
   List<AppNotification> _notifications = [];
 
-  // Écoute temps réel (toast des invitations d'équipe).
+  // ── Écoute temps réel (toast des invitations d'équipe).
   StreamSubscription<List<AppNotification>>? _sub;
   String? _listeningUid;
   bool _firstEmission = true;
@@ -25,17 +29,18 @@ class NotificationService extends ChangeNotifier {
 
   List<AppNotification> get notifications => _notifications;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
-  List<AppNotification> get unreadNotifications {
-    return _notifications.where((n) => !n.isRead).toList();
-  }
+  List<AppNotification> get unreadNotifications =>
+      _notifications.where((n) => !n.isRead).toList();
 
+  // ═══════════════════════════════════════════════════════════════
+  //  INITIALISATION
+  // ═══════════════════════════════════════════════════════════════
   Future<void> init() async {
     await refresh();
     startListening();
     notifyListeners();
   }
 
-  /// Recharge les notifications depuis Firestore (mémoire + notify).
   Future<void> refresh() async {
     try {
       final items = await _db.getNotifications();
@@ -47,13 +52,13 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
-  /// Écoute en temps réel les notifications de l'utilisateur connecté.
-  /// Affiche un TOAST (SnackBar global) quand une invitation d'équipe arrive
-  /// en direct, et met à jour la liste en mémoire.
+  // ═══════════════════════════════════════════════════════════════
+  //  ÉCOUTE TEMPS RÉEL
+  // ═══════════════════════════════════════════════════════════════
   void startListening() {
     final uid = _db.currentUserId;
     if (uid == null || uid.isEmpty) return;
-    if (_listeningUid == uid && _sub != null) return; // déjà en écoute
+    if (_listeningUid == uid && _sub != null) return;
     _sub?.cancel();
     _listeningUid = uid;
     try {
@@ -61,7 +66,6 @@ class NotificationService extends ChangeNotifier {
         (items) {
           _notifications = items;
           if (_firstEmission) {
-            // Ne toaste pas les notifications déjà présentes au démarrage.
             _firstEmission = false;
             _seenTeamInviteIds
               ..clear()
@@ -100,26 +104,34 @@ class NotificationService extends ChangeNotifier {
     super.dispose();
   }
 
-  // --- Opérations CRUD persistées (Firestore) ---
+  // ═══════════════════════════════════════════════════════════════
+  //  CRUD PERSISTÉ
+  // ═══════════════════════════════════════════════════════════════
 
+  /// 🔔 Crée une notification pour l'UTILISATEUR CONNECTÉ.
   Future<void> addNotification(AppNotification notification) async {
     await _db.saveNotification(notification);
     _notifications.insert(0, notification);
     notifyListeners();
   }
 
-  /// Crée une notification pour un AUTRE utilisateur (mention @ dans un
-  /// partage d'équipe). Ne l'ajoute PAS à la liste locale de l'émetteur.
+  /// 🔔 Crée une notification pour un AUTRE utilisateur (mention @ dans un
+  /// partage d'équipe, invitation, etc.).
+  ///
+  /// `teamId` est OBLIGATOIRE depuis la nouvelle règle Firestore : un
+  /// émetteur ne peut notifier qu'un membre de SA team (fail-closed).
   Future<void> addNotificationForUser({
     required String userId,
     required AppNotification notification,
     String? createdBy,
+    String? teamId,
   }) async {
     try {
       await _db.saveNotificationForUser(
         userId,
         notification,
         createdBy: createdBy,
+        teamId: teamId,
       );
     } catch (e) {
       debugPrint('⚠️ addNotificationForUser: $e');
@@ -159,13 +171,16 @@ class NotificationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Réinitialise le service (appelé au logout). Purge la mémoire.
+  /// Réinitialise le service (appelé au logout).
   Future<void> clearAllForLogout() async {
+    stopListening();
     _notifications.clear();
     notifyListeners();
   }
 
-  // --- Navigation contextuelle ---
+  // ═══════════════════════════════════════════════════════════════
+  //  NAVIGATION CONTEXTUELLE
+  // ═══════════════════════════════════════════════════════════════
 
   Future<void> openNotification(
       BuildContext context, String notificationId) async {
@@ -175,7 +190,6 @@ class NotificationService extends ChangeNotifier {
     final notification = _notifications[index];
     await markAsRead(notificationId);
 
-    // Utilisation d'un mapping pour simplifier le switch
     final Map<String, String> routes = {
       'invoice': notification.referenceId != null
           ? '/dashboard/invoices/${notification.referenceId}'
@@ -184,15 +198,18 @@ class NotificationService extends ChangeNotifier {
       'product': '/dashboard/stock',
       'reminder': '/dashboard/reminders',
       'subscription': '/dashboard/subscription',
+      'team_message': '/teams',
+      'team_shared': '/teams/shared-with-me',
     };
 
     final route = routes[notification.referenceType] ?? '/dashboard';
     if (context.mounted) context.push(route);
   }
 
-  // --- Helpers de notification (Factory Pattern) ---
+  // ═══════════════════════════════════════════════════════════════
+  //  HELPERS FACTORY
+  // ═══════════════════════════════════════════════════════════════
 
-  /// Notification générique (type en String, plus de dépendance Hive).
   Future<void> notify({
     required String type,
     String? title,
@@ -211,14 +228,7 @@ class NotificationService extends ChangeNotifier {
     ));
   }
 
-  /// Notification lors du paiement réussi d'une facture.
-  ///
-  /// 🔔 UNE SEULE notification par paiement (titre « Facture payée » +
-  /// montant dans le corps). L'ancienne double notification —
-  /// `notifyInvoicePaid` + `notifyPaymentReceived` — multipliait les
-  /// alertes et affichait des chiffres trompeurs : « Paiement reçu »
-  /// apparaissait même pour un paiement CASH (validation manuelle) qui ne
-  /// crédite JAMAIS le portefeuille en ligne.
+  /// 🔔 Notification de paiement : UNE seule notification par paiement.
   Future<void> notifyInvoicePaid(String invoiceNumber, {double? amount}) async {
     await addNotification(
       AppNotification.createInvoicePaid(invoiceNumber, amount: amount),

@@ -1,14 +1,23 @@
 // lib/services/firestore_service.dart
+//
+// CHANGELOG (SaaS) :
+//   • `getInvoicesStream()` : fusion de 3 flux (owner / sharedWithUsers /
+//     companyId) → un membre d'équipe voit enfin les factures partagées en
+//     temps réel, pas seulement celles qu'il a créées.
+//   • `saveInvoice` : rattache automatiquement `companyId` (via DatabaseService).
+//   • `syncLocalToCloud` : conserve la logique de batch, mais injecte companyId.
+//
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../models/plan.dart';
 import '../models/user.dart';
-import '../services/database_service.dart';
 import '../models/invoice.dart';
 import '../models/subscription.dart';
+import '../services/database_service.dart';
 import 'cloud_access_service.dart';
 import 'logger_service.dart';
 
@@ -20,13 +29,13 @@ class FirestoreService extends ChangeNotifier {
   String? get currentUserId => _auth.currentUser?.uid;
   bool get isAuthenticated => _auth.currentUser != null;
 
-  // ===== USERS =====
+  // ═══════════════════════════════════════════════════════════════════
+  // USERS
+  // ═══════════════════════════════════════════════════════════════════
   Future<void> saveUser(Map<String, dynamic> userData) async {
     if (!isAuthenticated) throw Exception('Non authentifié');
-    
-    // ✅ Vérification de l'accès cloud
+
     if (!await _cloudAccess.hasAccess()) {
-      // Stockage local uniquement
       await DatabaseService().saveUser(AppUser.fromMap(userData));
       return;
     }
@@ -35,41 +44,96 @@ class FirestoreService extends ChangeNotifier {
       {...userData, 'updatedAt': FieldValue.serverTimestamp()},
       SetOptions(merge: true),
     );
-    await LoggerService.info('save_user', details: 'Utilisateur sauvegardé dans le cloud');
+    await LoggerService.info('save_user',
+        details: 'Utilisateur sauvegardé dans le cloud');
   }
 
-  // ===== INVOICES =====
+  // ═══════════════════════════════════════════════════════════════════
+  // INVOICES — STREAM SaaS
+  // ═══════════════════════════════════════════════════════════════════
+  /// 📡 Stream temps réel des factures de l'utilisateur.
+  ///
+  /// Fusion de 3 flux :
+  ///   1. Factures créées par l'utilisateur (`userId == uid`) ;
+  ///   2. Factures partagées nominativement (`sharedWithUsers contains uid`) ;
+  ///   3. Factures de SON ENTREPRISE (`companyId == user.companyId`).
+  ///
+  /// Les trois flux sont dédoublonnés par id, puis triés par `updatedAt desc`.
   Stream<List<Invoice>> getInvoicesStream() {
     if (!isAuthenticated) return Stream.value([]);
 
+    final uid = currentUserId!;
     final controller = StreamController<List<Invoice>>();
+    final buffers = <String, Map<String, Invoice>>{
+      'owner': {},
+      'shared': {},
+      'company': {},
+    };
+    final subs = <StreamSubscription<QuerySnapshot>>[];
 
-    _cloudAccess.hasAccess().then((hasAccess) {
-      if (!hasAccess) {
-        controller.add([]);
-        controller.close();
-        return;
+    void emit() {
+      final seen = <String, Invoice>{};
+      for (final b in buffers.values) {
+        seen.addAll(b);
       }
+      final list = seen.values.toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      if (!controller.isClosed) controller.add(list);
+    }
 
-      final sub = _db
+    Future<void> attach() async {
+      // 1) Owner
+      subs.add(_db
           .collection('invoices')
-          .where('userId', isEqualTo: currentUserId)
+          .where('userId', isEqualTo: uid)
           .orderBy('updatedAt', descending: true)
           .snapshots()
-          .listen((snapshot) {
-        final list = snapshot.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return Invoice.fromMap(data);
-        }).toList();
-        controller.add(list);
-      });
+          .listen((snap) {
+        buffers['owner'] = {
+          for (final d in snap.docs)
+            d.id: Invoice.fromMap({...d.data(), 'id': d.id})
+        };
+        emit();
+      }, onError: (e) => debugPrint('❌ invoices.owner stream: $e')));
 
-      controller.onCancel = sub.cancel;
-    }).catchError((error) {
-      controller.addError(error);
-      controller.close();
-    });
+      // 2) Shared
+      subs.add(_db
+          .collection('invoices')
+          .where('sharedWithUsers', arrayContains: uid)
+          .snapshots()
+          .listen((snap) {
+        buffers['shared'] = {
+          for (final d in snap.docs)
+            d.id: Invoice.fromMap({...d.data(), 'id': d.id})
+        };
+        emit();
+      }, onError: (e) => debugPrint('❌ invoices.shared stream: $e')));
+
+      // 3) Company
+      final company = await DatabaseService().getCompany();
+      if (company != null && company.id.isNotEmpty) {
+        subs.add(_db
+            .collection('invoices')
+            .where('companyId', isEqualTo: company.id)
+            .snapshots()
+            .listen((snap) {
+          buffers['company'] = {
+            for (final d in snap.docs)
+              d.id: Invoice.fromMap({...d.data(), 'id': d.id})
+          };
+          emit();
+        }, onError: (e) => debugPrint('❌ invoices.company stream: $e')));
+      }
+    }
+
+    attach();
+
+    controller.onCancel = () async {
+      for (final s in subs) {
+        await s.cancel();
+      }
+      await controller.close();
+    };
 
     return controller.stream;
   }
@@ -78,23 +142,31 @@ class FirestoreService extends ChangeNotifier {
     if (!isAuthenticated) throw Exception('Non authentifié');
 
     if (!await _cloudAccess.hasAccess()) {
-      // ✅ Stockage local uniquement (pas de cloud)
       await DatabaseService().addInvoice(invoice);
-      await LoggerService.info('save_invoice_local', details: 'Facture ${invoice.invoiceNumber} sauvegardée en local');
+      await LoggerService.info('save_invoice_local',
+          details: 'Facture ${invoice.invoiceNumber} sauvegardée en local');
       return;
     }
+
+    final companyId = invoice.companyId.isNotEmpty
+        ? invoice.companyId
+        : (await DatabaseService().getCompany())?.id;
 
     await _db.collection('invoices').doc(invoice.id).set({
       ...invoice.toMap(),
       'userId': currentUserId,
+      if (companyId != null && companyId.isNotEmpty) 'companyId': companyId,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    await LoggerService.info('save_invoice', details: 'Facture ${invoice.invoiceNumber} sauvegardée dans le cloud');
+    await LoggerService.info('save_invoice',
+        details: 'Facture ${invoice.invoiceNumber} sauvegardée dans le cloud');
     notifyListeners();
   }
 
-  // ===== SYNCHRONISATION =====
+  // ═══════════════════════════════════════════════════════════════════
+  // SYNCHRONISATION
+  // ═══════════════════════════════════════════════════════════════════
   Future<void> syncLocalToCloud() async {
     if (!isAuthenticated) throw Exception('Non authentifié');
 
@@ -109,6 +181,8 @@ class FirestoreService extends ChangeNotifier {
         return;
       }
 
+      final companyId = (await DatabaseService().getCompany())?.id;
+
       for (var i = 0; i < localInvoices.length; i += 500) {
         final chunk = localInvoices.skip(i).take(500);
         final batch = _db.batch();
@@ -118,23 +192,30 @@ class FirestoreService extends ChangeNotifier {
           batch.set(ref, {
             ...invoice.toMap(),
             'userId': currentUserId,
+            if (companyId != null && companyId.isNotEmpty)
+              'companyId': companyId,
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
         }
         await batch.commit();
       }
 
-      debugPrint('✅ Synchronisation de ${localInvoices.length} factures terminée');
-      await LoggerService.info('sync_local_to_cloud', details: '${localInvoices.length} factures synchronisées');
+      debugPrint(
+          '✅ Synchronisation de ${localInvoices.length} factures terminée');
+      await LoggerService.info('sync_local_to_cloud',
+          details: '${localInvoices.length} factures synchronisées');
       notifyListeners();
     } catch (e) {
       debugPrint('❌ Erreur de synchronisation: $e');
-      await LoggerService.error('sync_local_to_cloud_failed', details: e.toString());
+      await LoggerService.error('sync_local_to_cloud_failed',
+          details: e.toString());
       rethrow;
     }
   }
 
-  // ===== ABONNEMENTS =====
+  // ═══════════════════════════════════════════════════════════════════
+  // ABONNEMENTS
+  // ═══════════════════════════════════════════════════════════════════
   Future<Subscription?> getActiveSubscription() async {
     if (!isAuthenticated) return null;
 
@@ -160,9 +241,9 @@ class FirestoreService extends ChangeNotifier {
     if (!isAuthenticated) throw Exception('Non authentifié');
 
     if (!await _cloudAccess.hasAccess()) {
-      // ✅ Stockage local seulement
       await DatabaseService().saveSubscription(subscription);
-      await LoggerService.info('save_subscription_local', details: 'Abonnement sauvegardé en local');
+      await LoggerService.info('save_subscription_local',
+          details: 'Abonnement sauvegardé en local');
       return;
     }
 
@@ -173,11 +254,13 @@ class FirestoreService extends ChangeNotifier {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await LoggerService.info('save_subscription', details: 'Abonnement sauvegardé dans le cloud');
+      await LoggerService.info('save_subscription',
+          details: 'Abonnement sauvegardé dans le cloud');
       notifyListeners();
     } catch (e) {
       debugPrint('❌ Erreur sauvegarde souscription: $e');
-      await LoggerService.error('save_subscription_failed', details: e.toString());
+      await LoggerService.error('save_subscription_failed',
+          details: e.toString());
       rethrow;
     }
   }
@@ -198,7 +281,9 @@ class FirestoreService extends ChangeNotifier {
         });
   }
 
-  // ===== PLANS =====
+  // ═══════════════════════════════════════════════════════════════════
+  // PLANS
+  // ═══════════════════════════════════════════════════════════════════
   Future<List<Plan>> getPublicPlans() async {
     try {
       final snapshot = await _db.collection('plans').get();
@@ -209,13 +294,17 @@ class FirestoreService extends ChangeNotifier {
       }).toList();
     } catch (e) {
       debugPrint("❌ Erreur chargement des plans: $e");
-      await LoggerService.error('get_public_plans_failed', details: e.toString());
+      await LoggerService.error('get_public_plans_failed',
+          details: e.toString());
       return [];
     }
   }
 
-  // ===== UTILITAIRES =====
-  Future<Map<String, dynamic>?> getDocument(String collectionPath, String docId) async {
+  // ═══════════════════════════════════════════════════════════════════
+  // UTILITAIRES
+  // ═══════════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>?> getDocument(
+      String collectionPath, String docId) async {
     if (await _cloudAccess.hasAccess()) {
       try {
         final doc = await _db.collection(collectionPath).doc(docId).get();
@@ -228,27 +317,32 @@ class FirestoreService extends ChangeNotifier {
     return null;
   }
 
-  Future<void> updateDocument(String collectionPath, String docId, Map<String, dynamic> data) async {
+  Future<void> updateDocument(
+      String collectionPath, String docId, Map<String, dynamic> data) async {
     if (!isAuthenticated) throw Exception('Non authentifié');
 
     if (!await _cloudAccess.hasAccess()) {
-      await LoggerService.info('update_document_local', details: 'Document $docId mis à jour en local');
+      await LoggerService.info('update_document_local',
+          details: 'Document $docId mis à jour en local');
       return;
     }
 
     await _db.collection(collectionPath).doc(docId).update(data);
-    await LoggerService.info('update_document', details: 'Document $docId mis à jour dans le cloud');
+    await LoggerService.info('update_document',
+        details: 'Document $docId mis à jour dans le cloud');
   }
 
   Future<void> deleteDocument(String collectionPath, String docId) async {
     if (!isAuthenticated) throw Exception('Non authentifié');
 
     if (!await _cloudAccess.hasAccess()) {
-      await LoggerService.info('delete_document_local', details: 'Document $docId supprimé en local');
+      await LoggerService.info('delete_document_local',
+          details: 'Document $docId supprimé en local');
       return;
     }
 
     await _db.collection(collectionPath).doc(docId).delete();
-    await LoggerService.info('delete_document', details: 'Document $docId supprimé du cloud');
+    await LoggerService.info('delete_document',
+        details: 'Document $docId supprimé du cloud');
   }
 }

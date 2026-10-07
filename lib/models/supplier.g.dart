@@ -30,13 +30,18 @@ class SupplierAdapter extends TypeAdapter<Supplier> {
       createdAt: fields[10] as DateTime?,
       updatedAt: fields[11] as DateTime?,
       isSynced: fields[12] as bool,
+      companyId: fields[13] as String?,
+      sharedWithUsers: (fields[14] as List).cast<String>(),
+      sharedTeams: (fields[15] as List).cast<String>(),
+      editableByUsers: (fields[16] as List).cast<String>(),
+      editableTeams: (fields[17] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Supplier obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +67,17 @@ class SupplierAdapter extends TypeAdapter<Supplier> {
       ..writeByte(11)
       ..write(obj.updatedAt)
       ..writeByte(12)
-      ..write(obj.isSynced);
+      ..write(obj.isSynced)
+      ..writeByte(13)
+      ..write(obj.companyId)
+      ..writeByte(14)
+      ..write(obj.sharedWithUsers)
+      ..writeByte(15)
+      ..write(obj.sharedTeams)
+      ..writeByte(16)
+      ..write(obj.editableByUsers)
+      ..writeByte(17)
+      ..write(obj.editableTeams);
   }
 
   @override

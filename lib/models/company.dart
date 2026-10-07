@@ -1,3 +1,10 @@
+// lib/models/company.dart
+//
+// CHANGELOG :
+//   • Ajout `memberIds` / `adminIds` pour la notion d'ENTREPRISE PARTAGÉE
+//     (SaaS — plusieurs utilisateurs rattachés à la même entreprise).
+//   • Ajout `sharedWithUsers` (équivalent générique, lu par les règles).
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
@@ -6,40 +13,28 @@ part 'company.g.dart';
 
 @HiveType(typeId: 1)
 class Company {
-  @HiveField(0)
-  final String id;
-  @HiveField(1)
-  final String userId;
-  @HiveField(2)
-  final String name;
-  @HiveField(3)
-  final String address;
-  @HiveField(4)
-  final String taxId;
-  @HiveField(5)
-  final String phone;
-  @HiveField(6)
-  final String email;
-  @HiveField(7)
-  final String logoPath;
-  @HiveField(8)
-  final String currency;
-  @HiveField(9)
-  final double defaultTaxRate;
-  @HiveField(10)
-  final String legalText;
-  @HiveField(11)
-  final String website;
-  @HiveField(12)
-  final String rccm;
-  @HiveField(13)
-  final DateTime createdAt;
-  @HiveField(14)
-  final DateTime? updatedAt;
-  @HiveField(15)
-  final bool isActive;
-  @HiveField(16)
-  final bool isSynced;
+  @HiveField(0)  final String id;
+  @HiveField(1)  final String userId;   // propriétaire
+  @HiveField(2)  final String name;
+  @HiveField(3)  final String address;
+  @HiveField(4)  final String taxId;
+  @HiveField(5)  final String phone;
+  @HiveField(6)  final String email;
+  @HiveField(7)  final String logoPath;
+  @HiveField(8)  final String currency;
+  @HiveField(9)  final double defaultTaxRate;
+  @HiveField(10) final String legalText;
+  @HiveField(11) final String website;
+  @HiveField(12) final String rccm;
+  @HiveField(13) final DateTime createdAt;
+  @HiveField(14) final DateTime? updatedAt;
+  @HiveField(15) final bool isActive;
+  @HiveField(16) final bool isSynced;
+
+  // 🔑 NOUVEAU — SaaS partagé
+  @HiveField(17) final List<String> memberIds;
+  @HiveField(18) final List<String> adminIds;
+  @HiveField(19) final List<String> sharedWithUsers;
 
   Company({
     String? id,
@@ -59,6 +54,9 @@ class Company {
     this.updatedAt,
     this.isActive = true,
     this.isSynced = false,
+    this.memberIds = const [],
+    this.adminIds = const [],
+    this.sharedWithUsers = const [],
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -81,6 +79,9 @@ class Company {
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
       'isSynced': isSynced,
+      'memberIds': memberIds,
+      'adminIds': adminIds,
+      'sharedWithUsers': sharedWithUsers,
     };
   }
 
@@ -99,10 +100,17 @@ class Company {
       legalText: map['legalText'] ?? 'Conforme aux normes OHADA et SYSCOHADA',
       website: map['website'] ?? '',
       rccm: map['rccm'] ?? '',
-      createdAt: map['createdAt'] != null ? _parseDateTime(map['createdAt']) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      createdAt: map['createdAt'] != null
+          ? _parseDateTime(map['createdAt'])
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? _parseDateTime(map['updatedAt'])
+          : null,
       isActive: map['isActive'] ?? true,
       isSynced: map['isSynced'] ?? false,
+      memberIds: List<String>.from(map['memberIds'] ?? const []),
+      adminIds: List<String>.from(map['adminIds'] ?? const []),
+      sharedWithUsers: List<String>.from(map['sharedWithUsers'] ?? const []),
     );
   }
 
@@ -114,7 +122,19 @@ class Company {
     return DateTime.now();
   }
 
-  Company copyWith({String? name, String? address, String? phone, String? email, String? logoPath, String? currency, double? defaultTaxRate, String? legalText, String? website, String? rccm, String? taxId, bool? isActive, bool? isSynced}) {
+  bool isOwnerOf(String uid) => userId == uid;
+  bool isAdminOf(String uid) => adminIds.contains(uid);
+  bool hasMember(String uid) =>
+      isOwnerOf(uid) || isAdminOf(uid) || memberIds.contains(uid);
+
+  Company copyWith({
+    String? name, String? address, String? phone, String? email,
+    String? logoPath, String? currency, double? defaultTaxRate,
+    String? legalText, String? website, String? rccm, String? taxId,
+    bool? isActive, bool? isSynced,
+    List<String>? memberIds, List<String>? adminIds,
+    List<String>? sharedWithUsers,
+  }) {
     return Company(
       id: id,
       userId: userId,
@@ -133,6 +153,9 @@ class Company {
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
       isSynced: isSynced ?? this.isSynced,
+      memberIds: memberIds ?? this.memberIds,
+      adminIds: adminIds ?? this.adminIds,
+      sharedWithUsers: sharedWithUsers ?? this.sharedWithUsers,
     );
   }
 }

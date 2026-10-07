@@ -248,7 +248,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
                               backgroundSettings: _backgroundSettings,
                               backgroundImage: bgImage,
                               // Tampon « PAYÉ » — démonstration maquette.
-                              showPaidStamp: true,
+                              showPaidStamp: false,
                               watermarkText: _watermarkText,
                               showWatermark: _showWatermark,
                             ),

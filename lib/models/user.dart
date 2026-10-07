@@ -1,48 +1,37 @@
 // lib/models/user.dart
+//
+// CHANGELOG :
+//   • Ajout `companyId` (rattachement SaaS — pilote les custom claims côté CF).
+//   • Ajout `teamIds` (liste d'équipes — dupliquée dans les claims pour
+//     éviter un get() par lecture dans les règles Firestore).
+//   • `toMap()` inclut désormais `userId`, `companyId`, `teamIds`.
+//   • `isAdmin` reste basé sur `roles` (source serveur → custom claims).
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-part 'user.g.dart'; // Généré par Hive et json_serializable
+part 'user.g.dart';
 
 @JsonSerializable()
-@HiveType(typeId: 15) // Attribué à 15 pour suivre notre registre de modèles
+@HiveType(typeId: 15)
 class AppUser {
-  @HiveField(0)
-  final String id;
+  @HiveField(0)  final String id;
+  @HiveField(1)  final String email;
+  @HiveField(2)  final String displayName;
+  @HiveField(3)  final String? phone;
+  @HiveField(4)  final String? companyName;
+  @HiveField(5)  final String? companyAddress;
+  @HiveField(6)  final String? taxId;
+  @HiveField(7)  final String? subscriptionId;
+  @HiveField(8)  final DateTime createdAt;
+  @HiveField(9)  final DateTime? lastLoginAt;
+  @HiveField(10) final bool isActive;
+  @HiveField(11) final List<String> roles;
 
-  @HiveField(1)
-  final String email;
-
-  @HiveField(2)
-  final String displayName;
-
-  @HiveField(3)
-  final String? phone;
-
-  @HiveField(4)
-  final String? companyName;
-
-  @HiveField(5)
-  final String? companyAddress;
-
-  @HiveField(6)
-  final String? taxId; // NUI / RCCM de l'entreprise de l'utilisateur
-
-  @HiveField(7)
-  final String? subscriptionId;
-
-  @HiveField(8)
-  final DateTime createdAt;
-
-  @HiveField(9)
-  final DateTime? lastLoginAt;
-
-  @HiveField(10)
-  final bool isActive;
-
-  @HiveField(11)
-  final List<String> roles; // ['user', 'admin']
+  // 🔑 NOUVEAU — Rattachement SaaS
+  @HiveField(12) final String? companyId;
+  @HiveField(13) final List<String> teamIds;
 
   AppUser({
     required this.id,
@@ -57,14 +46,16 @@ class AppUser {
     this.lastLoginAt,
     this.isActive = true,
     this.roles = const ['user'],
+    this.companyId,
+    this.teamIds = const [],
   });
 
-  // ===== SÉRIALISATION COMPATIBLE HIVE & FIRESTORE =====
+  // ===== SÉRIALISATION =====
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'userId': id, // ✅ Requis par les règles Firestore (isNewOwner)
+      'userId': id,
       'email': email,
       'displayName': displayName,
       'phone': phone,
@@ -77,6 +68,8 @@ class AppUser {
           lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'isActive': isActive,
       'roles': roles,
+      'companyId': companyId,
+      'teamIds': teamIds,
     };
   }
 
@@ -97,18 +90,15 @@ class AppUser {
           ? _parseDateTime(map['lastLoginAt'])
           : null,
       isActive: map['isActive'] ?? true,
-      roles: List<String>.from(map['roles'] ?? ['user']),
+      roles: List<String>.from(map['roles'] ?? const ['user']),
+      companyId: map['companyId'],
+      teamIds: List<String>.from(map['teamIds'] ?? const []),
     );
   }
 
-  // ===== JSON (pour les APIs) =====
-
   Map<String, dynamic> toJson() => _$AppUserToJson(this);
-
   factory AppUser.fromJson(Map<String, dynamic> json) =>
       _$AppUserFromJson(json);
-
-  // ===== CLONAGE (copyWith) =====
 
   AppUser copyWith({
     String? email,
@@ -121,6 +111,8 @@ class AppUser {
     DateTime? lastLoginAt,
     bool? isActive,
     List<String>? roles,
+    String? companyId,
+    List<String>? teamIds,
   }) {
     return AppUser(
       id: id,
@@ -135,32 +127,24 @@ class AppUser {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
       roles: roles ?? this.roles,
+      companyId: companyId ?? this.companyId,
+      teamIds: teamIds ?? this.teamIds,
     );
   }
 
-  // ===== GETTERS APPLICATIFS =====
-// lib/models/user.dart
+  // ===== GETTERS =====
   bool get isAdmin => roles.contains('admin') || roles.contains('super-admin');
-  // bool get isAdmin => roles.contains('admin');
   bool get hasActiveSubscription =>
       subscriptionId != null && subscriptionId!.isNotEmpty;
+  bool get hasCompany => companyId != null && companyId!.isNotEmpty;
 
-  /// Retourne le nom d'affichage ou 'Utilisateur' par défaut
   String get displayNameOrDefault =>
       displayName.isNotEmpty ? displayName : 'Utilisateur';
-
-  /// Retourne l'email ou 'Non renseigné' par défaut
   String get emailOrDefault => email.isNotEmpty ? email : 'Non renseigné';
-
-  /// Retourne le téléphone ou 'Non renseigné' par défaut
-  String get phoneOrDefault =>
-      phone?.isNotEmpty == true ? phone! : 'Non renseigné';
-
-  /// Retourne le nom de l'entreprise ou 'Non renseignée' par défaut
+  String get phoneOrDefault => phone?.isNotEmpty == true ? phone! : 'Non renseigné';
   String get companyNameOrDefault =>
       companyName?.isNotEmpty == true ? companyName! : 'Non renseignée';
 
-  /// Fonction d'aide pour parser les dates de manière ultra-robuste (Firestore, Hive et JSON)
   static DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is Timestamp) return value.toDate();

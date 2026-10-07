@@ -2,115 +2,126 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =========== FONCTIONS UTILITAIRES ===========
+    // ═══════════════════════════════════════════════════════════════════
+    // FONCTIONS UTILITAIRES
+    // ═══════════════════════════════════════════════════════════════════
+    function isSignedIn() { return request.auth != null; }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
+    // 🔑 OPTION A : Custom Claims posés par la Cloud Function syncUserClaims.
+    //    - admin      : bool   (issu de users/{uid}.isAdmin ou roles)
+    //    - companyId  : string (issu de users/{uid}.companyId)
+    //    - teamIds    : array  (équipes actives du user, recalculé à chaque modif de team)
+    //    - planId     : string|null (plan actif, issu des subscriptions)
     function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
+    function myCompanyId() {
+      return isSignedIn() ? request.auth.token.companyId : null;
+    }
+    function myTeamIds() {
+      return isSignedIn() && request.auth.token.teamIds is list
+        ? request.auth.token.teamIds
+        : [];
+    }
 
-    // Le document appartient à l'utilisateur connecté (vérification sécurisée des champs)
     function isOwner() {
-      return 'userId' in resource.data && resource.data.userId == request.auth.uid;
+      return isSignedIn() && (
+        ('userId' in resource.data && resource.data.userId == request.auth.uid)
+        || ('companyId' in resource.data
+            && myCompanyId() != null
+            && resource.data.companyId == myCompanyId())
+      );
     }
-
     function isNewOwner() {
-      return 'userId' in request.resource.data && request.resource.data.userId == request.auth.uid;
+      return isSignedIn() && (
+        ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
+        || ('companyId' in request.resource.data
+            && myCompanyId() != null
+            && request.resource.data.companyId == myCompanyId())
+      );
     }
 
-    // Vrai si le document accorde des privilèges admin.
     function hasAdminPrivileges(data) {
       return ('isAdmin' in data && data.isAdmin == true)
-        || ('roles' in data && data.roles is list && data.roles.hasAny(['admin', 'super-admin']));
+          || ('roles' in data && data.roles is list
+              && data.roles.hasAny(['admin', 'super-admin']));
     }
 
-    // Lecture autorisée : admin OU propriétaire.
-    function canReadResource() {
-      return isAdmin() || isOwner();
+    function canReadResource()      { return isAdmin() || isOwner(); }
+    function canWriteOwnResource()  { return isAdmin() || isNewOwner(); }
+    function canUpdateOwnResource() { return isAdmin() || isOwner(); }
+
+    // 🔐 FAIL-CLOSED : seul un vrai membre (uid présent dans la team) est reconnu.
+    function isTeamMember(teamId, uid) {
+      let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
+      return teamId is string
+        && uid is string
+        && uid.size() > 0
+        && team != null
+        && (team.ownerId == uid
+            || ('memberIds' in team && team.memberIds is list && uid in team.memberIds)
+            || ('adminIds' in team && team.adminIds is list && uid in team.adminIds));
     }
 
-    // Lecture autorisée pour un membre d'équipe ayant reçu un partage.
+    // 📖 Lecture d'une ressource PARTAGÉE. Un membre y accède si son uid est
+    // listé nominativement, OU si son claim `teamIds` contient une équipe
+    // présente dans `sharedTeams` du document (fail-closed via custom claims).
     function canReadSharedResource() {
-      return isSignedIn()
-        && ('sharedWithUsers' in resource.data)
-        && (resource.data.sharedWithUsers is list)
-        && (request.auth.uid in resource.data.sharedWithUsers);
+      return isSignedIn() && (
+        ('sharedWithUsers' in resource.data
+          && resource.data.sharedWithUsers is list
+          && request.auth.uid in resource.data.sharedWithUsers)
+        || ('sharedTeams' in resource.data
+            && resource.data.sharedTeams is list
+            && resource.data.sharedTeams.size() > 0
+            && resource.data.sharedTeams.hasAny(myTeamIds()))
+      );
     }
-
-    // ✍️ ÉCRITURE autorisée pour un membre d'équipe à qui le partage a été
-    // accordé EN ÉCRITURE (rôle membre/admin défini par l'équipe). Le droit est
-    // matérialisé sur le document (editableByUsers) par l'émetteur ou par le
-    // serveur à l'adhésion d'un membre (cf. /team/manage-member).
-    // ✅ Défensif : on vérifie l'existence du champ avant d'y accéder.
     function canWriteSharedResource() {
       return isSignedIn()
         && ('editableByUsers' in resource.data)
-        && (request.auth.uid in resource.data.editableByUsers);
+        && request.auth.uid in resource.data.editableByUsers;
     }
 
-    // 🔒 Vrai si `uid` est membre (ou propriétaire/admin) de l'équipe `teamId`.
-    function isTeamMember(teamId, uid) {
-      let teamDoc = get(/databases/$(database)/documents/teams/$(teamId));
-      return teamId is string && uid is string && uid.size() > 0
-        && teamDoc.data != null
-        && (
-          teamDoc.data.ownerId == uid
-          || ('memberIds' in teamDoc.data && teamDoc.data.memberIds is list && uid in teamDoc.data.memberIds)
-          || ('adminIds' in teamDoc.data && teamDoc.data.adminIds is list && uid in teamDoc.data.adminIds)
-        );
-    }
-
-    // Création autorisée : admin OU utilisateur authentifié propriétaire.
-    function canWriteOwnResource() {
-      return isAdmin() || (isSignedIn() && isNewOwner());
-    }
-
-    // Mise à jour/suppression : admin OU propriétaire existant.
-    function canUpdateOwnResource() {
-      return isAdmin() || (isSignedIn() && isOwner());
-    }
-
-    // ===========================================
-    // RESSOURCES "PAR UTILISATEUR"
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
+    // RESSOURCES "PAR UTILISATEUR / ENTREPRISE"
+    // ═══════════════════════════════════════════════════════════════════
     match /companies/{companyId} {
-      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if isAdmin() || isOwner()
+      allow update, delete: if canUpdateOwnResource()
         || (companyId == 'default_company' && isAdmin());
     }
+
     match /clients/{clientId} {
-      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /products/{productId} {
-      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /invoices/{invoiceId} {
-      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /suppliers/{id} {
-      allow read: if isSignedIn() && (canReadResource() || canReadSharedResource());
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /deliveries/{id} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /reminders/{id} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read:   if isSignedIn() && (canReadResource() || canReadSharedResource());
       allow create: if canWriteOwnResource();
-      allow update, delete: if canUpdateOwnResource();
+      allow update, delete: if canUpdateOwnResource() || canWriteSharedResource();
     }
     match /dashboard_stats/{id} {
       allow read, write: if isSignedIn() && canUpdateOwnResource();
@@ -122,26 +133,36 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && canUpdateOwnResource();
     }
     match /line_items/{id} {
-      allow read: if isSignedIn() && canReadResource();
+      allow read:   if isSignedIn() && canReadResource();
       allow create: if canWriteOwnResource();
       allow update, delete: if canUpdateOwnResource();
     }
 
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
     // ABONNEMENTS / SOUSCRIPTIONS / PLANS
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔒 Un utilisateur ne peut PAS modifier les champs sensibles d'un
+    //    abonnement depuis le client — ces transitions passent par une Cloud
+    //    Function de paiement (activateSubscription).
     match /subscriptions/{subscriptionId} {
-      allow read: if isSignedIn() && (isAdmin() || isOwner());
-      allow create: if isAdmin() || (isSignedIn() && isNewOwner());
-      allow update, delete: if isAdmin();
+      allow read:   if isSignedIn() && (isAdmin() || isOwner());
+      allow create: if isAdmin() || (isSignedIn() && isNewOwner()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amount == 0);
+      allow update: if isAdmin()
+        || (isSignedIn() && isOwner()
+            && !request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['planId','amount','currency','status','paymentId','paymentMethod']));
+      allow delete: if isAdmin();
     }
     match /plans/{planId} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if isAdmin();
     }
 
-    // Un utilisateur peut lire/mettre à jour SON propre profil.
-    // L'utilisateur ne peut NI s'attribuer des privilèges admin NI modifier `isActive`.
+    // ═══════════════════════════════════════════════════════════════════
+    // USERS
+    // ═══════════════════════════════════════════════════════════════════
     match /users/{userId} {
       allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
       allow create: if isSignedIn() && request.auth.uid == userId
@@ -153,9 +174,9 @@ service cloud.firestore {
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isActive']));
     }
 
-    // ===========================================
-    // MODULE ÉQUIPE (Business) + PARTAGES
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
+    // MODULE ÉQUIPE + PARTAGES
+    // ═══════════════════════════════════════════════════════════════════
     match /teams/{teamId} {
       allow read: if isSignedIn() && (isAdmin()
         || resource.data.ownerId == request.auth.uid
@@ -167,8 +188,10 @@ service cloud.firestore {
     }
     match /shared_invoices/{sharedId} {
       allow read: if isSignedIn() && (isAdmin()
-        || ('sharedWith' in resource.data && resource.data.sharedWith is list && request.auth.uid in resource.data.sharedWith)
-        || ('writeUsers' in resource.data && resource.data.writeUsers is list && request.auth.uid in resource.data.writeUsers)
+        || ('sharedWith' in resource.data && resource.data.sharedWith is list
+            && request.auth.uid in resource.data.sharedWith)
+        || ('writeUsers' in resource.data && resource.data.writeUsers is list
+            && request.auth.uid in resource.data.writeUsers)
         || resource.data.sharedBy == request.auth.uid);
       allow create: if isSignedIn()
         && request.resource.data.sharedBy == request.auth.uid
@@ -178,19 +201,15 @@ service cloud.firestore {
         || resource.data.sharedBy == request.auth.uid;
     }
 
-    // ===========================================
-    // INVITATIONS D'ÉQUIPE
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
+    // INVITATIONS / MESSAGERIE D'ÉQUIPE
+    // ═══════════════════════════════════════════════════════════════════
     match /team_invitations/{invitationId} {
       allow read: if isSignedIn() && (isAdmin()
         || resource.data.inviteeUid == request.auth.uid
         || isTeamMember(resource.data.teamId, request.auth.uid));
       allow write: if isAdmin();
     }
-
-    // ===========================================
-    // MESSAGERIE D'ÉQUIPE
-    // ===========================================
     match /team_messages/{teamId} {
       allow read, write: if isAdmin()
         || isTeamMember(teamId, request.auth.uid);
@@ -211,20 +230,23 @@ service cloud.firestore {
       }
     }
 
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
     // SYSTÈME
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
     match /templates/{templateId} {
-      allow read: if isSignedIn();
+      allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
     match /settings/{settingId} {
-      allow read: if isSignedIn();
+      allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
+    // 🔔 Notifications : soit le propriétaire, soit un émetteur d'équipe qui
+    //    notifie un AUTRE membre de SA team (champ teamId désormais requis).
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (isAdmin() || isOwner()
-        || ('recipients' in resource.data && resource.data.recipients is list && request.auth.uid in resource.data.recipients));
+        || ('recipients' in resource.data && resource.data.recipients is list
+            && request.auth.uid in resource.data.recipients));
       allow write: if isAdmin() || (isSignedIn() && (isNewOwner()
         || (request.resource.data.createdBy == request.auth.uid
             && request.resource.data.teamId is string
@@ -233,44 +255,39 @@ service cloud.firestore {
             && isTeamMember(request.resource.data.teamId, request.resource.data.userId))));
     }
     match /fcm_tokens/{tokenId} {
-      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
-      allow update: if isSignedIn()
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid;
+      allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
     match /logs/{logId} {
       allow read, write: if isAdmin();
     }
     match /drive_sync/{syncId} {
-      allow read: if isSignedIn() && (isAdmin() || isOwner());
-      allow write: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid;
+      allow read:  if isSignedIn() && (isAdmin() || isOwner());
+      allow write: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
-    match /counters/{counterId} {
-      allow read, write: if isSignedIn() && request.auth.uid == counterId;
+    // 🔢 Compteurs (numérotation factures) : scopés sur le companyId OU le uid.
+    match /counters/{scopeId} {
+      allow read, write: if isSignedIn()
+        && (request.auth.uid == scopeId || myCompanyId() == scopeId);
     }
 
-    // ===========================================
-    // PORTEFEUILLE MARCHAND
-    // ===========================================
+    // ═══════════════════════════════════════════════════════════════════
+    // PORTEFEUILLE
+    // ═══════════════════════════════════════════════════════════════════
     match /wallets/{userId} {
-      allow read: if isSignedIn()
-        && (request.auth.uid == userId || isAdmin());
+      allow read:  if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
     }
     match /wallet_transactions/{id} {
-      allow read: if isSignedIn()
-        && (isAdmin() || isOwner());
+      allow read:   if isSignedIn() && (isAdmin() || isOwner());
       allow create: if isAdmin();
     }
     match /wallet_withdrawals/{id} {
-      allow read: if isSignedIn()
-        && (isAdmin() || isOwner());
-      allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid;
+      allow read:   if isSignedIn() && (isAdmin() || isOwner());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isAdmin();
     }
   }

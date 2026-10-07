@@ -34,13 +34,18 @@ class ProductAdapter extends TypeAdapter<Product> {
       updatedAt: fields[14] as DateTime?,
       supplierId: fields[15] as String?,
       isSynced: fields[16] as bool,
+      companyId: fields[17] as String?,
+      sharedWithUsers: (fields[18] as List).cast<String>(),
+      sharedTeams: (fields[19] as List).cast<String>(),
+      editableByUsers: (fields[20] as List).cast<String>(),
+      editableTeams: (fields[21] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(22)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +79,17 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(15)
       ..write(obj.supplierId)
       ..writeByte(16)
-      ..write(obj.isSynced);
+      ..write(obj.isSynced)
+      ..writeByte(17)
+      ..write(obj.companyId)
+      ..writeByte(18)
+      ..write(obj.sharedWithUsers)
+      ..writeByte(19)
+      ..write(obj.sharedTeams)
+      ..writeByte(20)
+      ..write(obj.editableByUsers)
+      ..writeByte(21)
+      ..write(obj.editableTeams);
   }
 
   @override

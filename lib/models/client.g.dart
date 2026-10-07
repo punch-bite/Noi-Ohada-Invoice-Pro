@@ -28,13 +28,18 @@ class ClientAdapter extends TypeAdapter<Client> {
       updatedAt: fields[8] as DateTime?,
       isActive: fields[9] as bool,
       isSynced: fields[10] as bool,
+      companyId: fields[11] as String?,
+      sharedWithUsers: (fields[12] as List).cast<String>(),
+      sharedTeams: (fields[13] as List).cast<String>(),
+      editableByUsers: (fields[14] as List).cast<String>(),
+      editableTeams: (fields[15] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Client obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -56,7 +61,17 @@ class ClientAdapter extends TypeAdapter<Client> {
       ..writeByte(9)
       ..write(obj.isActive)
       ..writeByte(10)
-      ..write(obj.isSynced);
+      ..write(obj.isSynced)
+      ..writeByte(11)
+      ..write(obj.companyId)
+      ..writeByte(12)
+      ..write(obj.sharedWithUsers)
+      ..writeByte(13)
+      ..write(obj.sharedTeams)
+      ..writeByte(14)
+      ..write(obj.editableByUsers)
+      ..writeByte(15)
+      ..write(obj.editableTeams);
   }
 
   @override

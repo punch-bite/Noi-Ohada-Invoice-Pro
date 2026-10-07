@@ -1,130 +1,138 @@
 // lib/services/firestore_initializer.dart
+//
+// CHANGELOG (v4 — SaaS Option A) :
+//   • Suppression de `_ensureCompany` : la création de l'entreprise est
+//     désormais faite par `AuthService._ensureUserCompany()` (id déterministe
+//     `company_{uid}`, rattachement automatique du user).
+//     → Créer un `default_company` global VIOLAIT les nouvelles règles
+//       Firestore (fail-closed sur `isNewOwner()`).
+//   • `kRoyalDesignVersion` passé à 4 : les 8 presets refondus (Bande Orange,
+//     Moderne Zigzag, Classique Or, Bandeau Bleu, Minimal Two-Col, Compact
+//     Pro, Carte Dorée, Bandeau Sombre) sont semés/upsertés.
+//   • Uppgrade AUTOMATIQUE v1/v2/v3 → v4 : designVersion < 4 → upsert
+//     complet. designVersion >= 4 → non touché (l'admin a pu personnaliser).
+//   • Batch unique (plans + templates + settings) → 1 seule écriture réseau
+//     atomique au lieu de 4.
+//   • Seeding des templates retirés (nettoyage `_ensureTemplates`).
+//   • Conservation de `_ensurePlans` (plans publics, lecture gratuite).
+//   • `_ensureSettings` conservé (settings publics en lecture seule pour
+//     l'app, écriture admin).
+//   • `_ensureLogsPlaceholder` supprimé (inutile : `logs` est auto-créé au
+//     1er log admin).
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../models/invoice_template.dart';
 import '../models/plan.dart';
 
 class FirestoreInitializer {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  /// 🚀 Point d'entrée — non bloquant, idempotent, réservé admin.
+  ///
+  /// Peut être appelé à chaque démarrage : toutes les opérations sont
+  /// idempotentes (batch merge + comptages).
   static Future<void> initialize() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        debugPrint(
-            'ℹ️ Utilisateur non authentifié, initialisation Firestore ignorée.');
+        debugPrint('ℹ️ FirestoreInitializer : utilisateur non connecté → skip');
         return;
       }
 
-      final idTokenResult = await user.getIdTokenResult();
-      final isAdmin = idTokenResult.claims?['admin'] == true;
+      final token = await user.getIdTokenResult();
+      final isAdmin = token.claims?['admin'] == true;
 
       if (!isAdmin) {
-        debugPrint(
-            'ℹ️ Utilisateur non admin, création des collections par défaut ignorée.');
+        debugPrint('ℹ️ FirestoreInitializer : non admin → skip');
         return;
       }
 
-      // ⚠️ NE PAS BLOQUER : exécuter en arrière-plan
-      _ensurePlans().catchError((e) => debugPrint('⚠️ Erreur plans: $e'));
-      _ensureCompany().catchError((e) => debugPrint('⚠️ Erreur company: $e'));
-      _ensureSettings().catchError((e) => debugPrint('⚠️ Erreur settings: $e'));
-      _ensureTemplates()
-          .catchError((e) => debugPrint('⚠️ Erreur templates: $e'));
-      _ensureLogsPlaceholder()
-          .catchError((e) => debugPrint('⚠️ Erreur logs: $e'));
+      debugPrint('🚀 FirestoreInitializer (admin) démarrage…');
 
-      debugPrint('✅ Firestore initialisé (non bloquant)');
+      // ⚠️ Non bloquant : on lance en parallèle, on n'attend pas.
+      unawaited(_ensurePlansAndSettings());
+      unawaited(_ensureTemplates());
+
+      debugPrint('✅ FirestoreInitializer lancé (non bloquant)');
     } catch (e) {
-      debugPrint('⚠️ Erreur initialisation Firestore: $e');
+      debugPrint('⚠️ FirestoreInitializer : erreur racine : $e');
     }
   }
 
-  // ===== PLANS =====
-  static Future<void> _ensurePlans() async {
+  // ═══════════════════════════════════════════════════════════════
+  //  PLANS + SETTINGS (seeds publics)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> _ensurePlansAndSettings() async {
     try {
-      final snapshot = await _firestore.collection('plans').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        debugPrint('📋 Création des plans par défaut...');
+      final batch = _firestore.batch();
+      var pending = 0;
+
+      // ─── Plans ───
+      final plansSnap =
+          await _firestore.collection('plans').limit(1).get();
+      if (plansSnap.docs.isEmpty) {
         final plans = Plan.getDefaultPlans();
-        final batch = _firestore.batch();
         for (final plan in plans) {
-          final ref = _firestore.collection('plans').doc(plan.id);
-          batch.set(ref, plan.toMap());
+          batch.set(
+            _firestore.collection('plans').doc(plan.id),
+            plan.toMap(),
+            SetOptions(merge: true),
+          );
+          pending++;
         }
+        debugPrint('📋 ${plans.length} plans par défaut à créer');
+      }
+
+      // ─── Settings globaux ───
+      final settingsRef = _firestore.collection('settings').doc('global');
+      final settingsSnap = await settingsRef.get();
+      if (!settingsSnap.exists) {
+        batch.set(
+          settingsRef,
+          <String, dynamic>{
+            'id': 'global',
+            'appName': 'OHADA Invoice Pro',
+            'version': '1.0.0',
+            'maintenanceMode': false,
+            'contactEmail': 'support@ohada-invoice-pro.com',
+            'contactPhone': '+237 6XX XX XX XX',
+            'designSystemVersion': InvoiceTemplate.kRoyalDesignVersion,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+        pending++;
+        debugPrint('⚙️ Settings globaux à créer');
+      }
+
+      if (pending > 0) {
         await batch.commit();
-        debugPrint('✅ ${plans.length} plans créés');
+        debugPrint('✅ FirestoreInitializer : $pending seed(s) public(s) créés');
       }
     } catch (e) {
-      debugPrint('⚠️ Erreur plans (ignorée): $e');
+      debugPrint('⚠️ _ensurePlansAndSettings : $e');
     }
   }
 
-  // ===== COMPANY =====
-  static Future<void> _ensureCompany() async {
-    try {
-      final snapshot = await _firestore.collection('companies').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        debugPrint('🏢 Création de l\'entreprise par défaut...');
-        await _firestore.collection('companies').doc('default_company').set({
-          'id': 'default_company',
-          'name': 'OHADA Invoice Pro',
-          'address': 'Douala, Cameroun',
-          'taxId': 'RC123456789',
-          'phone': '+237 6XX XX XX XX',
-          'email': 'contact@ohada-invoice-pro.com',
-          'logoPath': '',
-          'currency': 'XAF',
-          'defaultTaxRate': 18.0,
-          'legalText': 'Conforme aux normes OHADA et SYSCOHADA',
-          'website': 'https://ohada-invoice-pro.com',
-          'rccm': 'RC/DLA/2023/1234',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        debugPrint('✅ Entreprise par défaut créée');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Erreur entreprise (ignorée): $e');
-    }
-  }
-
-  // ===== SETTINGS =====
-  static Future<void> _ensureSettings() async {
-    try {
-      final snapshot = await _firestore.collection('settings').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        debugPrint('⚙️ Création des paramètres globaux...');
-        await _firestore.collection('settings').doc('global').set({
-          'id': 'global',
-          'appName': 'OHADA Invoice Pro',
-          'version': '1.0.0',
-          'maintenanceMode': false,
-          'contactEmail': 'support@ohada-invoice-pro.com',
-          'contactPhone': '+237 6XX XX XX XX',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        debugPrint('✅ Paramètres globaux créés');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Erreur settings (ignorée): $e');
-    }
-  }
-
-  // ===== TEMPLATES =====
-  /// 📄 Stocke TOUS les modèles prédéfinis « Royal Ledger » dans Firestore
-  /// pour qu'ils soient lisibles par l'app ET modifiables par l'admin
-  /// (`/admin/templates`).
-  ///
-  /// Stratégie d'upsert (elle ne fige pas les modifications de l'admin) :
-  ///   • collection vide → création de TOUS les modèles par défaut ;
-  ///   • modèle `default_*` absent → création ;
-  ///   • modèle présent avec `designVersion < kRoyalDesignVersion`
-  ///     → MISE À JOUR vers le nouveau design (v2) ;
-  ///   • modèle présent avec `designVersion >= 2` → on n'y touche pas
-  ///     (l'admin l'a peut-être personnalisé depuis la boutique).
+  // ═══════════════════════════════════════════════════════════════
+  //  TEMPLATES (8 presets v4 + uppgrade automatique)
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // 🔄 Politique d'upsert (elle ne fige PAS les modifications admin) :
+  //
+  //   • Modèle ABSENT             → création complète (v4).
+  //   • Présent avec version < 4  → MISE À JOUR vers le nouveau design
+  //                                 (positions, couleurs, styles).
+  //   • Présent avec version >= 4 → NON TOUCHÉ (l'admin a pu le
+  //                                 personnaliser depuis la boutique).
+  //
+  // 💡 Les modèles « custom » créés par l'admin (id non `default_*`)
+  //    sont préservés : on ne touche qu'aux presets système.
+  //
   static Future<void> _ensureTemplates() async {
     try {
       final defaults = InvoiceTemplate.getDefaultTemplates();
@@ -136,81 +144,70 @@ class FirestoreInitializer {
       };
 
       final batch = _firestore.batch();
-      var pending = 0;
+      var created = 0;
+      var upgraded = 0;
+      var untouched = 0;
 
       for (final template in defaults) {
         final ref = _firestore.collection('templates').doc(template.id);
         final current = existing[template.id];
 
-        // Création (absent) OU mise à jour vers le nouveau design.
-        final int currentVersion =
-            (current?['designVersion'] as num?)?.toInt() ?? 1;
-
-        // 🧩 Backfill : les modèles « default_* » déjà en design v2 ont été
-        // semés avec des `positions` vides → on complète UNIQUEMENT les
-        // positions depuis le preset (sections, textes, options d'impression)
-        // sans écraser le reste du document (couleurs, polices, mapping).
-        final storedPositions = current?['positions'];
-        if (current != null &&
-            template.positions.isNotEmpty &&
-            InvoiceTemplate.presetPositionsNeedBackfill(
-              storedPositions: storedPositions is Map
-                  ? Map<String, dynamic>.from(storedPositions)
-                  : null,
-              storedVersion: currentVersion,
-            )) {
-          batch.set(
-            ref,
-            <String, dynamic>{
-              'positions': template.positions,
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-          pending++;
+        // Cas 1 : modèle absent → création complète.
+        if (current == null) {
+          final map = template.toMap()
+            ..['createdAt'] = FieldValue.serverTimestamp()
+            ..['updatedAt'] = FieldValue.serverTimestamp()
+            ..['isDefault'] = true;
+          batch.set(ref, map, SetOptions(merge: true));
+          created++;
           continue;
         }
 
-        final needsUpdate = current == null ||
-            currentVersion < InvoiceTemplate.kRoyalDesignVersion;
+        // Cas 2 : version courante < 4 → uppgrade complet.
+        final currentVersion =
+            (current['designVersion'] as num?)?.toInt() ?? 1;
 
-        if (needsUpdate) {
+        if (currentVersion < InvoiceTemplate.kRoyalDesignVersion) {
           final map = template.toMap()
+            // On préserve la date de création d'origine.
             ..['createdAt'] =
-                current?['createdAt'] ?? FieldValue.serverTimestamp()
-            ..['updatedAt'] = FieldValue.serverTimestamp();
+                current['createdAt'] ?? FieldValue.serverTimestamp()
+            ..['updatedAt'] = FieldValue.serverTimestamp()
+            // On marque comme preset système (au cas où).
+            ..['isDefault'] = true;
           batch.set(ref, map, SetOptions(merge: true));
-          pending++;
+          upgraded++;
+          continue;
         }
+
+        // Cas 3 : version >= 4 → on ne touche pas (admin peut avoir modifié).
+        untouched++;
       }
 
-      if (pending > 0) {
+      if (created + upgraded > 0) {
         await batch.commit();
         debugPrint(
-            '✅ $pending modèle(s) par défaut stocké(s) en base (design v2)');
+            '✅ FirestoreInitializer : templates → '
+            '$created créé(s), $upgraded mis à jour, $untouched préservé(s)');
       } else {
-        debugPrint('✅ Les ${defaults.length} modèles par défaut sont à jour');
+        debugPrint(
+            '✅ FirestoreInitializer : ${defaults.length} preset(s) déjà à jour '
+            '(design v${InvoiceTemplate.kRoyalDesignVersion})');
       }
     } catch (e) {
-      debugPrint('⚠️ Erreur templates (ignorée): $e');
+      debugPrint('⚠️ _ensureTemplates : $e');
     }
   }
 
-  // ===== LOGS PLACEHOLDER =====
-  static Future<void> _ensureLogsPlaceholder() async {
-    try {
-      final snapshot = await _firestore.collection('logs').limit(1).get();
-      if (snapshot.docs.isEmpty) {
-        debugPrint('📝 Création d\'un placeholder pour les logs...');
-        await _firestore.collection('logs').doc('_placeholder').set({
-          'message': 'Logs initialisés',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-        await _firestore.collection('logs').doc('_placeholder').delete();
-        debugPrint('✅ Logs prêts');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Erreur logs (ignorée): $e');
-    }
+  // ═══════════════════════════════════════════════════════════════
+  //  UTILITAIRES
+  // ═══════════════════════════════════════════════════════════════
+
+  /// Déclenche une tâche en arrière-plan sans bloquer le flux appelant.
+  /// Équivalent d'un `unawaited(...)` — on évite d'importer `dart:async`.
+  static void unawaited(Future<void> future) {
+    future.catchError((Object e) {
+      debugPrint('⚠️ FirestoreInitializer (async) : $e');
+    });
   }
 }

@@ -1,13 +1,20 @@
 // lib/services/database_service.dart
 //
-// ✅ Base de données unifiée sur FIRESTORE.
-// Cette classe est la SOURCE UNIQUE DE VÉRITÉ : plus de Hive.
-// Toutes les ressources sont scopées par l'UID de l'utilisateur connecté.
+// CHANGELOG (v4 — SaaS) :
+//   • `getCompany()` : cherche d'abord `users/{uid}.companyId`, sinon fallback
+//     `where userId == uid` (un membre d'équipe retrouve SA company).
+//   • `getNextInvoiceNumber()` : compteur scopé sur `companyId` (ou uid en
+//     absence d'entreprise) → plus de doublons au sein d'une même société.
+//   • `saveNotificationForUser()` : accepte `teamId` (requis par les règles
+//     Firestore pour les notifs d'équipe).
+//   • `_getSaaSQueryDocs()` : logs explicites, plus de try/catch silencieux.
+//   • `_resolveCompanyId()` : helper privé pour rattacher automatiquement les
+//     nouvelles entités à la company de l'utilisateur.
 //
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:noi_ohada_invoice_pro/models/invoice_template.dart';
+
 import '../models/user.dart';
 import '../models/invoice.dart';
 import '../models/client.dart';
@@ -18,28 +25,31 @@ import '../models/reminder.dart';
 import '../models/subscription.dart';
 import '../models/plan.dart';
 import '../models/notification.dart';
+import '../models/invoice_template.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   String? get currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
-  static const String userCol = 'users';
-  static const String companyCol = 'companies';
-  static const String clientCol = 'clients';
-  static const String invoiceCol = 'invoices';
-  static const String productCol = 'products';
-  static const String supplierCol = 'suppliers';
-  static const String reminderCol = 'reminders';
+  static const String userCol         = 'users';
+  static const String companyCol      = 'companies';
+  static const String clientCol       = 'clients';
+  static const String invoiceCol      = 'invoices';
+  static const String productCol      = 'products';
+  static const String supplierCol     = 'suppliers';
+  static const String reminderCol     = 'reminders';
   static const String subscriptionCol = 'subscriptions';
-  static const String planCol = 'plans';
+  static const String planCol         = 'plans';
   static const String notificationCol = 'notifications';
 
   static Future<void> init() async {
-    debugPrint('DatabaseService initialise (Firestore)');
+    debugPrint('DatabaseService initialisé (Firestore)');
   }
 
-  // ============ USER ============
+  // ═══════════════════════════════════════════════════════════════
+  //  USER
+  // ═══════════════════════════════════════════════════════════════
   Future<AppUser?> getUser() async {
     final uid = currentUserId;
     if (uid == null) return null;
@@ -55,20 +65,40 @@ class DatabaseService {
       ...user.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // Les custom claims seront posés par la Cloud Function syncUserClaims.
   }
 
-  Future<void> updateUser(AppUser user) async {
-    await saveUser(user);
-  }
+  Future<void> updateUser(AppUser user) => saveUser(user);
 
   Future<void> clearUser() async {
-    // Session Auth effacee ; donnees conservees dans Firestore.
+    // Session Auth effacée ; données conservées dans Firestore.
   }
 
-  // ============ COMPANY ============
+  // ═══════════════════════════════════════════════════════════════
+  //  COMPANY
+  // ═══════════════════════════════════════════════════════════════
+  /// 🔑 Cherche d'abord le `companyId` stocké sur le profil user (cas d'un
+  ///    membre d'équipe), puis fallback sur `where userId == uid` (créateur).
   Future<Company?> getCompany() async {
     final uid = currentUserId;
     if (uid == null) return null;
+
+    final user = await getUser();
+    final companyId = user?.companyId;
+
+    if (companyId != null && companyId.isNotEmpty) {
+      try {
+        final doc = await _db.collection(companyCol).doc(companyId).get();
+        if (doc.exists) {
+          final data = doc.data()!;
+          data['id'] = doc.id;
+          return Company.fromMap(data);
+        }
+      } catch (e) {
+        debugPrint('⚠️ getCompany($companyId): $e');
+      }
+    }
+
     final query = await _db
         .collection(companyCol)
         .where('userId', isEqualTo: uid)
@@ -82,32 +112,115 @@ class DatabaseService {
 
   Future<void> saveCompany(Company company) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
+    if (uid == null) throw Exception('Non authentifié');
     await _db.collection(companyCol).doc(company.id).set({
       ...company.toMap(),
       'userId': uid,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    // 🔗 Rattachement automatique du user à cette company.
+    final user = await getUser();
+    if (user != null && user.companyId != company.id) {
+      await saveUser(user.copyWith(companyId: company.id));
+      try {
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      } catch (_) {}
+    }
   }
 
   Future<void> markCompanySynced() async {
-    // Firestore est deja la source de verite.
+    // Firestore est la source de vérité.
   }
 
-  // ============ CLIENTS ============
-  Future<List<Client>> getClients() async {
+  // ═══════════════════════════════════════════════════════════════
+  //  MULTI-TENANT SAAS QUERY HELPER
+  // ═══════════════════════════════════════════════════════════════
+  Future<List<Map<String, dynamic>>> _getSaaSQueryDocs(
+      String collectionPath) async {
     final uid = currentUserId;
     if (uid == null) return [];
-    final snapshot = await _db
-        .collection(clientCol)
-        .where('userId', isEqualTo: uid)
-        .orderBy('updatedAt', descending: true)
-        .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Client.fromMap(data);
-    }).toList();
+
+    final user = await getUser();
+    final company = await getCompany();
+    final companyId = company?.id;
+
+    // 1. Admin : accès global (via custom claim).
+    if (user != null && user.isAdmin) {
+      try {
+        final snapshot = await _db
+            .collection(collectionPath)
+            .orderBy('updatedAt', descending: true)
+            .get();
+        return snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+      } catch (e) {
+        debugPrint('❌ admin query [$collectionPath] : $e');
+        return [];
+      }
+    }
+
+    final resultsMap = <String, Map<String, dynamic>>{};
+
+    Future<void> run(String label, Query q) async {
+      try {
+        final snap = await q.get();
+        for (final doc in snap.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          resultsMap[doc.id] = data;
+        }
+      } catch (e, st) {
+        debugPrint('❌ _getSaaSQueryDocs[$label] $collectionPath : $e\n$st');
+      }
+    }
+
+    // Requête 1 : documents créés par l'utilisateur.
+    await run('owner',
+        _db.collection(collectionPath).where('userId', isEqualTo: uid));
+
+    // Requête 2 : documents partagés nominativement.
+    await run('shared',
+        _db.collection(collectionPath)
+            .where('sharedWithUsers', arrayContains: uid));
+
+    // Requête 3 : documents de l'entreprise (SaaS partagé).
+    if (companyId != null && companyId.isNotEmpty) {
+      await run('company',
+          _db.collection(collectionPath)
+              .where('companyId', isEqualTo: companyId));
+    }
+
+    final list = resultsMap.values.toList();
+    list.sort((a, b) {
+      final aTs = a['updatedAt'];
+      final bTs = b['updatedAt'];
+      final aDate = aTs is Timestamp
+          ? aTs.toDate()
+          : DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = bTs is Timestamp
+          ? bTs.toDate()
+          : DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return list;
+  }
+
+  /// Retourne le `companyId` effectif à utiliser pour une nouvelle écriture.
+  Future<String?> _resolveCompanyId() async {
+    final company = await getCompany();
+    return company?.id;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CLIENTS
+  // ═══════════════════════════════════════════════════════════════
+  Future<List<Client>> getClients() async {
+    final docs = await _getSaaSQueryDocs(clientCol);
+    return docs.map(Client.fromMap).toList();
   }
 
   Future<Client?> getClient(String id) async {
@@ -116,10 +229,19 @@ class DatabaseService {
     final doc = await _db.collection(clientCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
-    // Vérification de sécurité multi-tenant
+    final user = await getUser();
+    if (user != null && user.isAdmin) {
+      data['id'] = doc.id;
+      return Client.fromMap(data);
+    }
     final ownerId = data['userId'];
+    final docCompanyId = data['companyId'];
+    final company = await getCompany();
     final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
-    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+    if (ownerId != null &&
+        ownerId != uid &&
+        !sharedList.contains(uid) &&
+        (company == null || docCompanyId != company.id)) {
       return null;
     }
     data['id'] = doc.id;
@@ -128,36 +250,30 @@ class DatabaseService {
 
   Future<void> addClient(Client client) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
-    await _db.collection(clientCol).doc(client.id).set({
-      ...client.toMap(),
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
+    final map = client.toMap();
+    map['userId'] = uid;
+    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
+      map['companyId'] = companyId;
+    }
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(clientCol)
+        .doc(client.id)
+        .set(map, SetOptions(merge: true));
   }
 
-  Future<void> updateClient(Client client) async {
-    await addClient(client);
-  }
+  Future<void> updateClient(Client client) => addClient(client);
+  Future<void> deleteClient(String id) =>
+      _db.collection(clientCol).doc(id).delete();
 
-  Future<void> deleteClient(String id) async {
-    await _db.collection(clientCol).doc(id).delete();
-  }
-
-  // ============ INVOICES ============
+  // ═══════════════════════════════════════════════════════════════
+  //  INVOICES
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Invoice>> getInvoices() async {
-    final uid = currentUserId;
-    if (uid == null) return [];
-    final snapshot = await _db
-        .collection(invoiceCol)
-        .where('userId', isEqualTo: uid)
-        .orderBy('updatedAt', descending: true)
-        .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Invoice.fromMap(data);
-    }).toList();
+    final docs = await _getSaaSQueryDocs(invoiceCol);
+    return docs.map(Invoice.fromMap).toList();
   }
 
   Future<Invoice?> getInvoice(String id) async {
@@ -166,10 +282,19 @@ class DatabaseService {
     final doc = await _db.collection(invoiceCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
-    // Vérification de sécurité multi-tenant
+    final user = await getUser();
+    if (user != null && user.isAdmin) {
+      data['id'] = doc.id;
+      return Invoice.fromMap(data);
+    }
     final ownerId = data['userId'];
+    final docCompanyId = data['companyId'];
+    final company = await getCompany();
     final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
-    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+    if (ownerId != null &&
+        ownerId != uid &&
+        !sharedList.contains(uid) &&
+        (company == null || docCompanyId != company.id)) {
       return null;
     }
     data['id'] = doc.id;
@@ -178,30 +303,35 @@ class DatabaseService {
 
   Future<void> addInvoice(Invoice invoice) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
-    await _db.collection(invoiceCol).doc(invoice.id).set({
-      ...invoice.toMap(),
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
+    final map = invoice.toMap();
+    map['userId'] = uid;
+    if (invoice.companyId.isEmpty && companyId != null) {
+      map['companyId'] = companyId;
+    }
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(invoiceCol)
+        .doc(invoice.id)
+        .set(map, SetOptions(merge: true));
   }
 
-  Future<void> updateInvoice(Invoice invoice) async {
-    await addInvoice(invoice);
-  }
+  Future<void> updateInvoice(Invoice invoice) => addInvoice(invoice);
+  Future<void> deleteInvoice(String id) =>
+      _db.collection(invoiceCol).doc(id).delete();
 
-  Future<void> deleteInvoice(String id) async {
-    await _db.collection(invoiceCol).doc(id).delete();
-  }
-
+  /// 🔢 Numérotation SCOPÉE ENTREPRISE (plus de doublons).
   Future<String> getNextInvoiceNumber(bool isDevis) async {
     final uid = currentUserId;
     if (uid == null) return 'FA-${DateTime.now().year}-001';
 
+    final companyId = await _resolveCompanyId();
+    final scopeId = companyId ?? uid;
+
     final prefix = isDevis ? 'DEV' : 'FA';
     final year = DateTime.now().year;
-    // Compteur atomique par utilisateur : évite les doublons en concurrence.
-    final counterRef = _db.collection('counters').doc(uid);
+    final counterRef = _db.collection('counters').doc(scopeId);
     final field = isDevis ? 'devisCount' : 'invoiceCount';
 
     try {
@@ -213,14 +343,11 @@ class DatabaseService {
         return next;
       });
       return '$prefix-$year-${sequence.toString().padLeft(3, '0')}';
-    } catch (_) {
-      // Fallback non atomique (règles sans `counters`) : compte réel.
-      final snapshot = await _db
-          .collection(invoiceCol)
-          .where('userId', isEqualTo: uid)
-          .where('isDevis', isEqualTo: isDevis)
-          .get();
-      final count = snapshot.docs.length + 1;
+    } catch (e) {
+      debugPrint('⚠️ compteur ($scopeId) échec, fallback : $e');
+      final docs = await _getSaaSQueryDocs(invoiceCol);
+      final filtered = docs.where((d) => d['isDevis'] == isDevis).toList();
+      final count = filtered.length + 1;
       return '$prefix-$year-${count.toString().padLeft(3, '0')}';
     }
   }
@@ -253,20 +380,12 @@ class DatabaseService {
     }
   }
 
-  // ============ PRODUCTS ============
+  // ═══════════════════════════════════════════════════════════════
+  //  PRODUCTS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Product>> getProducts() async {
-    final uid = currentUserId;
-    if (uid == null) return [];
-    final snapshot = await _db
-        .collection(productCol)
-        .where('userId', isEqualTo: uid)
-        .orderBy('updatedAt', descending: true)
-        .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Product.fromMap(data);
-    }).toList();
+    final docs = await _getSaaSQueryDocs(productCol);
+    return docs.map(Product.fromMap).toList();
   }
 
   Future<Product?> getProduct(String id) async {
@@ -275,9 +394,19 @@ class DatabaseService {
     final doc = await _db.collection(productCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
+    final user = await getUser();
+    if (user != null && user.isAdmin) {
+      data['id'] = doc.id;
+      return Product.fromMap(data);
+    }
     final ownerId = data['userId'];
+    final docCompanyId = data['companyId'];
+    final company = await getCompany();
     final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
-    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+    if (ownerId != null &&
+        ownerId != uid &&
+        !sharedList.contains(uid) &&
+        (company == null || docCompanyId != company.id)) {
       return null;
     }
     data['id'] = doc.id;
@@ -286,20 +415,26 @@ class DatabaseService {
 
   Future<void> saveProduct(Product product) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
-    await _db.collection(productCol).doc(product.id).set({
-      ...product.toMap(),
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
+    final map = product.toMap();
+    map['userId'] = uid;
+    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
+      map['companyId'] = companyId;
+    }
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(productCol)
+        .doc(product.id)
+        .set(map, SetOptions(merge: true));
   }
 
-  Future<void> deleteProduct(String id) async {
-    await _db.collection(productCol).doc(id).delete();
-  }
+  Future<void> deleteProduct(String id) =>
+      _db.collection(productCol).doc(id).delete();
 
-
-  // ============ TEMPLATES ============
+  // ═══════════════════════════════════════════════════════════════
+  //  TEMPLATES
+  // ═══════════════════════════════════════════════════════════════
   Future<List<InvoiceTemplate>> getTemplates() async {
     final snapshot = await _db.collection('templates').get();
     return snapshot.docs.map((doc) {
@@ -316,7 +451,10 @@ class DatabaseService {
     data['id'] = doc.id;
     return InvoiceTemplate.fromMap(data);
   }
-  // ============ PLANS ============
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PLANS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Plan>> getPlans() async {
     final snapshot = await _db.collection(planCol).get();
     return snapshot.docs.map((doc) {
@@ -334,11 +472,12 @@ class DatabaseService {
     return Plan.fromMap(data);
   }
 
-  Future<void> savePlan(Plan plan) async {
-    await _db.collection(planCol).doc(plan.id).set(plan.toMap());
-  }
+  Future<void> savePlan(Plan plan) =>
+      _db.collection(planCol).doc(plan.id).set(plan.toMap());
 
-  // ============ SUBSCRIPTIONS ============
+  // ═══════════════════════════════════════════════════════════════
+  //  SUBSCRIPTIONS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Subscription>> getSubscriptions() async {
     final uid = currentUserId;
     if (uid == null) return [];
@@ -377,7 +516,7 @@ class DatabaseService {
 
   Future<void> saveSubscription(Subscription subscription) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
+    if (uid == null) throw Exception('Non authentifié');
     await _db.collection(subscriptionCol).doc(subscription.id).set({
       ...subscription.toMap(),
       'userId': uid,
@@ -385,77 +524,91 @@ class DatabaseService {
     }, SetOptions(merge: true));
   }
 
-  Future<void> deleteSubscription(String id) async {
-    await _db.collection(subscriptionCol).doc(id).delete();
-  }
+  Future<void> deleteSubscription(String id) =>
+      _db.collection(subscriptionCol).doc(id).delete();
 
-  // ============ SUPPLIERS ============
+  // ═══════════════════════════════════════════════════════════════
+  //  SUPPLIERS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Supplier>> getSuppliers() async {
-    final uid = currentUserId;
-    if (uid == null) return [];
-    final snapshot = await _db
-        .collection(supplierCol)
-        .where('userId', isEqualTo: uid)
-        .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Supplier.fromMap(data);
-    }).toList();
+    final docs = await _getSaaSQueryDocs(supplierCol);
+    return docs.map(Supplier.fromMap).toList();
   }
 
   Future<Supplier?> getSupplier(String id) async {
+    final uid = currentUserId;
+    if (uid == null) return null;
     final doc = await _db.collection(supplierCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
+    final user = await getUser();
+    if (user != null && user.isAdmin) {
+      data['id'] = doc.id;
+      return Supplier.fromMap(data);
+    }
+    final ownerId = data['userId'];
+    final docCompanyId = data['companyId'];
+    final company = await getCompany();
+    final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
+    if (ownerId != null &&
+        ownerId != uid &&
+        !sharedList.contains(uid) &&
+        (company == null || docCompanyId != company.id)) {
+      return null;
+    }
     data['id'] = doc.id;
     return Supplier.fromMap(data);
   }
 
   Future<void> saveSupplier(Supplier supplier) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
-    await _db.collection(supplierCol).doc(supplier.id).set({
-      ...supplier.toMap(),
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
+    final map = supplier.toMap();
+    map['userId'] = uid;
+    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
+      map['companyId'] = companyId;
+    }
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(supplierCol)
+        .doc(supplier.id)
+        .set(map, SetOptions(merge: true));
   }
 
-  Future<void> deleteSupplier(String id) async {
-    await _db.collection(supplierCol).doc(id).delete();
-  }
+  Future<void> deleteSupplier(String id) =>
+      _db.collection(supplierCol).doc(id).delete();
 
-  // ============ REMINDERS ============
+  // ═══════════════════════════════════════════════════════════════
+  //  REMINDERS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<Reminder>> getReminders() async {
-    final uid = currentUserId;
-    if (uid == null) return [];
-    final snapshot = await _db
-        .collection(reminderCol)
-        .where('userId', isEqualTo: uid)
-        .get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return Reminder.fromMap(data);
-    }).toList();
+    final docs = await _getSaaSQueryDocs(reminderCol);
+    return docs.map(Reminder.fromMap).toList();
   }
 
   Future<void> saveReminder(Reminder reminder) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
-    await _db.collection(reminderCol).doc(reminder.id).set({
-      ...reminder.toMap(),
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
+    final map = reminder.toMap();
+    map['userId'] = uid;
+    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
+      map['companyId'] = companyId;
+    }
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(reminderCol)
+        .doc(reminder.id)
+        .set(map, SetOptions(merge: true));
   }
 
-  Future<void> deleteReminder(String id) async {
-    await _db.collection(reminderCol).doc(id).delete();
-  }
+  Future<void> deleteReminder(String id) =>
+      _db.collection(reminderCol).doc(id).delete();
 
-  // ============ NOTIFICATIONS ============
+  // ═══════════════════════════════════════════════════════════════
+  //  NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════════
   Future<List<AppNotification>> getNotifications() async {
     final uid = currentUserId;
     if (uid == null) return [];
@@ -471,9 +624,6 @@ class DatabaseService {
     }).toList();
   }
 
-  /// Stream EN TEMPS RÉEL des notifications de l'utilisateur (même requête
-  /// que [getNotifications] → même index composite). Utilisé pour afficher
-  /// un toast dès qu'une invitation d'équipe arrive.
   Stream<List<AppNotification>> notificationsStream(String uid) {
     return _db
         .collection(notificationCol)
@@ -489,38 +639,44 @@ class DatabaseService {
 
   Future<void> saveNotification(AppNotification notification) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
+    if (uid == null) throw Exception('Non authentifié');
     await _db.collection(notificationCol).doc(notification.id).set({
       ...notification.toMap(),
       'userId': uid,
-      // 🔧 La lecture trie par `createdAt` : on l'écrit explicitement
-      // (sinon les notifications n'apparaissent jamais dans la liste).
-      'createdAt': Timestamp.fromDate(notification.timestamp),
       'recipients': [uid],
       'createdBy': uid,
+      'createdAt': Timestamp.fromDate(notification.timestamp),
     }, SetOptions(merge: true));
   }
 
-  /// Enregistre une notification pour un AUTRE utilisateur (mention @ dans
-  /// un partage d'équipe). `createdBy` = émetteur (permis par les règles).
+  /// 🔔 Enregistre une notification pour un AUTRE utilisateur.
+  /// `teamId` est désormais **requis** côté règles Firestore pour valider
+  /// qu'un émetteur ne peut notifier qu'un membre de SA team.
   Future<void> saveNotificationForUser(
     String userId,
     AppNotification notification, {
     String? createdBy,
+    String? teamId,
   }) async {
     final uid = currentUserId ?? createdBy ?? '';
-    await _db.collection(notificationCol).doc(notification.id).set({
+    final data = <String, dynamic>{
       ...notification.toMap(),
       'userId': userId,
-      'createdAt': Timestamp.fromDate(notification.timestamp),
       'recipients': [userId],
       'createdBy': createdBy ?? uid,
-    }, SetOptions(merge: true));
+      'createdAt': Timestamp.fromDate(notification.timestamp),
+    };
+    if (teamId != null && teamId.isNotEmpty) {
+      data['teamId'] = teamId;
+    }
+    await _db
+        .collection(notificationCol)
+        .doc(notification.id)
+        .set(data, SetOptions(merge: true));
   }
 
-  Future<void> deleteNotification(String id) async {
-    await _db.collection(notificationCol).doc(id).delete();
-  }
+  Future<void> deleteNotification(String id) =>
+      _db.collection(notificationCol).doc(id).delete();
 
   Future<void> clearNotifications() async {
     final notifs = await getNotifications();
@@ -529,43 +685,46 @@ class DatabaseService {
     }
   }
 
-  // ============ CRUD GENERIQUE ============
-  // ============ CRUD GENERIQUE SÉCURISÉ ============
+  // ═══════════════════════════════════════════════════════════════
+  //  CRUD GÉNÉRIQUE SÉCURISÉ
+  // ═══════════════════════════════════════════════════════════════
   Future<List<T>> getAll<T>(String collectionPath) async {
     final uid = currentUserId;
     if (uid == null) return [];
-    
-    // Collections publiques/système non associées à un utilisateur unique
+
     const publicCollections = [planCol, 'templates', 'settings'];
-    
-    Query<Map<String, dynamic>> query = _db.collection(collectionPath);
-    if (!publicCollections.contains(collectionPath)) {
-      query = query.where('userId', isEqualTo: uid);
+    if (publicCollections.contains(collectionPath)) {
+      final snapshot = await _db.collection(collectionPath).get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return _fromDoc<T>(collectionPath, data);
+      }).toList();
     }
-    
-    final snapshot = await query.get();
-    return snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id;
-      return _fromDoc<T>(collectionPath, data);
-    }).toList();
+
+    final docs = await _getSaaSQueryDocs(collectionPath);
+    return docs.map((d) => _fromDoc<T>(collectionPath, d)).toList();
   }
 
   Future<void> save<T>(String collectionPath, T item) async {
     final uid = currentUserId;
-    if (uid == null) throw Exception('Non authentifie');
+    if (uid == null) throw Exception('Non authentifié');
+    final companyId = await _resolveCompanyId();
     final data = (item as dynamic).toMap() as Map<String, dynamic>;
     final id = (item as dynamic).id as String;
-    await _db.collection(collectionPath).doc(id).set({
-      ...data,
-      'userId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    data['userId'] = uid;
+    if (data['companyId'] == null || (data['companyId'] as String).isEmpty) {
+      data['companyId'] = companyId;
+    }
+    data['updatedAt'] = FieldValue.serverTimestamp();
+    await _db
+        .collection(collectionPath)
+        .doc(id)
+        .set(data, SetOptions(merge: true));
   }
 
-  Future<void> delete<T>(String collectionPath, String id) async {
-    await _db.collection(collectionPath).doc(id).delete();
-  }
+  Future<void> delete<T>(String collectionPath, String id) =>
+      _db.collection(collectionPath).doc(id).delete();
 
   Future<T?> getById<T>(String collectionPath, String id) async {
     final doc = await _db.collection(collectionPath).doc(id).get();
@@ -575,7 +734,6 @@ class DatabaseService {
     return _fromDoc<T>(collectionPath, data);
   }
 
-  @protected
   T _fromDoc<T>(String collectionPath, Map<String, dynamic> data) {
     switch (collectionPath) {
       case clientCol:
@@ -595,14 +753,13 @@ class DatabaseService {
       case notificationCol:
         return AppNotification.fromMap(data) as T;
       default:
-        throw UnsupportedError('Collection non supportee: $collectionPath');
+        throw UnsupportedError('Collection non supportée: $collectionPath');
     }
   }
 
-  // ============ NETTOYAGE ============
-  /// Vide TOUTES les collections de l'utilisateur (métier + auxiliaires).
-  /// Découpe en lots de <=450 écritures pour respecter la limite Firestore
-  /// de 500 opérations par batch (marge de sécurité).
+  // ═══════════════════════════════════════════════════════════════
+  //  NETTOYAGE
+  // ═══════════════════════════════════════════════════════════════
   Future<void> clearAllData() async {
     final uid = currentUserId;
     if (uid == null) return;
@@ -624,7 +781,6 @@ class DatabaseService {
           .get();
       final refs = snapshot.docs.map((d) => d.reference).toList();
 
-      // Suppression par lots de 450 documents
       for (var i = 0; i < refs.length; i += 450) {
         final chunk = refs.sublist(
           i,

@@ -54,7 +54,6 @@ import '../screens/dashboard/drive_sync_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
 // Écrans - Customisation, Abonnements & Support
-import '../screens/customization/template_store_screen.dart';
 import '../screens/customization/template_checkout_screen.dart';
 import '../screens/customization/my_templates_screen.dart';
 import '../screens/customization/templates_screen.dart';
@@ -317,10 +316,41 @@ class AppRouter {
       // ══════════════════════════════════════════════════════════
       //  MODÈLES — Boutique & Personnalisation
       // ══════════════════════════════════════════════════════════
+      // ─── Remplacer les 3 GoRoute correspondantes par : ───
+
       GoRoute(
-        path: '/templates',
-        builder: (context, state) => const TemplateStoreScreen(),
+        path: '/templates/workspace',
+        builder: (context, state) {
+          final extra = state.extra;
+          InvoiceTemplate? template;
+          if (extra is InvoiceTemplate) {
+            template = extra;
+          } else if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
+            template = extra['template'] as InvoiceTemplate;
+          }
+          // 🆕 Fallback : ouvre l'atelier sur le 1er preset si pas d'extra.
+          template ??= InvoiceTemplate.getDefaultTemplates().first;
+          return TemplateWorkspaceScreen(template: template);
+        },
       ),
+
+      GoRoute(
+        path: '/templates/preview',
+        builder: (context, state) {
+          final extra = state.extra;
+          InvoiceTemplate? template;
+          if (extra is InvoiceTemplate) {
+            template = extra;
+          } else if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
+            template = extra['template'] as InvoiceTemplate;
+          }
+          template ??= InvoiceTemplate.getDefaultTemplates().first;
+          return TemplatePreviewScreen(template: template);
+        },
+      ),
+
       GoRoute(
         path: '/templates/checkout',
         builder: (context, state) {
@@ -339,7 +369,7 @@ class AppRouter {
               cartTemplates: cart is List<InvoiceTemplate> ? cart : null,
             );
           }
-          return const TemplateCheckoutScreen();
+          return const TemplateCheckoutScreen(); // ← gère lui-même le panier vide
         },
       ),
       GoRoute(
@@ -349,37 +379,6 @@ class AppRouter {
       GoRoute(
         path: '/templates/select',
         builder: (context, state) => const TemplatesScreen(),
-      ),
-      GoRoute(
-        path: '/templates/workspace',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is InvoiceTemplate) {
-            return TemplateWorkspaceScreen(template: extra);
-          }
-          if (extra is Map<String, dynamic> &&
-              extra['template'] is InvoiceTemplate) {
-            return TemplateWorkspaceScreen(
-                template: extra['template'] as InvoiceTemplate);
-          }
-          return const SizedBox.shrink();
-        },
-      ),
-      GoRoute(
-        path: '/templates/preview',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is InvoiceTemplate) {
-            return TemplatePreviewScreen(template: extra);
-          }
-          if (extra is Map<String, dynamic> &&
-              extra['template'] is InvoiceTemplate) {
-            return TemplatePreviewScreen(
-              template: extra['template'] as InvoiceTemplate,
-            );
-          }
-          return const SizedBox.shrink();
-        },
       ),
 
       // ══════════════════════════════════════════════════════════

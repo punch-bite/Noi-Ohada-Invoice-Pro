@@ -1,3 +1,8 @@
+// lib/models/product.dart
+//
+// CHANGELOG : ajout `companyId`, `sharedWithUsers`, `sharedTeams`,
+//             `editableByUsers`, `editableTeams`.
+//
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
@@ -7,40 +12,30 @@ part 'product.g.dart';
 
 @HiveType(typeId: 5)
 class Product {
-  @HiveField(0)
-  final String id;
-  @HiveField(1)
-  final String userId;
-  @HiveField(2)
-  final String name;
-  @HiveField(3)
-  final String description;
-  @HiveField(4)
-  final String category;
-  @HiveField(5)
-  final double price;
-  @HiveField(6)
-  final double costPrice;
-  @HiveField(7)
-  final int quantity;
-  @HiveField(8)
-  final int minStock;
-  @HiveField(9)
-  final String unit;
-  @HiveField(10)
-  final String? barcode;
-  @HiveField(11)
-  final String? imagePath;
-  @HiveField(12)
-  final bool isActive;
-  @HiveField(13)
-  final DateTime createdAt;
-  @HiveField(14)
-  final DateTime? updatedAt;
-  @HiveField(15)
-  final String? supplierId;
-  @HiveField(16)
-  final bool isSynced;
+  @HiveField(0)  final String id;
+  @HiveField(1)  final String userId;
+  @HiveField(2)  final String name;
+  @HiveField(3)  final String description;
+  @HiveField(4)  final String category;
+  @HiveField(5)  final double price;
+  @HiveField(6)  final double costPrice;
+  @HiveField(7)  final int quantity;
+  @HiveField(8)  final int minStock;
+  @HiveField(9)  final String unit;
+  @HiveField(10) final String? barcode;
+  @HiveField(11) final String? imagePath;
+  @HiveField(12) final bool isActive;
+  @HiveField(13) final DateTime createdAt;
+  @HiveField(14) final DateTime? updatedAt;
+  @HiveField(15) final String? supplierId;
+  @HiveField(16) final bool isSynced;
+
+  // 🔑 NOUVEAU
+  @HiveField(17) final String? companyId;
+  @HiveField(18) final List<String> sharedWithUsers;
+  @HiveField(19) final List<String> sharedTeams;
+  @HiveField(20) final List<String> editableByUsers;
+  @HiveField(21) final List<String> editableTeams;
 
   Product({
     String? id,
@@ -60,6 +55,11 @@ class Product {
     this.updatedAt,
     this.supplierId,
     this.isSynced = false,
+    this.companyId,
+    this.sharedWithUsers = const [],
+    this.sharedTeams = const [],
+    this.editableByUsers = const [],
+    this.editableTeams = const [],
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -67,6 +67,7 @@ class Product {
     return {
       'id': id,
       'userId': userId,
+      'companyId': companyId,
       'name': name,
       'description': description,
       'category': category,
@@ -82,6 +83,10 @@ class Product {
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'supplierId': supplierId,
       'isSynced': isSynced,
+      'sharedWithUsers': sharedWithUsers,
+      'sharedTeams': sharedTeams,
+      'editableByUsers': editableByUsers,
+      'editableTeams': editableTeams,
     };
   }
 
@@ -89,6 +94,7 @@ class Product {
     return Product(
       id: documentId ?? map['id'] ?? const Uuid().v4(),
       userId: map['userId'] ?? '',
+      companyId: map['companyId'],
       name: map['name'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
@@ -103,10 +109,15 @@ class Product {
       createdAt: map['createdAt'] != null
           ? _parseDateTime(map['createdAt'])
           : DateTime.now(),
-      updatedAt:
-          map['updatedAt'] != null ? _parseDateTime(map['updatedAt']) : null,
+      updatedAt: map['updatedAt'] != null
+          ? _parseDateTime(map['updatedAt'])
+          : null,
       supplierId: map['supplierId'],
       isSynced: map['isSynced'] ?? false,
+      sharedWithUsers: List<String>.from(map['sharedWithUsers'] ?? const []),
+      sharedTeams: List<String>.from(map['sharedTeams'] ?? const []),
+      editableByUsers: List<String>.from(map['editableByUsers'] ?? const []),
+      editableTeams: List<String>.from(map['editableTeams'] ?? const []),
     );
   }
 
@@ -122,24 +133,21 @@ class Product {
   bool get isOutOfStock => quantity <= 0;
   double get stockValue => quantity * price;
 
-  Product copyWith(
-      {String? name,
-      String? description,
-      String? category,
-      double? price,
-      double? costPrice,
-      int? quantity,
-      int? minStock,
-      String? unit,
-      String? barcode,
-      String? imagePath,
-      bool? isActive,
-      String? supplierId,
-      bool? isSynced,
-      required DateTime updatedAt}) {
+  Product copyWith({
+    String? name, String? description, String? category,
+    double? price, double? costPrice, int? quantity, int? minStock,
+    String? unit, String? barcode, String? imagePath, bool? isActive,
+    String? supplierId, bool? isSynced, DateTime? updatedAt,
+    String? companyId,
+    List<String>? sharedWithUsers,
+    List<String>? sharedTeams,
+    List<String>? editableByUsers,
+    List<String>? editableTeams,
+  }) {
     return Product(
       id: id,
       userId: userId,
+      companyId: companyId ?? this.companyId,
       name: name ?? this.name,
       description: description ?? this.description,
       category: category ?? this.category,
@@ -152,9 +160,13 @@ class Product {
       imagePath: imagePath ?? this.imagePath,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt,
-      updatedAt: DateTime.now(),
+      updatedAt: updatedAt ?? DateTime.now(),
       supplierId: supplierId ?? this.supplierId,
       isSynced: isSynced ?? this.isSynced,
+      sharedWithUsers: sharedWithUsers ?? this.sharedWithUsers,
+      sharedTeams: sharedTeams ?? this.sharedTeams,
+      editableByUsers: editableByUsers ?? this.editableByUsers,
+      editableTeams: editableTeams ?? this.editableTeams,
     );
   }
 
@@ -167,13 +179,11 @@ class Product {
     if (isLowStock) return 'Stock faible';
     return 'En stock';
   }
-
   Color get statusColor {
     if (isOutOfStock) return Colors.red;
     if (isLowStock) return Colors.orange;
     return Colors.green;
   }
-
   IconData get statusIcon {
     if (isOutOfStock) return Icons.dangerous;
     if (isLowStock) return Icons.warning_amber;

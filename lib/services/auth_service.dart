@@ -1,4 +1,14 @@
 // lib/services/auth_service.dart
+//
+// CHANGELOG (SaaS — Option A) :
+//   • `_ensureUserCompany()` renvoie désormais l'id de la company et
+//     rattache automatiquement l'utilisateur (`users/{uid}.companyId`).
+//   • Ajout `_linkUserToCompany()` — pose le companyId sur le profil (idempotent).
+//   • Ajout `_refreshToken()` — force le refresh du jeton Firebase pour que
+//     la Cloud Function `syncUserClaims` soit prise en compte immédiatement.
+//   • `signInWithEmailPassword`, `signInWithGoogle`, `registerWithEmailPassword`
+//     appellent `_refreshToken()` avant de retourner le profil.
+//
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -36,24 +46,26 @@ class AuthService {
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // PROFIL UTILISATEUR
+  // ═══════════════════════════════════════════════════════════════════
+
   /// ✅ Garantit que le document utilisateur existe dans Firestore.
-  /// - Document absent → création complète.
-  /// - Document existant mais INCOMPLET (ex: créé jadis avec le seul champ
-  ///   `lastLoginAt`) → complétion des champs manquants via un `set` en merge.
-  /// - Document complet → retour tel quel.
+  /// - Document absent → création complète + rattachement company.
+  /// - Document existant mais INCOMPLET → complétion + rattachement.
+  /// - Document complet → retour tel quel (mais vérifie la company).
   Future<AppUser> _ensureUserDocument(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
       final firebaseUser = _auth.currentUser;
 
+      // Cas 1 : document déjà présent
       if (doc.exists && doc.data() != null) {
         final data = Map<String, dynamic>.from(doc.data()!);
         final email = data['email'];
         final isIncomplete = email == null || (email as String).trim().isEmpty;
 
         if (isIncomplete) {
-          // 🔥 Document partiel → on le complète avec les infos Firebase Auth
-          // sans écraser les champs déjà présents (lastLoginAt, etc.).
           final completion = AppUser(
             id: userId,
             email: firebaseUser?.email ?? '',
@@ -62,6 +74,7 @@ class AuthService {
                 ? data['displayName'] as String
                 : (firebaseUser?.displayName ?? 'Utilisateur'),
             phone: data['phone'] as String?,
+            companyId: data['companyId'] as String?,
             createdAt: DateTime.now(),
             isActive: true,
             roles: const ['user'],
@@ -72,28 +85,38 @@ class AuthService {
               .doc(userId)
               .set(completion, SetOptions(merge: true));
 
-          unawaited(_ensureUserCompany(
+          final createdCompanyId = await _ensureUserCompany(
             userId,
             name: completion['displayName'] as String?,
             email: completion['email'] as String?,
             phone: completion['phone'] as String?,
-          ));
-          return AppUser.fromMap({...completion, ...data});
+          );
+          await _linkUserToCompany(userId, createdCompanyId);
+          await _refreshToken();
+
+          return AppUser.fromMap({
+            ...completion,
+            ...data,
+            'companyId': createdCompanyId ?? data['companyId'],
+          });
         }
 
-        // 🔥 Même quand le profil existe déjà, on s'assure que le document
-        // ENTREPRISE de l'utilisateur existe aussi (utilisateurs créés avant
-        // ce correctif : la « company » n'était jamais créée à l'inscription).
-        unawaited(_ensureUserCompany(
+        // ✅ Document complet → on vérifie que la company existe toujours.
+        final linkedCompanyId = await _ensureUserCompany(
           userId,
           name: data['displayName'] as String?,
           email: data['email'] as String?,
           phone: data['phone'] as String?,
-        ));
+        );
+        if (linkedCompanyId != null &&
+            (data['companyId'] == null || data['companyId'] == '')) {
+          await _linkUserToCompany(userId, linkedCompanyId);
+          data['companyId'] = linkedCompanyId;
+        }
         return AppUser.fromMap(data);
       }
 
-      // 🔥 Document inexistant → création avec les infos Firebase Auth
+      // Cas 2 : document inexistant → création
       final defaultUser = AppUser(
         id: userId,
         email: firebaseUser?.email ?? '',
@@ -104,12 +127,18 @@ class AuthService {
       );
 
       await _firestore.collection('users').doc(userId).set(defaultUser.toMap());
-      await _ensureUserCompany(
+
+      final createdCompanyId = await _ensureUserCompany(
         userId,
         name: defaultUser.displayName,
         email: defaultUser.email,
       );
-      return defaultUser;
+      if (createdCompanyId != null) {
+        await _linkUserToCompany(userId, createdCompanyId);
+      }
+      await _refreshToken();
+
+      return defaultUser.copyWith(companyId: createdCompanyId);
     } catch (e) {
       debugPrint('❌ Erreur _ensureUserDocument: $e');
       return AppUser(
@@ -123,20 +152,15 @@ class AuthService {
     }
   }
 
-  /// ✅ Garantit l'existence du document ENTREPRISE (« company ») de
-  /// l'utilisateur. Ce document est indispensable à la création de factures
-  /// (getCompany → companies/{userId}) et n'était PAS créé à l'inscription.
-  ///
-  /// Idempotent : vérifie d'abord si une société existe déjà pour cet
-  /// utilisateur (requête `where userId == uid`, limite 1) avant d'en créer
-  /// une nouvelle. L'id déterministe `company_$userId` évite les doublons.
-  Future<void> _ensureUserCompany(
+  /// ✅ Garantit l'existence de la company de l'utilisateur et renvoie son id.
+  /// Idempotent : `company_$userId` est déterministe.
+  Future<String?> _ensureUserCompany(
     String userId, {
     String? name,
     String? email,
     String? phone,
   }) async {
-    if (userId.isEmpty) return;
+    if (userId.isEmpty) return null;
     try {
       final existing = await _firestore
           .collection('companies')
@@ -144,7 +168,9 @@ class AuthService {
           .limit(1)
           .get();
 
-      if (existing.docs.isNotEmpty) return; // ✅ Déjà créée
+      if (existing.docs.isNotEmpty) {
+        return existing.docs.first.id;
+      }
 
       final companyName = (name == null || name.trim().isEmpty)
           ? 'Mon entreprise'
@@ -163,24 +189,52 @@ class AuthService {
         legalText: 'Conforme aux normes OHADA et SYSCOHADA',
         website: '',
         rccm: '',
+        memberIds: [userId],
+        adminIds: [userId],
       );
 
-      // 🔥 Création (règles Firestore : un utilisateur authentifié peut
-      // créer son propre document company avec `userId == auth.uid`).
       await _firestore
           .collection('companies')
           .doc('company_$userId')
           .set(company.toMap());
       debugPrint('✅ Document entreprise créé pour $userId');
+      return company.id;
     } catch (e) {
       debugPrint('❌ Erreur _ensureUserCompany: $e');
+      return null;
     }
   }
 
-  // Récupérer le profil utilisateur (Firestore ou Local)
+  /// 🔗 Pose le `companyId` sur le profil utilisateur (idempotent).
+  /// Déclenche la CF `syncUserClaims` côté serveur (custom claim).
+  Future<void> _linkUserToCompany(String userId, String? companyId) async {
+    if (companyId == null || companyId.isEmpty) return;
+    try {
+      await _firestore.collection('users').doc(userId).set({
+        'companyId': companyId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('⚠️ _linkUserToCompany: $e');
+    }
+  }
+
+  /// 🔄 Force le refresh du jeton Firebase → la CF `syncUserClaims` sera
+  /// visible immédiatement côté client (sinon latence jusqu'à 1h).
+  Future<void> _refreshToken() async {
+    try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+    } catch (e) {
+      debugPrint('⚠️ _refreshToken: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LECTURE / INSCRIPTION / CONNEXION
+  // ═══════════════════════════════════════════════════════════════════
+
   Future<AppUser?> getUserProfile(String userId) async {
     try {
-      // 🔥 Utiliser _ensureUserDocument pour garantir l'existence
       return await _ensureUserDocument(userId);
     } catch (e) {
       debugPrint('❌ Erreur getUserProfile: $e');
@@ -214,17 +268,23 @@ class AuthService {
         createdAt: DateTime.now(),
       );
 
-      await _firestore.collection('users').doc(createdAuthUser.uid).set(appUser.toMap());
-      // ✅ Créer immédiatement le document ENTREPRISE de l'utilisateur
-      // (indispensable aux factures) — idempotent.
-      await _ensureUserCompany(
+      await _firestore
+          .collection('users')
+          .doc(createdAuthUser.uid)
+          .set(appUser.toMap());
+
+      final companyId = await _ensureUserCompany(
         createdAuthUser.uid,
         name: companyName ?? displayName,
         email: email.trim(),
         phone: phone,
       );
-      _cachedUser = appUser;
-      return appUser;
+      await _linkUserToCompany(createdAuthUser.uid, companyId);
+      await _refreshToken();
+
+      final finalUser = appUser.copyWith(companyId: companyId);
+      _cachedUser = finalUser;
+      return finalUser;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
         throw Exception('Cet e-mail est déjà associé à un compte.');
@@ -234,12 +294,11 @@ class AuthService {
       }
       throw Exception(e.message ?? 'Erreur lors de l\'inscription.');
     } catch (e) {
-      // ⚠️ Si la création du document Firestore échoue alors que l'utilisateur Auth a été créé,
-      // on tente de nettoyer le compte Auth orphelin pour éviter un compte Auth sans document Firestore.
       if (createdAuthUser != null) {
         try {
           await createdAuthUser.delete();
-          debugPrint('🧹 Compte Auth orphelin nettoyé après échec de création Firestore');
+          debugPrint(
+              '🧹 Compte Auth orphelin nettoyé après échec de création Firestore');
         } catch (cleanupErr) {
           debugPrint('⚠️ Impossible de nettoyer le compte Auth: $cleanupErr');
         }
@@ -273,17 +332,13 @@ class AuthService {
       _loginAttempts = 0;
       _lockoutUntil = null;
 
-      // 🔥 Garantit d'abord l'existence du document profil COMPLET dans
-      // Firestore (création si absent, complétion si partiel). On le fait
-      // AVANT la mise à jour de `lastLoginAt` pour éviter qu'un `set` avec
-      // merge ne crée un document ne contenant QUE `lastLoginAt`.
       final profile = await _ensureUserDocument(user.uid);
 
-      // ✅ Met à jour ensuite lastLoginAt (merge sur le document complet).
       await _firestore.collection('users').doc(user.uid).set({
         'lastLoginAt': Timestamp.now(),
       }, SetOptions(merge: true));
 
+      await _refreshToken();
       _cachedUser = profile;
       return profile;
     } on FirebaseAuthException catch (e) {
@@ -307,14 +362,10 @@ class AuthService {
     }
   }
 
-    /// Se connecte avec un compte Google.
-  /// - 🌐 Web : on laisse FIREBASE gérer le popup OAuth (`signInWithPopup`
-  ///   avec GoogleAuthProvider). C'est beaucoup plus fiable que le plugin
-  ///   `google_sign_in_web` qui exige un client OAuth manuel + redirect URIs
-  ///   autorisés (sinon erreur « popup_closed »). Firebase utilise ses
-  ///   propres redirect URIs (firebaseapp.com) automatiquement.
-  /// - 📱 Android/iOS : `google_sign_in` SANS clientId (google-services.json /
-  ///   Info.plist), puis échange du jeton avec Firebase.
+  /// Se connecte avec un compte Google.
+  /// - 🌐 Web : `signInWithPopup` avec GoogleAuthProvider (Firebase gère les
+  ///   redirect URIs → plus fiable que google_sign_in_web).
+  /// - 📱 Android/iOS : `google_sign_in` + échange du jeton avec Firebase.
   Future<AppUser> signInWithGoogle() async {
     try {
       final UserCredential userCredential;
@@ -343,14 +394,13 @@ class AuthService {
 
       final user = userCredential.user!;
 
-      // ✅ Mise à jour du nom affiché si absent
       if (user.displayName == null || user.displayName!.isEmpty) {
         await user.updateDisplayName(
             googleDisplayName ?? 'Utilisateur Google');
       }
 
-      // 🔥 Garantit la création du document profil dans Firestore
       final profile = await _ensureUserDocument(user.uid);
+      await _refreshToken();
       _cachedUser = profile;
       return profile;
     } on FirebaseAuthException catch (e) {
@@ -375,21 +425,13 @@ class AuthService {
 
   Future<void> resetPassword(String email) async {
     try {
-      // 🔗 ActionCodeSettings : configure le lien de réinitialisation pour qu'il
-      // redirige vers l'application (deep link) après la réinitialisation.
-      // - handleCodeInApp : true → le lien ouvre l'app si installée
-      // - url : deep link de l'app (schéma personnalisé) pour la redirection
       final actionCodeSettings = ActionCodeSettings(
-        // URL de continuation : deep link vers l'application
-        // Format : https://<domain}/__/auth/callback ou schéma personnalisé
-        url: 'https://noi-ohada-invoice-pro.firebaseapp.com/__/auth/callback',
+        url:
+            'https://noi-ohada-invoice-pro.firebaseapp.com/__/auth/callback',
         handleCodeInApp: true,
-        // Bundle ID iOS / Package Name Android (pour les liens universels)
         iOSBundleId: 'com.noi.ohada.invoicePro',
         androidPackageName: 'com.noi.ohada.invoice_pro',
-        // Installer l'app Android si elle n'est pas installée
         androidInstallApp: true,
-        // Version minimale de l'app Android
         androidMinimumVersion: '1.0.0',
       );
 

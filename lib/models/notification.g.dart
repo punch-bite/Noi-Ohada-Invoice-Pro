@@ -26,13 +26,17 @@ class AppNotificationAdapter extends TypeAdapter<AppNotification> {
       referenceId: fields[6] as String?,
       referenceType: fields[7] as String?,
       data: (fields[8] as Map?)?.cast<String, dynamic>(),
+      userId: fields[9] as String?,
+      createdBy: fields[10] as String?,
+      teamId: fields[11] as String?,
+      recipients: (fields[12] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, AppNotification obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,7 +54,15 @@ class AppNotificationAdapter extends TypeAdapter<AppNotification> {
       ..writeByte(7)
       ..write(obj.referenceType)
       ..writeByte(8)
-      ..write(obj.data);
+      ..write(obj.data)
+      ..writeByte(9)
+      ..write(obj.userId)
+      ..writeByte(10)
+      ..write(obj.createdBy)
+      ..writeByte(11)
+      ..write(obj.teamId)
+      ..writeByte(12)
+      ..write(obj.recipients);
   }
 
   @override

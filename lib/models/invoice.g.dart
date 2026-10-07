@@ -39,13 +39,17 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       templateId: fields[21] as String?,
       updatedAt: fields[19] as DateTime?,
       createdAt: fields[20] as DateTime?,
+      sharedWithUsers: (fields[22] as List).cast<String>(),
+      sharedTeams: (fields[23] as List).cast<String>(),
+      editableByUsers: (fields[24] as List).cast<String>(),
+      editableTeams: (fields[25] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Invoice obj) {
     writer
-      ..writeByte(22)
+      ..writeByte(26)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -89,7 +93,15 @@ class InvoiceAdapter extends TypeAdapter<Invoice> {
       ..writeByte(20)
       ..write(obj.createdAt)
       ..writeByte(21)
-      ..write(obj.templateId);
+      ..write(obj.templateId)
+      ..writeByte(22)
+      ..write(obj.sharedWithUsers)
+      ..writeByte(23)
+      ..write(obj.sharedTeams)
+      ..writeByte(24)
+      ..write(obj.editableByUsers)
+      ..writeByte(25)
+      ..write(obj.editableTeams);
   }
 
   @override

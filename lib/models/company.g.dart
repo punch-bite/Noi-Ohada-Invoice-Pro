@@ -34,13 +34,16 @@ class CompanyAdapter extends TypeAdapter<Company> {
       updatedAt: fields[14] as DateTime?,
       isActive: fields[15] as bool,
       isSynced: fields[16] as bool,
+      memberIds: (fields[17] as List).cast<String>(),
+      adminIds: (fields[18] as List).cast<String>(),
+      sharedWithUsers: (fields[19] as List).cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Company obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +77,13 @@ class CompanyAdapter extends TypeAdapter<Company> {
       ..writeByte(15)
       ..write(obj.isActive)
       ..writeByte(16)
-      ..write(obj.isSynced);
+      ..write(obj.isSynced)
+      ..writeByte(17)
+      ..write(obj.memberIds)
+      ..writeByte(18)
+      ..write(obj.adminIds)
+      ..writeByte(19)
+      ..write(obj.sharedWithUsers);
   }
 
   @override

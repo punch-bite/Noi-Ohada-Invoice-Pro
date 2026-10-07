@@ -1,8 +1,19 @@
+// lib/services/team_service.dart
+//
+// CHANGELOG (SaaS) :
+//   • `_notifyMentioned()` passe désormais `teamId` à addNotificationForUser
+//     (requis par les règles Firestore).
+//   • Correction `NotificationType.team_shared.toString()` →
+//     `.name` (l'ancien code renvoyait "NotificationType.team_shared", ce qui
+//     cassait le parsing `firstWhere` → la notif n'était jamais reconnue).
+//   • `Team.memberIds` inclut désormais le propriétaire dès la création.
+//
 import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/notification.dart';
 import '../models/shared_invoice.dart';
 import '../models/team.dart';
@@ -14,7 +25,9 @@ class TeamService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
 
-  // ===== CRUD ÉQUIPES =====
+  // ═══════════════════════════════════════════════════════════════════
+  // CRUD ÉQUIPES
+  // ═══════════════════════════════════════════════════════════════════
 
   Future<Team> createTeam({
     required String name,
@@ -88,7 +101,9 @@ class TeamService {
     }
   }
 
-  // ===== GESTION DES MEMBRES (via serveur = SDK admin) =====
+  // ═══════════════════════════════════════════════════════════════════
+  // GESTION DES MEMBRES (via serveur = SDK admin)
+  // ═══════════════════════════════════════════════════════════════════
 
   static String prettyError(Object error) {
     var message = error.toString();
@@ -219,7 +234,7 @@ class TeamService {
       );
     } catch (e) {
       debugPrint(
-          '⚠️ Server accept invitation failed, trying direct Firestore acceptance: $e');
+          '⚠️ Server accept invitation failed, trying direct Firestore: $e');
       try {
         final invDoc =
             await _db.collection('team_invitations').doc(invitationId).get();
@@ -266,7 +281,7 @@ class TeamService {
       );
     } catch (e) {
       debugPrint(
-          '⚠️ Server decline invitation failed, trying direct Firestore decline: $e');
+          '⚠️ Server decline invitation failed, trying direct Firestore: $e');
       try {
         final invDoc =
             await _db.collection('team_invitations').doc(invitationId).get();
@@ -374,7 +389,9 @@ class TeamService {
     );
   }
 
-  // ===== RÉCUPÉRATION =====
+  // ═══════════════════════════════════════════════════════════════════
+  // RÉCUPÉRATION
+  // ═══════════════════════════════════════════════════════════════════
 
   Future<List<Team>> getUserTeams(String userId) async {
     try {
@@ -395,7 +412,7 @@ class TeamService {
 
   Future<SharedInvoice> shareResource({
     required String resourceId,
-    required String resourceType, // 'invoice' | 'product' | 'client'
+    required String resourceType,
     required String resourceName,
     required String teamId,
     required String sharedBy,
@@ -544,6 +561,8 @@ class TeamService {
     }
   }
 
+  /// 🔔 Notifie chaque membre mentionné — **teamId OBLIGATOIRE** (règle
+  /// Firestore fail-closed : un émetteur ne notifie qu'un membre de SA team).
   Future<void> _notifyMentioned({
     required String resourceType,
     required String resourceName,
@@ -564,13 +583,18 @@ class TeamService {
       await _notificationService.addNotificationForUser(
         userId: uid,
         createdBy: sharedBy,
+        teamId: teamId,
         notification: AppNotification(
           title: '🔗 Donnée partagée avec vous',
           body: '$sharerName vous a partagé « $resourceName » ($label) '
               '$access dans $teamName.',
-          type: NotificationType.team_shared.toString(),
+          type: NotificationType.team_shared.name,
           referenceId: resourceId,
           referenceType: resourceType,
+          teamId: teamId,
+          userId: uid,
+          createdBy: sharedBy,
+          recipients: [uid],
           data: {
             'teamId': teamId,
             'resourceType': resourceType,
@@ -617,7 +641,8 @@ class TeamService {
       if (resourceType != null) {
         query = query.where('resourceType', isEqualTo: resourceType);
       }
-      final snapshot = await query.orderBy('sharedAt', descending: true).get();
+      final snapshot =
+          await query.orderBy('sharedAt', descending: true).get();
       return snapshot.docs
           .map((doc) => SharedInvoice.fromMap(doc.data(), documentId: doc.id))
           .toList();
@@ -681,8 +706,9 @@ class TeamService {
         final data = doc.data() ?? {};
         result[uid] = {
           'email': data['email']?.toString() ?? '',
-          'name':
-              data['displayName']?.toString() ?? data['name']?.toString() ?? '',
+          'name': data['displayName']?.toString() ??
+              data['name']?.toString() ??
+              '',
         };
       } catch (_) {
         result[uid] = {'email': '', 'name': ''};
@@ -728,11 +754,6 @@ class TeamService {
   }
 
   /// 🔐 Ressources partagées accessibles à [userId] (membre de [teamId]).
-  ///
-  /// Un membre a accès à une ressource si :
-  ///   • il est propriétaire ou admin de l'équipe → accès à TOUT ;
-  ///   • OU son uid est dans `sharedWith` du partage ;
-  ///   • OU son uid est dans `writeUsers` du partage.
   Future<List<SharedInvoice>> getAccessibleShares({
     required String teamId,
     required String userId,
@@ -748,7 +769,9 @@ class TeamService {
     }).toList();
   }
 
-  // ===== HELPERS =====
+  // ═══════════════════════════════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════════════════════════════
 
   String _collectionFor(String resourceType) {
     switch (resourceType) {
