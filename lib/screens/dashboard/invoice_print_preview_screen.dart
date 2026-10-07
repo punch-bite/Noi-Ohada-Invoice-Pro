@@ -1,11 +1,13 @@
 // lib/screens/dashboard/invoice_print_preview_screen.dart
 //
-// CHANGELOG v3 :
-//   • 🎯 FIX PARITÉ ABSOLUE : le widget capturé pour le PDF applique
-//     EXACTEMENT la même transformation que `invoice_detail_screen.dart`
-//     (SettingsService.applyToTemplate + même background image + même
-//     layoutConfig + même watermark).
-//   • Résultat : PDF = aperçu à 100%, pixel-perfect, en mode "image".
+// CHANGELOG v4 :
+//   • 🎯 PARITÉ ABSOLUE avec `invoice_detail_screen` :
+//     - `previewBackground` est transmis résolu (plus de re-décodage).
+//     - Le template effectif est utilisé TEL QUEL (plus de double
+//       `applyToTemplate`).
+//     - Le widget caché capture EXACTEMENT le même rendu que l'aperçu
+//       affiché dans l'écran détail.
+//   • Résultat : détail = aperçu PDF = impression, pixel-perfect.
 //
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -20,7 +22,6 @@ import '../../models/invoice_layout.dart';
 import '../../models/invoice_settings.dart';
 import '../../models/invoice_template.dart';
 import '../../services/printing_service.dart';
-import '../../services/settings_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
@@ -30,8 +31,19 @@ class InvoicePrintPreviewArgs {
   final Client client;
   final Company company;
   final InvoiceTemplate template;
+
+  /// 📐 Positions **déjà résolues** (preset + custom fusionnés).
   final Map<String, dynamic> customPositions;
+
+  /// 🎨 Background settings résolus.
   final TemplateBackgroundSettings background;
+
+  /// 🖼️ Image de fond **déjà décodée** (custom, ou template.fileData).
+  /// Null si ni custom ni preset ni template.fileData.
+  ///
+  /// ⚠️ CRITIQUE : ce champ garantit la parité visuelle avec l'écran détail.
+  final Uint8List? previewBackground;
+
   final InvoiceSettings invoiceSettings;
   final bool isFreePlan;
 
@@ -42,6 +54,7 @@ class InvoicePrintPreviewArgs {
     required this.template,
     required this.customPositions,
     required this.background,
+    this.previewBackground,
     required this.invoiceSettings,
     required this.isFreePlan,
   });
@@ -58,7 +71,7 @@ class InvoicePrintPreviewScreen extends StatefulWidget {
 
 class _InvoicePrintPreviewScreenState
     extends State<InvoicePrintPreviewScreen> {
-  /// 🎯 Clé du RepaintBoundary caché → capture PNG pour le mode image.
+  /// 🎯 Clé du RepaintBoundary caché → capture PNG.
   final GlobalKey _captureKey = GlobalKey();
 
   InvoiceRenderMode _mode = InvoiceRenderMode.image;
@@ -72,7 +85,7 @@ class _InvoicePrintPreviewScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 2 frames pour être sûr que le RepaintBoundary est peint.
+      // 2 frames pour garantir le rendu du RepaintBoundary.
       await Future.delayed(const Duration(milliseconds: 350));
       if (mounted) {
         setState(() => _widgetReady = true);
@@ -89,7 +102,7 @@ class _InvoicePrintPreviewScreenState
       Uint8List pdf;
 
       if (_mode == InvoiceRenderMode.image) {
-        // ── Mode image : capture du widget → PDF (WYSIWYG) ──
+        // ── Mode image : capture → PDF (WYSIWYG strict) ──
         final png = await PrintingService.captureWidgetToPng(
           _captureKey,
           pixelRatio: 3.0,
@@ -248,71 +261,65 @@ class _InvoicePrintPreviewScreenState
         ],
       ),
 
-      // 🎯 Widget A4 caché — reproduit EXACTEMENT l'aperçu de la facture.
+      // 🎯 Widget A4 caché — IDENTIQUE au `_buildInvoicePaper` du détail.
       bottomSheet: _widgetReady
           ? const SizedBox.shrink()
           : _buildHiddenCapture(),
     );
   }
 
-  /// Construit le widget A4 caché.
+  /// 🎯 Construit le widget A4 caché — **parité absolue** avec l'aperçu détail.
   ///
-  /// ⚠️ CRITIQUE : utilise la MÊME transformation que `_buildInvoicePaper`
-  /// dans `invoice_detail_screen.dart` → parité pixel-perfect garantie.
+  /// ⚠️ AUCUNE re-computation :
+  ///   • `args.template` est déjà le template **effectif** (settings appliqués
+  ///     par `InvoiceRenderService.resolveRenderState` dans le détail).
+  ///   • `args.customPositions` sont déjà fusionnées (preset + custom).
+  ///   • `args.background` sont déjà résolues.
+  ///   • `args.previewBackground` est déjà décodée (custom OU fileData).
   Widget _buildHiddenCapture() {
-    // 🎯 Reproduit exactement `_buildInvoicePaper` :
-    //    effective = SettingsService.applyToTemplate(args.template, settings)
-    final effective = SettingsService.applyToTemplate(
-      args.template,
-      args.invoiceSettings,
-    );
-
-    // 🎯 Même logique de background que dans `_applyCustomisation`.
-    final hasCustom = args.background.hasCustomImage;
-    final hasPreset = args.background.presetId.isNotEmpty;
-    final backgroundBytes = hasCustom
-        ? TemplateCustomService.decodeBackground(args.background)
-        : null;
-
-    // Si preset sans image custom → on laisse backgroundImage null,
-    // le preset est géré par StitchA4InvoicePreview via backgroundSettings.
-
     return SizedBox(
       width: 0,
       height: 0,
       child: OverflowBox(
-        maxWidth: 794,
-        maxHeight: 1123,
+        maxWidth: InvoiceTemplate.kPageWidth,
+        maxHeight: InvoiceTemplate.kPageHeight,
         alignment: Alignment.topLeft,
         child: RepaintBoundary(
           key: _captureKey,
           child: SizedBox(
-            width: 794,
-            height: 1123,
+            width: InvoiceTemplate.kPageWidth,
+            height: InvoiceTemplate.kPageHeight,
             child: StitchA4InvoicePreview(
+              // ── Données dynamiques ──
               data: StitchPreviewDataX.fromInvoice(
                 invoice: args.invoice,
                 client: args.client,
                 company: args.company,
               ),
-              // 🎯 TOUTES ces valeurs sont désormais issues du template
-              //    "effective" (settings appliqués), comme dans l'aperçu.
-              accentColor: effective.primaryColor,
-              pageColor: effective.backgroundColor,
-              showLogo: effective.showLogo,
-              showBorder: effective.showBorder,
-              showTaxDetails: effective.showTaxDetails,
-              showPaymentTerms: effective.showPaymentTerms,
-              showPaymentQR: effective.showPaymentQR,
-              fontFamily: effective.fontFamily,
-              fontScale: effective.fontSize / 12,
+
+              // ── Template effectif (settings déjà appliqués) ──
+              accentColor: args.template.primaryColor,
+              pageColor: args.template.backgroundColor,
+              showLogo: args.template.showLogo,
+              showBorder: args.template.showBorder,
+              showTaxDetails: args.template.showTaxDetails,
+              showPaymentTerms: args.template.showPaymentTerms,
+              showPaymentQR: args.template.showPaymentQR,
+              fontFamily: args.template.fontFamily,
+              fontScale: args.template.fontSize / 12,
+
+              // ── Layout (positions résolues) ──
               layoutConfig: InvoiceLayoutConfig.defaultLayout(),
+              customPositions: args.customPositions,
+
+              // ── Background (image pré-décodée, settings résolus) ──
               backgroundSettings: args.background,
-              backgroundImage: backgroundBytes,
+              backgroundImage: args.previewBackground,
+
+              // ── Filigrane / tampon ──
               watermarkText: args.invoiceSettings.watermarkText,
               showWatermark: args.invoiceSettings.showWatermark,
               showPaidStamp: args.invoice.status == 'paid',
-              customPositions: args.customPositions,
             ),
           ),
         ),

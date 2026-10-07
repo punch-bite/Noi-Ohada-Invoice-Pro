@@ -1,18 +1,22 @@
 // lib/screens/customization/template_workspace_screen.dart
 //
-// 🎨 ATELIER v9 « Magnetic Canvas »
+// 🎨 ATELIER v9.1 « Magnetic Canvas + Labels »
 //
-// CHANGELOG v9 :
-//   • Blocs vides (spacers) redimensionnables (20/40/80px par défaut, drag
-//     vertical pour ajuster).
-//   • Séparateurs 3 styles (solid / dashed / dots).
-//   • Paragraphe direct (1 tap → éditeur).
-//   • Double-tap sur un texte → éditeur direct.
-//   • Palette de couleurs allégée (6 pastilles + bouton "Plus").
-//   • Alignement paragraphe : gauche / centre / droite / justifié.
-//   • Bottom bar compacte (icônes + tooltip).
-//   • Canvas gris avec trame + auto-fit + zoom flottant (v7 conservé).
-//   • Contours pointillés des colonnes pendant le drag (v8 conservé).
+// CHANGELOG v9.1 :
+//   • 🎨 BOTTOM BAR : labels visibles sous chaque icône (hauteur 76px).
+//   • 🎯 OUTIL ACTIF : pastille colorée + label en gras quand sélectionné.
+//   • 📦 GROUPES : séparateurs visuels entre Style / Ajouts / Layout.
+//   • Tous les patches v7/v8/v9 conservés :
+//     - Blocs vides redimensionnables
+//     - Séparateurs solid/dashed/dots
+//     - Paragraphe direct + double-tap édition
+//     - Palette 6 + "Plus"
+//     - Alignement 4-way (gauche/centre/droite/justifié)
+//     - Canvas gris + trame
+//     - Auto-fit + zoom flottant
+//     - Contours drag
+//     - Grille magnétique 8pt
+//     - Undo/Redo 50 étapes
 //
 // ignore_for_file: unused_field, unused_element, dead_null_aware_expression,
 //   deprecated_member_use, unnecessary_import
@@ -77,6 +81,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   bool _showGrid = true;
   double _paperRadius = 12;
 
+  /// 🎯 Outil actif (pour la coloration de la pastille dans la bottom bar).
+  String _activeTool = '';
+
   String? _selectedKey;
   String? _draggingKey;
   int? _dragOverSection;
@@ -113,10 +120,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   final Map<String, int> _blockBg = {};
   final Map<String, int> _blockText = {};
 
-  /// 📏 Hauteur personnalisée des spacers (clé → px). Fallback : 40.
+  /// 📏 Hauteur personnalisée des spacers.
   final Map<String, double> _spacerSizes = {};
 
-  /// 🎨 Type de séparateur (`__divider_x` → 'solid' | 'dashed' | 'dots').
+  /// 🎨 Type de séparateur.
   final Map<String, String> _dividerStyles = {};
 
   final Map<String, String> _customTexts = {};
@@ -789,7 +796,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                           borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      final id = '__spacer_${DateTime.now().millisecondsSinceEpoch}__';
+                      final id =
+                          '__spacer_${DateTime.now().millisecondsSinceEpoch}__';
                       _mutate(() {
                         _spacerSizes[id] = size;
                         _bodySections.add([id]);
@@ -808,7 +816,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  /// ─── Insère un SÉPARATEUR (ligne horizontale) ───
+  /// ─── Insère un SÉPARATEUR ───
   void _addDivider() {
     showModalBottomSheet<void>(
       context: context,
@@ -1050,7 +1058,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           return;
         }
         if (key.startsWith('__spacer') || key.startsWith('__divider')) {
-          // Ouvre le sheet avec action "supprimer"
           setState(() => _selectedKey = key);
           _openSpecialSheet(key);
           return;
@@ -1833,58 +1840,146 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  // ── BOTTOM BAR COMPACTE ──
+  // ═══════════════════════════════════════════════════════════════
+  //  BOTTOM BAR — icône + label + groupes
+  // ═══════════════════════════════════════════════════════════════
   Widget _buildBottomBar() {
-    final tools = <_Tool>[
-      _Tool('Style', Icons.palette_outlined, _openStyleSheet),
-      _Tool('Fond', Icons.wallpaper_outlined, _openBackgroundSheet),
-      _Tool('Logo', Icons.image_outlined, _pickLogo),
-      _Tool('Sign', Icons.draw_outlined, _pickSignature),
-      _Tool('Texte', Icons.notes_outlined, _addTextToBody),
-      _Tool('Paragraphe', Icons.segment_outlined, _addParagraph),
-      _Tool('Bloc vide', Icons.space_bar_outlined, _addEmptySpacer),
-      _Tool('Séparateur', Icons.horizontal_rule, _addDivider),
-      _Tool('Colonne', Icons.view_column_outlined, () {
+    // 📦 Groupes d'outils : STYLE · AJOUTS · LAYOUT
+    const group1 = [
+      _Tool('Style', Icons.palette_outlined, 'style'),
+      _Tool('Fond', Icons.wallpaper_outlined, 'fond'),
+      _Tool('Logo', Icons.image_outlined, 'logo'),
+      _Tool('Signature', Icons.draw_outlined, 'signature'),
+    ];
+    const group2 = [
+      _Tool('Texte', Icons.notes_outlined, 'texte'),
+      _Tool('Paragraphe', Icons.segment_outlined, 'paragraphe'),
+      _Tool('Bloc vide', Icons.space_bar_outlined, 'bloc_vide'),
+      _Tool('Séparateur', Icons.horizontal_rule, 'separateur'),
+    ];
+    const group3 = [
+      _Tool('Colonne', Icons.view_column_outlined, 'colonne'),
+      _Tool('Section', Icons.add_box_outlined, 'section'),
+      _Tool('En-tête +', Icons.add_to_photos_outlined, 'entete'),
+    ];
+
+    // Map label → action.
+    final actions = <String, VoidCallback>{
+      'style': _openStyleSheet,
+      'fond': _openBackgroundSheet,
+      'logo': _pickLogo,
+      'signature': _pickSignature,
+      'texte': _addTextToBody,
+      'paragraphe': _addParagraph,
+      'bloc_vide': _addEmptySpacer,
+      'separateur': _addDivider,
+      'colonne': () {
         final idx = _bodySections.length - 1;
         if (idx >= 0) _addBodyColumn(idx);
-      }),
-      _Tool('Section', Icons.add_box_outlined, _addBodySection),
-      _Tool('En-tête +', Icons.add_to_photos_outlined, _addTextToHeader),
-    ];
+      },
+      'section': _addBodySection,
+      'entete': _addTextToHeader,
+    };
+
+    Widget separator() => Container(
+          width: 1,
+          height: 40,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          color: _outline.withValues(alpha: 0.3),
+        );
+
     return Container(
-      height: 58,
+      height: 78,
       decoration: BoxDecoration(
         color: _surface,
         border:
             Border(top: BorderSide(color: _outline.withValues(alpha: 0.25))),
       ),
-      child: ListView.separated(
+      child: ListView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        itemCount: tools.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 4),
-        itemBuilder: (_, i) => _compactToolButton(tools[i]),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        children: [
+          for (final t in group1) _toolButton(t, actions[t.key]!),
+          separator(),
+          for (final t in group2) _toolButton(t, actions[t.key]!),
+          separator(),
+          for (final t in group3) _toolButton(t, actions[t.key]!),
+        ],
       ),
     );
   }
 
-  Widget _compactToolButton(_Tool tool) {
-    return Tooltip(
-      message: tool.label,
-      preferBelow: false,
+  /// 🎨 Bouton d'outil — pastille + label, actif ou non.
+  Widget _toolButton(_Tool tool, VoidCallback onTap) {
+    final active = _activeTool == tool.key;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: InkWell(
-        onTap: tool.onTap,
+        onTap: () {
+          setState(() => _activeTool = tool.key);
+          onTap();
+          // Réinitialise l'état actif après un court délai.
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted && _activeTool == tool.key) {
+              setState(() => _activeTool = '');
+            }
+          });
+        },
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: 48,
-          height: 46,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _primary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
+          width: 68,
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Pastille ──
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: active
+                      ? _primary
+                      : _primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: _primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  tool.icon,
+                  size: 18,
+                  color: active ? Colors.white : _primary,
+                ),
+              ),
+              const SizedBox(height: 5),
+
+              // ── Label ──
+              Text(
+                tool.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  height: 1.1,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: -0.1,
+                  color: active
+                      ? _primary
+                      : _onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+            ],
           ),
-          child: Icon(tool.icon, size: 20, color: _primary),
         ),
       ),
     );
@@ -1898,8 +1993,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
 class _Tool {
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
-  _Tool(this.label, this.icon, this.onTap);
+  final String key;
+  const _Tool(this.label, this.icon, this.key);
 }
 
 class _Paragraph {
@@ -2218,7 +2313,6 @@ class _WorkspaceA4Preview extends StatelessWidget {
           final key = keys[i];
           if (i > 0) children.add(const SizedBox(width: 8));
 
-          // ── Spacer ──
           if (key.startsWith('__spacer')) {
             children.add(
               _columnWrapper(
@@ -2231,7 +2325,6 @@ class _WorkspaceA4Preview extends StatelessWidget {
             continue;
           }
 
-          // ── Séparateur ──
           if (key.startsWith('__divider')) {
             children.add(
               Expanded(

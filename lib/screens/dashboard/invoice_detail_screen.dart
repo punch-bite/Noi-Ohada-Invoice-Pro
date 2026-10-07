@@ -246,16 +246,17 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final t = _selectedTemplate;
     if (t == null) return _openTemplatePicker();
     if (!_canCustomize()) {
-      _toast(
-          'Personnalisation réservée au propriétaire du modèle.', Colors.orange);
-      return;
+      /* ... */ return;
     }
     if (_isReadOnlyForAdmin) {
-      _toast('Mode lecture seule — impossible de personnaliser.', Colors.orange);
-      return;
+      /* ... */ return;
     }
     await context.push('/templates/workspace', extra: t);
-    if (mounted) await _loadTemplates();
+    if (mounted) {
+      // 🔄 Force le reload complet pour refléter les modifications.
+      await _loadData();
+      await _loadTemplates();
+    }
   }
 
   void _toast(String msg, [Color? color]) {
@@ -303,22 +304,23 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _previewAndPrint() async {
-  if (_invoice == null || _client == null || _company == null) return;
-  if (_selectedTemplate == null) return;
-  await context.push(
-    '/dashboard/invoices/${widget.invoiceId}/print',
-    extra: InvoicePrintPreviewArgs(
-      invoice: _invoice!,
-      client: _client!,
-      company: _company!,
-      template: _selectedTemplate!,   // ✅ Déjà "effective" (via resolveRenderState)
-      customPositions: _customPositions,
-      background: _backgroundSettings,
-      invoiceSettings: _invoiceSettings,
-      isFreePlan: _isFreePlan(),
-    ),
-  );
-}
+    if (_invoice == null || _client == null || _company == null) return;
+    if (_selectedTemplate == null) return;
+    await context.push(
+      '/dashboard/invoices/${widget.invoiceId}/print',
+      extra: InvoicePrintPreviewArgs(
+        invoice: _invoice!,
+        client: _client!,
+        company: _company!,
+        template: _selectedTemplate!,
+        customPositions: _customPositions,
+        background: _backgroundSettings,
+        previewBackground: _previewBackground, // 🆕 AJOUTER CETTE LIGNE
+        invoiceSettings: _invoiceSettings,
+        isFreePlan: _isFreePlan(),
+      ),
+    );
+  }
 
   Future<void> _sendEmail() async {
     if (_invoice == null || _client == null || _company == null) return;
@@ -479,10 +481,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           },
           itemBuilder: (ctx) => [
             const PopupMenuItem(value: 'share', child: Text('Partager le PDF')),
-            const PopupMenuItem(value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
-            const PopupMenuItem(value: 'email', child: Text('Envoyer par email')),
+            const PopupMenuItem(
+                value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
+            const PopupMenuItem(
+                value: 'email', child: Text('Envoyer par email')),
             if (!_isReadOnlyForAdmin)
-              const PopupMenuItem(value: 'picker', child: Text('Changer de modèle')),
+              const PopupMenuItem(
+                  value: 'picker', child: Text('Changer de modèle')),
             if (!_isReadOnlyForAdmin) const PopupMenuDivider(),
             if (!_isReadOnlyForAdmin)
               const PopupMenuItem(
@@ -570,8 +575,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ),
               ),
             ),
-            Icon(Icons.swap_horiz_rounded,
-                size: 16, color: c.onSurfaceVariant),
+            Icon(Icons.swap_horiz_rounded, size: 16, color: c.onSurfaceVariant),
           ],
         ),
       ),
@@ -647,13 +651,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             onTap: readOnly
                 ? null
                 : () => context
-                    .push('/dashboard/invoices/${widget.invoiceId}/edit')
-                    .then((_) {
-                  if (mounted) {
-                    _loadData();
-                    _loadTemplates();
-                  }
-                }),
+                        .push('/dashboard/invoices/${widget.invoiceId}/edit')
+                        .then((_) {
+                      if (mounted) {
+                        _loadData();
+                        _loadTemplates();
+                      }
+                    }),
           ),
           _bottomAction(
             c,
@@ -690,8 +694,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   height: 48,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.18)),
                   ),
                   child: Icon(icon, size: 20, color: c.inverseOnSurface),
                 ),
