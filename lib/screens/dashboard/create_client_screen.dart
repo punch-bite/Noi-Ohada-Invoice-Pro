@@ -88,8 +88,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 'Limite de clients atteinte. Passez au plan supérieur.'),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
         return;
@@ -124,9 +124,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.client != null
-              ? 'Client modifié ✓'
-              : 'Client ajouté ✓'),
+          content: Text(
+              widget.client != null ? 'Client modifié ✓' : 'Client ajouté ✓'),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
           shape:
@@ -159,74 +158,74 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
   }
 
   Future<void> _importFromContactsWeb() async {
-  setState(() => _isLoadingContacts = true);
+    setState(() => _isLoadingContacts = true);
 
-  try {
-    final contacts = await pickContactsFromWeb(multiple: true);
+    try {
+      final contacts = await pickContactsFromWeb(multiple: true);
 
-    if (!mounted) return;
-    setState(() => _isLoadingContacts = false);
+      if (!mounted) return;
+      setState(() => _isLoadingContacts = false);
 
-    // 🛡️ Garde : si la liste est vide, on informe sans crash.
-    if (contacts.isEmpty) {
+      // 🛡️ Garde : si la liste est vide, on informe sans crash.
+      if (contacts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Aucun contact sélectionné'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // 🛡️ Garde : ne cherche un contact utilisable QUE si la liste n'est pas vide.
+      final usable = contacts.where((c) => c.isUsable).toList();
+      final first = usable.isNotEmpty ? usable.first : contacts.first;
+
+      setState(() {
+        if (first.name.isNotEmpty) _nameController.text = first.name;
+        if (first.phone != null && first.phone!.isNotEmpty) {
+          _phoneController.text = first.phone!;
+        }
+        if (first.email != null && first.email!.isNotEmpty) {
+          _emailController.text = first.email!;
+        }
+      });
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Aucun contact sélectionné'),
-          backgroundColor: Colors.orange,
+        SnackBar(
+          content: Text(
+            contacts.length == 1
+                ? 'Contact importé ✓'
+                : '${contacts.length} contacts — le premier a été utilisé',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingContacts = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
     }
-
-    // 🛡️ Garde : ne cherche un contact utilisable QUE si la liste n'est pas vide.
-    final usable = contacts.where((c) => c.isUsable).toList();
-    final first = usable.isNotEmpty ? usable.first : contacts.first;
-
-    setState(() {
-      if (first.name.isNotEmpty) _nameController.text = first.name;
-      if (first.phone != null && first.phone!.isNotEmpty) {
-        _phoneController.text = first.phone!;
-      }
-      if (first.email != null && first.email!.isNotEmpty) {
-        _emailController.text = first.email!;
-      }
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          contacts.length == 1
-              ? 'Contact importé ✓'
-              : '${contacts.length} contacts — le premier a été utilisé',
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => _isLoadingContacts = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(e.toString().replaceFirst('Exception: ', '')),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
-}
+
   /// 📱 Import MOBILE — flutter_contacts (sélecteur natif + sheet).
   Future<void> _importFromContactsMobile() async {
     final status =
         await FlutterContacts.permissions.request(PermissionType.read);
     if (status != PermissionStatus.granted &&
         status != PermissionStatus.limited) {
-      final permanentlyDenied =
-          status == PermissionStatus.permanentlyDenied ||
-              status == PermissionStatus.restricted;
+      final permanentlyDenied = status == PermissionStatus.permanentlyDenied ||
+          status == PermissionStatus.restricted;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -237,8 +236,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           action: permanentlyDenied
               ? SnackBarAction(
                   label: 'Réglages',
-                  onPressed: () =>
-                      FlutterContacts.permissions.openSettings(),
+                  onPressed: () => FlutterContacts.permissions.openSettings(),
                 )
               : null,
         ),
@@ -277,8 +275,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       setState(() => _isLoadingContacts = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('Import non disponible sur cette plateforme.'),
+          content: Text('Import non disponible sur cette plateforme.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -429,18 +426,17 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                               },
                               borderRadius: BorderRadius.circular(14),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 child: Row(
                                   children: [
                                     Container(
                                       width: 44,
                                       height: 44,
                                       decoration: BoxDecoration(
-                                        color: primaryColor
-                                            .withValues(alpha: 0.12),
-                                        borderRadius:
-                                            BorderRadius.circular(14),
+                                        color: primaryColor.withValues(
+                                            alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(14),
                                       ),
                                       child: Center(
                                         child: Text(
@@ -464,8 +460,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                                           Text(
                                             name,
                                             maxLines: 1,
-                                            overflow:
-                                                TextOverflow.ellipsis,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               fontSize: 13.5,
                                               fontWeight: FontWeight.w700,
@@ -483,8 +478,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                                             Text(
                                               email,
                                               maxLines: 1,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                   fontSize: 11.5,
                                                   color: subTextColor),
@@ -493,8 +487,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                                       ),
                                     ),
                                     Icon(Icons.chevron_right_rounded,
-                                        color: subTextColor
-                                            .withValues(alpha: 0.5)),
+                                        color: subTextColor.withValues(
+                                            alpha: 0.5)),
                                   ],
                                 ),
                               ),
@@ -599,8 +593,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                   )
                 : const Text(
                     'Enregistrer',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 14),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
           ),
           const SizedBox(width: 4),
@@ -618,7 +611,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 _typeSegment(theme, primaryColor),
                 const SizedBox(height: 24),
               ],
-
               _sectionLabel('IDENTITÉ', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -629,9 +621,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     : Icons.person_outline_rounded,
                 theme: theme,
                 textCapitalization: TextCapitalization.words,
-                validator: (v) => v?.trim().isEmpty == true
-                    ? 'Veuillez saisir un nom'
-                    : null,
+                validator: (v) =>
+                    v?.trim().isEmpty == true ? 'Veuillez saisir un nom' : null,
               ).animate().fadeIn(duration: 300.ms),
               if (_isCompany) ...[
                 const SizedBox(height: 12),
@@ -644,7 +635,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 ).animate().fadeIn(delay: 50.ms, duration: 300.ms),
               ],
               const SizedBox(height: 24),
-
               _sectionLabel('CONTACT', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -666,7 +656,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     : null,
               ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
               const SizedBox(height: 24),
-
               _sectionLabel('LOCALISATION', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -678,14 +667,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                 textCapitalization: TextCapitalization.words,
               ).animate().fadeIn(delay: 200.ms, duration: 300.ms),
               const SizedBox(height: 24),
-
               _sectionLabel('PRÉFÉRENCES', subTextColor),
               const SizedBox(height: 10),
               _paymentTermsTile(theme, primaryColor)
                   .animate()
                   .fadeIn(delay: 250.ms, duration: 300.ms),
               const SizedBox(height: 32),
-
               GradientButton(
                 label: isEditing
                     ? 'Enregistrer les modifications'
@@ -899,8 +886,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down_rounded,
-                color: subTextColor, size: 20),
+            Icon(Icons.arrow_drop_down_rounded, color: subTextColor, size: 20),
           ],
         ),
       ),
@@ -926,8 +912,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1A1D26) : Colors.white,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: SafeArea(
           child: Column(
@@ -966,8 +951,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                     opt,
                     style: TextStyle(
                       color: active ? primaryColor : textColor,
-                      fontWeight:
-                          active ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                   onTap: () => Navigator.pop(context, opt),
