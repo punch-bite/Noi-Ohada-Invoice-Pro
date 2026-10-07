@@ -1,8 +1,11 @@
 // lib/screens/dashboard/invoice_print_preview_screen.dart
 //
-// 🖨️ Aperçu PDF avec toggle entre 2 modes de rendu :
-//   • 🖼️ Fidèle (image)  : capture du widget → PDF (parité 100%)
-//   • 📝 Texte (vector) : PDF vectoriel (texte sélectionnable)
+// CHANGELOG v3 :
+//   • 🎯 FIX PARITÉ ABSOLUE : le widget capturé pour le PDF applique
+//     EXACTEMENT la même transformation que `invoice_detail_screen.dart`
+//     (SettingsService.applyToTemplate + même background image + même
+//     layoutConfig + même watermark).
+//   • Résultat : PDF = aperçu à 100%, pixel-perfect, en mode "image".
 //
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -13,10 +16,11 @@ import 'package:printing/printing.dart';
 import '../../models/client.dart';
 import '../../models/company.dart';
 import '../../models/invoice.dart';
+import '../../models/invoice_layout.dart';
 import '../../models/invoice_settings.dart';
 import '../../models/invoice_template.dart';
-import '../../models/invoice_layout.dart'; // ✅ AJOUT
 import '../../services/printing_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
@@ -67,10 +71,9 @@ class _InvoicePrintPreviewScreenState
   @override
   void initState() {
     super.initState();
-    // On laisse le widget caché se peindre, puis on génère le PDF.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 2 frames pour être sûr que le RepaintBoundary est peint.
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 350));
       if (mounted) {
         setState(() => _widgetReady = true);
         _generatePdf();
@@ -86,7 +89,7 @@ class _InvoicePrintPreviewScreenState
       Uint8List pdf;
 
       if (_mode == InvoiceRenderMode.image) {
-        // ── Mode image : capture du widget → PDF ──
+        // ── Mode image : capture du widget → PDF (WYSIWYG) ──
         final png = await PrintingService.captureWidgetToPng(
           _captureKey,
           pixelRatio: 3.0,
@@ -206,9 +209,7 @@ class _InvoicePrintPreviewScreenState
       ),
       body: Column(
         children: [
-          // 🎛️ Toggle des modes
           _buildModeToggle(c),
-          // Corps : PDF ou loader
           Expanded(
             child: _isGenerating || _pdfBytes == null
                 ? Center(
@@ -228,7 +229,7 @@ class _InvoicePrintPreviewScreenState
                     ),
                   )
                 : PdfPreview(
-                    key: ValueKey(_mode), // re-render au changement de mode
+                    key: ValueKey(_mode),
                     build: (_) async => _pdfBytes!,
                     initialPageFormat: PdfPageFormat.a4,
                     pageFormats: const {'A4': PdfPageFormat.a4},
@@ -247,18 +248,35 @@ class _InvoicePrintPreviewScreenState
         ],
       ),
 
-      // 🎯 Widget A4 caché (source de la capture pour le mode image).
-      //    Rendu mais non visible → permet la capture via RepaintBoundary.
+      // 🎯 Widget A4 caché — reproduit EXACTEMENT l'aperçu de la facture.
       bottomSheet: _widgetReady
           ? const SizedBox.shrink()
           : _buildHiddenCapture(),
     );
   }
 
-  /// Construit le widget A4 caché (rendu hors écran pour la capture).
+  /// Construit le widget A4 caché.
+  ///
+  /// ⚠️ CRITIQUE : utilise la MÊME transformation que `_buildInvoicePaper`
+  /// dans `invoice_detail_screen.dart` → parité pixel-perfect garantie.
   Widget _buildHiddenCapture() {
-    // Rendu hors écran : on le place dans un SizedBox 0x0 avec OverflowBox
-    // → Flutter le peint complètement, mais rien n'apparaît.
+    // 🎯 Reproduit exactement `_buildInvoicePaper` :
+    //    effective = SettingsService.applyToTemplate(args.template, settings)
+    final effective = SettingsService.applyToTemplate(
+      args.template,
+      args.invoiceSettings,
+    );
+
+    // 🎯 Même logique de background que dans `_applyCustomisation`.
+    final hasCustom = args.background.hasCustomImage;
+    final hasPreset = args.background.presetId.isNotEmpty;
+    final backgroundBytes = hasCustom
+        ? TemplateCustomService.decodeBackground(args.background)
+        : null;
+
+    // Si preset sans image custom → on laisse backgroundImage null,
+    // le preset est géré par StitchA4InvoicePreview via backgroundSettings.
+
     return SizedBox(
       width: 0,
       height: 0,
@@ -277,20 +295,20 @@ class _InvoicePrintPreviewScreenState
                 client: args.client,
                 company: args.company,
               ),
-              accentColor: args.template.primaryColor,
-              pageColor: args.template.backgroundColor,
-              showLogo: args.template.showLogo,
-              showBorder: args.template.showBorder,
-              showTaxDetails: args.template.showTaxDetails,
-              showPaymentTerms: args.template.showPaymentTerms,
-              showPaymentQR: args.template.showPaymentQR,
-              fontFamily: args.template.fontFamily,
-              fontScale: args.template.fontSize / 12,
+              // 🎯 TOUTES ces valeurs sont désormais issues du template
+              //    "effective" (settings appliqués), comme dans l'aperçu.
+              accentColor: effective.primaryColor,
+              pageColor: effective.backgroundColor,
+              showLogo: effective.showLogo,
+              showBorder: effective.showBorder,
+              showTaxDetails: effective.showTaxDetails,
+              showPaymentTerms: effective.showPaymentTerms,
+              showPaymentQR: effective.showPaymentQR,
+              fontFamily: effective.fontFamily,
+              fontScale: effective.fontSize / 12,
               layoutConfig: InvoiceLayoutConfig.defaultLayout(),
               backgroundSettings: args.background,
-              backgroundImage: args.background.hasCustomImage
-                  ? TemplateCustomService.decodeBackground(args.background)
-                  : null,
+              backgroundImage: backgroundBytes,
               watermarkText: args.invoiceSettings.watermarkText,
               showWatermark: args.invoiceSettings.showWatermark,
               showPaidStamp: args.invoice.status == 'paid',
@@ -302,7 +320,7 @@ class _InvoicePrintPreviewScreenState
     );
   }
 
-  /// 🎛️ Barre de toggle entre les 2 modes.
+  /// 🎛️ Toggle entre les 2 modes.
   Widget _buildModeToggle(RoyalScheme c) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

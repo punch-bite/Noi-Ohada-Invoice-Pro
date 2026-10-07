@@ -1,6 +1,12 @@
 // lib/screens/dashboard/create_client_screen.dart
 //
-// ➕ Création / édition client — sections claires, import contact intégré.
+// CHANGELOG v2 :
+//   • 🆕 Import de contacts WEB (Chrome Android) via l'API Contact Picker.
+//   • 🆕 Branchement automatique mobile (flutter_contacts) vs web
+//     (contact_import_web).
+//   • 🆕 Support complet du sélecteur natif PWA.
+//   • 🎨 Reste inchangé : même UI, même design, mêmes animations.
+//
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MissingPluginException;
@@ -15,6 +21,11 @@ import '../../providers/subscription_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/quota_enforcement_service.dart';
+import '../../services/contact_import_types.dart';
+// 🎯 Import conditionnel : en fonction de la plateforme, on tire
+//    soit le stub (mobile) soit la vraie implémentation (web).
+import '../../services/contact_import_web_stub.dart'
+    if (dart.library.js_interop) '../../services/contact_import_web.dart';
 import '../../widgets/glass_widgets.dart';
 
 class CreateClientScreen extends StatefulWidget {
@@ -136,13 +147,25 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     }
   }
 
-  // ── Import contact ──
+  // ═══════════════════════════════════════════════════════════════
+  //  📇 IMPORT DE CONTACTS (branché mobile/web)
+  // ═══════════════════════════════════════════════════════════════
   Future<void> _importFromContacts() async {
     if (kIsWeb) {
+      await _importFromContactsWeb();
+    } else {
+      await _importFromContactsMobile();
+    }
+  }
+
+  /// 🌐 Import WEB — API Contact Picker (Chrome Android).
+  Future<void> _importFromContactsWeb() async {
+    if (!webContactPickerSupported()) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Import disponible uniquement sur mobile/desktop'),
+              'Import de contacts disponible uniquement sur Chrome Android.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -150,6 +173,70 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       return;
     }
 
+    setState(() => _isLoadingContacts = true);
+
+    try {
+      final contacts =
+          await pickContactsFromWeb(multiple: true);
+
+      if (!mounted) return;
+      setState(() => _isLoadingContacts = false);
+
+      if (contacts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Aucun contact sélectionné'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // Remplit le formulaire avec le premier contact utilisable.
+      final first = contacts.firstWhere(
+        (c) => c.isUsable,
+        orElse: () => contacts.first,
+      );
+
+      setState(() {
+        if (first.name.isNotEmpty) _nameController.text = first.name;
+        if (first.phone != null && first.phone!.isNotEmpty) {
+          _phoneController.text = first.phone!;
+        }
+        if (first.email != null && first.email!.isNotEmpty) {
+          _emailController.text = first.email!;
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              contacts.length == 1
+                  ? 'Contact importé ✓'
+                  : '${contacts.length} contacts — le premier a été utilisé',
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingContacts = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  /// 📱 Import MOBILE — flutter_contacts (sélecteur natif + sheet).
+  Future<void> _importFromContactsMobile() async {
     final status =
         await FlutterContacts.permissions.request(PermissionType.read);
     if (status != PermissionStatus.granted &&
@@ -167,7 +254,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           action: permanentlyDenied
               ? SnackBarAction(
                   label: 'Réglages',
-                  onPressed: () => FlutterContacts.permissions.openSettings(),
+                  onPressed: () =>
+                      FlutterContacts.permissions.openSettings(),
                 )
               : null,
         ),
@@ -206,8 +294,8 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       setState(() => _isLoadingContacts = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Import non disponible sur cette plateforme.'),
+          content:
+              Text('Import non disponible sur cette plateforme.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -266,7 +354,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
             ),
             child: Column(
               children: [
-                // Handle
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Container(
@@ -301,7 +388,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Recherche
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Container(
@@ -325,13 +411,11 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      onChanged: (v) =>
-                          setSheetState(() => query = v),
+                      onChanged: (v) => setSheetState(() => query = v),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Liste
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(
@@ -455,8 +539,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
       if (displayName.isNotEmpty) _nameController.text = displayName;
       if (phones.isNotEmpty) _phoneController.text = phones.first.number;
       if (emails.isNotEmpty) _emailController.text = emails.first.address;
-      if (addresses.isNotEmpty &&
-          addresses.first.formatted != null) {
+      if (addresses.isNotEmpty && addresses.first.formatted != null) {
         _addressController.text = addresses.first.formatted ?? '';
       }
     });
@@ -479,6 +562,12 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
     final primaryColor = theme.primaryColor;
     final isEditing = widget.client != null;
 
+    // 🎯 Affiche le bouton d'import si :
+    //    • mobile natif (toujours possible)
+    //    • web + Chrome Android (API disponible)
+    final showImportButton =
+        !isEditing && (!kIsWeb || webContactPickerSupported());
+
     return GlassScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -498,10 +587,17 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           ),
         ),
         actions: [
-          if (!isEditing)
+          if (showImportButton)
             IconButton(
-              icon: Icon(Icons.contact_phone_outlined,
-                  color: primaryColor, size: 22),
+              icon: _isLoadingContacts
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: primaryColor),
+                    )
+                  : Icon(Icons.contact_phone_outlined,
+                      color: primaryColor, size: 22),
               onPressed: _isLoadingContacts ? null : _importFromContacts,
               tooltip: 'Importer depuis le répertoire',
             ),
@@ -535,13 +631,11 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Type segment ──
               if (!isEditing) ...[
                 _typeSegment(theme, primaryColor),
                 const SizedBox(height: 24),
               ],
 
-              // ── Section Identité ──
               _sectionLabel('IDENTITÉ', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -568,7 +662,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               ],
               const SizedBox(height: 24),
 
-              // ── Section Contact ──
               _sectionLabel('CONTACT', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -591,7 +684,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
               const SizedBox(height: 24),
 
-              // ── Section Localisation ──
               _sectionLabel('LOCALISATION', subTextColor),
               const SizedBox(height: 10),
               _field(
@@ -604,7 +696,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               ).animate().fadeIn(delay: 200.ms, duration: 300.ms),
               const SizedBox(height: 24),
 
-              // ── Section Préférences ──
               _sectionLabel('PRÉFÉRENCES', subTextColor),
               const SizedBox(height: 10),
               _paymentTermsTile(theme, primaryColor)
@@ -612,7 +703,6 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
                   .fadeIn(delay: 250.ms, duration: 300.ms),
               const SizedBox(height: 32),
 
-              // ── Bouton ──
               GradientButton(
                 label: isEditing
                     ? 'Enregistrer les modifications'
@@ -693,9 +783,7 @@ class _CreateClientScreenState extends State<CreateClientScreen> {
               fontSize: 12.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.4,
-              color: selected
-                  ? Colors.white
-                  : theme.subTextColor,
+              color: selected ? Colors.white : theme.subTextColor,
             ),
           ),
         ),

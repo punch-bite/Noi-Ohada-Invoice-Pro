@@ -1,13 +1,9 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
 //
-// CHANGELOG (v3 — UNIFIÉ) :
-//   • Rendu A4 : passe TOUT par StitchA4InvoicePreview → strictement
-//     identique au workspace et au PDF.
-//   • `_customPositions` : fusionné (preset + user + styles) via
-//     InvoiceRenderService (source unique).
-//   • Suppression de l'ancien `layoutConfig` séparé : l'aperçu lit
-//     directement les positions.
-//   • Menu → atelier : redirige vers le nouveau workspace magnétique.
+// CHANGELOG v4 :
+//   • 🛡️ Bandeau "Mode lecture seule admin" si l'admin ouvre la facture
+//     d'un autre utilisateur (empêche les modifications accidentelles).
+//   • Boutons Éditer/Personnaliser désactivés en mode lecture seule.
 //
 import 'dart:convert';
 import 'dart:typed_data';
@@ -41,6 +37,8 @@ import '../../services/wallet_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
 import '../../widgets/template_background_palette.dart';
+// 🆕 Bandeau lecture seule.
+import '../../widgets/admin_read_only_banner.dart';
 import 'invoice_print_preview_screen.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -60,7 +58,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   bool _isLoading = true;
   InvoiceTemplate? _selectedTemplate;
   List<InvoiceTemplate> _templates = [];
-  final List<Team> _cachedTeams = [];
+  List<Team> _cachedTeams = [];
 
   Map<String, dynamic> _customPositions = const {};
   TemplateBackgroundSettings _backgroundSettings =
@@ -75,6 +73,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Color get textColor => themeProvider.textColor ?? Colors.black;
   Color get subTextColor => themeProvider.subTextColor ?? Colors.grey;
   Color get primaryColor => themeProvider.primaryColor ?? Colors.indigo;
+
+  /// 🛡️ Vrai si l'utilisateur est admin MAIS pas propriétaire de la facture.
+  bool get _isReadOnlyForAdmin {
+    final auth = context.read<AppAuthProvider>();
+    return shouldShowReadOnlyBanner(
+      isAdmin: auth.isAdmin,
+      currentUid: auth.user?.id ?? '',
+      docOwnerUid: _invoice?.userId,
+    );
+  }
 
   @override
   void initState() {
@@ -173,7 +181,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
     final positions = Map<String, dynamic>.from(render.positions);
 
-    // Signature : repli sur SignatureService si absente.
     if ((positions['signature_image'] as String?)?.isNotEmpty != true) {
       try {
         final sigBytes = await SignatureService().loadSignatureBytes();
@@ -243,6 +250,10 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           'Personnalisation réservée au propriétaire du modèle.', Colors.orange);
       return;
     }
+    if (_isReadOnlyForAdmin) {
+      _toast('Mode lecture seule — impossible de personnaliser.', Colors.orange);
+      return;
+    }
     await context.push('/templates/workspace', extra: t);
     if (mounted) await _loadTemplates();
   }
@@ -292,22 +303,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   }
 
   Future<void> _previewAndPrint() async {
-    if (_invoice == null || _client == null || _company == null) return;
-    if (_selectedTemplate == null) return;
-    await context.push(
-      '/dashboard/invoices/${widget.invoiceId}/print',
-      extra: InvoicePrintPreviewArgs(
-        invoice: _invoice!,
-        client: _client!,
-        company: _company!,
-        template: _selectedTemplate!,
-        customPositions: _customPositions,
-        background: _backgroundSettings,
-        invoiceSettings: _invoiceSettings,
-        isFreePlan: _isFreePlan(),
-      ),
-    );
-  }
+  if (_invoice == null || _client == null || _company == null) return;
+  if (_selectedTemplate == null) return;
+  await context.push(
+    '/dashboard/invoices/${widget.invoiceId}/print',
+    extra: InvoicePrintPreviewArgs(
+      invoice: _invoice!,
+      client: _client!,
+      company: _company!,
+      template: _selectedTemplate!,   // ✅ Déjà "effective" (via resolveRenderState)
+      customPositions: _customPositions,
+      background: _backgroundSettings,
+      invoiceSettings: _invoiceSettings,
+      isFreePlan: _isFreePlan(),
+    ),
+  );
+}
 
   Future<void> _sendEmail() async {
     if (_invoice == null || _client == null || _company == null) return;
@@ -386,6 +397,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           title: _invoice!.isDevis ? 'Aperçu Devis' : 'Aperçu Facture'),
       body: Column(
         children: [
+          // 🛡️ Bandeau lecture seule si admin sur doc tiers
+          if (_isReadOnlyForAdmin)
+            AdminReadOnlyBanner(
+              documentName: 'Cette facture',
+              ownerName: _client?.name,
+            ),
           Expanded(
             child: Stack(
               children: [
@@ -453,31 +470,32 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 _sendEmail();
                 break;
               case 'picker':
-                _openTemplatePicker();
+                if (!_isReadOnlyForAdmin) _openTemplatePicker();
                 break;
               case 'delete':
-                _confirmDelete();
+                if (!_isReadOnlyForAdmin) _confirmDelete();
                 break;
             }
           },
-          itemBuilder: (ctx) => const [
-            PopupMenuItem(value: 'share', child: Text('Partager le PDF')),
-            PopupMenuItem(value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
-            PopupMenuItem(value: 'email', child: Text('Envoyer par email')),
-            PopupMenuItem(value: 'picker', child: Text('Changer de modèle')),
-            PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'delete',
-              child: Text('Supprimer',
-                  style: TextStyle(color: Colors.redAccent)),
-            ),
+          itemBuilder: (ctx) => [
+            const PopupMenuItem(value: 'share', child: Text('Partager le PDF')),
+            const PopupMenuItem(value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
+            const PopupMenuItem(value: 'email', child: Text('Envoyer par email')),
+            if (!_isReadOnlyForAdmin)
+              const PopupMenuItem(value: 'picker', child: Text('Changer de modèle')),
+            if (!_isReadOnlyForAdmin) const PopupMenuDivider(),
+            if (!_isReadOnlyForAdmin)
+              const PopupMenuItem(
+                value: 'delete',
+                child: Text('Supprimer',
+                    style: TextStyle(color: Colors.redAccent)),
+              ),
           ],
         ),
       ],
     );
   }
 
-  // ── A4 unifié ──
   Widget _buildInvoicePaper(RoyalScheme c) {
     final tpl = _selectedTemplate;
     final effective = tpl == null
@@ -510,7 +528,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           watermarkText: _invoiceSettings.watermarkText,
           showWatermark: _invoiceSettings.showWatermark,
           showPaidStamp: _invoice?.status == 'paid',
-          // 🎯 Source de vérité : positions du preset + custom fusionnées
           customPositions: _customPositions,
         ),
       ],
@@ -519,7 +536,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   Widget _templateIndicator(RoyalScheme c, InvoiceTemplate t) {
     return GestureDetector(
-      onTap: _openTemplatePicker,
+      onTap: _isReadOnlyForAdmin ? null : _openTemplatePicker,
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 10),
@@ -605,8 +622,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
-  // ── Barre basse ──
   Widget _buildBottomBar(RoyalScheme c) {
+    final readOnly = _isReadOnlyForAdmin;
     return Container(
       decoration: BoxDecoration(
         color: c.inverseSurface,
@@ -627,20 +644,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             c,
             icon: Icons.edit_outlined,
             label: 'Éditer',
-            onTap: () => context
-                .push('/dashboard/invoices/${widget.invoiceId}/edit')
-                .then((_) {
-              if (mounted) {
-                _loadData();
-                _loadTemplates();
-              }
-            }),
+            onTap: readOnly
+                ? null
+                : () => context
+                    .push('/dashboard/invoices/${widget.invoiceId}/edit')
+                    .then((_) {
+                  if (mounted) {
+                    _loadData();
+                    _loadTemplates();
+                  }
+                }),
           ),
           _bottomAction(
             c,
             icon: Icons.palette_outlined,
             label: 'Personnaliser',
-            onTap: _openWorkspace,
+            onTap: readOnly ? null : _openWorkspace,
           ),
         ],
       ),
@@ -651,46 +670,49 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     RoyalScheme c, {
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
+    final enabled = onTap != null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.18)),
+        child: Opacity(
+          opacity: enabled ? 1.0 : 0.4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18)),
+                  ),
+                  child: Icon(icon, size: 20, color: c.inverseOnSurface),
                 ),
-                child: Icon(icon, size: 20, color: c.inverseOnSurface),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: c.inverseOnSurface,
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'WorkSans',
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: c.inverseOnSurface,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ── Suppression ──
   Future<void> _confirmDelete() async {
     final inv = _invoice;
     if (inv == null) return;

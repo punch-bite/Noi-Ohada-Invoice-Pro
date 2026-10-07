@@ -7,11 +7,6 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════════════
     function isSignedIn() { return request.auth != null; }
 
-    // 🔑 OPTION A : Custom Claims posés par la Cloud Function syncUserClaims.
-    //    - admin      : bool   (issu de users/{uid}.isAdmin ou roles)
-    //    - companyId  : string (issu de users/{uid}.companyId)
-    //    - teamIds    : array  (équipes actives du user, recalculé à chaque modif de team)
-    //    - planId     : string|null (plan actif, issu des subscriptions)
     function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
@@ -51,7 +46,6 @@ service cloud.firestore {
     function canWriteOwnResource()  { return isAdmin() || isNewOwner(); }
     function canUpdateOwnResource() { return isAdmin() || isOwner(); }
 
-    // 🔐 FAIL-CLOSED : seul un vrai membre (uid présent dans la team) est reconnu.
     function isTeamMember(teamId, uid) {
       let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
       return teamId is string
@@ -63,9 +57,6 @@ service cloud.firestore {
             || ('adminIds' in team && team.adminIds is list && uid in team.adminIds));
     }
 
-    // 📖 Lecture d'une ressource PARTAGÉE. Un membre y accède si son uid est
-    // listé nominativement, OU si son claim `teamIds` contient une équipe
-    // présente dans `sharedTeams` du document (fail-closed via custom claims).
     function canReadSharedResource() {
       return isSignedIn() && (
         ('sharedWithUsers' in resource.data
@@ -141,9 +132,6 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════════════
     // ABONNEMENTS / SOUSCRIPTIONS / PLANS
     // ═══════════════════════════════════════════════════════════════════
-    // 🔒 Un utilisateur ne peut PAS modifier les champs sensibles d'un
-    //    abonnement depuis le client — ces transitions passent par une Cloud
-    //    Function de paiement (activateSubscription).
     match /subscriptions/{subscriptionId} {
       allow read:   if isSignedIn() && (isAdmin() || isOwner());
       allow create: if isAdmin() || (isSignedIn() && isNewOwner()
@@ -241,8 +229,6 @@ service cloud.firestore {
       allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
-    // 🔔 Notifications : soit le propriétaire, soit un émetteur d'équipe qui
-    //    notifie un AUTRE membre de SA team (champ teamId désormais requis).
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && (isAdmin() || isOwner()
         || ('recipients' in resource.data && resource.data.recipients is list
@@ -268,10 +254,19 @@ service cloud.firestore {
       allow read:  if isSignedIn() && (isAdmin() || isOwner());
       allow write: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
-    // 🔢 Compteurs (numérotation factures) : scopés sur le companyId OU le uid.
     match /counters/{scopeId} {
       allow read, write: if isSignedIn()
         && (request.auth.uid == scopeId || myCompanyId() == scopeId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // 🆕 AUDIT LOG (lecture/écriture admin uniquement)
+    // ═══════════════════════════════════════════════════════════════════
+    // Les Cloud Functions écrivent via le SDK admin (bypass des règles).
+    // Les règles bloquent l'accès aux non-admins.
+    match /admin_audit_log/{logId} {
+      allow read:  if isAdmin();
+      allow write: if isAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════════════

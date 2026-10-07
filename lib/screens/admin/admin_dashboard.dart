@@ -1,6 +1,12 @@
 // lib/screens/admin/admin_dashboard.dart
 //
-// 👑 Admin dashboard — épuré : stats en grille, actions iconographiées.
+// CHANGELOG v2 :
+//   • 🆕 Action "Journal d'audit" (route /admin/audit-log).
+//   • 🆕 Bannière d'alerte "Écrasements détectés" en haut (si applicable).
+//   • 🆕 Section "Sécurité" regroupant : Logs, Audit, Sécurité.
+//   • Stats étendues : utilisateurs + admins + activité récente.
+//   • Design épuré préservé.
+//
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/theme_provider.dart';
 import '../../services/admin_service.dart';
+import '../../services/audit_log_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -18,24 +25,35 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final AdminService _adminService = AdminService();
+  final AuditLogService _auditService = AuditLogService();
+
   Map<String, int> _stats = {};
   bool _isLoading = true;
+
+  /// Nombre d'écrasements d'ownership détectés dans les 30 derniers jours.
+  int _recentOverwrites = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    _loadAll();
   }
 
-  Future<void> _loadStats() async {
+  Future<void> _loadAll() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      final stats = await _adminService.getUsersStats();
+      // Stats utilisateurs + détection d'écrasements (en parallèle).
+      final results = await Future.wait([
+        _adminService.getUsersStats(),
+        _loadRecentOverwrites(),
+      ]);
+
       if (!mounted) return;
+      final rawStats = results[0] as Map<String, dynamic>;
       setState(() {
-        _stats = stats.map((key, value) {
+        _stats = rawStats.map((key, value) {
           if (value is num) return MapEntry(key, value.toInt());
           return MapEntry(key, 0);
         });
@@ -53,6 +71,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
+    }
+  }
+
+  /// 🔍 Détecte les écrasements récents via le service d'audit.
+  Future<int> _loadRecentOverwrites() async {
+    try {
+      final logs = await _auditService.getLogs(
+        onlyOwnershipChanges: true,
+        limit: 50,
+      );
+      if (!mounted) return 0;
+      // Compte les logs des 30 derniers jours.
+      final cutoff = DateTime.now().subtract(const Duration(days: 30));
+      final recent = logs.where((l) => l.timestamp.isAfter(cutoff)).length;
+      setState(() => _recentOverwrites = recent);
+      return recent;
+    } catch (e) {
+      debugPrint('⚠️ _loadRecentOverwrites : $e');
+      return 0;
     }
   }
 
@@ -89,7 +126,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primary))
           : RefreshIndicator(
-              onRefresh: _loadStats,
+              onRefresh: _loadAll,
               color: primary,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(
@@ -98,7 +135,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Section stats
+                    // ═══════════════════════════════════════════════════
+                    //  🚨 BANNIÈRE D'ALERTE (si écrasements détectés)
+                    // ═══════════════════════════════════════════════════
+                    if (_recentOverwrites > 0) ...[
+                      _buildSecurityAlert(
+                        count: _recentOverwrites,
+                        text: text,
+                      ).animate().fadeIn(duration: 300.ms).shakeX(
+                            amount: 2,
+                            duration: 500.ms,
+                          ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // ═══════════════════════════════════════════════════
+                    //  VUE D'ENSEMBLE
+                    // ═══════════════════════════════════════════════════
                     _sectionLabel('Vue d\'ensemble', sub),
                     const SizedBox(height: 12),
                     Row(
@@ -135,7 +188,43 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ).animate().fadeIn(delay: 50.ms, duration: 400.ms),
                     const SizedBox(height: 32),
 
-                    // Section actions
+                    // ═══════════════════════════════════════════════════
+                    //  SÉCURITÉ (nouveau)
+                    // ═══════════════════════════════════════════════════
+                    _sectionLabel('Sécurité', sub),
+                    const SizedBox(height: 12),
+
+                    _actionTile(
+                      icon: Icons.history_rounded,
+                      title: 'Journal d\'audit',
+                      subtitle: _recentOverwrites > 0
+                          ? '🚨 $_recentOverwrites écrasement(s) récent(s)'
+                          : 'Traçabilité complète des modifications',
+                      color: _recentOverwrites > 0
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFF6B7280),
+                      badge: _recentOverwrites > 0 ? _recentOverwrites : null,
+                      onTap: () => context.push('/admin/audit-log'),
+                      isDark: isDark,
+                      text: text,
+                      sub: sub,
+                    ),
+                    const SizedBox(height: 10),
+                    _actionTile(
+                      icon: Icons.history_toggle_off_rounded,
+                      title: 'Logs d\'activité',
+                      subtitle: 'Connexions, actions sensibles',
+                      color: const Color(0xFF06B6D4),
+                      onTap: () => context.push('/admin/logs'),
+                      isDark: isDark,
+                      text: text,
+                      sub: sub,
+                    ),
+                    const SizedBox(height: 32),
+
+                    // ═══════════════════════════════════════════════════
+                    //  ACTIONS
+                    // ═══════════════════════════════════════════════════
                     _sectionLabel('Actions', sub),
                     const SizedBox(height: 12),
 
@@ -145,17 +234,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       subtitle: 'Rôles, activation, abonnements',
                       color: primary,
                       onTap: () => context.push('/admin/users'),
-                      isDark: isDark,
-                      text: text,
-                      sub: sub,
-                    ),
-                    const SizedBox(height: 10),
-                    _actionTile(
-                      icon: Icons.history_toggle_off_rounded,
-                      title: 'Logs d\'activité',
-                      subtitle: 'Audit complet des actions',
-                      color: const Color(0xFF06B6D4),
-                      onTap: () => context.push('/admin/logs'),
                       isDark: isDark,
                       text: text,
                       sub: sub,
@@ -211,6 +289,83 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  🚨 BANNIÈRE D'ALERTE SÉCURITÉ
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildSecurityAlert({
+    required int count,
+    required Color text,
+  }) {
+    const red = Color(0xFFEF4444);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: red.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: red.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.warning_amber_rounded,
+                color: red, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count écrasement(s) détecté(s)',
+                  style: TextStyle(
+                    color: text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Consultez le journal d\'audit pour identifier et restaurer',
+                  style: TextStyle(
+                    color: text.withValues(alpha: 0.55),
+                    fontSize: 11.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => context.push('/admin/audit-log'),
+            style: TextButton.styleFrom(
+              foregroundColor: red,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Voir',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SECTION LABEL
+  // ═══════════════════════════════════════════════════════════════
   Widget _sectionLabel(String label, Color sub) {
     return Text(
       label.toUpperCase(),
@@ -223,6 +378,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  STAT CARD
+  // ═══════════════════════════════════════════════════════════════
   Widget _statCard(
     String label,
     int count,
@@ -284,6 +442,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  ACTION TILE
+  // ═══════════════════════════════════════════════════════════════
   Widget _actionTile({
     required IconData icon,
     required String title,
@@ -293,6 +454,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required bool isDark,
     required Color text,
     required Color sub,
+    int? badge,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -329,14 +491,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            color: text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  color: text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (badge != null && badge > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '$badge',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(

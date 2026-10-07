@@ -1,9 +1,7 @@
 // functions/index.js
 //
 // ☁️ Cloud Functions NOI OHADA Invoice Pro
-// Met à jour les CUSTOM CLAIMS des utilisateurs pour que les règles Firestore
-// puissent vérifier `admin`, `companyId`, `teamIds` et `planId` SANS lecture
-// supplémentaire (Option A SaaS — performant et sûr).
+// Met à jour les CUSTOM CLAIMS + AUDIT LOG + RESTAURATION D'OWNERSHIP.
 //
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
@@ -16,7 +14,6 @@ const REGION = 'europe-west1';
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
 async function computeClaimsForUser(uid) {
-    // Profil
     const userSnap = await db.collection('users').doc(uid).get();
     const u = userSnap.exists ? userSnap.data() : {};
 
@@ -29,7 +26,6 @@ async function computeClaimsForUser(uid) {
             ? u.companyId
             : null;
 
-    // Équipes actives
     const teamsSnap = await db
         .collection('teams')
         .where('memberIds', 'array-contains', uid)
@@ -37,7 +33,6 @@ async function computeClaimsForUser(uid) {
         .get();
     const teamIds = teamsSnap.docs.map(d => d.id);
 
-    // Plan actif
     let planId = null;
     try {
         const subSnap = await db
@@ -68,7 +63,7 @@ async function applyClaims(uid) {
             JSON.stringify(current.teamIds || []) === JSON.stringify(claims.teamIds) &&
             (current.planId || null) === claims.planId;
 
-        if (same) return; // pas de refresh inutile
+        if (same) return;
 
         await admin.auth().setCustomUserClaims(uid, claims);
         console.log(`✅ Claims synchronisés pour ${uid}`, claims);
@@ -86,7 +81,6 @@ exports.syncUserClaims = functions
     .onWrite(async (change, ctx) => {
         const uid = ctx.params.uid;
         if (!change.after.exists) {
-            // Utilisateur supprimé → cleanup claims
             try {
                 await admin.auth().setCustomUserClaims(uid, null);
             } catch (_) {
@@ -132,8 +126,7 @@ exports.syncSubscriptionClaims = functions
     });
 
 // ─────────────────────────────────────────────────────────────────────
-// 4. Callable de secours : force un refresh (appelé par le client après
-//    une mise à jour sensible du profil, ex : changement de companyId).
+// 4. Callable : refreshMyClaims
 // ─────────────────────────────────────────────────────────────────────
 exports.refreshMyClaims = functions
     .region(REGION)
@@ -146,8 +139,9 @@ exports.refreshMyClaims = functions
     });
 
 // ─────────────────────────────────────────────────────────────────────
-// Charge les migrations (migrateExistingData, backfillEditableUsers).
-// ⚠️ Ce require DOIT être en dernier : il dépend de l'app Firebase
-//    déjà initialisée par `admin.initializeApp()` ci-dessus.
+// Charge les modules externes (migrations, audit, restauration).
+// ⚠️ DOIT être en dernier : dépend de l'app Firebase déjà initialisée.
 // ─────────────────────────────────────────────────────────────────────
 require('./migrations');
+require('./audit_log');
+require('./restore_ownership');

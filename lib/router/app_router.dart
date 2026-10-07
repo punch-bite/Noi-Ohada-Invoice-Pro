@@ -9,28 +9,23 @@ import 'package:noi_ohada_invoice_pro/screens/teams/team_chat_screen.dart';
 import 'package:noi_ohada_invoice_pro/screens/webview/webview_screen.dart';
 import 'package:provider/provider.dart';
 
-// Modèles
 import '../models/delivery.dart';
 import '../models/plan.dart';
 
-// Providers
 import '../providers/auth_provider.dart';
 import '../providers/subscription_provider.dart';
 
-// Écrans - Auth / Landing
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/verify_2fa_screen.dart';
 
-// Écrans - Dashboard & Stock
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/dashboard/profile_update_screen.dart';
 import '../screens/dashboard/stock/stock_screen.dart';
 import '../screens/dashboard/stock/product_detail_screen.dart';
 import '../screens/dashboard/stock/create_delivery_screen.dart';
 
-// Écrans - Clients, Factures & Fournisseurs
 import '../screens/dashboard/clients_screen.dart';
 import '../screens/dashboard/create_client_screen.dart';
 import '../screens/dashboard/client_detail_screen.dart';
@@ -41,7 +36,6 @@ import '../screens/dashboard/invoice_print_preview_screen.dart';
 import '../screens/dashboard/suppliers/suppliers_screen.dart';
 import '../screens/dashboard/suppliers/create_supplier_screen.dart';
 
-// Écrans - Utilitaires & Analytics
 import '../screens/dashboard/analytics_screen.dart';
 import '../screens/dashboard/settings_screen.dart';
 import '../screens/dashboard/invoice_settings_edit_screen.dart';
@@ -53,7 +47,7 @@ import '../screens/dashboard/relance_screen.dart';
 import '../screens/dashboard/drive_sync_screen.dart';
 import '../screens/status/no_internet_screen.dart';
 
-// Écrans - Customisation, Abonnements & Support
+import '../screens/customization/template_store_screen.dart';
 import '../screens/customization/template_checkout_screen.dart';
 import '../screens/customization/my_templates_screen.dart';
 import '../screens/customization/templates_screen.dart';
@@ -71,7 +65,6 @@ import '../screens/support/legal_screen.dart';
 import '../screens/security/security_screen.dart';
 import '../screens/security/sessions_screen.dart';
 
-// Écrans - Admin
 import '../screens/admin/admin_dashboard.dart';
 import '../screens/admin/users_list_screen.dart';
 import '../screens/admin/user_detail_screen.dart';
@@ -83,8 +76,9 @@ import '../screens/admin/admin_templates_screen.dart';
 import '../screens/admin/admin_withdrawals_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
+// 🆕 Écran d'audit log (module 3).
+import '../screens/admin/admin_audit_log_screen.dart';
 
-// Écrans - Teams (partage)
 import '../screens/teams/team_shared_with_me_screen.dart';
 import '../screens/teams/teams_screen.dart';
 
@@ -100,7 +94,6 @@ class AppRouter {
       final needs2Fa = authProvider.needsTwoFactor;
       final location = state.uri.path;
 
-      // 🔐 2FA en cours → forcer la page de vérification.
       if (needs2Fa) {
         if (location != '/auth/verify-2fa') {
           return '/auth/verify-2fa';
@@ -108,13 +101,11 @@ class AppRouter {
         return null;
       }
 
-      // ✅ Déjà connecté → rediriger vers le dashboard depuis la racine/auth.
       if (isAuthenticated &&
           (location == '/' || location.startsWith('/auth'))) {
         return '/dashboard';
       }
 
-      // 🚫 Non connecté → protéger les zones privées.
       if (!isAuthenticated &&
           (location.startsWith('/dashboard') ||
               location.startsWith('/admin') ||
@@ -122,7 +113,6 @@ class AppRouter {
         return '/';
       }
 
-      // 🚫 Non connecté → abonnement protégé.
       if (!isAuthenticated && location == '/subscription') {
         return '/auth/login';
       }
@@ -187,7 +177,6 @@ class AppRouter {
         path: '/teams',
         builder: (context, state) => const TeamsScreen(),
       ),
-      // 🔒 La création est réservée au premium.
       GoRoute(
         path: '/teams/create',
         redirect: (context, state) {
@@ -201,7 +190,6 @@ class AppRouter {
         path: '/teams/invitations',
         builder: (context, state) => const TeamInvitationsScreen(),
       ),
-      // 💬 Messagerie d'équipe (temps réel + historique local Hive).
       GoRoute(
         path: '/teams/chat',
         builder: (context, state) {
@@ -215,8 +203,6 @@ class AppRouter {
           return const SizedBox.shrink();
         },
       ),
-      // ✅ `/teams/shared-with-me` DOIT passer AVANT `/teams/:id`,
-      // sinon `shared-with-me` est capturé comme un ID d'équipe.
       GoRoute(
         path: '/teams/shared-with-me',
         name: 'team-shared-with-me',
@@ -314,43 +300,12 @@ class AppRouter {
       ),
 
       // ══════════════════════════════════════════════════════════
-      //  MODÈLES — Boutique & Personnalisation
+      //  MODÈLES
       // ══════════════════════════════════════════════════════════
-      // ─── Remplacer les 3 GoRoute correspondantes par : ───
-
       GoRoute(
-        path: '/templates/workspace',
-        builder: (context, state) {
-          final extra = state.extra;
-          InvoiceTemplate? template;
-          if (extra is InvoiceTemplate) {
-            template = extra;
-          } else if (extra is Map<String, dynamic> &&
-              extra['template'] is InvoiceTemplate) {
-            template = extra['template'] as InvoiceTemplate;
-          }
-          // 🆕 Fallback : ouvre l'atelier sur le 1er preset si pas d'extra.
-          template ??= InvoiceTemplate.getDefaultTemplates().first;
-          return TemplateWorkspaceScreen(template: template);
-        },
+        path: '/templates',
+        builder: (context, state) => const TemplateStoreScreen(),
       ),
-
-      GoRoute(
-        path: '/templates/preview',
-        builder: (context, state) {
-          final extra = state.extra;
-          InvoiceTemplate? template;
-          if (extra is InvoiceTemplate) {
-            template = extra;
-          } else if (extra is Map<String, dynamic> &&
-              extra['template'] is InvoiceTemplate) {
-            template = extra['template'] as InvoiceTemplate;
-          }
-          template ??= InvoiceTemplate.getDefaultTemplates().first;
-          return TemplatePreviewScreen(template: template);
-        },
-      ),
-
       GoRoute(
         path: '/templates/checkout',
         builder: (context, state) {
@@ -369,7 +324,7 @@ class AppRouter {
               cartTemplates: cart is List<InvoiceTemplate> ? cart : null,
             );
           }
-          return const TemplateCheckoutScreen(); // ← gère lui-même le panier vide
+          return const TemplateCheckoutScreen();
         },
       ),
       GoRoute(
@@ -379,6 +334,37 @@ class AppRouter {
       GoRoute(
         path: '/templates/select',
         builder: (context, state) => const TemplatesScreen(),
+      ),
+      GoRoute(
+        path: '/templates/workspace',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is InvoiceTemplate) {
+            return TemplateWorkspaceScreen(template: extra);
+          }
+          if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
+            return TemplateWorkspaceScreen(
+                template: extra['template'] as InvoiceTemplate);
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+      GoRoute(
+        path: '/templates/preview',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is InvoiceTemplate) {
+            return TemplatePreviewScreen(template: extra);
+          }
+          if (extra is Map<String, dynamic> &&
+              extra['template'] is InvoiceTemplate) {
+            return TemplatePreviewScreen(
+              template: extra['template'] as InvoiceTemplate,
+            );
+          }
+          return const SizedBox.shrink();
+        },
       ),
 
       // ══════════════════════════════════════════════════════════
@@ -427,9 +413,7 @@ class AppRouter {
       // ══════════════════════════════════════════════════════════
       GoRoute(
         path: '/no-internet',
-        builder: (context, state) => const NoInternetScreen(
-          onRetry: null,
-        ),
+        builder: (context, state) => const NoInternetScreen(onRetry: null),
       ),
 
       // ══════════════════════════════════════════════════════════
@@ -444,12 +428,10 @@ class AppRouter {
         builder: (context, state) => const ProfileUpdateScreen(),
       ),
 
-      // ── Stock & Produits ──
       GoRoute(
         path: '/dashboard/stock',
         builder: (context, state) => const StockScreen(),
       ),
-      // ✅ Les routes statiques AVANT les routes dynamiques.
       GoRoute(
         path: '/dashboard/stock/create-delivery',
         builder: (context, state) {
@@ -470,13 +452,10 @@ class AppRouter {
         },
       ),
 
-      // ── Clients ──
       GoRoute(
         path: '/dashboard/clients',
         builder: (context, state) => const ClientsScreen(),
       ),
-      // ✅ `/create` DOIT passer AVANT `/:id`, sinon "create" est capturé
-      // comme un ID de client → ClientDetailScreen avec id = "create".
       GoRoute(
         path: '/dashboard/clients/create',
         builder: (context, state) => const CreateClientScreen(),
@@ -489,12 +468,10 @@ class AppRouter {
         },
       ),
 
-      // ── Factures ──
       GoRoute(
         path: '/dashboard/invoices',
         builder: (context, state) => const InvoicesScreen(),
       ),
-      // ✅ `/create` AVANT `/:id`.
       GoRoute(
         path: '/dashboard/invoices/create',
         builder: (context, state) => const CreateInvoiceScreen(),
@@ -519,7 +496,6 @@ class AppRouter {
         },
       ),
 
-      // ── Statistiques & Entreprise ──
       GoRoute(
         path: '/dashboard/analytics',
         builder: (context, state) => const AnalyticsScreen(),
@@ -541,13 +517,11 @@ class AppRouter {
         builder: (context, state) => const CompanyConfigScreen(),
       ),
 
-      // ── Portefeuille ──
       GoRoute(
         path: '/wallet',
         builder: (context, state) => const WalletScreen(),
       ),
 
-      // ── Fournisseurs ──
       GoRoute(
         path: '/suppliers',
         builder: (context, state) => const SuppliersScreen(),
@@ -560,18 +534,13 @@ class AppRouter {
       // ══════════════════════════════════════════════════════════
       //  ADMINISTRATION
       // ══════════════════════════════════════════════════════════
-      //
-      // ⚠️ Le `redirect` du parent `/admin` s'applique à TOUTES les routes
-      // enfants (`/admin/users`, `/admin/logs`, etc.). On laisse passer tant
-      // que `auth.user` n'est pas chargé, sinon un admin fraîchement connecté
-      // est renvoyé vers `/dashboard` avant que Firestore n'ait répondu.
       GoRoute(
         path: '/admin',
         name: 'admin',
         builder: (context, state) => const AdminDashboard(),
         redirect: (context, state) {
           final auth = Provider.of<AppAuthProvider>(context, listen: false);
-          if (auth.user == null) return null; // ⏳ laisser charger
+          if (auth.user == null) return null;
           if (auth.user!.isAdmin != true) return '/dashboard';
           return null;
         },
@@ -617,6 +586,13 @@ class AppRouter {
             },
           ),
 
+          // 🆕 ── Journal d'audit (module 3) ──
+          GoRoute(
+            path: 'audit-log',
+            name: 'admin-audit-log',
+            builder: (context, state) => const AdminAuditLogScreen(),
+          ),
+
           // ── Abonnements ──
           GoRoute(
             path: 'add-subscription',
@@ -630,9 +606,6 @@ class AppRouter {
           ),
 
           // ── Modèles de factures ──
-          // ✅ Les routes STATIQUES (`create`) DOIVENT passer AVANT les
-          // routes DYNAMIQUES (`edit/:id`), sinon "create" serait capturé
-          // comme un ID.
           GoRoute(
             path: 'templates/create',
             name: 'admin-template-create',

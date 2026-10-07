@@ -1,15 +1,9 @@
 // lib/services/database_service.dart
 //
-// CHANGELOG (v4 — SaaS) :
-//   • `getCompany()` : cherche d'abord `users/{uid}.companyId`, sinon fallback
-//     `where userId == uid` (un membre d'équipe retrouve SA company).
-//   • `getNextInvoiceNumber()` : compteur scopé sur `companyId` (ou uid en
-//     absence d'entreprise) → plus de doublons au sein d'une même société.
-//   • `saveNotificationForUser()` : accepte `teamId` (requis par les règles
-//     Firestore pour les notifs d'équipe).
-//   • `_getSaaSQueryDocs()` : logs explicites, plus de try/catch silencieux.
-//   • `_resolveCompanyId()` : helper privé pour rattacher automatiquement les
-//     nouvelles entités à la company de l'utilisateur.
+// CHANGELOG (v6 — Audit + Mode lecture seule) :
+//   • Fix v5 conservé : préserve userId/companyId sur toute mise à jour.
+//   • 🆕 `isReadOnlyForMe()` : détecte si l'admin ouvre un document tiers
+//     (l'UI doit alors passer en mode lecture seule).
 //
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -65,7 +59,6 @@ class DatabaseService {
       ...user.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-    // Les custom claims seront posés par la Cloud Function syncUserClaims.
   }
 
   Future<void> updateUser(AppUser user) => saveUser(user);
@@ -77,8 +70,6 @@ class DatabaseService {
   // ═══════════════════════════════════════════════════════════════
   //  COMPANY
   // ═══════════════════════════════════════════════════════════════
-  /// 🔑 Cherche d'abord le `companyId` stocké sur le profil user (cas d'un
-  ///    membre d'équipe), puis fallback sur `where userId == uid` (créateur).
   Future<Company?> getCompany() async {
     final uid = currentUserId;
     if (uid == null) return null;
@@ -119,7 +110,6 @@ class DatabaseService {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    // 🔗 Rattachement automatique du user à cette company.
     final user = await getUser();
     if (user != null && user.companyId != company.id) {
       await saveUser(user.copyWith(companyId: company.id));
@@ -129,9 +119,7 @@ class DatabaseService {
     }
   }
 
-  Future<void> markCompanySynced() async {
-    // Firestore est la source de vérité.
-  }
+  Future<void> markCompanySynced() async {}
 
   // ═══════════════════════════════════════════════════════════════
   //  MULTI-TENANT SAAS QUERY HELPER
@@ -145,7 +133,6 @@ class DatabaseService {
     final company = await getCompany();
     final companyId = company?.id;
 
-    // 1. Admin : accès global (via custom claim).
     if (user != null && user.isAdmin) {
       try {
         final snapshot = await _db
@@ -178,16 +165,11 @@ class DatabaseService {
       }
     }
 
-    // Requête 1 : documents créés par l'utilisateur.
     await run('owner',
         _db.collection(collectionPath).where('userId', isEqualTo: uid));
-
-    // Requête 2 : documents partagés nominativement.
     await run('shared',
         _db.collection(collectionPath)
             .where('sharedWithUsers', arrayContains: uid));
-
-    // Requête 3 : documents de l'entreprise (SaaS partagé).
     if (companyId != null && companyId.isNotEmpty) {
       await run('company',
           _db.collection(collectionPath)
@@ -209,10 +191,83 @@ class DatabaseService {
     return list;
   }
 
-  /// Retourne le `companyId` effectif à utiliser pour une nouvelle écriture.
   Future<String?> _resolveCompanyId() async {
     final company = await getCompany();
     return company?.id;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  🔒 GARDE ÉCRITURE
+  // ═══════════════════════════════════════════════════════════════
+  Future<bool> canWriteOn(String collectionPath, String docId) async {
+    final uid = currentUserId;
+    if (uid == null) return false;
+
+    final doc = await _db.collection(collectionPath).doc(docId).get();
+    if (!doc.exists) return true;
+
+    final data = doc.data()!;
+    if (data['userId'] == uid) return true;
+
+    final user = await getUser();
+    final myCompanyId = user?.companyId;
+    if (myCompanyId != null &&
+        myCompanyId.isNotEmpty &&
+        data['companyId'] == myCompanyId) {
+      return true;
+    }
+
+    final editable = List<String>.from(data['editableByUsers'] ?? []);
+    if (editable.contains(uid)) return true;
+
+    if (user?.isAdmin == true) return true;
+
+    return false;
+  }
+
+  /// 🛡️ Vrai si l'utilisateur courant est admin MAIS n'est pas le
+  /// propriétaire du document → l'UI doit passer en mode lecture seule.
+  Future<bool> isReadOnlyForMe(String collectionPath, String docId) async {
+    final uid = currentUserId;
+    if (uid == null) return true;
+
+    final user = await getUser();
+    if (user?.isAdmin != true) return false;
+
+    final doc = await _db.collection(collectionPath).doc(docId).get();
+    if (!doc.exists) return false;
+
+    final owner = doc.data()?['userId'];
+    return owner != null && owner != uid;
+  }
+
+  Future<Map<String, dynamic>> _buildOwnershipFields({
+    required String collectionPath,
+    required String docId,
+    required Map<String, dynamic> incomingMap,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) throw Exception('Non authentifié');
+
+    final docRef = _db.collection(collectionPath).doc(docId);
+    final existing = await docRef.get();
+
+    if (existing.exists) {
+      final original = existing.data()!;
+      incomingMap['userId'] = original['userId'] ?? uid;
+      incomingMap['companyId'] = original['companyId'];
+      incomingMap['lastEditedBy'] = uid;
+    } else {
+      incomingMap['userId'] = uid;
+      incomingMap['lastEditedBy'] = uid;
+      final companyId = await _resolveCompanyId();
+      final existingCompanyId = incomingMap['companyId'];
+      if (existingCompanyId == null || (existingCompanyId as String).isEmpty) {
+        incomingMap['companyId'] = companyId;
+      }
+    }
+    incomingMap['updatedAt'] = FieldValue.serverTimestamp();
+    return incomingMap;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -251,13 +306,14 @@ class DatabaseService {
   Future<void> addClient(Client client) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final map = client.toMap();
-    map['userId'] = uid;
-    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
-      map['companyId'] = companyId;
+    if (!await canWriteOn(clientCol, client.id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier ce client.');
     }
-    map['updatedAt'] = FieldValue.serverTimestamp();
+    final map = await _buildOwnershipFields(
+      collectionPath: clientCol,
+      docId: client.id,
+      incomingMap: client.toMap(),
+    );
     await _db
         .collection(clientCol)
         .doc(client.id)
@@ -304,13 +360,20 @@ class DatabaseService {
   Future<void> addInvoice(Invoice invoice) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final map = invoice.toMap();
-    map['userId'] = uid;
-    if (invoice.companyId.isEmpty && companyId != null) {
-      map['companyId'] = companyId;
+    if (!await canWriteOn(invoiceCol, invoice.id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier cette facture.');
     }
-    map['updatedAt'] = FieldValue.serverTimestamp();
+    final map = await _buildOwnershipFields(
+      collectionPath: invoiceCol,
+      docId: invoice.id,
+      incomingMap: invoice.toMap(),
+    );
+    if (invoice.companyId.isNotEmpty) {
+      final existing = await _db.collection(invoiceCol).doc(invoice.id).get();
+      if (!existing.exists) {
+        map['companyId'] = invoice.companyId;
+      }
+    }
     await _db
         .collection(invoiceCol)
         .doc(invoice.id)
@@ -321,7 +384,6 @@ class DatabaseService {
   Future<void> deleteInvoice(String id) =>
       _db.collection(invoiceCol).doc(id).delete();
 
-  /// 🔢 Numérotation SCOPÉE ENTREPRISE (plus de doublons).
   Future<String> getNextInvoiceNumber(bool isDevis) async {
     final uid = currentUserId;
     if (uid == null) return 'FA-${DateTime.now().year}-001';
@@ -416,13 +478,14 @@ class DatabaseService {
   Future<void> saveProduct(Product product) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final map = product.toMap();
-    map['userId'] = uid;
-    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
-      map['companyId'] = companyId;
+    if (!await canWriteOn(productCol, product.id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier ce produit.');
     }
-    map['updatedAt'] = FieldValue.serverTimestamp();
+    final map = await _buildOwnershipFields(
+      collectionPath: productCol,
+      docId: product.id,
+      incomingMap: product.toMap(),
+    );
     await _db
         .collection(productCol)
         .doc(product.id)
@@ -563,13 +626,14 @@ class DatabaseService {
   Future<void> saveSupplier(Supplier supplier) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final map = supplier.toMap();
-    map['userId'] = uid;
-    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
-      map['companyId'] = companyId;
+    if (!await canWriteOn(supplierCol, supplier.id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier ce fournisseur.');
     }
-    map['updatedAt'] = FieldValue.serverTimestamp();
+    final map = await _buildOwnershipFields(
+      collectionPath: supplierCol,
+      docId: supplier.id,
+      incomingMap: supplier.toMap(),
+    );
     await _db
         .collection(supplierCol)
         .doc(supplier.id)
@@ -590,13 +654,14 @@ class DatabaseService {
   Future<void> saveReminder(Reminder reminder) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final map = reminder.toMap();
-    map['userId'] = uid;
-    if (map['companyId'] == null || (map['companyId'] as String).isEmpty) {
-      map['companyId'] = companyId;
+    if (!await canWriteOn(reminderCol, reminder.id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier ce rappel.');
     }
-    map['updatedAt'] = FieldValue.serverTimestamp();
+    final map = await _buildOwnershipFields(
+      collectionPath: reminderCol,
+      docId: reminder.id,
+      incomingMap: reminder.toMap(),
+    );
     await _db
         .collection(reminderCol)
         .doc(reminder.id)
@@ -649,9 +714,6 @@ class DatabaseService {
     }, SetOptions(merge: true));
   }
 
-  /// 🔔 Enregistre une notification pour un AUTRE utilisateur.
-  /// `teamId` est désormais **requis** côté règles Firestore pour valider
-  /// qu'un émetteur ne peut notifier qu'un membre de SA team.
   Future<void> saveNotificationForUser(
     String userId,
     AppNotification notification, {
@@ -709,18 +771,23 @@ class DatabaseService {
   Future<void> save<T>(String collectionPath, T item) async {
     final uid = currentUserId;
     if (uid == null) throw Exception('Non authentifié');
-    final companyId = await _resolveCompanyId();
-    final data = (item as dynamic).toMap() as Map<String, dynamic>;
+
     final id = (item as dynamic).id as String;
-    data['userId'] = uid;
-    if (data['companyId'] == null || (data['companyId'] as String).isEmpty) {
-      data['companyId'] = companyId;
+    if (!await canWriteOn(collectionPath, id)) {
+      throw Exception('Vous n\'avez pas le droit de modifier ce document.');
     }
-    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    final incomingMap = (item as dynamic).toMap() as Map<String, dynamic>;
+    final map = await _buildOwnershipFields(
+      collectionPath: collectionPath,
+      docId: id,
+      incomingMap: incomingMap,
+    );
+
     await _db
         .collection(collectionPath)
         .doc(id)
-        .set(data, SetOptions(merge: true));
+        .set(map, SetOptions(merge: true));
   }
 
   Future<void> delete<T>(String collectionPath, String id) =>
