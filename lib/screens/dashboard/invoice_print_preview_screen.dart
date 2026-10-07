@@ -1,13 +1,12 @@
 // lib/screens/dashboard/invoice_print_preview_screen.dart
 //
-// CHANGELOG v4 :
-//   • 🎯 PARITÉ ABSOLUE avec `invoice_detail_screen` :
-//     - `previewBackground` est transmis résolu (plus de re-décodage).
-//     - Le template effectif est utilisé TEL QUEL (plus de double
-//       `applyToTemplate`).
-//     - Le widget caché capture EXACTEMENT le même rendu que l'aperçu
-//       affiché dans l'écran détail.
-//   • Résultat : détail = aperçu PDF = impression, pixel-perfect.
+// CHANGELOG v5 :
+//   • 🐛 FIX `boundary null` : le widget caché reste TOUJOURS dans l'arbre
+//     (positionné hors-écran via Stack + Positioned), au lieu d'être retiré
+//     dès que `_widgetReady` devient true.
+//   • 🐛 FIX `bottomSheet` → remplacé par Stack (meilleure fiabilité).
+//   • 🐛 Attente de 3 frames + délai pour garantir le rendu du RepaintBoundary.
+//   • 🎯 Parité absolue conservée (template effectif + previewBackground).
 //
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -31,17 +30,10 @@ class InvoicePrintPreviewArgs {
   final Client client;
   final Company company;
   final InvoiceTemplate template;
-
-  /// 📐 Positions **déjà résolues** (preset + custom fusionnés).
   final Map<String, dynamic> customPositions;
-
-  /// 🎨 Background settings résolus.
   final TemplateBackgroundSettings background;
 
-  /// 🖼️ Image de fond **déjà décodée** (custom, ou template.fileData).
-  /// Null si ni custom ni preset ni template.fileData.
-  ///
-  /// ⚠️ CRITIQUE : ce champ garantit la parité visuelle avec l'écran détail.
+  /// 🖼️ Image de fond déjà décodée (custom OU template.fileData).
   final Uint8List? previewBackground;
 
   final InvoiceSettings invoiceSettings;
@@ -71,26 +63,27 @@ class InvoicePrintPreviewScreen extends StatefulWidget {
 
 class _InvoicePrintPreviewScreenState
     extends State<InvoicePrintPreviewScreen> {
-  /// 🎯 Clé du RepaintBoundary caché → capture PNG.
+  /// 🎯 Clé du RepaintBoundary caché.
   final GlobalKey _captureKey = GlobalKey();
 
   InvoiceRenderMode _mode = InvoiceRenderMode.image;
   bool _isGenerating = false;
   Uint8List? _pdfBytes;
-  bool _widgetReady = false;
 
   InvoicePrintPreviewArgs get args => widget.args;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 2 frames pour garantir le rendu du RepaintBoundary.
-      await Future.delayed(const Duration(milliseconds: 350));
-      if (mounted) {
-        setState(() => _widgetReady = true);
-        _generatePdf();
-      }
+    // ⏱️ On attend 3 frames + un délai pour s'assurer que le widget caché
+    //    a bien été peint dans le tree avant la capture.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) _generatePdf();
+        });
+      });
     });
   }
 
@@ -107,14 +100,26 @@ class _InvoicePrintPreviewScreenState
           _captureKey,
           pixelRatio: 3.0,
         );
+
         if (png == null) {
-          if (mounted) setState(() => _isGenerating = false);
-          return;
+          debugPrint('⚠️ Capture retournée null — fallback vectoriel');
+          // 🔄 Fallback automatique vers vectoriel si la capture échoue.
+          pdf = await PrintingService.generateInvoicePdf(
+            invoice: args.invoice,
+            client: args.client,
+            company: args.company,
+            template: args.template,
+            customPositions: args.customPositions,
+            customBackground: args.background,
+            isFreePlan: args.isFreePlan,
+            invoiceSettings: args.invoiceSettings,
+          );
+        } else {
+          pdf = await PrintingService.generateInvoicePdfFromCapture(
+            pngBytes: png,
+            isFreePlan: args.isFreePlan,
+          );
         }
-        pdf = await PrintingService.generateInvoicePdfFromCapture(
-          pngBytes: png,
-          isFreePlan: args.isFreePlan,
-        );
       } else {
         // ── Mode vector : PDF texte ──
         pdf = await PrintingService.generateInvoicePdf(
@@ -220,114 +225,100 @@ class _InvoicePrintPreviewScreenState
           ),
         ],
       ),
-      body: Column(
+      // 🎯 STACK : contenu visible + widget caché hors-écran (toujours dans le tree).
+      body: Stack(
         children: [
-          _buildModeToggle(c),
-          Expanded(
-            child: _isGenerating || _pdfBytes == null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Génération du PDF…',
-                          style: TextStyle(
-                            color: c.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
+          // ── Contenu visible ──
+          Column(
+            children: [
+              _buildModeToggle(c),
+              Expanded(
+                child: _isGenerating || _pdfBytes == null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Génération du PDF…',
+                              style: TextStyle(
+                                color: c.onSurfaceVariant,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  )
-                : PdfPreview(
-                    key: ValueKey(_mode),
-                    build: (_) async => _pdfBytes!,
-                    initialPageFormat: PdfPageFormat.a4,
-                    pageFormats: const {'A4': PdfPageFormat.a4},
-                    canChangePageFormat: false,
-                    canChangeOrientation: false,
-                    canDebug: false,
-                    maxPageWidth: 720,
-                    pdfFileName: fileName,
-                    allowPrinting: true,
-                    allowSharing: true,
-                    padding: const EdgeInsets.all(16),
-                    previewPageMargin:
-                        const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                      )
+                    : PdfPreview(
+                        key: ValueKey(_mode),
+                        build: (_) async => _pdfBytes!,
+                        initialPageFormat: PdfPageFormat.a4,
+                        pageFormats: const {'A4': PdfPageFormat.a4},
+                        canChangePageFormat: false,
+                        canChangeOrientation: false,
+                        canDebug: false,
+                        maxPageWidth: 720,
+                        pdfFileName: fileName,
+                        allowPrinting: true,
+                        allowSharing: true,
+                        padding: const EdgeInsets.all(16),
+                        previewPageMargin:
+                            const EdgeInsets.symmetric(vertical: 12),
+                      ),
+              ),
+            ],
+          ),
+
+          // ── Widget caché hors-écran, TOUJOURS dans le tree ──
+          //    Positioned.left négatif : rendu mais invisible.
+          Positioned(
+            left: -3000,
+            top: 0,
+            child: _buildHiddenCapture(),
           ),
         ],
       ),
-
-      // 🎯 Widget A4 caché — IDENTIQUE au `_buildInvoicePaper` du détail.
-      bottomSheet: _widgetReady
-          ? const SizedBox.shrink()
-          : _buildHiddenCapture(),
     );
   }
 
-  /// 🎯 Construit le widget A4 caché — **parité absolue** avec l'aperçu détail.
+  /// 🎯 Widget A4 capturé — parité absolue avec le détail.
   ///
-  /// ⚠️ AUCUNE re-computation :
-  ///   • `args.template` est déjà le template **effectif** (settings appliqués
-  ///     par `InvoiceRenderService.resolveRenderState` dans le détail).
-  ///   • `args.customPositions` sont déjà fusionnées (preset + custom).
-  ///   • `args.background` sont déjà résolues.
-  ///   • `args.previewBackground` est déjà décodée (custom OU fileData).
+  /// Toujours dans l'arbre (jamais retiré) pour que `_captureKey.currentContext`
+  /// soit toujours non-null au moment de la capture.
   Widget _buildHiddenCapture() {
-    return SizedBox(
-      width: 0,
-      height: 0,
-      child: OverflowBox(
-        maxWidth: InvoiceTemplate.kPageWidth,
-        maxHeight: InvoiceTemplate.kPageHeight,
-        alignment: Alignment.topLeft,
-        child: RepaintBoundary(
-          key: _captureKey,
-          child: SizedBox(
-            width: InvoiceTemplate.kPageWidth,
-            height: InvoiceTemplate.kPageHeight,
-            child: StitchA4InvoicePreview(
-              // ── Données dynamiques ──
-              data: StitchPreviewDataX.fromInvoice(
-                invoice: args.invoice,
-                client: args.client,
-                company: args.company,
-              ),
-
-              // ── Template effectif (settings déjà appliqués) ──
-              accentColor: args.template.primaryColor,
-              pageColor: args.template.backgroundColor,
-              showLogo: args.template.showLogo,
-              showBorder: args.template.showBorder,
-              showTaxDetails: args.template.showTaxDetails,
-              showPaymentTerms: args.template.showPaymentTerms,
-              showPaymentQR: args.template.showPaymentQR,
-              fontFamily: args.template.fontFamily,
-              fontScale: args.template.fontSize / 12,
-
-              // ── Layout (positions résolues) ──
-              layoutConfig: InvoiceLayoutConfig.defaultLayout(),
-              customPositions: args.customPositions,
-
-              // ── Background (image pré-décodée, settings résolus) ──
-              backgroundSettings: args.background,
-              backgroundImage: args.previewBackground,
-
-              // ── Filigrane / tampon ──
-              watermarkText: args.invoiceSettings.watermarkText,
-              showWatermark: args.invoiceSettings.showWatermark,
-              showPaidStamp: args.invoice.status == 'paid',
-            ),
+    return RepaintBoundary(
+      key: _captureKey,
+      child: SizedBox(
+        width: InvoiceTemplate.kPageWidth,
+        height: InvoiceTemplate.kPageHeight,
+        child: StitchA4InvoicePreview(
+          data: StitchPreviewDataX.fromInvoice(
+            invoice: args.invoice,
+            client: args.client,
+            company: args.company,
           ),
+          accentColor: args.template.primaryColor,
+          pageColor: args.template.backgroundColor,
+          showLogo: args.template.showLogo,
+          showBorder: args.template.showBorder,
+          showTaxDetails: args.template.showTaxDetails,
+          showPaymentTerms: args.template.showPaymentTerms,
+          showPaymentQR: args.template.showPaymentQR,
+          fontFamily: args.template.fontFamily,
+          fontScale: args.template.fontSize / 12,
+          layoutConfig: InvoiceLayoutConfig.defaultLayout(),
+          customPositions: args.customPositions,
+          backgroundSettings: args.background,
+          backgroundImage: args.previewBackground,
+          watermarkText: args.invoiceSettings.watermarkText,
+          showWatermark: args.invoiceSettings.showWatermark,
+          showPaidStamp: args.invoice.status == 'paid',
         ),
       ),
     );
   }
 
-  /// 🎛️ Toggle entre les 2 modes.
   Widget _buildModeToggle(RoyalScheme c) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

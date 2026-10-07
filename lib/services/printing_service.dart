@@ -1,20 +1,19 @@
 // lib/services/printing_service.dart
 //
-// 🖨️ Rendu PDF HYBRIDE — Solution A (image) + Solution B (vector).
-//
-// CHANGELOG v11 :
-//   • Enum `InvoiceRenderMode { vector, image }`.
-//   • Mode `vector` : PDF texte sélectionnable (WYSIWYG strict v10).
-//   • Mode `image`  : capture PNG du widget A4 → PDF (parité 100%).
-//   • `captureWidgetToPng(key)` : screenshot via RenderRepaintBoundary.
-//   • `generateInvoicePdfFromCapture(png)` : insère l'image dans un A4.
-//   • Conversion d'échelle Flutter↔PDF conservée (ratio 0.7497).
+// CHANGELOG v12 :
+//   • 🐛 FIX `boundary null` et `toImage` silencieux sur Flutter Web :
+//     - pixelRatio adaptatif (1.5 web, 3.0 mobile)
+//     - retry automatique avec pixelRatio réduit si échec
+//     - logs ultra-verbeux à chaque étape
+//   • 🎯 Fallback vector automatique si capture échoue.
+//   • Parité absolue conservée (Solution A + B).
 //
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -34,27 +33,18 @@ import 'invoice_render_service.dart';
 // ═══════════════════════════════════════════════════════════════════════
 //  MODE DE RENDU
 // ═══════════════════════════════════════════════════════════════════════
-
-/// Mode de rendu du PDF.
 enum InvoiceRenderMode {
-  /// 📝 Texte sélectionnable, léger, rendu vectoriel.
-  vector,
-
-  /// 🖼️ Image fidèle (capture du widget Flutter), parité pixel-perfect.
-  image,
+  vector, // 📝 texte sélectionnable
+  image,  // 🖼️ capture fidèle
 }
 
-const double _kPdfScale = 595.28 / 794.0; // ≈ 0.7497
+const double _kPdfScale = 595.28 / 794.0;
 
 class PrintingService {
   // ═══════════════════════════════════════════════════════════════════
-  //  API PUBLIQUE UNIFIÉE
+  //  API PUBLIQUE
   // ═══════════════════════════════════════════════════════════════════
 
-  /// 📄 Génère un PDF (mode `vector` par défaut).
-  ///
-  /// En mode `image`, cette méthode retombe sur `vector` : la capture
-  /// d'image doit être faite côté UI (voir `generateInvoicePdfFromCapture`).
   static Future<Uint8List> generateInvoicePdf({
     required Invoice invoice,
     required Client client,
@@ -79,38 +69,90 @@ class PrintingService {
     );
   }
 
-  /// 🖼️ Capture un widget Flutter (RenderRepaintBoundary) en PNG.
+  /// 🎯 Capture un widget Flutter (RepaintBoundary) en PNG.
   ///
-  /// Le widget DOIT être enveloppé dans un `RepaintBoundary` avec le
-  /// `GlobalKey` passé en paramètre.
+  /// ✅ **pixelRatio adaptatif** :
+  ///   • Web      : 1.5 (max ~1191 x 1685 px → sous toutes les limites)
+  ///   • Mobile   : 3.0 (max ~2382 x 3369 px)
+  ///   • Desktop  : 2.5
+  ///
+  /// ✅ **Retry automatique** : si `toImage()` échoue au pixelRatio demandé,
+  ///    on retente avec 50% puis 25% avant d'abandonner.
   static Future<Uint8List?> captureWidgetToPng(
     GlobalKey repaintKey, {
-    double pixelRatio = 3.0,
+    double? pixelRatio,
   }) async {
-    try {
-      // Petit délai pour laisser Flutter peindre le widget.
-      await Future.delayed(const Duration(milliseconds: 80));
+    // 1. Laisser Flutter peindre le RepaintBoundary.
+    await Future.delayed(const Duration(milliseconds: 150));
 
-      final boundary = repaintKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null) {
-        debugPrint('⚠️ captureWidgetToPng : boundary null');
-        return null;
-      }
-
-      final image = await boundary.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      return byteData?.buffer.asUint8List();
-    } catch (e) {
-      debugPrint('⚠️ captureWidgetToPng : $e');
+    // 2. Vérifier le contexte.
+    final ctx = repaintKey.currentContext;
+    if (ctx == null) {
+      debugPrint('❌ captureWidgetToPng : currentContext null '
+          '(widget pas dans l\'arbre)');
       return null;
     }
+
+    final boundary = ctx.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      debugPrint('❌ captureWidgetToPng : boundary null');
+      return null;
+    }
+    if (!boundary.hasSize) {
+      debugPrint('❌ captureWidgetToPng : boundary sans size (pas layouté)');
+      return null;
+    }
+
+    debugPrint('✅ captureWidgetToPng : boundary OK, size=${boundary.size}');
+
+    // 3. Ratio adaptatif selon plateforme.
+    final primaryRatio = pixelRatio ??
+        (kIsWeb
+            ? 1.5
+            : (Platform.isAndroid || Platform.isIOS ? 3.0 : 2.5));
+
+    // 4. Tentatives successives avec pixelRatio décroissant.
+    final ratios = <double>[
+      primaryRatio,
+      primaryRatio * 0.5,
+      primaryRatio * 0.25,
+    ];
+
+    for (var i = 0; i < ratios.length; i++) {
+      final ratio = ratios[i];
+      try {
+        debugPrint('🎯 Tentative ${i + 1}/${ratios.length} '
+            'à pixelRatio=$ratio');
+
+        final image = await boundary.toImage(pixelRatio: ratio);
+        debugPrint('   → image générée : ${image.width}×${image.height}');
+
+        final byteData =
+            await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+
+        if (byteData == null) {
+          debugPrint('   → byteData null (format PNG non supporté ?)');
+          continue;
+        }
+
+        final bytes = byteData.buffer.asUint8List();
+        debugPrint('✅ captureWidgetToPng : ${bytes.length} octets');
+        return bytes;
+      } catch (e, st) {
+        debugPrint('⚠️ Tentative ${i + 1} échouée à ratio=$ratio : $e');
+        if (i == ratios.length - 1) {
+          debugPrint('❌ Toutes les tentatives ont échoué\n$st');
+        }
+        // Petite pause avant retry.
+        await Future.delayed(const Duration(milliseconds: 80));
+      }
+    }
+
+    return null;
   }
 
   /// 🖼️ Génère un PDF depuis un PNG capturé (mode image).
-  ///
-  /// Le PNG est inséré en plein A4, préservant le rendu exact du widget.
   static Future<Uint8List> generateInvoicePdfFromCapture({
     required Uint8List pngBytes,
     bool isFreePlan = false,
@@ -151,7 +193,6 @@ class PrintingService {
     return pdf.save();
   }
 
-  /// 🖨️ Impression directe.
   static Future<void> printInvoice({
     required Invoice invoice,
     required Client client,
@@ -239,7 +280,7 @@ class PrintingService {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  //  MODE B — RENDU VECTORIEL
+  //  MODE B — RENDU VECTORIEL (inchangé v11)
   // ═══════════════════════════════════════════════════════════════════
   static Future<Uint8List> _generateVectorPdf({
     required Invoice invoice,
@@ -300,7 +341,7 @@ class PrintingService {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  //  RENDU VECTORIEL A4 (complet, identique v10)
+  //  RENDU VECTORIEL A4
   // ═══════════════════════════════════════════════════════════════════
   static pw.Widget _renderA4({
     required Invoice invoice,
@@ -345,7 +386,7 @@ class PrintingService {
     return pw.Container(
       width: pageW,
       height: pageH,
-      color: bgColor,
+      decoration: pw.BoxDecoration(color: bgColor),
       child: pw.Stack(
         children: [
           pw.SizedBox(width: pageW, height: pageH),
@@ -428,7 +469,10 @@ class PrintingService {
             top: 0,
             left: 0,
             right: 0,
-            child: pw.Container(height: _s(8), color: accent),
+            child: pw.Container(
+              height: _s(8),
+              decoration: pw.BoxDecoration(color: accent),
+            ),
           ),
         ];
       case 'left':
@@ -437,7 +481,10 @@ class PrintingService {
             top: 0,
             bottom: 0,
             left: 0,
-            child: pw.Container(width: _s(8), color: accent),
+            child: pw.Container(
+              width: _s(8),
+              decoration: pw.BoxDecoration(color: accent),
+            ),
           ),
         ];
       case 'frame':
@@ -478,7 +525,8 @@ class PrintingService {
         for (var i = 0; i < stripes; i++)
           pw.Expanded(
             child: pw.Container(
-              color: PdfColor.fromInt(colors[i % colors.length]),
+              decoration:
+                  pw.BoxDecoration(color: PdfColor.fromInt(colors[i % colors.length])),
             ),
           ),
       ],
@@ -921,7 +969,9 @@ class PrintingService {
                   padding: pw.EdgeInsets.symmetric(horizontal: _s(2)),
                   child: pw.Container(
                     height: _s(1.5),
-                    color: _withOpacity(textColor, 0.35),
+                    decoration: pw.BoxDecoration(
+                      color: _withOpacity(textColor, 0.35),
+                    ),
                   ),
                 ),
               ),
@@ -950,8 +1000,10 @@ class PrintingService {
       default:
         return pw.Container(
           height: _s(1),
-          color: _withOpacity(textColor, 0.25),
           margin: pw.EdgeInsets.symmetric(vertical: _s(6)),
+          decoration: pw.BoxDecoration(
+            color: _withOpacity(textColor, 0.25),
+          ),
         );
     }
   }
@@ -1112,10 +1164,11 @@ class PrintingService {
         ? const PdfColor.fromInt(0xFF1B4965)
         : primary;
 
+    // ✅ FIX : pas de `color:` + `decoration:` simultanés.
     final header = pw.Container(
-      color: headerBg,
       padding: pw.EdgeInsets.symmetric(horizontal: _s(10), vertical: _s(8)),
       decoration: pw.BoxDecoration(
+        color: headerBg,
         borderRadius: pw.BorderRadius.only(
           topLeft: pw.Radius.circular(_s(4)),
           topRight: pw.Radius.circular(_s(4)),
@@ -1247,7 +1300,8 @@ class PrintingService {
                   textColor,
                   fs),
             if (invoice.discount > 0)
-              _totalLinePdf('Discount', _fmtNum(invoice.discount), textColor, fs),
+              _totalLinePdf(
+                  'Discount', _fmtNum(invoice.discount), textColor, fs),
             pw.SizedBox(height: _s(4)),
             pw.Container(
               padding: pw.EdgeInsets.symmetric(
@@ -1393,7 +1447,9 @@ class PrintingService {
           pw.Container(
             width: _s(110),
             height: _s(1),
-            color: _withOpacity(textColor, 0.5),
+            decoration: pw.BoxDecoration(
+              color: _withOpacity(textColor, 0.5),
+            ),
           ),
           pw.SizedBox(height: _s(3)),
           pw.Text(
