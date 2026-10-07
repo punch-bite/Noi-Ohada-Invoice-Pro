@@ -1,4 +1,4 @@
-﻿// lib/services/database_service.dart
+// lib/services/database_service.dart
 //
 // ✅ Base de données unifiée sur FIRESTORE.
 // Cette classe est la SOURCE UNIQUE DE VÉRITÉ : plus de Hive.
@@ -111,9 +111,17 @@ class DatabaseService {
   }
 
   Future<Client?> getClient(String id) async {
+    final uid = currentUserId;
+    if (uid == null) return null;
     final doc = await _db.collection(clientCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
+    // Vérification de sécurité multi-tenant
+    final ownerId = data['userId'];
+    final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
+    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+      return null;
+    }
     data['id'] = doc.id;
     return Client.fromMap(data);
   }
@@ -153,9 +161,17 @@ class DatabaseService {
   }
 
   Future<Invoice?> getInvoice(String id) async {
+    final uid = currentUserId;
+    if (uid == null) return null;
     final doc = await _db.collection(invoiceCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
+    // Vérification de sécurité multi-tenant
+    final ownerId = data['userId'];
+    final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
+    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+      return null;
+    }
     data['id'] = doc.id;
     return Invoice.fromMap(data);
   }
@@ -254,9 +270,16 @@ class DatabaseService {
   }
 
   Future<Product?> getProduct(String id) async {
+    final uid = currentUserId;
+    if (uid == null) return null;
     final doc = await _db.collection(productCol).doc(id).get();
     if (!doc.exists) return null;
     final data = doc.data()!;
+    final ownerId = data['userId'];
+    final sharedList = List<String>.from(data['sharedWithUsers'] ?? []);
+    if (ownerId != null && ownerId != uid && !sharedList.contains(uid)) {
+      return null;
+    }
     data['id'] = doc.id;
     return Product.fromMap(data);
   }
@@ -507,8 +530,20 @@ class DatabaseService {
   }
 
   // ============ CRUD GENERIQUE ============
+  // ============ CRUD GENERIQUE SÉCURISÉ ============
   Future<List<T>> getAll<T>(String collectionPath) async {
-    final snapshot = await _db.collection(collectionPath).get();
+    final uid = currentUserId;
+    if (uid == null) return [];
+    
+    // Collections publiques/système non associées à un utilisateur unique
+    const publicCollections = [planCol, 'templates', 'settings'];
+    
+    Query<Map<String, dynamic>> query = _db.collection(collectionPath);
+    if (!publicCollections.contains(collectionPath)) {
+      query = query.where('userId', isEqualTo: uid);
+    }
+    
+    final snapshot = await query.get();
     return snapshot.docs.map((doc) {
       final data = doc.data();
       data['id'] = doc.id;
