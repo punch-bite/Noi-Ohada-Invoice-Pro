@@ -1,14 +1,14 @@
 // lib/screens/customization/template_workspace_screen.dart
 //
-// 🎨 ATELIER v12 « Magnetic Canvas + Labels + Footer + Stamp Drag »
+// 🎨 ATELIER v12.2 « Magnetic Canvas + Stamp Drag + Focus Sections »
 //
-// CHANGELOG v12 :
-//   • 🎯 Tampon déplaçable : drag libre sur toute la facture.
-//   • 🎚️ Rotation + échelle du tampon via sliders.
-//   • 🗂️ Drawer "Pied de page" unique regroupant tous les outils footer.
-//   • 🖼️ Logo : BoxFit.contain, sans bordure/cercle étouffant, 64 px par défaut.
-//   • 🐛 FIX duplication lors du drag entre sections (index shift).
-//   • ✅ v11 conservé (spacer slider, divider chips, QR, signature pad).
+// CHANGELOG v12.2 :
+//   • 🐛 FIX : les boutons ▲▼✕ des sections ne sont plus clippés.
+//     Ils sont maintenant dans une Column (flux normal) au lieu de
+//     Positioned(top: -8) qui provoquait un overflow caché.
+//   • 🎯 Focus section : tap pour révéler les contrôles.
+//   • 🔘 Boutons plus gros (32×32), ombrés, très visibles.
+//   • ✅ v12 conservé : stamp drag, footer drawer, logo non étouffé.
 //
 // ignore_for_file: unused_field, unused_element, dead_null_aware_expression,
 //   deprecated_member_use, unnecessary_import
@@ -81,6 +81,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   int? _dragOverSection;
   int? _dragOverSectionIndicator;
 
+  /// 🎯 Section focus (tap) — affiche les boutons ▲▼✕.
+  int? _focusedSection;
+
   final List<String> _undoStack = [];
   final List<String> _redoStack = [];
   bool _isRestoringHistory = false;
@@ -123,13 +126,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   final Map<String, int> _footerBg = {};
   final Map<String, int> _footerText = {};
 
-  /// 🏷️ Label personnalisé par bloc.
   final Map<String, String> _blockLabels = {};
-
-  /// 📏 Hauteur personnalisée des spacers.
   final Map<String, double> _spacerSizes = {};
-
-  /// 🎨 Type de séparateur.
   final Map<String, String> _dividerStyles = {};
 
   final Map<String, String> _customTexts = {};
@@ -147,14 +145,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   bool _showPaidStamp = false;
   String _stampText = 'PAYÉ';
 
-  /// 🎯 Position normalisée du tampon (0..1 sur chaque axe).
   double _stampX = 0.5;
   double _stampY = 0.5;
-
-  /// 🔄 Rotation du tampon (radians).
   double _stampRotation = -0.15;
-
-  /// 🔍 Échelle du tampon (0.5..3.0).
   double _stampScale = 1.0;
 
   bool _showSignatureLine = true;
@@ -173,8 +166,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   String _invoiceSubtitle = '';
   Uint8List? _customLogoBytes;
   Uint8List? _signatureBytes;
-
-  /// 📐 Taille du logo (défaut 64 — augmenté pour visibilité).
   double _logoSize = 64;
 
   @override
@@ -293,6 +284,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _pagePadding = 32;
     _customLogoBytes = null;
     _logoSize = 64;
+    _focusedSection = null;
   }
 
   void _applyPositions(Map<String, dynamic> p) {
@@ -589,7 +581,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  DÉPLACEMENT — v12 (fix duplication + index shift)
+  //  DÉPLACEMENT (fix duplication + index shift)
   // ═══════════════════════════════════════════════════════════════
   bool _isSpecialBlock(String key) =>
       key.startsWith('__spacer') || key.startsWith('__divider');
@@ -603,12 +595,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         _sectionHasSpecial(_bodySections[targetSection]);
 
     _mutate(() {
-      // 1. Supprime TOUTES les occurrences (pas seulement la 1ère).
       for (final s in _bodySections) {
         s.removeWhere((e) => e == key);
       }
 
-      // 2. Calcule combien de sections vides précèdent la cible.
       int removedBefore = 0;
       if (!targetIsSpecial) {
         for (var i = 0; i < targetSection && i < _bodySections.length; i++) {
@@ -616,11 +606,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         }
       }
 
-      // 3. Supprime les sections vides.
       _bodySections.removeWhere((s) => s.isEmpty);
       if (_bodySections.isEmpty) _bodySections.add(<String>[]);
 
-      // 4. Insère à la bonne place.
       if (targetIsSpecial) {
         _bodySections.add([key]);
       } else {
@@ -1044,6 +1032,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         onMoveSectionUp: (i) => _moveSection(i, i - 1),
         onMoveSectionDown: (i) => _moveSection(i, i + 1),
         onDeleteSection: _deleteSection,
+        onSectionFocus: (index) => setState(() {
+          _focusedSection = index;
+        }),
+        focusedSection: _focusedSection,
         onMoveFooterBlock: (key, row, before) =>
             _moveFooterBlock(key, row, beforeKey: before),
         headerStyle: _headerStyle,
@@ -1380,39 +1372,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  Widget _chipString(
-    String label,
-    String value,
-    String current,
-    ValueChanged<String> onTap,
-  ) {
-    final selected = current == value;
-    return GestureDetector(
-      onTap: () => onTap(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? _primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? _primary : _onSurface.withValues(alpha: 0.2),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-            color: selected ? Colors.white : _onSurface,
-          ),
-        ),
-      ),
-    );
-  }
-
   // ═══════════════════════════════════════════════════════════════
-  //  🗂️ DRAWER FOOTER (regroupement des outils pied de page)
+  //  DRAWER FOOTER
   // ═══════════════════════════════════════════════════════════════
   void _openFooterSheet() {
     showModalBottomSheet<void>(
@@ -1456,8 +1417,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                 ]),
                 const SizedBox(height: 6),
                 Text(
-                  'Ajoutez des lignes et des composants en bas de facture '
-                  '(comme les totaux, contacts, mentions légales…).',
+                  'Ajoutez des lignes et des composants en bas de facture.',
                   style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
                 ),
                 const SizedBox(height: 16),
@@ -1556,7 +1516,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                           Expanded(
                             child: Text(
                               row.isEmpty
-                                  ? 'Ligne vide — cliquez + dans l\'aperçu'
+                                  ? 'Ligne vide'
                                   : '${row.length} composant(s)',
                               style: const TextStyle(
                                 fontSize: 12,
@@ -2024,7 +1984,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  🏷️ SHEET TAMPON (position + rotation + échelle)
+  //  SHEET TAMPON
   // ═══════════════════════════════════════════════════════════════
   void _openStampSheet() {
     showModalBottomSheet<void>(
@@ -2072,8 +2032,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                 ]),
                 const SizedBox(height: 6),
                 Text(
-                  'Glissez le tampon sur la facture pour le déplacer. '
-                  'Ajustez rotation et échelle ci-dessous.',
+                  'Glissez le tampon sur la facture pour le déplacer.',
                   style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
                 ),
                 const SizedBox(height: 14),
@@ -2136,8 +2095,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                     });
                     setSS(() {});
                   },
-                  icon: const Icon(Icons.center_focus_strong,
-                      size: 16),
+                  icon:
+                      const Icon(Icons.center_focus_strong, size: 16),
                   label: const Text('Recentrer le tampon'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(42),
@@ -2145,35 +2104,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                         borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-                if (_showPaidStamp) ...[
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: _primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: _primary.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.touch_app_outlined,
-                            size: 16, color: Color(0xFF22C55E)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Glissez le tampon directement sur l\'aperçu',
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: _primary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -2529,7 +2459,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  BOTTOM BAR — 4 groupes (Footer regroupé en 1 tool)
+  //  BOTTOM BAR
   // ═══════════════════════════════════════════════════════════════
   Widget _buildBottomBar() {
     const group1 = [
@@ -2841,6 +2771,8 @@ class _WorkspaceRenderState {
   final void Function(int index)? onMoveSectionUp;
   final void Function(int index)? onMoveSectionDown;
   final void Function(int index)? onDeleteSection;
+  final void Function(int? index)? onSectionFocus;
+  final int? focusedSection;
   final void Function(String key, int row, String? beforeKey)?
       onMoveFooterBlock;
 
@@ -2913,6 +2845,8 @@ class _WorkspaceRenderState {
     this.onMoveSectionUp,
     this.onMoveSectionDown,
     this.onDeleteSection,
+    this.onSectionFocus,
+    this.focusedSection,
     this.onMoveFooterBlock,
     required this.headerStyle,
     required this.tableStyle,
@@ -3045,13 +2979,12 @@ class _WorkspaceA4Preview extends StatelessWidget {
           ),
         ),
         if (showGrid) IgnorePointer(child: _buildGridOverlay()),
-        // 🎯 Tampon déplaçable (v12)
         if (state.showPaidStamp) _buildStampOverlay(context),
       ],
     );
   }
 
-  /// 🎯 Tampon déplaçable — drag à la souris/doigt.
+  /// 🎯 Tampon déplaçable.
   Widget _buildStampOverlay(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -3191,6 +3124,9 @@ class _WorkspaceA4Preview extends StatelessWidget {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────
+  //  SECTION DE CORPS — v12.2 : contrôles dans le flux (pas clippés)
+  // ─────────────────────────────────────────────────────────────
   Widget _buildBodySection(int index) {
     final keys = state.bodySections[index];
     final hasSpecial = keys.any((k) =>
@@ -3203,13 +3139,17 @@ class _WorkspaceA4Preview extends StatelessWidget {
       onLeave: (_) => onSectionHover(-1),
       builder: (ctx, candidates, rejected) {
         final hovered = candidates.isNotEmpty;
-        final children = <Widget>[];
+        final focused = state.focusedSection == index;
+        final showControls = isDragging || hovered || focused;
+
+        // Construction des enfants de la rangée de contenu
+        final contentChildren = <Widget>[];
         for (var i = 0; i < keys.length; i++) {
           final key = keys[i];
-          if (i > 0) children.add(const SizedBox(width: 8));
+          if (i > 0) contentChildren.add(const SizedBox(width: 8));
 
           if (key.startsWith('__spacer')) {
-            children.add(
+            contentChildren.add(
               _columnWrapper(
                 key: key,
                 isHeader: false,
@@ -3221,7 +3161,7 @@ class _WorkspaceA4Preview extends StatelessWidget {
           }
 
           if (key.startsWith('__divider')) {
-            children.add(
+            contentChildren.add(
               Expanded(
                 child: _draggable(
                   key: key,
@@ -3236,7 +3176,7 @@ class _WorkspaceA4Preview extends StatelessWidget {
           if (state.blockVisibility[key] == false) continue;
           final flex =
               ((state.blockWidths[key] ?? 1.0) * 10).round().clamp(3, 30);
-          children.add(Expanded(
+          contentChildren.add(Expanded(
             flex: flex,
             child: _columnWrapper(
               key: key,
@@ -3251,94 +3191,122 @@ class _WorkspaceA4Preview extends StatelessWidget {
           ));
         }
         if (keys.length < 3 && !hasSpecial) {
-          if (children.isNotEmpty) children.add(const SizedBox(width: 8));
-          children.add(_plusColumn(() => onSelected('__add_body_col__$index')));
+          if (contentChildren.isNotEmpty) {
+            contentChildren.add(const SizedBox(width: 8));
+          }
+          contentChildren
+              .add(_plusColumn(() => onSelected('__add_body_col__$index')));
         }
 
-        return Stack(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                color: hovered
-                    ? state.primary.withValues(alpha: 0.06)
-                    : Colors.transparent,
-                border: (isDragging || hovered)
-                    ? Border.all(
-                        color: hovered
-                            ? state.primary
-                            : state.primary.withValues(alpha: 0.3),
-                        width: hovered ? 2.0 : 1.5,
-                      )
-                    : null,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: children.isEmpty ? [_emptySectionHint()] : children,
-              ),
-            ),
-            if (isDragging || hovered)
-              Positioned(
-                left: -2,
-                top: -8,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: state.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Section ${index + 1}',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            if (hovered || isDragging)
-              Positioned(
-                right: 0,
-                top: -8,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _miniIconBtn(
-                      Icons.arrow_upward,
-                      enabled: index > 0,
-                      tooltip: 'Monter la section',
-                      onTap: () => state.onMoveSectionUp?.call(index),
-                    ),
-                    _miniIconBtn(
-                      Icons.arrow_downward,
-                      enabled: index < state.bodySections.length - 1,
-                      tooltip: 'Descendre la section',
-                      onTap: () => state.onMoveSectionDown?.call(index),
-                    ),
-                    if (state.bodySections.length > 1)
-                      _miniIconBtn(
-                        Icons.close,
-                        enabled: true,
-                        tooltip: 'Supprimer la section',
-                        onTap: () => state.onDeleteSection?.call(index),
-                        danger: true,
+        // ── Structure VERTICALE : badge + boutons DANS LE FLUX ──
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            state.onSectionFocus?.call(focused ? null : index);
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Bandeau de contrôle
+              if (showControls)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: state.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Section ${index + 1}',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
                       ),
-                  ],
+                      const Spacer(),
+                      _sectionBtn(
+                        icon: Icons.arrow_upward_rounded,
+                        enabled: index > 0,
+                        tooltip: 'Monter la section',
+                        onTap: () {
+                          state.onMoveSectionUp?.call(index);
+                          Future.microtask(() {
+                            state.onSectionFocus?.call(index - 1);
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      _sectionBtn(
+                        icon: Icons.arrow_downward_rounded,
+                        enabled: index < state.bodySections.length - 1,
+                        tooltip: 'Descendre la section',
+                        onTap: () {
+                          state.onMoveSectionDown?.call(index);
+                          Future.microtask(() {
+                            state.onSectionFocus?.call(index + 1);
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      if (state.bodySections.length > 1)
+                        _sectionBtn(
+                          icon: Icons.close_rounded,
+                          enabled: true,
+                          tooltip: 'Supprimer la section',
+                          danger: true,
+                          onTap: () {
+                            state.onDeleteSection?.call(index);
+                            state.onSectionFocus?.call(null);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+
+              // Contenu de la section
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(bottom: 10),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  color: (hovered || focused)
+                      ? state.primary.withValues(alpha: 0.06)
+                      : Colors.transparent,
+                  border: (isDragging || hovered || focused)
+                      ? Border.all(
+                          color: (focused || hovered)
+                              ? state.primary
+                              : state.primary.withValues(alpha: 0.3),
+                          width: (focused || hovered) ? 2.0 : 1.5,
+                        )
+                      : null,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: contentChildren.isEmpty
+                      ? [_emptySectionHint()]
+                      : contentChildren,
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _miniIconBtn(
-    IconData icon, {
+  /// 🎯 Bouton de contrôle de section — GRAND et OMBRÉ.
+  Widget _sectionBtn({
+    required IconData icon,
     required bool enabled,
     required String tooltip,
     required VoidCallback onTap,
@@ -3346,21 +3314,36 @@ class _WorkspaceA4Preview extends StatelessWidget {
   }) {
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          width: 20,
-          height: 20,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
-          decoration: BoxDecoration(
-            color: danger
-                ? Colors.redAccent.withValues(alpha: 0.85)
-                : enabled
-                    ? state.primary
-                    : state.primary.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(4),
+      child: Material(
+        elevation: danger ? 3 : 2,
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.transparent,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: danger
+                  ? const Color(0xFFEF4444)
+                  : (enabled
+                      ? state.primary
+                      : state.primary.withValues(alpha: 0.25)),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.35),
+                width: 1.2,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: Colors.white,
+            ),
           ),
-          child: Icon(icon, size: 12, color: Colors.white),
         ),
       ),
     );
@@ -3421,12 +3404,11 @@ class _WorkspaceA4Preview extends StatelessWidget {
     }
   }
 
-  /// 🖼️ Logo NON ÉTOUFFÉ : BoxFit.contain, pas de cercle, pas de bordure.
+  /// 🖼️ Logo NON ÉTOUFFÉ.
   Widget _logoWidget() {
     final size = state.logoSize;
     final bytes = state.customLogoBytes;
 
-    // Cas 1 : image fournie → affichage propre sans contrainte circulaire.
     if (bytes != null && bytes.isNotEmpty) {
       return Align(
         alignment: Alignment.centerLeft,
@@ -3444,7 +3426,6 @@ class _WorkspaceA4Preview extends StatelessWidget {
       );
     }
 
-    // Cas 2 : pas d'image → initiales dans un cercle discret.
     return _logoFallback(size);
   }
 
@@ -4314,7 +4295,7 @@ class _DashedBorderPainter extends CustomPainter {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  BLOC VIDE (SPACER) — SANS BORDURE
+//  BLOC VIDE (SPACER)
 // ═══════════════════════════════════════════════════════════════════════
 class _SpacerBlock extends StatelessWidget {
   final double size;
