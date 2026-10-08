@@ -1,13 +1,9 @@
 // lib/services/template_custom_service.dart
 //
-// CHANGELOG (v4) :
-//   • `saveCustom` normalise DÉSORMAIS toutes les valeurs de layout sur la
-//     grille 8pt (InvoiceTemplate.gridSnap) → plus aucun décalage entre
-//     l'atelier, l'aperçu et le PDF.
-//   • `loadCustom` VALIDE les positions (clamp, types, dédoublonnage) →
-//     aucune donnée corrompue ne peut casser le rendu.
-//   • Support complet des nouvelles clés : `grid_snap`, `design_version`,
-//     styles `split_orange_left`, `wave`, `diamond_center`, `rainbow_strip`,…
+// CHANGELOG (v6) :
+//   • Support complet v9/v10 (footer, labels, spacer, divider).
+//   • Ajout des styles finaux : `serif_title`, `solid_band_left`,
+//     `split_diagonal_orange_blue`, `pill_date`, `side_bars_orange`.
 //
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -104,35 +100,51 @@ class TemplateCustomService {
       final raw = box.get(templateId);
       if (raw == null) return const TemplateCustom();
 
-      final data = raw is Map
-          ? Map<String, dynamic>.from(raw)
-          : (raw is String
-              ? Map<String, dynamic>.from(jsonDecode(raw) as Map)
-              : <String, dynamic>{});
+      Map<String, dynamic> data;
+      if (raw is Map<String, dynamic>) {
+        data = raw;
+      } else if (raw is Map) {
+        data = raw.map((k, v) => MapEntry(k.toString(), v));
+      } else if (raw is String) {
+        data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      } else {
+        return const TemplateCustom();
+      }
 
-      final positions = _normalizePositions(
-        Map<String, dynamic>.from(data['positions'] ?? const {}),
-      );
+      final rawPositions = data['positions'];
+      final positionsMap = rawPositions is Map
+          ? rawPositions.map((k, v) => MapEntry(k.toString(), v))
+          : <String, dynamic>{};
+      final positions = _normalizePositions(positionsMap);
 
-      final mapping = Map<String, String>.from(data['mapping'] ?? const {});
+      final mapping = data['mapping'] is Map
+          ? Map<String, String>.from(
+              (data['mapping'] as Map).map(
+                (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
+              ),
+            )
+          : <String, String>{};
 
-      final bg = TemplateBackgroundSettings.fromMap(
-        Map<String, dynamic>.from(data['background'] ?? const {}),
-      );
+      final bgRaw = data['background'];
+      final bg = bgRaw is Map
+          ? TemplateBackgroundSettings.fromMap(
+              bgRaw.map((k, v) => MapEntry(k.toString(), v)),
+            )
+          : const TemplateBackgroundSettings();
 
       return TemplateCustom(
         positions: positions,
         mapping: mapping,
         background: bg,
       );
-    } catch (e) {
-      debugPrint('⚠️ TemplateCustomService.loadCustom($templateId): $e');
+    } catch (e, st) {
+      debugPrint('⚠️ TemplateCustomService.loadCustom($templateId): $e\n$st');
       return const TemplateCustom();
     }
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  SAVE — normalise sur la grille 8pt
+  //  SAVE
   // ═══════════════════════════════════════════════════════════════
   static Future<void> saveCustom(
     String templateId, {
@@ -163,9 +175,9 @@ class TemplateCustomService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  NORMALISATION — grille 8pt + validation stricte
+  //  NORMALISATION
   // ═══════════════════════════════════════════════════════════════
-  static const double _grid = InvoiceTemplate.gridSnap; // 8.0
+  static const double _grid = InvoiceTemplate.gridSnap;
 
   static double _snap(double v) => (v / _grid).round() * _grid;
 
@@ -174,8 +186,12 @@ class TemplateCustomService {
   ) {
     final out = <String, dynamic>{};
 
-    // ─── Sections (en-tête + corps) ───
-    for (final key in ['header_sections', 'blocks_sections']) {
+    // ─── Sections ───
+    for (final key in [
+      'header_sections',
+      'blocks_sections',
+      'footer_sections',
+    ]) {
       final raw = input[key];
       if (raw is List) {
         out[key] = [
@@ -183,44 +199,69 @@ class TemplateCustomService {
             if (s is List)
               s.whereType<String>().toList()
             else if (s is String)
-              s.split('|').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
+              s
+                  .split('|')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList()
             else
               <String>[],
         ];
       }
     }
 
-    // ─── Maps de doubles (widths, font scales) ───
-    for (final key in ['header_widths', 'block_widths']) {
+    // ─── Largeurs ───
+    for (final key in [
+      'header_widths',
+      'block_widths',
+      'footer_widths',
+    ]) {
       final raw = input[key];
       if (raw is Map) {
         final m = <String, double>{};
         raw.forEach((k, v) {
           if (v is num) {
-            // Largeur : clamp 0.3..3.0 et snap
-            m[k.toString()] = _snap(v.toDouble().clamp(0.3, 3.0) * 100) / 100;
+            m[k.toString()] =
+                _snap(v.toDouble().clamp(0.3, 3.0) * 100) / 100;
           }
         });
         if (m.isNotEmpty) out[key] = m;
       }
     }
 
-    for (final key in ['block_font_scales']) {
+    // ─── Font scales ───
+    for (final key in ['block_font_scales', 'footer_font_scales']) {
       final raw = input[key];
       if (raw is Map) {
         final m = <String, double>{};
         raw.forEach((k, v) {
           if (v is num) {
-            // Échelle de police : clamp 0.6..1.8 et snap
-            m[k.toString()] = _snap(v.toDouble().clamp(0.6, 1.8) * 100) / 100;
+            m[k.toString()] =
+                _snap(v.toDouble().clamp(0.6, 1.8) * 100) / 100;
           }
         });
         if (m.isNotEmpty) out[key] = m;
       }
     }
 
-    // ─── Maps d'alignements ───
-    for (final key in ['header_alignments', 'block_alignment']) {
+    // ─── Spacer sizes ───
+    final rawSpacers = input['spacer_sizes'];
+    if (rawSpacers is Map) {
+      final m = <String, double>{};
+      rawSpacers.forEach((k, v) {
+        if (v is num) {
+          m[k.toString()] = _snap(v.toDouble().clamp(8.0, 500.0));
+        }
+      });
+      if (m.isNotEmpty) out['spacer_sizes'] = m;
+    }
+
+    // ─── Alignements ───
+    for (final key in [
+      'header_alignments',
+      'block_alignment',
+      'footer_alignments',
+    ]) {
       final raw = input[key];
       if (raw is Map) {
         final m = <String, String>{};
@@ -235,7 +276,11 @@ class TemplateCustomService {
     }
 
     // ─── Visibilités ───
-    for (final key in ['header_visibility', 'block_visibility']) {
+    for (final key in [
+      'header_visibility',
+      'block_visibility',
+      'footer_visibility',
+    ]) {
       final raw = input[key];
       if (raw is Map) {
         final m = <String, bool>{};
@@ -246,8 +291,13 @@ class TemplateCustomService {
       }
     }
 
-    // ─── Couleurs de bloc (int ARGB) ───
-    for (final key in ['block_bg_colors', 'block_text_colors']) {
+    // ─── Couleurs ───
+    for (final key in [
+      'block_bg_colors',
+      'block_text_colors',
+      'footer_bg_colors',
+      'footer_text_colors',
+    ]) {
       final raw = input[key];
       if (raw is Map) {
         final m = <String, int>{};
@@ -258,24 +308,57 @@ class TemplateCustomService {
       }
     }
 
-    // ─── Polices de bloc ───
-    final rawFonts = input['block_fonts'];
-    if (rawFonts is Map) {
-      final m = <String, String>{};
-      rawFonts.forEach((k, v) {
-        if (v is String && v.isNotEmpty) m[k.toString()] = v;
-      });
-      if (m.isNotEmpty) out['block_fonts'] = m;
+    // ─── Polices ───
+    for (final key in ['block_fonts', 'footer_fonts']) {
+      final rawFonts = input[key];
+      if (rawFonts is Map) {
+        final m = <String, String>{};
+        rawFonts.forEach((k, v) {
+          if (v is String && v.isNotEmpty) m[k.toString()] = v;
+        });
+        if (m.isNotEmpty) out[key] = m;
+      }
     }
 
-    // ─── Styles (valeurs énumérées) ───
+    // ─── Séparateurs ───
+    final rawDividers = input['divider_styles'];
+    if (rawDividers is Map) {
+      const validDividerStyles = {'solid', 'dashed', 'dots'};
+      final m = <String, String>{};
+      rawDividers.forEach((k, v) {
+        final s = v?.toString();
+        if (s != null && validDividerStyles.contains(s)) {
+          m[k.toString()] = s;
+        }
+      });
+      if (m.isNotEmpty) out['divider_styles'] = m;
+    }
+
+    // ─── Labels personnalisés ───
+    final rawLabels = input['block_labels'];
+    if (rawLabels is Map) {
+      final m = <String, String>{};
+      rawLabels.forEach((k, v) {
+        if (v is String && v.trim().isNotEmpty) {
+          m[k.toString()] = v;
+        }
+      });
+      if (m.isNotEmpty) out['block_labels'] = m;
+    }
+
+    // ─── Styles (valeurs énumérées) — V6 ───
     const validHeaderStyles = {
       'flat', 'dark', 'band', 'wave', 'split_orange_left',
       'split_diagonal_corners', 'circle_accent_top_left',
       'orange_band_right', 'cursive_title', 'diamond_center',
+      // ✨ Nouveaux :
+      'serif_title', 'solid_band_left',
+      'split_diagonal_orange_blue', 'pill_date',
     };
     const validTableStyles = {
       'plain', 'alternate_dark', 'dark_header', 'orange_bars', 'cards',
+      // ✨ Nouveau :
+      'side_bars_orange',
     };
     const validFooterStyles = {
       'simple', 'contact_bar_icons', 'zigzag_thankyou',
@@ -337,7 +420,7 @@ class TemplateCustomService {
       final m = <String, String>{};
       (input['custom_texts'] as Map).forEach((k, v) {
         final key = k.toString();
-        if (key.startsWith('text_')) {
+        if (key.startsWith('text_') || key.startsWith('foot_')) {
           m[key] = v?.toString() ?? '';
         }
       });
@@ -358,29 +441,27 @@ class TemplateCustomService {
       out['custom_paragraphs'] = m;
     }
 
+    // ─── Extra keys du titre ───
     if (input['title_extra_keys'] is List) {
       out['title_extra_keys'] = (input['title_extra_keys'] as List)
           .whereType<String>()
-          .where((k) => k.startsWith('text_'))
+          .where((k) => k.startsWith('text_') || k.startsWith('foot_'))
           .toList();
     }
 
-    // ─── Images (base64) ───
+    // ─── Images ───
     for (final key in ['signature_image', 'custom_logo_base64']) {
       final v = input[key];
       if (v is String && v.isNotEmpty) out[key] = v;
     }
 
-    // ─── Métadonnées design ───
+    // ─── Métadonnées ───
     out['grid_snap'] = _grid;
     out['design_version'] = InvoiceTemplate.kRoyalDesignVersion;
 
     return out;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  UTILITAIRES PUBLICS
-  // ═══════════════════════════════════════════════════════════════
   static Uint8List? decodeBackground(TemplateBackgroundSettings settings) {
     if (!settings.hasCustomImage) return null;
     try {

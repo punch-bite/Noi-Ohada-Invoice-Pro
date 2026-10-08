@@ -1,11 +1,10 @@
 // lib/widgets/stitch_a4_invoice_preview.dart
 //
-// CHANGELOG (v5 — REFONTE MAGNÉTIQUE) :
-//   • Rendu STRICTEMENT identique au workspace ET au PDF.
-//   • Support complet des 10 styles d'en-tête, 5 de tableau, 6 de pied,
-//     5 de bordure, définis dans InvoiceTemplate.
-//   • Grille 8pt respectée partout (marges, paddings, gaps).
-//   • 3 source de vérité : `customPositions` (map unique).
+// CHANGELOG (v7) :
+//   • ✨ 4 nouveaux styles d'en-tête : serif_title, solid_band_left,
+//     split_diagonal_orange_blue, pill_date.
+//   • ✨ Nouveau style de tableau : side_bars_orange.
+//   • ✅ Conserve v6 (footer_sections, block_labels, spacer, divider, foot_*).
 //
 import 'dart:convert';
 import 'dart:io';
@@ -20,9 +19,6 @@ import '../services/template_custom_service.dart';
 import '../theme/royal_ledger.dart';
 import 'template_background_palette.dart';
 
-// ═══════════════════════════════════════════════════════════════════════
-//  MODÈLES DE DONNÉES (inchangés)
-// ═══════════════════════════════════════════════════════════════════════
 class StitchPreviewItem {
   final String description;
   final int quantity;
@@ -109,9 +105,18 @@ class StitchPreviewData {
         dueDate: '02/04/2025',
         currency: 'XAF',
         items: [
-          StitchPreviewItem(description: 'Wireless Router', quantity: 1, unitPrice: 500, total: 500),
-          StitchPreviewItem(description: 'Lan Cable', quantity: 3, unitPrice: 20, total: 60),
-          StitchPreviewItem(description: 'Lorem ipsum dolor', quantity: 3, unitPrice: 10, total: 30),
+          StitchPreviewItem(
+              description: 'Wireless Router',
+              quantity: 1,
+              unitPrice: 500,
+              total: 500),
+          StitchPreviewItem(
+              description: 'Lan Cable', quantity: 3, unitPrice: 20, total: 60),
+          StitchPreviewItem(
+              description: 'Lorem ipsum dolor',
+              quantity: 3,
+              unitPrice: 10,
+              total: 30),
         ],
         subtotal: 590,
         taxAmount: 0,
@@ -125,9 +130,6 @@ class StitchPreviewData {
   static String amount(double value) => 'Fr${money(value)}';
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  APERÇU A4 — WYSIWYG STRICT
-// ═══════════════════════════════════════════════════════════════════════
 class StitchA4InvoicePreview extends StatelessWidget {
   final StitchPreviewData data;
   final Color? accentColor;
@@ -174,7 +176,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
   static const double _paperWidth = 560;
   static const double _paperBaseHeight = _paperWidth * 1123 / 794;
 
-  // ── Helpers lecture ──
   bool _vis(LayoutElement e) => layoutConfig.styleOf(e).visible;
 
   bool _cpBool(String key, bool fallback) {
@@ -222,6 +223,15 @@ class StitchA4InvoicePreview extends StatelessWidget {
   String get _customSignatoryTitle => _sanitize(
       _cpStr('signatory_title').isNotEmpty ? _cpStr('signatory_title') : 'Signature');
 
+  String _labelOf(String key, String fallback) {
+    final labels = customPositions['block_labels'];
+    if (labels is Map) {
+      final raw = labels[key];
+      if (raw is String && raw.trim().isNotEmpty) return _sanitize(raw);
+    }
+    return fallback;
+  }
+
   Uint8List? get _effectiveLogoBytes {
     final b64 = _cpStr('custom_logo_base64');
     if (b64.isNotEmpty) {
@@ -258,9 +268,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
   bool get _effectiveShowSignature =>
       _cpBool('show_signature_line', _vis(LayoutElement.signature));
 
-  // ═══════════════════════════════════════════════════════════════
-  //  BUILD PRINCIPAL
-  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     final Color accent = accentColor ?? RoyalColors.secondary;
@@ -277,8 +284,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
     final double k = fontScale.clamp(0.80, 1.35);
     final double pad = _cpDouble('page_padding', 24).clamp(8, 80);
 
-    final bool hasBg =
-        backgroundImage != null || backgroundSettings.hasPreset;
+    final bool hasBg = backgroundImage != null || backgroundSettings.hasPreset;
     final double overlayAlpha = hasBg
         ? (darkPage ? 0.18 : 0.15) *
             backgroundSettings.opacity.clamp(0.3, 1.0)
@@ -306,12 +312,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // Fond
             Positioned.fill(
               child: TemplateBackgroundLayer(
-                presetId: backgroundImage != null
-                    ? ''
-                    : backgroundSettings.presetId,
+                presetId:
+                    backgroundImage != null ? '' : backgroundSettings.presetId,
                 imageBytes: backgroundImage,
                 opacity: backgroundSettings.opacity,
                 blur: backgroundSettings.blur,
@@ -326,15 +330,10 @@ class StitchA4InvoicePreview extends StatelessWidget {
                       : Colors.white.withValues(alpha: overlayAlpha),
                 ),
               ),
-            // Bordures décoratives
             ..._accentBorderWidgets(accent),
-            // Tampon PAYÉ
-            if (_effectiveShowStamp && data.isPaid)
-              _buildPaidStampAt(),
-            // Filigrane
+            if (_effectiveShowStamp && data.isPaid) _buildPaidStampAt(),
             if (showWatermark && watermarkText.isNotEmpty)
               Positioned.fill(child: _buildWatermark(cText)),
-            // Contenu
             Padding(
               padding: EdgeInsets.all(pad * k),
               child: Column(
@@ -343,6 +342,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
                   _buildHeaderWrapper(accent, k),
                   SizedBox(height: 12 * k),
                   Expanded(child: _buildBody(cText, cSub, line, k)),
+                  _buildCustomFooterSections(accent, cText, cSub, k),
                   _buildFooter(accent, cText, cSub, line, k),
                 ],
               ),
@@ -353,9 +353,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  BORDURE D'ACCENT
-  // ═══════════════════════════════════════════════════════════════
   List<Widget> _accentBorderWidgets(Color accent) {
     switch (_accentBorder) {
       case 'top':
@@ -409,9 +406,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  EN-TÊTE — dispatch par style
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildHeaderWrapper(Color accent, double k) {
     switch (_headerStyle) {
       case 'dark':
@@ -431,13 +425,21 @@ class StitchA4InvoicePreview extends StatelessWidget {
         return _headerCursive(accent, k);
       case 'diamond_center':
         return _headerDiamond(accent, k);
+      // ✨ NOUVEAUX
+      case 'serif_title':
+        return _headerSerif(accent, k);
+      case 'solid_band_left':
+        return _headerSolidBandLeft(accent, k);
+      case 'split_diagonal_orange_blue':
+        return _headerDiagonalOrangeBlue(accent, k);
+      case 'pill_date':
+        return _headerPillDate(accent, k);
       case 'flat':
       default:
         return _headerFlat(accent, k);
     }
   }
 
-  /// Récupère les colonnes réellement visibles dans l'en-tête.
   List<String> _headerKeys() {
     final order = InvoiceTemplate.visibleHeaderElements(customPositions);
     return order.where((k) {
@@ -446,7 +448,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     }).toList();
   }
 
-  /// Contenu de la colonne [key] (logo / société / titre).
   Widget _headerCol(String key, Color onColor, double k) {
     switch (key) {
       case 'logo':
@@ -492,7 +493,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 color: onColor,
               ),
             ),
-            if (_customSubtitle.isNotEmpty)
+            if (_customSubtitle.isNotEmpty && _headerStyle != 'pill_date')
               Padding(
                 padding: EdgeInsets.only(top: 2 * k),
                 child: Text(
@@ -512,7 +513,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     }
   }
 
-  /// En-tête PLAT : contenu sur fond de page, colonnes alignées.
   Widget _headerFlat(Color accent, double k) {
     final keys = _headerKeys();
     return Padding(
@@ -524,11 +524,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête REMPLI (band/dark) : fond coloré, texte blanc.
   Widget _headerFilled(Color accent, double k, {bool dark = false}) {
-    final bg = dark
-        ? Color.lerp(accent, Colors.black, 0.3)!
-        : accent;
+    final bg = dark ? Color.lerp(accent, Colors.black, 0.3)! : accent;
     final keys = _headerKeys();
     return Container(
       decoration: BoxDecoration(
@@ -543,10 +540,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête VAGUE : bloc orange à gauche + bloc bleu/violet à droite.
   Widget _headerSplitLeft(Color accent, double k) {
     final keys = _headerKeys();
-    // On considère que les clés contiennent au moins 'invoice_title'
     final titleIndex = keys.indexOf('invoice_title');
     final leftKeys = titleIndex >= 0 ? keys.sublist(0, titleIndex) : keys;
     final rightKeys = titleIndex >= 0 ? [keys[titleIndex]] : <String>[];
@@ -557,15 +552,14 @@ class StitchA4InvoicePreview extends StatelessWidget {
         height: 90 * k,
         child: Stack(
           children: [
-            // Fond gauche (orange) + courbe
             Positioned.fill(
               child: CustomPaint(
                 painter: _WaveHeaderPainter(accent: accent),
               ),
             ),
-            // Colonnes gauche (logo + société)
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16 * k, vertical: 12 * k),
+              padding:
+                  EdgeInsets.symmetric(horizontal: 16 * k, vertical: 12 * k),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Row(
@@ -574,9 +568,9 @@ class StitchA4InvoicePreview extends StatelessWidget {
                 ),
               ),
             ),
-            // Titre (blanc) à droite
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20 * k, vertical: 12 * k),
+              padding:
+                  EdgeInsets.symmetric(horizontal: 20 * k, vertical: 12 * k),
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Row(
@@ -591,7 +585,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête avec bande orange à DROITE (logotype à gauche).
   Widget _headerSplitRight(Color accent, double k) {
     final keys = _headerKeys();
     return Container(
@@ -610,7 +603,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête DIAGONALES COINS (orange haut-gauche / bas-droit).
   Widget _headerDiagonalCorners(Color accent, double k) {
     final keys = _headerKeys();
     return SizedBox(
@@ -629,7 +621,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
           ),
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14 * k, vertical: 12 * k),
+              padding: EdgeInsets.symmetric(
+                  horizontal: 14 * k, vertical: 12 * k),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: _rowChildren(keys, RoyalColors.onSurface, k),
@@ -648,7 +641,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête CERCLE orange haut-gauche + titre centré.
   Widget _headerCircle(Color accent, double k) {
     final keys = _headerKeys();
     return SizedBox(
@@ -681,7 +673,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
           ),
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14 * k, vertical: 12 * k),
+              padding: EdgeInsets.symmetric(
+                  horizontal: 14 * k, vertical: 12 * k),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: _rowChildren(keys, RoyalColors.onSurface, k),
@@ -693,7 +686,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête CURSIVE : "Invoice" en italique fin.
   Widget _headerCursive(Color accent, double k) {
     final keys = _headerKeys();
     return Padding(
@@ -705,7 +697,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// En-tête LOSANGE central (or) + colonnes autour.
   Widget _headerDiamond(Color accent, double k) {
     final keys = _headerKeys();
     return SizedBox(
@@ -719,7 +710,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
             bottom: 0,
             child: Center(
               child: Transform.rotate(
-                angle: 0.785398, // 45°
+                angle: 0.785398,
                 child: Container(
                   width: 50 * k,
                   height: 50 * k,
@@ -733,7 +724,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
           ),
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 70 * k, vertical: 12 * k),
+              padding: EdgeInsets.symmetric(
+                  horizontal: 70 * k, vertical: 12 * k),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: _rowChildren(keys, RoyalColors.onSurface, k),
@@ -745,7 +737,143 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  /// Construit les enfants de ligne pour une liste de clés donnée.
+  // ✨ NOUVEAU : Serif Title
+  Widget _headerSerif(Color accent, double k) {
+    final keys = _headerKeys();
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 10 * k),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _rowChildren(keys, accent, k, italicTitle: true),
+      ),
+    );
+  }
+
+  // ✨ NOUVEAU : Solid Band Left
+  Widget _headerSolidBandLeft(Color accent, double k) {
+    final keys = _headerKeys();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: 90 * k,
+        child: Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: accent)),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: 150 * k,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1B2A),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(40 * k),
+                    bottomLeft: Radius.circular(40 * k),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: 14 * k, vertical: 10 * k),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: _rowChildren(keys, Colors.white, k),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✨ NOUVEAU : Diagonale Orange / Bleu (blanc courbé)
+  Widget _headerDiagonalOrangeBlue(Color accent, double k) {
+    final keys = _headerKeys();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: 90 * k,
+        child: Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: accent)),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: 145 * k,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.elliptical(60 * k, 90 * k),
+                    bottomLeft: Radius.elliptical(60 * k, 90 * k),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: 14 * k, vertical: 10 * k),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: _rowChildren(keys, Colors.white, k),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✨ NOUVEAU : Pill Date
+  Widget _headerPillDate(Color accent, double k) {
+    final keys = _headerKeys();
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6 * k),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _rowChildren(keys, RoyalColors.onSurface, k),
+          ),
+          if (_customSubtitle.isNotEmpty) ...[
+            SizedBox(height: 10 * k),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 18 * k,
+                  vertical: 8 * k,
+                ),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(20 * k),
+                ),
+                child: Text(
+                  _customSubtitle,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Manrope',
+                    fontSize: 10 * k,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   List<Widget> _rowChildren(
     List<String> keys,
     Color onColor,
@@ -839,9 +967,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ),
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CORPS
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildBody(Color cText, Color cSub, Color line, double k) {
     final sections = InvoiceTemplate.decodeSections(
       customPositions['blocks_sections'],
@@ -914,6 +1039,17 @@ class StitchA4InvoicePreview extends StatelessWidget {
   }
 
   Widget _bodyBlock(String key, Color cText, Color cSub, Color line, double k) {
+    if (key.startsWith('__spacer')) {
+      final raw = (customPositions['spacer_sizes'] as Map?)?[key];
+      final h = (raw is num ? raw.toDouble() : 60.0).clamp(8.0, 500.0);
+      return SizedBox(width: double.infinity, height: h * k);
+    }
+    if (key.startsWith('__divider')) {
+      final raw = (customPositions['divider_styles'] as Map?)?[key];
+      final style = raw is String && raw.isNotEmpty ? raw : 'solid';
+      return _dividerWidget(style, cText, k);
+    }
+
     switch (key) {
       case 'billing_info':
         return _billingBlock(cText, cSub, k);
@@ -930,8 +1066,61 @@ class StitchA4InvoicePreview extends StatelessWidget {
       case 'qr_block':
         return _qrBlock(k);
       default:
-        if (key.startsWith('text_')) return _textBlock(key, cText, k);
+        if (key.startsWith('text_') || key.startsWith('foot_')) {
+          return _textBlock(key, cText, k);
+        }
         return const SizedBox.shrink();
+    }
+  }
+
+  Widget _dividerWidget(String style, Color color, double k) {
+    switch (style) {
+      case 'dashed':
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : 400.0;
+            const dashW = 6.0;
+            const gap = 4.0;
+            final count = (width / (dashW + gap)).floor();
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                count,
+                (_) => Container(
+                  width: dashW,
+                  height: 1.5,
+                  margin: const EdgeInsets.symmetric(horizontal: gap / 2),
+                  color: color.withValues(alpha: 0.35),
+                ),
+              ),
+            );
+          },
+        );
+      case 'dots':
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            20,
+            (_) => Container(
+              width: 3,
+              height: 3,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.35),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      case 'solid':
+      default:
+        return Container(
+          height: 1,
+          color: color.withValues(alpha: 0.25),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+        );
     }
   }
 
@@ -940,7 +1129,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'INVOICE TO:',
+            _labelOf('billing_info', 'INVOICE TO:'),
             style: TextStyle(
               fontFamily: 'WorkSans',
               fontSize: 10 * k,
@@ -1031,7 +1220,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
           ]
         : items;
 
-    // En-tête
     final headerWidget = Container(
       padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
       decoration: BoxDecoration(
@@ -1063,26 +1251,32 @@ class StitchA4InvoicePreview extends StatelessWidget {
     for (var i = 0; i < rows.length; i++) {
       final item = rows[i];
       final isAlt = _tableStyle == 'alternate_dark' && i.isEven;
+      final isSideBars = _tableStyle == 'side_bars_orange';
+      final effectiveAccent = accentColor ?? RoyalColors.secondary;
       body.add(Container(
         padding: EdgeInsets.symmetric(horizontal: 12 * k, vertical: 9 * k),
         decoration: BoxDecoration(
           color: isAlt ? cText.withValues(alpha: 0.05) : null,
-          border: Border(
-            bottom: BorderSide(color: line, width: 0.5),
-          ),
+          border: isSideBars
+              ? Border(
+                  left: BorderSide(color: effectiveAccent, width: 4),
+                  right: BorderSide(color: effectiveAccent, width: 4),
+                  bottom: BorderSide(color: line, width: 0.5),
+                )
+              : Border(
+                  bottom: BorderSide(color: line, width: 0.5),
+                ),
         ),
         child: Row(
           children: [
-            Expanded(
-                flex: 1,
-                child: _td('${i + 1}', cText, k)),
+            Expanded(flex: 1, child: _td('${i + 1}', cText, k)),
             Expanded(
                 flex: 5,
                 child: _td(_sanitize(item.description), cText, k)),
             Expanded(
                 flex: 2,
-                child: _td('${item.quantity}', cText, k,
-                    align: TextAlign.center)),
+                child:
+                    _td('${item.quantity}', cText, k, align: TextAlign.center)),
             Expanded(
                 flex: 2,
                 child: _td(StitchPreviewData.money(item.unitPrice), cText, k,
@@ -1098,14 +1292,12 @@ class StitchA4InvoicePreview extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        headerWidget,
-        ...body,
-      ],
+      children: [headerWidget, ...body],
     );
   }
 
-  Widget _th(String t, Color color, double k, {TextAlign align = TextAlign.left}) =>
+  Widget _th(String t, Color color, double k,
+          {TextAlign align = TextAlign.left}) =>
       Text(
         t,
         textAlign: align,
@@ -1118,7 +1310,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
       );
 
   Widget _td(String t, Color color, double k,
-      {TextAlign align = TextAlign.left, bool bold = false}) =>
+          {TextAlign align = TextAlign.left, bool bold = false}) =>
       Text(
         t,
         textAlign: align,
@@ -1131,12 +1323,13 @@ class StitchA4InvoicePreview extends StatelessWidget {
       );
 
   Widget _totalsBlock(Color cText, Color cSub, double k) {
+    final totalLabel = _labelOf('totals', 'TOTAL');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _totalLine('Sub Total',
-            StitchPreviewData.money(data.subtotal), cSub, cText, k),
+        _totalLine('Sub Total', StitchPreviewData.money(data.subtotal), cSub,
+            cText, k),
         if (showTaxDetails)
           _totalLine('Tax (${data.taxRate.toStringAsFixed(0)}%)',
               StitchPreviewData.money(data.taxAmount), cSub, cText, k),
@@ -1154,7 +1347,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'TOTAL',
+                totalLabel,
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -1205,19 +1398,20 @@ class StitchA4InvoicePreview extends StatelessWidget {
       );
 
   Widget _legalBlock(Color cText, Color cSub, double k) {
-    if (!showPaymentTerms && _customLegalText.isEmpty && data.rccm.isEmpty) {
-      return const SizedBox.shrink();
-    }
     final legal = _customLegalText.isNotEmpty
         ? _customLegalText
         : _sanitize(data.legalMention);
+    final headerLabel = _labelOf('legal_mentions', 'TERMS & CONDITIONS');
+    if (!showPaymentTerms && legal.isEmpty && data.rccm.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (showPaymentTerms) ...[
           Text(
-            'TERMS & CONDITIONS',
+            headerLabel,
             style: TextStyle(
               fontFamily: 'WorkSans',
               fontSize: 10 * k,
@@ -1244,6 +1438,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
 
   Widget _signatureBlock(Color cText, Color cSub, double k) {
     if (!_effectiveShowSignature) return const SizedBox.shrink();
+    final title = _labelOf('signature_block', _customSignatoryTitle);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
@@ -1266,7 +1461,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ),
         SizedBox(height: 3 * k),
         Text(
-          _customSignatoryTitle,
+          title,
           style: TextStyle(
             fontFamily: 'WorkSans',
             fontSize: 10 * k,
@@ -1284,7 +1479,9 @@ class StitchA4InvoicePreview extends StatelessWidget {
       height: 60 * k,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        border: Border.all(color: (accentColor ?? RoyalColors.secondary).withValues(alpha: 0.4)),
+        border: Border.all(
+            color: (accentColor ?? RoyalColors.secondary)
+                .withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(4),
       ),
       child: const Icon(Icons.qr_code_2, size: 40),
@@ -1350,10 +1547,72 @@ class StitchA4InvoicePreview extends StatelessWidget {
     return const [];
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  PIED
-  // ═══════════════════════════════════════════════════════════════
-  Widget _buildFooter(Color accent, Color cText, Color cSub, Color line, double k) {
+  Widget _buildCustomFooterSections(
+    Color accent,
+    Color cText,
+    Color cSub,
+    double k,
+  ) {
+    final sections = InvoiceTemplate.decodeSections(
+      customPositions['footer_sections'],
+    );
+    if (sections.every((s) => s.isEmpty)) return const SizedBox.shrink();
+
+    final visMap = (customPositions['footer_visibility'] as Map?) ?? {};
+    final alignMap = (customPositions['footer_alignments'] as Map?) ?? {};
+    final widthMap = (customPositions['footer_widths'] as Map?) ?? {};
+
+    bool visOf(String key) {
+      final v = visMap[key];
+      return v is bool ? v : true;
+    }
+
+    TextAlign alignOf(String key) {
+      final v = alignMap[key];
+      if (v == 'center') return TextAlign.center;
+      if (v == 'right') return TextAlign.right;
+      return TextAlign.left;
+    }
+
+    double widthOf(String key) {
+      final v = widthMap[key];
+      return v is num ? v.toDouble().clamp(0.3, 3.0) : 1.0;
+    }
+
+    final rows = <Widget>[];
+    for (final section in sections) {
+      final visibleKeys = section.where(visOf).toList();
+      if (visibleKeys.isEmpty) continue;
+      final children = <Widget>[];
+      for (var i = 0; i < visibleKeys.length; i++) {
+        final key = visibleKeys[i];
+        if (i > 0) children.add(SizedBox(width: 10 * k));
+        final w = (widthOf(key) * 10).round().clamp(3, 30);
+        children.add(Expanded(
+          flex: w,
+          child: Align(
+            alignment: _alignmentOf(alignOf(key)),
+            child: _textBlock(key, cText, k),
+          ),
+        ));
+      }
+      rows.add(Padding(
+        padding: EdgeInsets.only(top: 6 * k),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
+  }
+
+  Widget _buildFooter(
+      Color accent, Color cText, Color cSub, Color line, double k) {
     final widgets = <Widget>[];
 
     if (_bankName.isNotEmpty || _bankAccount.isNotEmpty) {
@@ -1404,7 +1663,8 @@ class StitchA4InvoicePreview extends StatelessWidget {
           widgets.add(Padding(
             padding: EdgeInsets.only(top: 10 * k),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16 * k, vertical: 10 * k),
+              padding:
+                  EdgeInsets.symmetric(horizontal: 16 * k, vertical: 10 * k),
               decoration: BoxDecoration(
                 color: accent,
                 borderRadius: BorderRadius.circular(4),
@@ -1439,7 +1699,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
       }
     }
 
-    // Contact bar (icônes)
     if (_footerStyle == 'contact_bar_icons') {
       widgets.add(Padding(
         padding: EdgeInsets.only(top: 10 * k),
@@ -1452,12 +1711,24 @@ class StitchA4InvoicePreview extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _footerContact(Icons.public,
-                  _sanitize(data.companyWebsite.isNotEmpty ? data.companyWebsite : 'www.example.com'), k),
-              _footerContact(Icons.mail_outline,
-                  _sanitize(data.companyEmail.isNotEmpty ? data.companyEmail : 'mail@example.com'), k),
-              _footerContact(Icons.phone_outlined,
-                  _sanitize(data.companyPhone.isNotEmpty ? data.companyPhone : '+000 000 000'), k),
+              _footerContact(
+                  Icons.public,
+                  _sanitize(data.companyWebsite.isNotEmpty
+                      ? data.companyWebsite
+                      : 'www.example.com'),
+                  k),
+              _footerContact(
+                  Icons.mail_outline,
+                  _sanitize(data.companyEmail.isNotEmpty
+                      ? data.companyEmail
+                      : 'mail@example.com'),
+                  k),
+              _footerContact(
+                  Icons.phone_outlined,
+                  _sanitize(data.companyPhone.isNotEmpty
+                      ? data.companyPhone
+                      : '+000 000 000'),
+                  k),
             ],
           ),
         ),
@@ -1502,9 +1773,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
         ],
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  TAMPON / FILIGRANE
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildPaidStampAt() {
     final sx = _cpDouble('stamp_x', 0.5).clamp(0.05, 0.95);
     final sy = _cpDouble('stamp_y', 0.5).clamp(0.05, 0.95);
@@ -1582,9 +1850,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  SANITIZE
-  // ═══════════════════════════════════════════════════════════════
   static String _sanitize(String input) {
     if (input.isEmpty) return input;
     final buf = StringBuffer();
@@ -1607,9 +1872,6 @@ class StitchA4InvoicePreview extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  HELPERS INTERNES
-// ═══════════════════════════════════════════════════════════════════════
 class _PreviewParagraph {
   final String text;
   final TextAlign align;
@@ -1623,20 +1885,15 @@ class _PreviewParagraph {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  PAINTERS
-// ═══════════════════════════════════════════════════════════════════════
 class _WaveHeaderPainter extends CustomPainter {
   final Color accent;
   _WaveHeaderPainter({required this.accent});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Fond bleu marine (droite)
-    final bg = Paint()..color = const Color(0xFF1B4965);
-    canvas.drawRect(Offset.zero & size, bg);
+    canvas.drawRect(
+        Offset.zero & size, Paint()..color = const Color(0xFF1B4965));
 
-    // Vague orange (gauche) — recouvre jusqu'à ~60% puis courbe
     final orange = Paint()..color = accent;
     final path = Path()
       ..moveTo(0, 0)
@@ -1715,9 +1972,6 @@ class _RainbowStripPainter extends CustomPainter {
       old.accent != accent || old.stripes != stripes;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  EXTENSION — conversion invoice → preview data
-// ═══════════════════════════════════════════════════════════════════════
 extension StitchPreviewDataX on StitchPreviewData {
   static StitchPreviewData fromInvoice({
     required dynamic invoice,

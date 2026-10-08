@@ -1,13 +1,9 @@
 // lib/widgets/template_thumbnail.dart
 //
-// CHANGELOG (v4) :
-//   • Rend fidèlement les 10 styles d'en-tête, 5 styles de tableau et
-//     6 styles de pied définis dans InvoiceTemplate v4.
-//   • Décode `positions` du preset (header_style, table_style, footer_style,
-//     accent_border, show_thank_you) → identité visuelle parfaite entre la
-//     miniature et le rendu final.
-//   • Fallback : si le preset embarque une image (`fileData`), elle est
-//     affichée en couverture.
+// CHANGELOG (v5) :
+//   • ✨ 4 nouveaux styles d'en-tête : serif_title, solid_band_left,
+//     split_diagonal_orange_blue, pill_date.
+//   • ✨ Nouveau style de tableau : side_bars_orange.
 //
 import 'dart:convert';
 
@@ -19,7 +15,6 @@ class TemplateThumbnail extends StatelessWidget {
   final InvoiceTemplate template;
   const TemplateThumbnail({super.key, required this.template});
 
-  // ── Helpers lecture positions ──
   String _style(String key, String fallback) {
     final v = template.positions[key];
     return v is String && v.isNotEmpty ? v : fallback;
@@ -55,9 +50,6 @@ class TemplateThumbnail extends StatelessWidget {
     return _drawn();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  RENDU PRINCIPAL
-  // ═══════════════════════════════════════════════════════════════
   Widget _drawn() {
     final t = template;
     final headerStyle = _style('header_style', 'flat');
@@ -78,7 +70,6 @@ class TemplateThumbnail extends StatelessWidget {
       color: t.backgroundColor,
       child: Stack(
         children: [
-          // ── Bande décorative (accent_border) ──
           if (accentBorder == 'top')
             Positioned(
               top: 0,
@@ -115,8 +106,6 @@ class TemplateThumbnail extends StatelessWidget {
                 child: _RainbowStrip(color: t.primaryColor),
               ),
             ),
-
-          // ── Contenu ──
           Padding(
             padding: const EdgeInsets.all(8),
             child: Column(
@@ -141,9 +130,6 @@ class TemplateThumbnail extends StatelessWidget {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  EN-TÊTE — dispatch par style
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildHeader(InvoiceTemplate t, String style, Color onPrimary) {
     final headerContent = Row(
       children: [
@@ -187,7 +173,6 @@ class TemplateThumbnail extends StatelessWidget {
     );
 
     switch (style) {
-      // 🔵 Band / Dark : bandeau plein largeur
       case 'band':
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -207,7 +192,6 @@ class TemplateThumbnail extends StatelessWidget {
           child: headerContent,
         );
 
-      // 🌊 Wave / Split Orange Left : vague orange sur fond bleu marine
       case 'wave':
       case 'split_orange_left':
         return ClipRRect(
@@ -231,7 +215,6 @@ class TemplateThumbnail extends StatelessWidget {
           ),
         );
 
-      // 🔶 Orange Band Right : bande orange à droite
       case 'orange_band_right':
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
@@ -245,7 +228,6 @@ class TemplateThumbnail extends StatelessWidget {
           child: headerContent,
         );
 
-      // ⬛ Split Diagonal Corners : 2 triangles
       case 'split_diagonal_corners':
         return SizedBox(
           height: 36,
@@ -284,7 +266,6 @@ class TemplateThumbnail extends StatelessWidget {
           ),
         );
 
-      // 🟠 Circle Accent Top Left
       case 'circle_accent_top_left':
         return SizedBox(
           height: 36,
@@ -311,8 +292,8 @@ class TemplateThumbnail extends StatelessWidget {
           ),
         );
 
-      // ✒️ Cursive Title : "Invoice" en italique fin
-            case 'cursive_title':
+      // ✨ NOUVEAU : Serif Title
+      case 'serif_title':
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
@@ -338,7 +319,159 @@ class TemplateThumbnail extends StatelessWidget {
                       color: t.primaryColor,
                     ),
                     const SizedBox(height: 2),
-                    // ✅ Fix : self-contained, ne dépend plus de `lineSoft`
+                    Container(
+                      height: 2.5,
+                      width: 28,
+                      color: t.textColor.withValues(alpha: 0.10),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Invoice',
+                style: TextStyle(
+                  color: t.primaryColor,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        );
+
+      // ✨ NOUVEAU : Solid Band Left
+      case 'solid_band_left':
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 36,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(color: t.primaryColor),
+                ),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 32,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0D1B2A),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        bottomLeft: Radius.circular(20),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 4),
+                  child: headerContent,
+                ),
+              ],
+            ),
+          ),
+        );
+
+      // ✨ NOUVEAU : Diagonale Orange / Bleu (blanc courbé)
+      case 'split_diagonal_orange_blue':
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 36,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(color: t.primaryColor),
+                ),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 34,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.elliptical(24, 40),
+                        bottomLeft: Radius.elliptical(24, 40),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 4),
+                  child: headerContent,
+                ),
+              ],
+            ),
+          ),
+        );
+
+      // ✨ NOUVEAU : Pill Date
+      case 'pill_date':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              headerContent,
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: t.primaryColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'Invoice · Date',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case 'cursive_title':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              if (t.showLogo) ...[
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: t.primaryColor.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 3.5,
+                      width: 40,
+                      color: t.primaryColor,
+                    ),
+                    const SizedBox(height: 2),
                     Container(
                       height: 2.5,
                       width: 28,
@@ -359,7 +492,7 @@ class TemplateThumbnail extends StatelessWidget {
             ],
           ),
         );
-      // 💠 Diamond Center : losange central or
+
       case 'diamond_center':
         return SizedBox(
           height: 36,
@@ -388,7 +521,6 @@ class TemplateThumbnail extends StatelessWidget {
           ),
         );
 
-      // 🔳 Flat (défaut)
       case 'flat':
       default:
         return Padding(
@@ -398,9 +530,6 @@ class TemplateThumbnail extends StatelessWidget {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  CLIENT / MÉTA
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildClientMeta(InvoiceTemplate t, Color line, Color lineSoft) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,9 +560,6 @@ class TemplateThumbnail extends StatelessWidget {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  TABLEAU — dispatch par style
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildItemsTable(
       InvoiceTemplate t, String style, Color line, Color lineSoft) {
     final headerBg = style == 'dark_header'
@@ -463,14 +589,23 @@ class TemplateThumbnail extends StatelessWidget {
     for (var i = 0; i < 3; i++) {
       final isAlt = style == 'alternate_dark' && i.isEven;
       final showNumbered = style == 'numbered';
+      final isSideBars = style == 'side_bars_orange';
       bodyRows.add(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
           decoration: BoxDecoration(
             color: isAlt ? t.textColor.withValues(alpha: 0.05) : null,
-            border: Border(
-              bottom: BorderSide(color: line.withValues(alpha: 0.4), width: 0.5),
-            ),
+            border: isSideBars
+                ? Border(
+                    left: BorderSide(color: t.primaryColor, width: 2),
+                    right: BorderSide(color: t.primaryColor, width: 2),
+                    bottom: BorderSide(
+                        color: line.withValues(alpha: 0.4), width: 0.5),
+                  )
+                : Border(
+                    bottom: BorderSide(
+                        color: line.withValues(alpha: 0.4), width: 0.5),
+                  ),
           ),
           child: Row(
             children: [
@@ -541,16 +676,16 @@ class TemplateThumbnail extends StatelessWidget {
         ),
       );
 
-  // ═══════════════════════════════════════════════════════════════
-  //  TOTAUX
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildTotals(InvoiceTemplate t) {
     return Align(
       alignment: Alignment.centerRight,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(height: 2.5, width: 24, color: t.textColor.withValues(alpha: 0.2)),
+          Container(
+              height: 2.5,
+              width: 24,
+              color: t.textColor.withValues(alpha: 0.2)),
           const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
@@ -575,9 +710,6 @@ class TemplateThumbnail extends StatelessWidget {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  //  PIED — dispatch par style
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildFooter(InvoiceTemplate t, String style) {
     switch (style) {
       case 'contact_bar_icons':
@@ -645,9 +777,15 @@ class TemplateThumbnail extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(height: 2, width: 40, color: t.textColor.withValues(alpha: 0.12)),
+                    Container(
+                        height: 2,
+                        width: 40,
+                        color: t.textColor.withValues(alpha: 0.12)),
                     const SizedBox(height: 2),
-                    Container(height: 2, width: 30, color: t.textColor.withValues(alpha: 0.12)),
+                    Container(
+                        height: 2,
+                        width: 30,
+                        color: t.textColor.withValues(alpha: 0.12)),
                   ],
                 ),
               ),
@@ -667,18 +805,14 @@ class TemplateThumbnail extends StatelessWidget {
       );
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  PAINTERS / CLIPPERS
-// ═══════════════════════════════════════════════════════════════════════
 class _ThumbWavePainter extends CustomPainter {
   final Color accent;
   _ThumbWavePainter({required this.accent});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Fond bleu marine
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF1B4965));
-    // Vague orange à gauche
+    canvas.drawRect(
+        Offset.zero & size, Paint()..color = const Color(0xFF1B4965));
     final path = Path()
       ..moveTo(0, 0)
       ..lineTo(size.width * 0.55, 0)

@@ -1,16 +1,11 @@
 // lib/models/invoice_template.dart
 //
-// CHANGELOG (v4 — REFONTE VISUELLE) :
-//   • 8 presets ENTIÈREMENT réécrits d'après les images fournies
-//     (Bande Orange, Moderne Zigzag, Classique Or, Bandeau Bleu,
-//      Minimal Two-Col, Compact Pro, Carte Dorée, Bandeau Sombre).
-//   • Nouveaux styles : `wave`, `split_diagonal`, `circle_accent`,
-//     `diamond_center`, `cursive_title`, `stripes_pattern`,
-//     `rainbow_strip`, `zigzag_thankyou`, `pill_date`, `cursive_signature`.
-//   • Nouveaux table styles : `alternate_dark`, `dark_header`, `orange_bars`.
-//   • Nouveau footer style : `contact_bar_icons`, `cursive_center`,
-//     `diagonal_rainbow`, `thick_orange_band`.
-//   • Ajout `gridSnap` (8.0) : la grille magnétique lue par le workspace.
+// CHANGELOG (v5) :
+//   • 🐛 FIX preset `default_2` : `wave_orange_blue` → `wave`.
+//   • ✨ Nouveaux styles finaux : `serif_title`, `solid_band_left`,
+//     `split_diagonal_orange_blue`, `pill_date`, `side_bars_orange`.
+//   • ✨ Presets mis à jour : `default_4`, `default_5`, `default_6`, `default_7`.
+//   • ✨ Nouveau preset `default_9` « Moderne Date » (image #7).
 //
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -20,20 +15,10 @@ import 'invoice_layout.dart';
 
 part 'invoice_template.g.dart';
 
-  // ═══════════════════════════════════════════════════════════════
-  //  📋 VARIABLES / CATÉGORIES (utilisées par l'admin + boutique)
-  // ═══════════════════════════════════════════════════════════════
-
-  /// 🔤 Variables de facture disponibles pour le mapping admin.
-  /// Utilisées par `AdminTemplateFormScreen` pour associer une variable
-  /// (ex. `invoice_number`) à un placeholder dans un fichier template
-  /// (ex. `{invoice_number}`).
-
-
 @HiveType(typeId: 6)
 class InvoiceTemplate {
 
-    static const List<String> availableVariables = [
+  static const List<String> availableVariables = [
     'invoice_number',
     'issue_date',
     'due_date',
@@ -58,9 +43,6 @@ class InvoiceTemplate {
     'currency',
   ];
 
-  /// 🏷️ Catégories officielles de la boutique — **alignées sur les 8
-  /// presets v4** (Bande Orange → Classique, Moderne Zigzag → Moderne,
-  /// Classique Or → Élégant, etc.).
   static const List<String> categories = [
     'Tous',
     'Classique',
@@ -102,11 +84,7 @@ class InvoiceTemplate {
   final int designVersion;
 
   static const int kRoyalDesignVersion = 4;
-
-  /// 📐 Grille magnétique — 8pt (base commune éditeur ↔ aperçu ↔ PDF).
   static const double gridSnap = 8.0;
-
-  /// 📏 Dimensions A4 logiques (portrait, base des dimensions de layout).
   static const double kPageWidth = 794.0;
   static const double kPageHeight = 1123.0;
 
@@ -233,12 +211,11 @@ class InvoiceTemplate {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  CONSTRUCTION PRESET — une seule fonction, tous les styles
+  //  CONSTRUCTION PRESET
   // ═══════════════════════════════════════════════════════════════
   static Map<String, dynamic> _preset({
     required String title,
     String subtitle = '',
-    // En-tête
     List<List<String>>? headerSections,
     Map<String, double> headerWidths = const {'company_info': 2.0},
     Map<String, String> headerAlignments = const {
@@ -248,7 +225,6 @@ class InvoiceTemplate {
     },
     String headerStyle = 'flat',
     String accentBorder = '',
-    // Corps
     List<List<String>>? sections,
     Map<String, String> blockAlignment = const {
       'billing_info': 'left',
@@ -259,7 +235,10 @@ class InvoiceTemplate {
       'signature_block': 'right',
       'qr_block': 'center',
     },
-    Map<String, double> blockWidths = const {'billing_info': 1.2, 'invoice_meta': 1.0},
+    Map<String, double> blockWidths = const {
+      'billing_info': 1.2,
+      'invoice_meta': 1.0,
+    },
     Map<String, bool> blockVisibility = const {
       'billing_info': true,
       'invoice_meta': true,
@@ -269,23 +248,18 @@ class InvoiceTemplate {
       'signature_block': true,
       'qr_block': false,
     },
-    // Tableau
     String tableStyle = 'plain',
-    // Footer
     String footerStyle = 'simple',
     bool showThankYou = false,
     String thankYouText = 'Merci pour votre confiance !',
     String bankName = '',
     String bankAccount = '',
-    // Signatures / dates
     String signatoryTitle = 'Authorized Sign',
     bool showSignatureLine = true,
-    // Légal
     String legalText =
         'Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed do '
             'eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim '
             'ad minim veniam, quis nostrud exercitation ullamco laboris nisi.',
-    // Divers
     double pagePadding = 32.0,
     bool showPaidStamp = false,
     String stampText = 'PAYÉ',
@@ -301,7 +275,6 @@ class InvoiceTemplate {
 
     return <String, dynamic>{
       ...InvoiceLayoutConfig.defaultLayout().toMap(),
-      // ── Corps ──
       'blocks_sections': encodeSections(defaultSections),
       'blocks_order': [for (final s in defaultSections) ...s],
       'block_visibility': Map<String, bool>.from(blockVisibility)
@@ -309,19 +282,16 @@ class InvoiceTemplate {
         ..['qr_block'] = blockVisibility['qr_block'] ?? false,
       'block_alignment': Map<String, String>.from(blockAlignment),
       'block_widths': Map<String, double>.from(blockWidths),
-      // ── En-tête ──
       'header_sections': encodeSections(
         headerSections ?? const [['logo', 'company_info', 'invoice_title']],
       ),
       'header_elements_order': const ['logo', 'company_info', 'invoice_title'],
       'header_widths': Map<String, double>.from(headerWidths),
       'header_alignments': Map<String, String>.from(headerAlignments),
-      // ── Styles ──
       'header_style': headerStyle,
       'table_style': tableStyle,
       'footer_style': footerStyle,
       'accent_border': accentBorder,
-      // ── Textes ──
       'invoice_title_text': title,
       'invoice_subtitle': subtitle,
       'custom_legal_text': legalText,
@@ -333,7 +303,6 @@ class InvoiceTemplate {
       'thank_you_text': thankYouText,
       'bank_name': bankName,
       'bank_account': bankAccount,
-      // ── Divers ──
       'qr_position': qrPosition,
       'page_padding': pagePadding,
       'grid_snap': InvoiceTemplate.gridSnap,
@@ -342,12 +311,10 @@ class InvoiceTemplate {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  8 PRESETS — fidèles aux images de référence
+  //  9 PRESETS
   // ═══════════════════════════════════════════════════════════════
   static List<InvoiceTemplate> getDefaultTemplates() => [
-    // ─────────────────────────────────────────────────────────────
-    // ① BANDE ORANGE — grand INVOICE orange en haut à gauche
-    // ─────────────────────────────────────────────────────────────
+    // ① BANDE ORANGE
     InvoiceTemplate(
       id: 'default_1',
       name: 'Bande Orange',
@@ -372,7 +339,11 @@ class InvoiceTemplate {
           ['invoice_title'],
           ['logo', 'company_info'],
         ],
-        headerWidths: const {'logo': 0.8, 'company_info': 2.0, 'invoice_title': 1.4},
+        headerWidths: const {
+          'logo': 0.8,
+          'company_info': 2.0,
+          'invoice_title': 1.4,
+        },
         headerAlignments: const {
           'logo': 'right',
           'company_info': 'right',
@@ -403,9 +374,7 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ② MODERNE ZIGZAG — vague orange/bleu, pill date orange
-    // ─────────────────────────────────────────────────────────────
+    // ② MODERNE ZIGZAG
     InvoiceTemplate(
       id: 'default_2',
       name: 'Moderne Zigzag',
@@ -422,12 +391,16 @@ class InvoiceTemplate {
       positions: _preset(
         title: 'Invoice',
         subtitle: 'Invoice: 0001593   Date: 01/05/2029',
-        headerStyle: 'wave_orange_blue',
+        headerStyle: 'wave',
         headerSections: const [
           ['logo'],
           ['company_info', 'invoice_title'],
         ],
-        headerWidths: const {'logo': 1.0, 'company_info': 1.2, 'invoice_title': 1.6},
+        headerWidths: const {
+          'logo': 1.0,
+          'company_info': 1.2,
+          'invoice_title': 1.6,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -459,9 +432,7 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ③ CLASSIQUE OR — logo carré + Invoice fin, tableau orange
-    // ─────────────────────────────────────────────────────────────
+    // ③ CLASSIQUE OR
     InvoiceTemplate(
       id: 'default_3',
       name: 'Classique Or',
@@ -482,7 +453,11 @@ class InvoiceTemplate {
           ['logo', 'company_info'],
           ['invoice_title'],
         ],
-        headerWidths: const {'logo': 0.6, 'company_info': 2.0, 'invoice_title': 1.4},
+        headerWidths: const {
+          'logo': 0.6,
+          'company_info': 2.0,
+          'invoice_title': 1.4,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -510,14 +485,12 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ④ BANDEAU BLEU — cercle orange en haut à gauche, INVOICE géant
-    // ─────────────────────────────────────────────────────────────
+    // ④ BANDEAU BLEU — ✨ headerStyle → solid_band_left
     InvoiceTemplate(
       id: 'default_4',
       name: 'Bandeau Bleu',
-      description: 'Cercle orange & bandeau sombre — élégance',
-      primaryColor: const Color(0xFF1B4965),
+      description: 'Bandeau orange & bleu nuit — élégance',
+      primaryColor: const Color(0xFFE8A33D),
       textColor: const Color(0xFF1F2937),
       backgroundColor: const Color(0xFFFFFFFF),
       fontSize: 11.5,
@@ -528,12 +501,16 @@ class InvoiceTemplate {
       designVersion: 4,
       positions: _preset(
         title: 'INVOICE',
-        headerStyle: 'circle_accent_top_left',
+        headerStyle: 'solid_band_left',
         headerSections: const [
           ['logo', 'company_info'],
           ['invoice_title'],
         ],
-        headerWidths: const {'logo': 0.9, 'company_info': 1.8, 'invoice_title': 1.6},
+        headerWidths: const {
+          'logo': 0.9,
+          'company_info': 1.8,
+          'invoice_title': 1.6,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -561,9 +538,7 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ⑤ MINIMAL TWO-COL — header clean, tableau orange/noir
-    // ─────────────────────────────────────────────────────────────
+    // ⑤ MINIMAL TWO-COL — ✨ headerStyle → split_diagonal_orange_blue
     InvoiceTemplate(
       id: 'default_5',
       name: 'Minimal Two-Col',
@@ -579,12 +554,16 @@ class InvoiceTemplate {
       designVersion: 4,
       positions: _preset(
         title: 'INVOICE',
-        headerStyle: 'orange_band_right',
+        headerStyle: 'split_diagonal_orange_blue',
         headerSections: const [
           ['logo', 'company_info'],
           ['invoice_title'],
         ],
-        headerWidths: const {'logo': 0.9, 'company_info': 1.8, 'invoice_title': 2.0},
+        headerWidths: const {
+          'logo': 0.9,
+          'company_info': 1.8,
+          'invoice_title': 2.0,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -611,13 +590,11 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ⑥ COMPACT PRO — diagonales haut, INVOICE centré, table orange
-    // ─────────────────────────────────────────────────────────────
+    // ⑥ COMPACT PRO — ✨ tableStyle → side_bars_orange
     InvoiceTemplate(
       id: 'default_6',
       name: 'Compact Pro',
-      description: 'Diagonales latérales & titre centré — dense',
+      description: 'Diagonales latérales & barres orange — dense',
       primaryColor: const Color(0xFFE8A33D),
       textColor: const Color(0xFF1F2937),
       backgroundColor: const Color(0xFFFFFFFF),
@@ -634,7 +611,11 @@ class InvoiceTemplate {
           ['invoice_title'],
           ['company_info'],
         ],
-        headerWidths: const {'logo': 0.7, 'company_info': 2.0, 'invoice_title': 1.4},
+        headerWidths: const {
+          'logo': 0.7,
+          'company_info': 2.0,
+          'invoice_title': 1.4,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -655,7 +636,7 @@ class InvoiceTemplate {
           'signature_block': 'left',
         },
         blockWidths: const {'billing_info': 1.0, 'invoice_meta': 1.2},
-        tableStyle: 'orange_bars',
+        tableStyle: 'side_bars_orange',
         footerStyle: 'diagonal_bottom_stripes',
         showThankYou: false,
         signatoryTitle: 'AUTHORIZED SIGN',
@@ -665,13 +646,11 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ⑦ CARTE DORÉE — Invoice en cursive, tableau orange, contact bar
-    // ─────────────────────────────────────────────────────────────
+    // ⑦ CARTE DORÉE — ✨ headerStyle → serif_title
     InvoiceTemplate(
       id: 'default_7',
       name: 'Carte Dorée',
-      description: 'Or discret & pied contact — élégant',
+      description: 'Titre serif & pied épais — élégant',
       primaryColor: const Color(0xFFE8A33D),
       textColor: const Color(0xFF1F2937),
       backgroundColor: const Color(0xFFFFFDF7),
@@ -683,12 +662,16 @@ class InvoiceTemplate {
       designVersion: 4,
       positions: _preset(
         title: 'Invoice',
-        headerStyle: 'cursive_title',
+        headerStyle: 'serif_title',
         headerSections: const [
           ['logo', 'company_info'],
           ['invoice_title'],
         ],
-        headerWidths: const {'logo': 0.9, 'company_info': 2.0, 'invoice_title': 1.6},
+        headerWidths: const {
+          'logo': 0.9,
+          'company_info': 2.0,
+          'invoice_title': 1.6,
+        },
         headerAlignments: const {
           'logo': 'left',
           'company_info': 'left',
@@ -719,9 +702,7 @@ class InvoiceTemplate {
       ),
     ),
 
-    // ─────────────────────────────────────────────────────────────
-    // ⑧ BANDEAU SOMBRE — losange central, table orange, stripe bas
-    // ─────────────────────────────────────────────────────────────
+    // ⑧ BANDEAU SOMBRE
     InvoiceTemplate(
       id: 'default_8',
       name: 'Bandeau Sombre',
@@ -743,7 +724,11 @@ class InvoiceTemplate {
           ['company_info'],
           ['invoice_title'],
         ],
-        headerWidths: const {'logo': 0.8, 'company_info': 2.0, 'invoice_title': 1.6},
+        headerWidths: const {
+          'logo': 0.8,
+          'company_info': 2.0,
+          'invoice_title': 1.6,
+        },
         headerAlignments: const {
           'logo': 'center',
           'company_info': 'center',
@@ -771,6 +756,62 @@ class InvoiceTemplate {
         bankName: 'Bank Name Here',
         bankAccount: 'Branch Code 000000 / Account 00 000 000 000',
         pagePadding: 36,
+      ),
+    ),
+
+    // ⑨ MODERNE DATE — image #7
+    InvoiceTemplate(
+      id: 'default_9',
+      name: 'Moderne Date',
+      description: 'Pill orange & table bleu foncé — moderne daté',
+      primaryColor: const Color(0xFFE8A33D),
+      textColor: const Color(0xFF1F2937),
+      backgroundColor: const Color(0xFFFFFFFF),
+      fontSize: 11.5,
+      fontFamily: 'WorkSans',
+      category: 'Moderne',
+      price: 0,
+      rating: 4.6,
+      designVersion: 4,
+      positions: _preset(
+        title: 'Invoice',
+        subtitle: 'Invoice: 0001593     Date 01/05/2029',
+        headerStyle: 'pill_date',
+        headerSections: const [
+          ['logo', 'company_info'],
+          ['invoice_title'],
+        ],
+        headerWidths: const {
+          'logo': 0.8,
+          'company_info': 2.0,
+          'invoice_title': 1.6,
+        },
+        headerAlignments: const {
+          'logo': 'left',
+          'company_info': 'left',
+          'invoice_title': 'right',
+        },
+        sections: const [
+          ['billing_info'],
+          ['items_table'],
+          ['legal_mentions', 'totals'],
+          ['signature_block'],
+        ],
+        blockAlignment: const {
+          'billing_info': 'left',
+          'invoice_meta': 'right',
+          'items_table': 'left',
+          'totals': 'right',
+          'legal_mentions': 'left',
+          'signature_block': 'right',
+        },
+        tableStyle: 'dark_header',
+        footerStyle: 'diagonal_bottom_stripes',
+        accentBorder: '',
+        pagePadding: 36,
+        signatoryTitle: 'Director',
+        bankName: 'Your Bank',
+        bankAccount: '000 000 000',
       ),
     ),
   ];

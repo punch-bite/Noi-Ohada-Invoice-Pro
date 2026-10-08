@@ -1,9 +1,12 @@
 // lib/screens/dashboard/invoice_detail_screen.dart
 //
-// CHANGELOG v4 :
-//   • 🛡️ Bandeau "Mode lecture seule admin" si l'admin ouvre la facture
-//     d'un autre utilisateur (empêche les modifications accidentelles).
-//   • Boutons Éditer/Personnaliser désactivés en mode lecture seule.
+// CHANGELOG v5 :
+//   • ❌ Suppression du bouton « Éditer » (bottom bar).
+//   • 🔄 Le pill « Modèle : X » (au-dessus de la facture) est remplacé par
+//     un CAROUSEL de templates en bas de page.
+//   • ✨ Le bouton « Personnaliser » devient un FloatingActionButton.
+//   • ✅ Bandeau lecture seule admin, partage, PDF, email, suppression
+//     restent inchangés.
 //
 import 'dart:convert';
 import 'dart:typed_data';
@@ -36,7 +39,7 @@ import '../../services/wallet_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
 import '../../widgets/template_background_palette.dart';
-// 🆕 Bandeau lecture seule.
+import '../../widgets/template_thumbnail.dart';
 import '../../widgets/admin_read_only_banner.dart';
 import 'invoice_print_preview_screen.dart';
 
@@ -67,6 +70,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   double _zoom = 1.0;
 
+  /// 🎠 Contrôleur du carousel de templates (bas de page).
+  final ScrollController _carouselController = ScrollController();
+
+  /// 🎠 Clé de l'item sélectionné pour le scroll initial.
+  final GlobalKey _selectedCarouselKey = GlobalKey();
+
   ThemeProvider get themeProvider => context.watch<ThemeProvider>();
   bool get isDark => themeProvider.isDarkMode;
   Color get textColor => themeProvider.textColor ?? Colors.black;
@@ -88,6 +97,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     super.initState();
     _loadData();
     _loadTemplates();
+  }
+
+  @override
+  void dispose() {
+    _carouselController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -167,6 +182,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       _templates = merged;
       if (applied != null) _selectedTemplate = applied;
     });
+
+    // 🎠 Scroll vers l'item sélectionné après le rendu.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelectedTemplate();
+    });
+  }
+
+  void _scrollToSelectedTemplate() {
+    final ctx = _selectedCarouselKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+      alignment: 0.5,
+    );
   }
 
   Future<InvoiceTemplate> _applyCustomisation(
@@ -245,17 +276,41 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final t = _selectedTemplate;
     if (t == null) return _openTemplatePicker();
     if (!_canCustomize()) {
-      /* ... */ return;
+      _toast('Personnalisation réservée à ce modèle.', Colors.orange);
+      return;
     }
     if (_isReadOnlyForAdmin) {
-      /* ... */ return;
+      _toast('Mode lecture seule — action désactivée.', Colors.orange);
+      return;
     }
     await context.push('/templates/workspace', extra: t);
     if (mounted) {
-      // 🔄 Force le reload complet pour refléter les modifications.
       await _loadData();
       await _loadTemplates();
     }
+  }
+
+  /// 🎠 Sélectionne un template depuis le carousel.
+  Future<void> _selectTemplateFromCarousel(InvoiceTemplate t) async {
+    if (_isReadOnlyForAdmin) return;
+    if (_selectedTemplate?.id == t.id) return;
+
+    // Sauvegarde la sélection
+    await TemplateSelectionService.setActiveTemplateId(t.id);
+
+    // Applique la personnalisation et recharge
+    final applied = await _applyCustomisation(
+      t,
+      settings: _invoiceSettings,
+    );
+    if (!mounted) return;
+
+    setState(() => _selectedTemplate = applied);
+
+    // Scroll vers le nouveau sélectionné
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelectedTemplate();
+    });
   }
 
   void _toast(String msg, [Color? color]) {
@@ -314,7 +369,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         template: _selectedTemplate!,
         customPositions: _customPositions,
         background: _backgroundSettings,
-        previewBackground: _previewBackground, // 🆕 AJOUTER CETTE LIGNE
+        previewBackground: _previewBackground,
         invoiceSettings: _invoiceSettings,
         isFreePlan: _isFreePlan(),
       ),
@@ -392,14 +447,39 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
     }
 
+    final readOnly = _isReadOnlyForAdmin;
+
     return Scaffold(
       backgroundColor: c.surface,
       appBar: _appBar(c,
           title: _invoice!.isDevis ? 'Aperçu Devis' : 'Aperçu Facture'),
+      // 🎯 FloatingActionButton : « Personnaliser »
+      floatingActionButton: readOnly || !_canCustomize()
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _openWorkspace,
+              backgroundColor: c.primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.palette_outlined, size: 20),
+              label: const Text(
+                'Personnaliser',
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+              tooltip: 'Personnaliser le modèle',
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      // 🎠 Carousel de templates en bas de page
+      bottomNavigationBar: _templates.isEmpty
+          ? null
+          : _buildTemplateCarousel(c),
       body: Column(
         children: [
           // 🛡️ Bandeau lecture seule si admin sur doc tiers
-          if (_isReadOnlyForAdmin)
+          if (readOnly)
             AdminReadOnlyBanner(
               documentName: 'Cette facture',
               ownerName: _client?.name,
@@ -410,7 +490,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 Positioned.fill(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
                     child: Center(
                       child: Transform.scale(
                         scale: _zoom,
@@ -424,7 +504,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ],
             ),
           ),
-          _buildBottomBar(c),
         ],
       ),
     );
@@ -512,75 +591,204 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       company: _company,
     );
 
-    return Column(
-      children: [
-        if (tpl != null) _templateIndicator(c, tpl),
-        StitchA4InvoicePreview(
-          data: stitch,
-          accentColor: effective?.primaryColor,
-          pageColor: effective?.backgroundColor,
-          showLogo: effective?.showLogo ?? true,
-          showBorder: effective?.showBorder ?? false,
-          showTaxDetails: effective?.showTaxDetails ?? true,
-          showPaymentTerms: effective?.showPaymentTerms ?? true,
-          showPaymentQR: effective?.showPaymentQR ?? false,
-          fontFamily: effective?.fontFamily ?? 'WorkSans',
-          fontScale: (effective?.fontSize ?? 12) / 12,
-          layoutConfig: InvoiceLayoutConfig.defaultLayout(),
-          backgroundSettings: _backgroundSettings,
-          backgroundImage: _previewBackground,
-          watermarkText: _invoiceSettings.watermarkText,
-          showWatermark: _invoiceSettings.showWatermark,
-          showPaidStamp: _invoice?.status == 'paid',
-          customPositions: _customPositions,
-        ),
-      ],
+    // ✅ Le pill « Modèle : X » a été retiré : le carousel en bas le remplace.
+    return StitchA4InvoicePreview(
+      data: stitch,
+      accentColor: effective?.primaryColor,
+      pageColor: effective?.backgroundColor,
+      showLogo: effective?.showLogo ?? true,
+      showBorder: effective?.showBorder ?? false,
+      showTaxDetails: effective?.showTaxDetails ?? true,
+      showPaymentTerms: effective?.showPaymentTerms ?? true,
+      showPaymentQR: effective?.showPaymentQR ?? false,
+      fontFamily: effective?.fontFamily ?? 'WorkSans',
+      fontScale: (effective?.fontSize ?? 12) / 12,
+      layoutConfig: InvoiceLayoutConfig.defaultLayout(),
+      backgroundSettings: _backgroundSettings,
+      backgroundImage: _previewBackground,
+      watermarkText: _invoiceSettings.watermarkText,
+      showWatermark: _invoiceSettings.showWatermark,
+      showPaidStamp: _invoice?.status == 'paid',
+      customPositions: _customPositions,
     );
   }
 
-  Widget _templateIndicator(RoyalScheme c, InvoiceTemplate t) {
-    return GestureDetector(
-      onTap: _isReadOnlyForAdmin ? null : _openTemplatePicker,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: c.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: c.outlineVariant.withValues(alpha: 0.5)),
+  // ═══════════════════════════════════════════════════════════════
+  //  🎠 CAROUSEL DE TEMPLATES (bas de page)
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildTemplateCarousel(RoyalScheme c) {
+    return Container(
+      height: 148 + MediaQuery.of(context).padding.bottom,
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(
+          top: BorderSide(
+            color: c.outlineVariant.withValues(alpha: 0.5),
+          ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: t.primaryColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Titre du carousel
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                Icon(Icons.palette_outlined, size: 14, color: c.tertiary),
+                const SizedBox(width: 6),
+                Text(
+                  'Choisir un modèle',
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: c.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _openTemplatePicker,
+                  child: Text(
+                    'Voir tout',
+                    style: TextStyle(
+                      fontFamily: 'WorkSans',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: c.primary,
+                      decoration: TextDecoration.underline,
+                      decorationColor: c.primary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
+          ),
+          // Liste horizontale des templates
+          Expanded(
+            child: ListView.builder(
+              controller: _carouselController,
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              itemCount: _templates.length,
+              itemBuilder: (ctx, i) {
+                final t = _templates[i];
+                final selected = _selectedTemplate?.id == t.id;
+                return Padding(
+                  key: selected ? _selectedCarouselKey : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _carouselItem(c, t, selected),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _carouselItem(
+    RoyalScheme c,
+    InvoiceTemplate t,
+    bool selected,
+  ) {
+    final readOnly = _isReadOnlyForAdmin;
+    return GestureDetector(
+      onTap: readOnly ? null : () => _selectTemplateFromCarousel(t),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        width: 92,
+        decoration: BoxDecoration(
+          color: selected
+              ? c.primary.withValues(alpha: 0.08)
+              : c.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? c.primary : c.outlineVariant.withValues(alpha: 0.5),
+            width: selected ? 2.5 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: c.primary.withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Thumbnail
             Expanded(
-              child: Text(
-                'Modèle : ${t.name}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: c.onSurface,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: TemplateThumbnail(template: t),
                 ),
               ),
             ),
-            Icon(Icons.swap_horiz_rounded, size: 16, color: c.onSurfaceVariant),
+            // Nom du template
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Text(
+                t.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontSize: 9.5,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  color: selected ? c.primary : c.onSurface,
+                ),
+              ),
+            ),
+            // Badge sélection
+            if (selected)
+              Container(
+                margin: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(
+                  color: c.primary,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check, size: 10, color: Colors.white),
+                    SizedBox(width: 2),
+                    Text(
+                      'Actif',
+                      style: TextStyle(
+                        fontFamily: 'WorkSans',
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  ZOOM
+  // ═══════════════════════════════════════════════════════════════
   Widget _zoomButton(RoyalScheme c) {
     return Container(
       decoration: BoxDecoration(
@@ -621,97 +829,6 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(7),
         child: Icon(i, size: 15, color: c.onSurface),
-      ),
-    );
-  }
-
-  Widget _buildBottomBar(RoyalScheme c) {
-    final readOnly = _isReadOnlyForAdmin;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.inverseSurface,
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-      ),
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 14,
-        bottom: 14 + MediaQuery.of(context).padding.bottom,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _bottomAction(
-            c,
-            icon: Icons.edit_outlined,
-            label: 'Éditer',
-            onTap: readOnly
-                ? null
-                : () => context
-                        .push('/dashboard/invoices/${widget.invoiceId}/edit')
-                        .then((_) {
-                      if (mounted) {
-                        _loadData();
-                        _loadTemplates();
-                      }
-                    }),
-          ),
-          _bottomAction(
-            c,
-            icon: Icons.palette_outlined,
-            label: 'Personnaliser',
-            onTap: readOnly ? null : _openWorkspace,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _bottomAction(
-    RoyalScheme c, {
-    required IconData icon,
-    required String label,
-    required VoidCallback? onTap,
-  }) {
-    final enabled = onTap != null;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Opacity(
-          opacity: enabled ? 1.0 : 0.4,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border:
-                        Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                  ),
-                  child: Icon(icon, size: 20, color: c.inverseOnSurface),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'WorkSans',
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: c.inverseOnSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
