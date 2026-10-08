@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 
 <head>
@@ -28,6 +28,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="NOI Invoice Pro">
   <link rel="apple-touch-icon" href="icons/splash_logo.png">
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png">
   
@@ -75,7 +76,7 @@
       text-align: center;
     }
 
-    /* Halo décoratif « respiration » derrière le logo */
+    /* Halo d├®coratif ┬½ respiration ┬╗ derri├¿re le logo */
     #splash::before {
       content: "";
       position: absolute;
@@ -106,9 +107,9 @@
       place-items: center;
       background: var(--glass);
       border: 1px solid var(--glass-line);
-      box-shadow:
+      /* box-shadow:
         0 26px 64px rgba(0, 0, 0, 0.34),
-        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+        inset 0 1px 0 rgba(255, 255, 255, 0.16); */
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
     }
@@ -259,6 +260,10 @@
   <script src="flutter_bootstrap.js" async=""></script>
 
 
+
+
+  <script src="register-sw.js"></script>
 </body>
 
 </html>
+
