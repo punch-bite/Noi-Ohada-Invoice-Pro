@@ -1,16 +1,14 @@
 // lib/screens/customization/template_workspace_screen.dart
 //
-// 🎨 ATELIER v11 « Magnetic Canvas + Labels + Footer »
+// 🎨 ATELIER v12 « Magnetic Canvas + Labels + Footer + Stamp Drag »
 //
-// CHANGELOG v11 :
-//   • 🎚️ Spacer : slider uniquement (plus de chips redondants).
-//   • 🎯 Divider : chips larges avec sélection très visible.
-//   • 🔻 Outils "Pied" / "Ligne pied" / "Composant" / "Bloc pied".
-//   • 🖼️ Image de fond : correction du rendu (Stack).
-//   • 🖊️ Signature : ouvre le pad de dessin (plus d'upload).
-//   • 🏷️ Tampon "PAYÉ" : overlay visible dans l'aperçu.
-//   • 📱 Outils "QR code" + "Tampon" dans la palette.
-//   • ✅ v10 conservé : footer_sections, block_labels, anti-drop spacer.
+// CHANGELOG v12 :
+//   • 🎯 Tampon déplaçable : drag libre sur toute la facture.
+//   • 🎚️ Rotation + échelle du tampon via sliders.
+//   • 🗂️ Drawer "Pied de page" unique regroupant tous les outils footer.
+//   • 🖼️ Logo : BoxFit.contain, sans bordure/cercle étouffant, 64 px par défaut.
+//   • 🐛 FIX duplication lors du drag entre sections (index shift).
+//   • ✅ v11 conservé (spacer slider, divider chips, QR, signature pad).
 //
 // ignore_for_file: unused_field, unused_element, dead_null_aware_expression,
 //   deprecated_member_use, unnecessary_import
@@ -76,14 +74,11 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   bool _showGrid = true;
   final double _paperRadius = 12;
 
-  /// 🎯 Outil actif (coloration de la pastille dans la bottom bar).
   String _activeTool = '';
 
   String? _selectedKey;
   String? _draggingKey;
   int? _dragOverSection;
-
-  /// 🏷️ Section survolée pour l'indicateur drag.
   int? _dragOverSectionIndicator;
 
   final List<String> _undoStack = [];
@@ -118,7 +113,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   final Map<String, int> _blockBg = {};
   final Map<String, int> _blockText = {};
 
-  /// 🔻 Footer de page (bas de facture).
+  // ─── Footer ───
   List<List<String>> _footerSections = [<String>[]];
   final Map<String, bool> _footerVisibility = {};
   final Map<String, TextAlign> _footerAlignments = {};
@@ -151,6 +146,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   String _bankAccount = '';
   bool _showPaidStamp = false;
   String _stampText = 'PAYÉ';
+
+  /// 🎯 Position normalisée du tampon (0..1 sur chaque axe).
+  double _stampX = 0.5;
+  double _stampY = 0.5;
+
+  /// 🔄 Rotation du tampon (radians).
+  double _stampRotation = -0.15;
+
+  /// 🔍 Échelle du tampon (0.5..3.0).
+  double _stampScale = 1.0;
+
   bool _showSignatureLine = true;
   String _signatoryTitle = 'Authorized Sign';
   String _customLegalText = '';
@@ -167,7 +173,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   String _invoiceSubtitle = '';
   Uint8List? _customLogoBytes;
   Uint8List? _signatureBytes;
-  double _logoSize = 46;
+
+  /// 📐 Taille du logo (défaut 64 — augmenté pour visibilité).
+  double _logoSize = 64;
 
   @override
   void initState() {
@@ -274,13 +282,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _bankAccount = '';
     _showPaidStamp = false;
     _stampText = 'PAYÉ';
+    _stampX = 0.5;
+    _stampY = 0.5;
+    _stampRotation = -0.15;
+    _stampScale = 1.0;
     _showSignatureLine = true;
     _signatoryTitle = 'Authorized Sign';
     _customLegalText = '';
     _qrPosition = 'totals';
     _pagePadding = 32;
     _customLogoBytes = null;
-    _logoSize = 46;
+    _logoSize = 64;
   }
 
   void _applyPositions(Map<String, dynamic> p) {
@@ -357,6 +369,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _bankAccount = p['bank_account']?.toString() ?? '';
     _showPaidStamp = p['show_paid_stamp'] as bool? ?? false;
     _stampText = p['stamp_text']?.toString() ?? 'PAYÉ';
+    _stampX = (p['stamp_x'] as num?)?.toDouble() ?? 0.5;
+    _stampY = (p['stamp_y'] as num?)?.toDouble() ?? 0.5;
+    _stampRotation = (p['stamp_rotation'] as num?)?.toDouble() ?? -0.15;
+    _stampScale = (p['stamp_scale'] as num?)?.toDouble() ?? 1.0;
     _showSignatureLine = p['show_signature_line'] as bool? ?? true;
     _signatoryTitle = p['signatory_title']?.toString() ?? 'Authorized Sign';
     _customLegalText = p['custom_legal_text']?.toString() ?? '';
@@ -377,7 +393,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         _signatureBytes = base64Decode(sig);
       } catch (_) {}
     }
-    _logoSize = (p['logo_size'] as num?)?.toDouble() ?? 46;
+    _logoSize = (p['logo_size'] as num?)?.toDouble() ?? 64;
   }
 
   bool _isNativeKey(String k) {
@@ -468,6 +484,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       'bank_account': _bankAccount,
       'show_paid_stamp': _showPaidStamp,
       'stamp_text': _stampText,
+      'stamp_x': _stampX,
+      'stamp_y': _stampY,
+      'stamp_rotation': _stampRotation,
+      'stamp_scale': _stampScale,
       'show_signature_line': _showSignatureLine,
       'signatory_title': _signatoryTitle,
       'custom_legal_text': _customLegalText,
@@ -569,7 +589,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  MUTATIONS
+  //  DÉPLACEMENT — v12 (fix duplication + index shift)
   // ═══════════════════════════════════════════════════════════════
   bool _isSpecialBlock(String key) =>
       key.startsWith('__spacer') || key.startsWith('__divider');
@@ -578,37 +598,51 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       section.any((k) => _isSpecialBlock(k));
 
   void _moveBlock(String key, int targetSection, {String? beforeKey}) {
-    int? sanitizedTarget = targetSection;
-    if (targetSection >= 0 &&
+    final bool targetIsSpecial = targetSection >= 0 &&
         targetSection < _bodySections.length &&
-        _sectionHasSpecial(_bodySections[targetSection])) {
-      sanitizedTarget = null;
-    }
+        _sectionHasSpecial(_bodySections[targetSection]);
 
     _mutate(() {
+      // 1. Supprime TOUTES les occurrences (pas seulement la 1ère).
       for (final s in _bodySections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
+
+      // 2. Calcule combien de sections vides précèdent la cible.
+      int removedBefore = 0;
+      if (!targetIsSpecial) {
+        for (var i = 0; i < targetSection && i < _bodySections.length; i++) {
+          if (_bodySections[i].isEmpty) removedBefore++;
+        }
+      }
+
+      // 3. Supprime les sections vides.
       _bodySections.removeWhere((s) => s.isEmpty);
       if (_bodySections.isEmpty) _bodySections.add(<String>[]);
 
-      if (sanitizedTarget == null ||
-          sanitizedTarget < 0 ||
-          sanitizedTarget >= _bodySections.length) {
+      // 4. Insère à la bonne place.
+      if (targetIsSpecial) {
         _bodySections.add([key]);
       } else {
-        final list = _bodySections[sanitizedTarget];
-        if (beforeKey != null) {
-          final idx = list.indexOf(beforeKey);
-          if (idx >= 0) {
-            list.insert(idx, key);
+        final int newTarget =
+            (targetSection - removedBefore).clamp(0, _bodySections.length);
+        if (newTarget >= _bodySections.length) {
+          _bodySections.add([key]);
+        } else {
+          final list = _bodySections[newTarget];
+          if (beforeKey != null) {
+            final idx = list.indexOf(beforeKey);
+            if (idx >= 0) {
+              list.insert(idx, key);
+            } else {
+              list.add(key);
+            }
           } else {
             list.add(key);
           }
-        } else {
-          list.add(key);
         }
       }
+
       _draggingKey = null;
       _dragOverSection = null;
       _dragOverSectionIndicator = null;
@@ -619,12 +653,20 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     if (_headerSections.isEmpty) _headerSections = [<String>[]];
     _mutate(() {
       for (final s in _bodySections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _bodySections.removeWhere((s) => s.isEmpty);
       if (_bodySections.isEmpty) _bodySections.add(<String>[]);
+
       for (final s in _headerSections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
+      }
+
+      int removedBefore = 0;
+      if (row != null) {
+        for (var i = 0; i < row && i < _headerSections.length; i++) {
+          if (_headerSections[i].isEmpty) removedBefore++;
+        }
       }
       _headerSections.removeWhere((s) => s.isEmpty);
 
@@ -632,11 +674,12 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       _headerWidths.putIfAbsent(key, () => 1.0);
       _headerAlignments.putIfAbsent(key, () => TextAlign.left);
 
-      final targetRow = (row ?? (_headerSections.length - 1))
-          .clamp(0, _headerSections.length - 1);
       if (_headerSections.isEmpty) {
         _headerSections.add([key]);
       } else {
+        final int targetRow = row == null
+            ? _headerSections.length - 1
+            : (row - removedBefore).clamp(0, _headerSections.length - 1);
         final list = _headerSections[targetRow];
         if (beforeKey != null) {
           final idx = list.indexOf(beforeKey);
@@ -655,7 +698,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   void _moveHeaderToBody(String key) {
     _mutate(() {
       for (final s in _headerSections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _headerSections.removeWhere((s) => s.isEmpty);
       if (_headerSections.isEmpty) _headerSections = [<String>[]];
@@ -668,15 +711,49 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     });
   }
 
+  void _moveFooterBlock(String key, int targetRow, {String? beforeKey}) {
+    _mutate(() {
+      for (final s in _footerSections) {
+        s.removeWhere((e) => e == key);
+      }
+
+      int removedBefore = 0;
+      for (var i = 0; i < targetRow && i < _footerSections.length; i++) {
+        if (_footerSections[i].isEmpty) removedBefore++;
+      }
+
+      _footerSections.removeWhere((s) => s.isEmpty);
+      if (_footerSections.isEmpty) _footerSections.add(<String>[]);
+
+      final int newTarget =
+          (targetRow - removedBefore).clamp(0, _footerSections.length);
+      if (newTarget >= _footerSections.length) {
+        _footerSections.add([key]);
+      } else {
+        final list = _footerSections[newTarget];
+        if (beforeKey != null) {
+          final idx = list.indexOf(beforeKey);
+          if (idx >= 0) {
+            list.insert(idx, key);
+          } else {
+            list.add(key);
+          }
+        } else {
+          list.add(key);
+        }
+      }
+    });
+  }
+
   void _dropUnderTitle(String key) {
     _mutate(() {
       for (final s in _bodySections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _bodySections.removeWhere((s) => s.isEmpty);
       if (_bodySections.isEmpty) _bodySections.add(<String>[]);
       for (final s in _headerSections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _headerSections.removeWhere((s) => s.isEmpty);
       if (_headerSections.isEmpty) _headerSections = [<String>[]];
@@ -758,17 +835,17 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       _footerText.remove(key);
 
       for (final s in _bodySections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _bodySections.removeWhere((s) => s.isEmpty);
       if (_bodySections.isEmpty) _bodySections.add(<String>[]);
       for (final s in _headerSections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _headerSections.removeWhere((s) => s.isEmpty);
       if (_headerSections.isEmpty) _headerSections = [<String>[]];
       for (final s in _footerSections) {
-        s.remove(key);
+        s.removeWhere((e) => e == key);
       }
       _footerSections.removeWhere((s) => s.isEmpty);
       if (_footerSections.isEmpty) _footerSections = [<String>[]];
@@ -809,7 +886,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _openTextEditor(key);
   }
 
-  /// 🔻 Ajoute un composant texte dans le footer.
   void _addFooterText() {
     final key = 'foot_${++_textSeq}';
     _mutate(() {
@@ -848,32 +924,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     });
   }
 
-  void _moveFooterBlock(String key, int targetRow, {String? beforeKey}) {
-    _mutate(() {
-      for (final s in _footerSections) {
-        s.remove(key);
-      }
-      _footerSections.removeWhere((s) => s.isEmpty);
-      if (_footerSections.isEmpty) _footerSections.add(<String>[]);
-
-      if (targetRow < 0 || targetRow >= _footerSections.length) {
-        _footerSections.add([key]);
-      } else {
-        final list = _footerSections[targetRow];
-        if (beforeKey != null) {
-          final idx = list.indexOf(beforeKey);
-          if (idx >= 0) {
-            list.insert(idx, key);
-          } else {
-            list.add(key);
-          }
-        } else {
-          list.add(key);
-        }
-      }
-    });
-  }
-
   void _moveSection(int from, int to) {
     if (from < 0 || from >= _bodySections.length) return;
     if (to < 0 || to >= _bodySections.length) return;
@@ -905,7 +955,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _openTextEditor(key);
   }
 
-  /// 📏 Insère un bloc VIDE (spacer) — ouvre automatiquement le slider.
   void _addEmptySpacer() {
     final id = '__spacer_${DateTime.now().millisecondsSinceEpoch}__';
     _mutate(() {
@@ -917,7 +966,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     });
   }
 
-  /// ─── Insère un SÉPARATEUR — ouvre automatiquement le sélecteur.
   void _addDivider() {
     final id = '__divider_${DateTime.now().millisecondsSinceEpoch}__';
     _mutate(() {
@@ -929,7 +977,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     });
   }
 
-  /// 📱 Ajoute un bloc QR code au corps (une seule fois).
   void _addQrBlock() {
     const key = 'qr_block';
     final already = _bodySections.any((s) => s.contains(key));
@@ -1009,6 +1056,14 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
         bankAccount: _bankAccount,
         showPaidStamp: _showPaidStamp,
         stampText: _stampText,
+        stampX: _stampX,
+        stampY: _stampY,
+        stampRotation: _stampRotation,
+        stampScale: _stampScale,
+        onStampMoved: (x, y) => _mutate(() {
+          _stampX = x;
+          _stampY = y;
+        }),
         showSignatureLine: _showSignatureLine,
         signatoryTitle: _signatoryTitle,
         customLegalText: _customLegalText,
@@ -1084,9 +1139,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  SHEET SPÉCIAL (spacer / divider) — v11
-  //   • Spacer : slider uniquement
-  //   • Divider : chips larges avec sélection très visible
+  //  SHEET SPÉCIAL (spacer / divider)
   // ═══════════════════════════════════════════════════════════════
   void _openSpecialSheet(String key) {
     final isSpacer = key.startsWith('__spacer');
@@ -1143,7 +1196,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                // ── SPACER : slider uniquement ──
                 if (isSpacer) ...[
                   Row(
                     children: [
@@ -1203,7 +1255,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
                   ),
                 ],
 
-                // ── DIVIDER : chips larges ──
                 if (!isSpacer) ...[
                   Row(
                     children: [
@@ -1277,7 +1328,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     });
   }
 
-  /// 🎯 Chip large, sélection très visible (fond plein + texte blanc).
   Widget _bigChip({
     required String label,
     required IconData icon,
@@ -1355,6 +1405,212 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             color: selected ? Colors.white : _onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  🗂️ DRAWER FOOTER (regroupement des outils pied de page)
+  // ═══════════════════════════════════════════════════════════════
+  void _openFooterSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSS) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.78,
+          ),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(children: [
+                  Icon(Icons.vertical_align_bottom,
+                      color: _primary, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Pied de page',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                ]),
+                const SizedBox(height: 6),
+                Text(
+                  'Ajoutez des lignes et des composants en bas de facture '
+                  '(comme les totaux, contacts, mentions légales…).',
+                  style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _bigChip(
+                        label: 'Ligne vide',
+                        icon: Icons.view_stream_outlined,
+                        selected: false,
+                        onTap: () {
+                          _addFooterRow();
+                          setSS(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _bigChip(
+                        label: 'Texte',
+                        icon: Icons.notes_outlined,
+                        selected: false,
+                        onTap: () {
+                          _addFooterText();
+                          setSS(() {});
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Structure actuelle',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: _onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_footerSections.isEmpty ||
+                    _footerSections.every((s) => s.isEmpty))
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _primary.withValues(alpha: 0.15)),
+                    ),
+                    child: Text(
+                      'Aucun composant — Ajoutez-en un ci-dessus.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  )
+                else
+                  ...List.generate(_footerSections.length, (r) {
+                    final row = _footerSections[r];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                      decoration: BoxDecoration(
+                        color: _surfaceVariant,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: _outline.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 26,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _primary,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${r + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              row.isEmpty
+                                  ? 'Ligne vide — cliquez + dans l\'aperçu'
+                                  : '${row.length} composant(s)',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (row.isEmpty)
+                            IconButton(
+                              tooltip: 'Supprimer cette ligne',
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 18, color: Colors.redAccent),
+                              onPressed: () {
+                                _mutate(() {
+                                  _footerSections.removeAt(r);
+                                  if (_footerSections.isEmpty) {
+                                    _footerSections = [<String>[]];
+                                  }
+                                });
+                                setSS(() {});
+                              },
+                            )
+                          else
+                            IconButton(
+                              tooltip: 'Ajouter un composant',
+                              icon: Icon(Icons.add_circle_outline,
+                                  size: 18, color: _primary),
+                              onPressed: () {
+                                _addFooterColumn(r);
+                                setSS(() {});
+                              },
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 46),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Terminé'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1750,7 +2006,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _mutate(() => _customLogoBytes = bytes);
   }
 
-  /// 🖊️ Ouvre le pad de signature (plus d'upload depuis la galerie).
   Future<void> _pickSignature() async {
     final result = await showDialog<bool>(
       context: context,
@@ -1768,7 +2023,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     }
   }
 
-  /// 🏷️ Sheet de configuration du tampon "PAYÉ".
+  // ═══════════════════════════════════════════════════════════════
+  //  🏷️ SHEET TAMPON (position + rotation + échelle)
+  // ═══════════════════════════════════════════════════════════════
   void _openStampSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -1776,6 +2033,9 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSS) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+          ),
           decoration: BoxDecoration(
             color: _surface,
             borderRadius:
@@ -1787,89 +2047,175 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
             20,
             MediaQuery.of(ctx).viewInsets.bottom + 24,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(2),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(children: [
-                Icon(Icons.approval_outlined, color: _primary, size: 18),
-                const SizedBox(width: 8),
-                const Text('Tampon de facture',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-              ]),
-              const SizedBox(height: 6),
-              Text(
-                'Affiche un tampon "PAYÉ" par-dessus la facture.',
-                style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
-              ),
-              const SizedBox(height: 14),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text('Afficher le tampon',
-                    style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-                value: _showPaidStamp,
-                activeThumbColor: _primary,
-                onChanged: (v) {
-                  _mutate(() => _showPaidStamp = v);
-                  setSS(() {});
-                },
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: TextEditingController(text: _stampText),
-                decoration: InputDecoration(
-                  labelText: 'Texte du tampon',
-                  hintText: 'Ex : PAYÉ',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  isDense: true,
+                const SizedBox(height: 14),
+                Row(children: [
+                  Icon(Icons.approval_outlined, color: _primary, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Tampon de facture',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                ]),
+                const SizedBox(height: 6),
+                Text(
+                  'Glissez le tampon sur la facture pour le déplacer. '
+                  'Ajustez rotation et échelle ci-dessous.',
+                  style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
                 ),
-                onChanged: (v) => _mutate(() => _stampText = v),
-              ),
-              const SizedBox(height: 12),
-              if (_showPaidStamp)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: _primary.withValues(alpha: 0.2)),
+                const SizedBox(height: 14),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Afficher le tampon',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  value: _showPaidStamp,
+                  activeThumbColor: _primary,
+                  onChanged: (v) {
+                    _mutate(() => _showPaidStamp = v);
+                    setSS(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: TextEditingController(text: _stampText),
+                  decoration: InputDecoration(
+                    labelText: 'Texte du tampon',
+                    hintText: 'Ex : PAYÉ',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.check_circle,
-                          size: 16, color: Color(0xFF22C55E)),
-                      const SizedBox(width: 6),
-                      Text('Tampon actif',
+                  onChanged: (v) => _mutate(() => _stampText = v),
+                ),
+                const SizedBox(height: 18),
+                _sliderRow(
+                  label: 'Rotation',
+                  value: _stampRotation,
+                  min: -0.6,
+                  max: 0.6,
+                  divisions: 24,
+                  display: '${(_stampRotation * 57.3).round()}°',
+                  onChanged: (v) {
+                    _mutate(() => _stampRotation = v);
+                    setSS(() {});
+                  },
+                ),
+                _sliderRow(
+                  label: 'Échelle',
+                  value: _stampScale,
+                  min: 0.5,
+                  max: 3.0,
+                  divisions: 25,
+                  display: '${(_stampScale * 100).round()}%',
+                  onChanged: (v) {
+                    _mutate(() => _stampScale = v);
+                    setSS(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _mutate(() {
+                      _stampX = 0.5;
+                      _stampY = 0.5;
+                    });
+                    setSS(() {});
+                  },
+                  icon: const Icon(Icons.center_focus_strong,
+                      size: 16),
+                  label: const Text('Recentrer le tampon'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(42),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                if (_showPaidStamp) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _primary.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.touch_app_outlined,
+                            size: 16, color: Color(0xFF22C55E)),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Glissez le tampon directement sur l\'aperçu',
                           style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.w600,
-                              color: _primary)),
-                    ],
+                              color: _primary),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+                ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _sliderRow({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String display,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            Text(display,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: _primary)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: _primary,
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
@@ -2183,7 +2529,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  BOTTOM BAR — 5 groupes d'outils
+  //  BOTTOM BAR — 4 groupes (Footer regroupé en 1 tool)
   // ═══════════════════════════════════════════════════════════════
   Widget _buildBottomBar() {
     const group1 = [
@@ -2204,12 +2550,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       _Tool('En-tête +', Icons.add_to_photos_outlined, 'entete'),
     ];
     const group4 = [
-      _Tool('Pied', Icons.vertical_align_bottom, 'footer'),
-      _Tool('Ligne pied', Icons.view_stream_outlined, 'footer_row'),
-      _Tool('Composant', Icons.widgets_outlined, 'footer_add'),
-      _Tool('Bloc pied', Icons.add_box_outlined, 'footer_block'),
-    ];
-    const group5 = [
+      _Tool('Pied de page', Icons.vertical_align_bottom, 'footer_drawer'),
       _Tool('QR code', Icons.qr_code_2, 'qr'),
       _Tool('Tampon', Icons.approval_outlined, 'stamp'),
     ];
@@ -2226,10 +2567,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
       'colonne': _showAddColumnMenu,
       'section': _addBodySection,
       'entete': _addTextToHeader,
-      'footer': _addFooterRow,
-      'footer_row': _addFooterRow,
-      'footer_add': _addFooterText,
-      'footer_block': _addFooterText,
+      'footer_drawer': _openFooterSheet,
       'qr': _addQrBlock,
       'stamp': _openStampSheet,
     };
@@ -2260,8 +2598,6 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           for (final t in group3) _toolButton(t, actions[t.key]!),
           separator(),
           for (final t in group4) _toolButton(t, actions[t.key]!),
-          separator(),
-          for (final t in group5) _toolButton(t, actions[t.key]!),
         ],
       ),
     );
@@ -2518,6 +2854,11 @@ class _WorkspaceRenderState {
   final String bankAccount;
   final bool showPaidStamp;
   final String stampText;
+  final double stampX;
+  final double stampY;
+  final double stampRotation;
+  final double stampScale;
+  final void Function(double x, double y)? onStampMoved;
   final bool showSignatureLine;
   final String signatoryTitle;
   final String customLegalText;
@@ -2583,6 +2924,11 @@ class _WorkspaceRenderState {
     required this.bankAccount,
     required this.showPaidStamp,
     required this.stampText,
+    this.stampX = 0.5,
+    this.stampY = 0.5,
+    this.stampRotation = -0.15,
+    this.stampScale = 1.0,
+    this.onStampMoved,
     required this.showSignatureLine,
     required this.signatoryTitle,
     required this.customLegalText,
@@ -2649,8 +2995,6 @@ class _WorkspaceA4Preview extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ✅ FIX v11 : image de fond visible (Stack interne nécessaire car
-        //    TemplateBackgroundLayer retourne Positioned.fill).
         ClipRRect(
           borderRadius: BorderRadius.circular(paperRadius),
           child: DecoratedBox(
@@ -2701,50 +3045,75 @@ class _WorkspaceA4Preview extends StatelessWidget {
           ),
         ),
         if (showGrid) IgnorePointer(child: _buildGridOverlay()),
-        // ✅ FIX v11 : tampon "PAYÉ" visible dans l'aperçu.
-        if (state.showPaidStamp) _buildStampOverlay(),
+        // 🎯 Tampon déplaçable (v12)
+        if (state.showPaidStamp) _buildStampOverlay(context),
       ],
     );
   }
 
-  /// 🏷️ Tampon "PAYÉ" — overlay centré.
-  Widget _buildStampOverlay() {
-    final text =
-        state.stampText.trim().isEmpty ? 'PAYÉ' : state.stampText.trim();
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Center(
-          child: Transform.rotate(
-            angle: -0.15,
-            child: Opacity(
-              opacity: 0.85,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 26, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFBAAB6D),
-                    width: 4,
-                  ),
-                ),
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 40,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 6,
-                    color: Color(0xFFBAAB6D),
-                    height: 1.0,
+  /// 🎯 Tampon déplaçable — drag à la souris/doigt.
+  Widget _buildStampOverlay(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        final sc = state.stampScale;
+
+        return Stack(
+          children: [
+            Positioned(
+              left: state.stampX * w - 100 * sc,
+              top: state.stampY * h - 35 * sc,
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  final newX =
+                      (state.stampX + details.delta.dx / w).clamp(0.05, 0.95);
+                  final newY =
+                      (state.stampY + details.delta.dy / h).clamp(0.05, 0.95);
+                  state.onStampMoved?.call(newX, newY);
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.move,
+                  child: Transform.rotate(
+                    angle: state.stampRotation,
+                    child: Transform.scale(
+                      scale: sc,
+                      child: Opacity(
+                        opacity: 0.85,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 26, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFBAAB6D),
+                              width: 4,
+                            ),
+                          ),
+                          child: Text(
+                            state.stampText.trim().isEmpty
+                                ? 'PAYÉ'
+                                : state.stampText.trim(),
+                            style: const TextStyle(
+                              fontFamily: 'Manrope',
+                              fontSize: 40,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 6,
+                              color: Color(0xFFBAAB6D),
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -3052,7 +3421,34 @@ class _WorkspaceA4Preview extends StatelessWidget {
     }
   }
 
+  /// 🖼️ Logo NON ÉTOUFFÉ : BoxFit.contain, pas de cercle, pas de bordure.
   Widget _logoWidget() {
+    final size = state.logoSize;
+    final bytes = state.customLogoBytes;
+
+    // Cas 1 : image fournie → affichage propre sans contrainte circulaire.
+    if (bytes != null && bytes.isNotEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.high,
+            errorBuilder: (_, __, ___) => _logoFallback(size),
+          ),
+        ),
+      );
+    }
+
+    // Cas 2 : pas d'image → initiales dans un cercle discret.
+    return _logoFallback(size);
+  }
+
+  Widget _logoFallback(double size) {
     final initials = state.companyName.isNotEmpty
         ? state.companyName
             .substring(
@@ -3062,7 +3458,6 @@ class _WorkspaceA4Preview extends StatelessWidget {
                     : state.companyName.length)
             .toUpperCase()
         : 'ABC';
-    final size = state.logoSize;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -3074,17 +3469,14 @@ class _WorkspaceA4Preview extends StatelessWidget {
           border: Border.all(color: state.primary.withValues(alpha: 0.3)),
         ),
         alignment: Alignment.center,
-        clipBehavior: Clip.antiAlias,
-        child: state.customLogoBytes != null
-            ? Image.memory(state.customLogoBytes!, fit: BoxFit.cover)
-            : Text(
-                initials,
-                style: TextStyle(
-                  color: state.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: size * 0.3,
-                ),
-              ),
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: state.primary,
+            fontWeight: FontWeight.bold,
+            fontSize: size * 0.30,
+          ),
+        ),
       ),
     );
   }
