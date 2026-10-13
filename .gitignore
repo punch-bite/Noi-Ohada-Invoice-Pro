@@ -82,3 +82,7 @@ enkap_swagger.json
 design/
 .vercel
 .agents/
+_diag_all.txt
+_diag_out.txt
+_diag_utf8.txt
+_enc_report.txt
