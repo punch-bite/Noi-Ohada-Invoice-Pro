@@ -13,6 +13,7 @@ import 'dart:convert' show base64Decode;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -28,6 +29,7 @@ import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
+import 'customization_ui.dart';
 
 /// 👁️ Aperçu A4 haute fidélité (maquette Stitch) d'un modèle de facture.
 class TemplatePreviewScreen extends StatefulWidget {
@@ -137,13 +139,10 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
   Future<void> _useThisTemplate() async {
     await TemplateSelectionService.setActiveTemplateId(widget.template.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            '« ${widget.template.name} » est maintenant votre modèle actif'),
-        backgroundColor: RoyalColors.primary,
-        behavior: SnackBarBehavior.floating,
-      ),
+    CustomSnack.show(
+      context,
+      '« ${widget.template.name} » est maintenant votre modèle actif',
+      type: CustomSnackType.success,
     );
     context.pop();
   }
@@ -163,19 +162,14 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       cart.add(template);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(wasInCart
-              ? '« ${template.name} » retiré du panier'
-              : '« ${template.name} » ajouté au panier '
-                  '(${TemplateCart.instance.count} modèle(s))'),
-          backgroundColor:
-              wasInCart ? RoyalColors.secondary : RoyalColors.primary,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    CustomSnack.show(
+      context,
+      wasInCart
+          ? '« ${template.name} » retiré du panier'
+          : '« ${template.name} » ajouté au panier '
+              '(${TemplateCart.instance.count} modèle(s))',
+      type: wasInCart ? CustomSnackType.info : CustomSnackType.success,
+    );
   }
 
   /// 💳 Passe au checkout avec ce modèle (paiement ENKAP ou déblocage
@@ -215,7 +209,7 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       appBar: _buildAppBar(c, template.name, 'Aperçu Format A4 (SYSCOHADA)',
           canCustomize: canCustomize),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: c.primary))
+          ? const Center(child: _A4LoadingPaper())
           : Column(
               children: [
                 Expanded(
@@ -516,5 +510,65 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// Squelette A4 élégant : une « feuille » fantôme avec lignes shimmer.
+class _A4LoadingPaper extends StatelessWidget {
+  const _A4LoadingPaper();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = CustomPalette.of(context);
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Container(
+        width: 300,
+        margin: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: p.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: p.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ShimmerBox(
+                    width: 44, height: 44,
+                    borderRadius: BorderRadius.circular(8)),
+                const Spacer(),
+                const ShimmerBox(width: 90, height: 11),
+              ],
+            ),
+            const SizedBox(height: 22),
+            ShimmerBox(
+                width: 180, height: 20,
+                borderRadius: BorderRadius.circular(6)),
+            const SizedBox(height: 12),
+            const ShimmerBox(width: double.infinity, height: 12),
+            const SizedBox(height: 10),
+            const ShimmerBox(width: double.infinity, height: 12),
+            const SizedBox(height: 10),
+            const ShimmerBox(width: 220, height: 12),
+            const SizedBox(height: 26),
+            ShimmerBox(
+                width: double.infinity, height: 60,
+                borderRadius: BorderRadius.circular(8)),
+            const SizedBox(height: 18),
+            const ShimmerBox(width: double.infinity, height: 12),
+            const SizedBox(height: 8),
+            const ShimmerBox(width: double.infinity, height: 12),
+            const SizedBox(height: 8),
+            const ShimmerBox(width: 160, height: 12),
+          ],
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(duration: RoyalMotion.base)
+        .slideY(begin: 0.02, end: 0, curve: RoyalMotion.emphasized);
   }
 }

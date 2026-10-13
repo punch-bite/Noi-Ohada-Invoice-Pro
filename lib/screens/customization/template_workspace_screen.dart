@@ -34,6 +34,7 @@ import '../../services/signature_service.dart';
 import '../../services/template_custom_service.dart';
 import '../../widgets/signature_pad_dialog.dart';
 import '../../widgets/template_background_palette.dart';
+import 'customization_ui.dart';
 
 const double _kGrid = InvoiceTemplate.gridSnap;
 const int _kMaxHistory = 50;
@@ -554,22 +555,8 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     _recordHistory();
 
     if (feedback && mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: const Row(children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('Modifications enregistrées'),
-            ]),
-            backgroundColor: _primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(milliseconds: 1400),
-          ),
-        );
+      CustomSnack.show(context, 'Modifications enregistrées',
+          type: CustomSnackType.success);
     }
   }
 
@@ -970,21 +957,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     final already = _bodySections.any((s) => s.contains(key));
     if (already) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: const Row(children: [
-              Icon(Icons.info_outline, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('Le QR code est déjà présent'),
-            ]),
-            backgroundColor: _primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+      CustomSnack.show(context, 'Le QR code est déjà présent');
       return;
     }
     _mutate(() {
@@ -2157,7 +2130,7 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     if (!_accessChecked) {
       return Scaffold(
         backgroundColor: _surfaceVariant,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const PaperSkeleton(),
       );
     }
     if (!_canCustomize) return _buildDenied();
@@ -2175,9 +2148,10 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
     );
   }
 
-  Widget _skeleton() => const Center(child: CircularProgressIndicator());
+  Widget _skeleton() => const PaperSkeleton();
 
   Widget _buildDenied() {
+    final p = CustomPalette.of(context);
     return Scaffold(
       backgroundColor: _surfaceVariant,
       appBar: AppBar(
@@ -2195,22 +2169,59 @@ class _TemplateWorkspaceScreenState extends State<TemplateWorkspaceScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock_outline, size: 48, color: _primary),
-              const SizedBox(height: 16),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.82, end: 1.0),
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutBack,
+                builder: (context, scale, child) => Transform.scale(
+                  scale: scale,
+                  child: child,
+                ),
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: p.card,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: p.border),
+                  ),
+                  child: Icon(Icons.lock_outline_rounded,
+                      size: 44, color: _primary),
+                ),
+              ),
+              const SizedBox(height: 20),
               const Text(
                 'Personnalisation réservée',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                  letterSpacing: -0.3,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Acquérez ce modèle dans la boutique pour le personnaliser.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: _onSurfaceVariant, fontSize: 13),
+                style: TextStyle(color: _onSurfaceVariant, fontSize: 13, height: 1.4),
               ),
-              const SizedBox(height: 20),
-              FilledButton(
+              const SizedBox(height: 24),
+              FilledButton.icon(
                 onPressed: () => context.go('/templates'),
-                child: const Text('Voir la boutique'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: p.gold,
+                  foregroundColor: p.onGold,
+                  elevation: 0,
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.storefront_outlined, size: 18),
+                label: const Text(
+                  'Voir la boutique',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),

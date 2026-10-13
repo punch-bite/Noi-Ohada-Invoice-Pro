@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/theme_provider.dart';
+import '../l10n/app_localizations.dart';
 
 class CustomDrawer extends StatelessWidget {
   const CustomDrawer({super.key});
@@ -15,6 +16,7 @@ class CustomDrawer extends StatelessWidget {
     final authProvider = context.watch<AppAuthProvider>();
     final subscriptionProvider = context.watch<SubscriptionProvider>();
     final themeProvider = context.watch<ThemeProvider>();
+    final l10n = AppLocalizations.of(context);
     final user = authProvider.user;
     final isDark = themeProvider.isDarkMode;
     final primaryColor = themeProvider.primaryColor;
@@ -56,7 +58,7 @@ class CustomDrawer extends StatelessWidget {
                 const SizedBox(height: 12),
                 // Nom centré
                 Text(
-                  user?.displayName ?? 'Utilisateur',
+                  user?.displayName ?? l10n.defaultUserName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -86,7 +88,7 @@ class CustomDrawer extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      subscriptionProvider.currentPlan?.name ?? 'Gratuit',
+                      subscriptionProvider.currentPlan?.name ?? l10n.free,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -105,7 +107,7 @@ class CustomDrawer extends StatelessWidget {
               children: [
                 _buildTile(
                   icon: Icons.person_outline,
-                  label: 'Profil',
+                  label: l10n.drawerProfile,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/dashboard/profile');
@@ -116,7 +118,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.subscriptions,
-                  label: 'Abonnement',
+                  label: l10n.subscription,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/subscription');
@@ -127,7 +129,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.style,
-                  label: 'Modèles de factures',
+                  label: l10n.invoiceTemplates,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/templates');
@@ -138,7 +140,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.business_outlined,
-                  label: 'Fournisseurs',
+                  label: l10n.drawerSuppliers,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/suppliers');
@@ -150,7 +152,7 @@ class CustomDrawer extends StatelessWidget {
                 // Dans CustomDrawer
                 _buildTile(
                   icon: Icons.groups_outlined,
-                  label: 'Équipes',
+                  label: l10n.drawerTeams,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/teams');
@@ -162,7 +164,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.alarm_outlined,
-                  label: 'Rappels',
+                  label: l10n.drawerRemindersTile,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/dashboard/reminders');
@@ -173,7 +175,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.campaign_outlined,
-                  label: 'Relance clients',
+                  label: l10n.drawerClientReminders,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/dashboard/relance');
@@ -187,7 +189,7 @@ class CustomDrawer extends StatelessWidget {
                 if (authProvider.user?.isAdmin == true)
                   _buildTile(
                     icon: Icons.admin_panel_settings_outlined,
-                    label: 'Administration',
+                    label: l10n.drawerAdmin,
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/admin');
@@ -199,7 +201,7 @@ class CustomDrawer extends StatelessWidget {
                 const Divider(),
                 _buildTile(
                   icon: Icons.settings_outlined,
-                  label: 'Paramètres',
+                  label: l10n.settingsTitle,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/dashboard/settings');
@@ -211,7 +213,7 @@ class CustomDrawer extends StatelessWidget {
                 const Divider(),
                 _buildTile(
                   icon: Icons.support_outlined,
-                  label: 'Support',
+                  label: l10n.onlineSupport,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/support');
@@ -222,7 +224,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.help_outline,
-                  label: 'FAQ',
+                  label: l10n.drawerFaq,
                   onTap: () {
                     Navigator.pop(context);
                     context.push('/support/faq');
@@ -233,7 +235,7 @@ class CustomDrawer extends StatelessWidget {
                 ),
                 _buildTile(
                   icon: Icons.share_outlined,
-                  label: 'Partager l\'application',
+                  label: l10n.drawerShareApp,
                   onTap: () {
                     Navigator.pop(context);
                     _shareApp(context);

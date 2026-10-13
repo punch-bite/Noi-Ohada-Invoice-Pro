@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../l10n/app_localizations.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/glass_widgets.dart';
@@ -93,7 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       setState(() {
-        _errorMessage = authProvider.error ?? 'Échec de connexion';
+        _errorMessage = authProvider.error ??
+            AppLocalizations.of(context).authLoginFailed;
       });
     }
   }
@@ -118,7 +120,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       setState(() {
-        _errorMessage = authProvider.error ?? 'Connexion Google échouée';
+        _errorMessage = authProvider.error ??
+            AppLocalizations.of(context).authGoogleFailed;
       });
     }
   }
@@ -126,13 +129,16 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    final l10n = AppLocalizations.of(context);
     final primary = theme.primaryColor;
     final text = theme.textColor;
     final sub = theme.subTextColor;
-    final bg = theme.backgroundColor;
 
+    // Fond transparent : laisse transparaître le fond glass global
+    // (GlassAppBackground). Un fond opaque ici recouvrait le formulaire
+    // d'un voile gris uni.
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

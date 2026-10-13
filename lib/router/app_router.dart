@@ -21,6 +21,7 @@ import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/verify_2fa_screen.dart';
 
 import '../screens/dashboard/dashboard_screen.dart';
+import '../screens/dashboard/dashboard_home.dart';
 import '../screens/dashboard/profile_update_screen.dart';
 import '../screens/dashboard/stock/stock_screen.dart';
 import '../screens/dashboard/stock/product_detail_screen.dart';
@@ -76,6 +77,7 @@ import '../screens/admin/admin_templates_screen.dart';
 import '../screens/admin/admin_withdrawals_screen.dart';
 import '../screens/admin/admin_plan_form_screen.dart';
 import '../screens/admin/admin_assign_plan_screen.dart';
+import '../screens/admin/admin_business_dashboard.dart';
 // 🆕 Écran d'audit log (module 3).
 import '../screens/admin/admin_audit_log_screen.dart';
 
@@ -349,6 +351,14 @@ class AppRouter {
           }
           return const SizedBox.shrink();
         },
+        // 🔒 Workspace réservé aux administrateurs.
+        redirect: (context, state) {
+          final auth = Provider.of<AppAuthProvider>(context, listen: false);
+          if (auth.user?.isAdmin != true) {
+            return '/dashboard';
+          }
+          return null;
+        },
       ),
       GoRoute(
         path: '/templates/preview',
@@ -419,19 +429,66 @@ class AppRouter {
       // ══════════════════════════════════════════════════════════
       //  DASHBOARD
       // ══════════════════════════════════════════════════════════
-      GoRoute(
-        path: '/dashboard',
-        builder: (context, state) => const DashboardScreen(),
+      // ── SHELL DE NAVIGATION PERSISTANTE (bottom nav / rail) ──
+      // Chaque onglet = une branche. La coquille DashboardScreen affiche la
+      // barre en permanence ; go_router empile les sous-routes (détail, etc.)
+      // au-dessus, SANS faire disparaître la barre.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            DashboardScreen(navigationShell: navigationShell),
+        branches: [
+          // 0 — Accueil
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard',
+                builder: (context, state) => const DashboardHome(),
+              ),
+            ],
+          ),
+          // 1 — Clients
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard/clients',
+                builder: (context, state) => const ClientsScreen(),
+              ),
+            ],
+          ),
+          // 2 — Factures
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard/invoices',
+                builder: (context, state) => const InvoicesScreen(),
+              ),
+            ],
+          ),
+          // 3 — Analyses
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard/analytics',
+                builder: (context, state) => const AnalyticsScreen(),
+              ),
+            ],
+          ),
+          // 4 — Stock
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard/stock',
+                builder: (context, state) => const StockScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/dashboard/profile',
         builder: (context, state) => const ProfileUpdateScreen(),
       ),
 
-      GoRoute(
-        path: '/dashboard/stock',
-        builder: (context, state) => const StockScreen(),
-      ),
       GoRoute(
         path: '/dashboard/stock/create-delivery',
         builder: (context, state) {
@@ -453,10 +510,6 @@ class AppRouter {
       ),
 
       GoRoute(
-        path: '/dashboard/clients',
-        builder: (context, state) => const ClientsScreen(),
-      ),
-      GoRoute(
         path: '/dashboard/clients/create',
         builder: (context, state) => const CreateClientScreen(),
       ),
@@ -468,10 +521,6 @@ class AppRouter {
         },
       ),
 
-      GoRoute(
-        path: '/dashboard/invoices',
-        builder: (context, state) => const InvoicesScreen(),
-      ),
       GoRoute(
         path: '/dashboard/invoices/create',
         builder: (context, state) => const CreateInvoiceScreen(),
@@ -496,10 +545,6 @@ class AppRouter {
         },
       ),
 
-      GoRoute(
-        path: '/dashboard/analytics',
-        builder: (context, state) => const AnalyticsScreen(),
-      ),
       GoRoute(
         path: '/dashboard/settings',
         builder: (context, state) => const SettingsScreen(),
@@ -545,6 +590,12 @@ class AppRouter {
           return null;
         },
         routes: [
+          // ── Tableau de bord business (abonnements + ventes) ──
+          GoRoute(
+            path: 'business',
+            name: 'admin-business',
+            builder: (context, state) => const AdminBusinessDashboard(),
+          ),
           // ── Utilisateurs ──
           GoRoute(
             path: 'users',

@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../../services/database_service.dart';
 import '../../services/update_service.dart';
 import '../../models/client.dart';
@@ -260,6 +261,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color subTextColor,
   }) {
     final user = authProvider.user;
+    final l10n = AppLocalizations.of(context);
 
     return Row(
       children: [
@@ -310,7 +312,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Bonjour',
+                l10n.greeting,
                 style: TextStyle(
                   fontSize: 12.5,
                   color: subTextColor,
@@ -319,7 +321,7 @@ class _DashboardHomeState extends State<DashboardHome> {
               ),
               const SizedBox(height: 2),
               Text(
-                user?.displayName ?? 'Utilisateur',
+                user?.displayName ?? l10n.defaultUserName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -382,10 +384,12 @@ class _DashboardHomeState extends State<DashboardHome> {
       );
     }
 
+    final l10n = AppLocalizations.of(context);
+
     return Row(
       children: [
         _buildStatCard(
-          label: 'Revenus',
+          label: l10n.statRevenue,
           value: _financialStats.getFormattedTotalRevenue(),
           color: primaryColor,
           icon: Icons.trending_up_rounded,
@@ -396,7 +400,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         ),
         const SizedBox(width: 10),
         _buildStatCard(
-          label: 'Moyenne',
+          label: l10n.statAverage,
           value: _financialStats.getFormattedAverageInvoice(),
           color: const Color(0xFF10B981),
           icon: Icons.show_chart_rounded,
@@ -407,7 +411,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         ),
         const SizedBox(width: 10),
         _buildStatCard(
-          label: 'Taux paiement',
+          label: l10n.statPaymentRate,
           value: '${_financialStats.paidPercentage.toStringAsFixed(0)}%',
           color: const Color(0xFFF59E0B),
           icon: Icons.percent_rounded,
@@ -492,6 +496,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     required Color textColor,
     required Color cardColor,
   }) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -561,7 +566,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                             color: Colors.white, size: 13),
                         const SizedBox(width: 5),
                         Text(
-                          'SOLDE TOTAL',
+                          l10n.totalBalance,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 9.5,
@@ -619,19 +624,19 @@ class _DashboardHomeState extends State<DashboardHome> {
                 child: Row(
                   children: [
                     _buildBalanceItem(
-                      label: 'Encaissé',
+                      label: l10n.collected,
                       value: _financialStats.getFormattedTotalPaid(),
                       color: const Color(0xFF34D399),
                     ),
                     _balanceDivider(),
                     _buildBalanceItem(
-                      label: 'En attente',
+                      label: l10n.pending,
                       value: _financialStats.getFormattedTotalPending(),
                       color: const Color(0xFFFBBF24),
                     ),
                     _balanceDivider(),
                     _buildBalanceItem(
-                      label: 'En retard',
+                      label: l10n.overdue,
                       value: _financialStats.getFormattedTotalOverdue(),
                       color: const Color(0xFFF87171),
                     ),
@@ -645,19 +650,19 @@ class _DashboardHomeState extends State<DashboardHome> {
                 children: [
                   _buildActionButton(
                     icon: Icons.add_rounded,
-                    label: 'Facture',
+                    label: l10n.quickInvoice,
                     onTap: () => context.push('/dashboard/invoices/create'),
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
                     icon: Icons.person_add_alt_1_rounded,
-                    label: 'Client',
+                    label: l10n.quickClient,
                     onTap: () => context.push('/dashboard/clients/create'),
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
                     icon: Icons.payments_rounded,
-                    label: 'Payer',
+                    label: l10n.quickPay,
                     onTap: _showPaymentDialog,
                   ),
                 ],
@@ -791,13 +796,15 @@ class _DashboardHomeState extends State<DashboardHome> {
       );
     }
 
+    final l10n = AppLocalizations.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              'Statut des factures',
+              l10n.invoiceStatusTitle,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -807,7 +814,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             const Spacer(),
             Text(
-              '${_financialStats.totalInvoices} factures',
+              l10n.invoicesCount(_financialStats.totalInvoices),
               style: TextStyle(
                 fontSize: 12,
                 color: subTextColor,
@@ -820,7 +827,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         Row(
           children: [
             _buildStatusCard(
-              label: 'Payées',
+              label: l10n.statusPaidPlural,
               count: _financialStats.paidCount,
               amount: _financialStats.getFormattedTotalPaid(),
               color: const Color(0xFF10B981),
@@ -832,7 +839,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             const SizedBox(width: 8),
             _buildStatusCard(
-              label: 'En attente',
+              label: l10n.statusPending,
               count: _financialStats.pendingCount,
               amount: _financialStats.getFormattedTotalPending(),
               color: const Color(0xFFF59E0B),
@@ -844,7 +851,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             const SizedBox(width: 8),
             _buildStatusCard(
-              label: 'En retard',
+              label: l10n.statusOverdue,
               count: _financialStats.overdueCount,
               amount: _financialStats.getFormattedTotalOverdue(),
               color: const Color(0xFFEF4444),
@@ -856,7 +863,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             ),
             const SizedBox(width: 8),
             _buildStatusCard(
-              label: 'Annulées',
+              label: l10n.statusCancelledPlural,
               count: _financialStats.cancelledCount,
               amount: _financialStats.getFormattedTotalCancelled(),
               color: const Color(0xFF6B7280),
@@ -949,13 +956,15 @@ class _DashboardHomeState extends State<DashboardHome> {
       );
     }
 
+    final l10n = AppLocalizations.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              'Nouveaux clients',
+              l10n.newClients,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -972,8 +981,8 @@ class _DashboardHomeState extends State<DashboardHome> {
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
-                'Voir tout',
+              child: Text(
+                l10n.seeAll,
                 style: TextStyle(
                     fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
@@ -984,7 +993,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         _recentClients.isEmpty
             ? _emptyMini(
                 icon: Icons.people_outline,
-                text: 'Aucun client pour le moment',
+                text: l10n.noClientsYet,
                 subTextColor: subTextColor,
               )
             : SizedBox(
@@ -1091,13 +1100,15 @@ class _DashboardHomeState extends State<DashboardHome> {
       );
     }
 
+    final l10n = AppLocalizations.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              'Factures récentes',
+              l10n.recentInvoices,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -1114,8 +1125,8 @@ class _DashboardHomeState extends State<DashboardHome> {
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
-                'Voir tout',
+              child: Text(
+                l10n.seeAll,
                 style: TextStyle(
                     fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
@@ -1126,7 +1137,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         _recentInvoices.isEmpty
             ? _emptyMini(
                 icon: Icons.receipt_long_outlined,
-                text: 'Aucune facture pour le moment',
+                text: l10n.noInvoicesYet,
                 subTextColor: subTextColor,
               )
             : Column(
@@ -1151,6 +1162,7 @@ class _DashboardHomeState extends State<DashboardHome> {
     Color textColor,
     Color subTextColor,
   ) {
+    final l10n = AppLocalizations.of(context);
     final statusColors = _getStatusColors(invoice.status);
     final isExpense = invoice.status != 'paid' && invoice.status != 'cancelled';
 
@@ -1212,7 +1224,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Client #${invoice.clientId.substring(0, 6)}',
+                        l10n.clientRef(invoice.clientId),
                         style: TextStyle(
                           fontSize: 11.5,
                           color: subTextColor,
@@ -1245,7 +1257,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        _getStatusLabel(invoice.status),
+                        l10n.invoiceStatusLabel(invoice.status),
                         style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
@@ -1315,21 +1327,6 @@ class _DashboardHomeState extends State<DashboardHome> {
           'bg': const Color(0xFF6B7280).withValues(alpha: 0.10),
           'text': const Color(0xFF4B5563),
         };
-    }
-  }
-
-  String _getStatusLabel(String status) {
-    switch (status) {
-      case 'paid':
-        return 'Payée';
-      case 'sent':
-        return 'En attente';
-      case 'overdue':
-        return 'En retard';
-      case 'cancelled':
-        return 'Annulée';
-      default:
-        return 'Brouillon';
     }
   }
 

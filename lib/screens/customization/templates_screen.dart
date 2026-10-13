@@ -1,21 +1,20 @@
-// lib/screens/customization/templates_screen.dart
+﻿// lib/screens/customization/templates_screen.dart
 //
 // 🎨 Sélecteur rapide de modèle de facture.
-// Épuré : recherche inline, sélection par tap, cards uniformes.
+// Refonte épurée & animée (kit `customization_ui.dart`) : recherche inline,
+// accès rapides uniformes, cartes sélectionnables avec état doré cohérent.
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:noi_ohada_invoice_pro/theme/royal_ledger.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
-import '../../theme/royal_ledger.dart';
 import '../../widgets/glass_widgets.dart';
-import '../../widgets/template_thumbnail.dart';
+import 'customization_ui.dart';
 
 class TemplatesScreen extends StatefulWidget {
   final bool isModal;
@@ -91,14 +90,10 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     if (widget.onSelect != null) {
       widget.onSelect!(template);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('« ${template.name} » est maintenant actif'),
-          backgroundColor: RoyalColors.tertiary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-        ),
+      CustomSnack.show(
+        context,
+        '« ${template.name} » est maintenant actif',
+        type: CustomSnackType.success,
       );
     }
 
@@ -109,11 +104,7 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-    final goldAccent = theme.accentGold;
-    final textColor = theme.textColor;
-    final subTextColor = theme.subTextColor;
+    final p = CustomPalette.of(context);
 
     final filtered = _templates.where((t) {
       if (_searchQuery.isEmpty) return true;
@@ -122,81 +113,36 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     }).toList();
 
     return GlassScaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: false,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(
-          'Choisir un modèle',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w700,
-            fontSize: 19,
-            letterSpacing: -0.3,
-          ),
-        ),
+      appBar: CustomAppBar(
+        title: 'Choisir un modèle',
+        subtitle: 'Modèle appliqué à vos factures',
         actions: [
           IconButton(
             tooltip: 'Boutique',
-            icon: Icon(Icons.storefront_rounded,
-                color: goldAccent, size: 22),
+            icon: const Icon(Icons.storefront_rounded, size: 22),
             onPressed: () => context.push('/templates'),
           ),
           const SizedBox(width: 6),
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: goldAccent))
+          ? const TemplatesSkeleton()
           : Column(
               children: [
                 // ── Recherche ──
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      style: TextStyle(color: textColor, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Rechercher…',
-                        hintStyle: TextStyle(
-                            color: subTextColor.withValues(alpha: 0.7),
-                            fontSize: 13.5),
-                        prefixIcon: Icon(Icons.search_rounded,
-                            color: subTextColor, size: 20),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(Icons.close_rounded,
-                                    color: subTextColor, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: CustomSearchField(
+                    controller: _searchController,
+                    hint: 'Rechercher…',
+                    onChanged: (v) => setState(() => _searchQuery = v),
                   ),
                 ),
                 const SizedBox(height: 14),
 
                 // ── Accès rapides ──
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
                       Expanded(
@@ -204,9 +150,6 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                           icon: Icons.collections_bookmark_rounded,
                           label: 'Mes modèles',
                           onTap: () => context.push('/templates/mine'),
-                          theme: theme,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -214,11 +157,8 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                         child: _quickAction(
                           icon: Icons.shopping_bag_rounded,
                           label: 'Boutique',
-                          onTap: () => context.push('/templates'),
-                          theme: theme,
-                          textColor: Colors.white,
-                          subTextColor: Colors.white70,
                           filled: true,
+                          onTap: () => context.push('/templates'),
                         ),
                       ),
                     ],
@@ -229,49 +169,34 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
                 // ── Grille ──
                 Expanded(
                   child: filtered.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Aucun modèle trouvé',
-                            style: TextStyle(color: subTextColor),
-                          ),
+                      ? EmptyState(
+                          icon: Icons.search_off_rounded,
+                          title: 'Aucun modèle trouvé',
+                          message:
+                              'Ajustez votre recherche pour afficher vos modèles.',
                         )
                       : GridView.builder(
                           physics: const BouncingScrollPhysics(),
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             childAspectRatio: 0.68,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
                           ),
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final template = filtered[index];
-                            final isSelected =
-                                template.id == _selectedId;
-                            return _buildSelectableCard(
-                              template,
-                              isSelected: isSelected,
-                              canCustomize: _canCustomize(template),
-                              theme: theme,
-                              textColor: textColor,
-                              subTextColor: subTextColor,
-                              goldAccent: goldAccent,
-                            )
-                                .animate()
-                                .fadeIn(
-                                  delay: Duration(
-                                      milliseconds: 50 + (index * 40)),
-                                  duration: 400.ms,
-                                )
-                                .slideY(
-                                  begin: 0.06,
-                                  end: 0,
-                                  duration: 400.ms,
-                                  curve: Curves.easeOut,
-                                );
+                            final isSelected = template.id == _selectedId;
+                            return EntranceFade(
+                              index: index,
+                              child: _buildSelectableCard(
+                                template,
+                                isSelected: isSelected,
+                                canCustomize: _canCustomize(template),
+                              ),
+                            );
                           },
                         ),
                 ),
@@ -284,41 +209,32 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    required ThemeProvider theme,
-    required Color textColor,
-    required Color subTextColor,
     bool filled = false,
   }) {
-    final isDark = theme.isDarkMode;
+    final p = CustomPalette.of(context);
     return Material(
-      color: filled ? theme.primaryColor : theme.cardColor,
+      color: filled ? p.primary : p.card,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 13),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: filled
-                ? null
-                : Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.04),
-                  ),
+            border: filled ? null : Border.all(color: p.border),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
-                  size: 16,
-                  color: filled ? Colors.white : subTextColor),
+                  size: 17, color: filled ? p.onPrimary : p.subText),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
-                  color: filled ? Colors.white : textColor,
+                  color: filled ? p.onPrimary : p.text,
+                  fontFamily: 'WorkSans',
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
@@ -334,170 +250,160 @@ class _TemplatesScreenState extends State<TemplatesScreen> {
     InvoiceTemplate template, {
     required bool isSelected,
     required bool canCustomize,
-    required ThemeProvider theme,
-    required Color textColor,
-    required Color subTextColor,
-    required Color goldAccent,
   }) {
-    final isDark = theme.isDarkMode;
-    return GestureDetector(
+    final p = CustomPalette.of(context);
+    return PressScale(
       onTap: () => _selectTemplate(template),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: RoyalMotion.base,
+        curve: RoyalMotion.standard,
         decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(20),
+          color: p.card,
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: isSelected
-                ? goldAccent
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.04)),
+            color: isSelected ? p.gold : p.border,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: goldAccent.withValues(alpha: 0.22),
+                    color: p.gold.withValues(alpha: 0.22),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),
                 ]
               : null,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18),
-                      ),
-                      child: TemplateThumbnail(template: template),
-                    ),
-                    if (isSelected)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: goldAccent,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: goldAccent.withValues(alpha: 0.4),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 14),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      template.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: textColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      template.description.isNotEmpty
-                          ? template.description
-                          : template.category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: subTextColor,
-                        fontSize: 11,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        if (canCustomize)
-                          InkWell(
-                            onTap: () => context.push(
-                                '/templates/workspace',
-                                extra: template),
-                            borderRadius: BorderRadius.circular(6),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 2, vertical: 2),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.tune_rounded,
-                                      size: 13, color: goldAccent),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Éditer',
-                                    style: TextStyle(
-                                      color: goldAccent,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  TemplateThumbFrame(
+                    template: template,
+                    radius: 18,
+                    border: Border.all(color: Colors.transparent),
+                  ),
+                  if (isSelected)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: p.gold,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: p.gold.withValues(alpha: 0.4),
+                              blurRadius: 8,
                             ),
-                          )
-                        else
-                          Row(
-                            children: [
-                              Icon(Icons.lock_outline_rounded,
-                                  size: 12,
-                                  color: subTextColor.withValues(alpha: 0.5)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Verrouillé',
-                                style: TextStyle(
-                                  color: subTextColor.withValues(alpha: 0.7),
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        const Spacer(),
+                          ],
+                        ),
+                        child: Icon(Icons.check_rounded,
+                            color: p.onGold, size: 14),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    template.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: p.text,
+                      fontFamily: 'Manrope',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    template.description.isNotEmpty
+                        ? template.description
+                        : template.category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: p.subText,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (canCustomize)
                         InkWell(
                           onTap: () => context.push(
-                              '/templates/preview', extra: template),
+                              '/templates/workspace',
+                              extra: template),
                           borderRadius: BorderRadius.circular(6),
                           child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.visibility_outlined,
-                              size: 15,
-                              color: subTextColor.withValues(alpha: 0.8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 2, vertical: 2),
+                            child: Row(
+                              children: [
+                                Icon(Icons.tune_rounded,
+                                    size: 13, color: p.gold),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Éditer',
+                                  style: TextStyle(
+                                    color: p.gold,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Icon(Icons.lock_outline_rounded,
+                                size: 12,
+                                color: p.subText.withValues(alpha: 0.5)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Verrouillé',
+                              style: TextStyle(
+                                color: p.subText.withValues(alpha: 0.7),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      const Spacer(),
+                      InkWell(
+                        onTap: () => context.push(
+                            '/templates/preview', extra: template),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.visibility_outlined,
+                            size: 15,
+                            color: p.subText.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

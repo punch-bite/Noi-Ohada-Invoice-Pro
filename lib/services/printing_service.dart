@@ -1080,7 +1080,10 @@ class PrintingService {
 
     final rows = <pw.Widget>[];
     for (final section in bodySections) {
-      final visible = section.where(visOf).toList();
+      // ✍️ La signature n'est jamais un bloc du flux : elle est toujours
+      // rendue dans le footer (cohérence aperçu / détail / PDF / impression).
+      final visible =
+          section.where((k) => k != 'signature_block' && visOf(k)).toList();
       if (visible.isEmpty) continue;
 
       final totalW = visible.fold<double>(0, (a, k) => a + widthOf(k));
@@ -1944,6 +1947,8 @@ class PrintingService {
       children: [
         if (hasCustomFooter)
           _buildCustomFooterSections(positions, textColor, fs),
+        // ✍️ Signature toujours dans le footer (cohérence aperçu / PDF).
+        _signaturePdf(positions, textColor, fs),
         ...baseChildren,
       ],
     );

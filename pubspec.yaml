@@ -9,6 +9,17 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # ⚠️ INDISPENSABLE dès que `locale` / `supportedLocales` sont définis sur le
+  #    MaterialApp : les delegates `DefaultMaterialLocalizations` et
+  #    `DefaultWidgetsLocalizations` ne supportent QUE `en_US`. En locale `fr`
+  #    (défaut de l'app), `MaterialLocalizations` était alors `null` et
+  #    `EditableText` plantait avec « Null check operator used on a null
+  #    value » sur TOUS les TextField / TextFormField.
+  #    → les delegates `Global*` couvrent fr + en.
+  flutter_localizations:
+    sdk: flutter
+
   cupertino_icons: ^1.0.8
 
   # ═══════════════════════════════════════════════════════════════════
@@ -46,7 +57,7 @@ dependencies:
   # ═══════════════════════════════════════════════════════════════════
   #  OHADA COMPLIANCE & BUSINESS LOGIC
   # ═══════════════════════════════════════════════════════════════════
-  intl: ^0.19.0
+  intl: ^0.20.2
   uuid: ^4.5.1
   decimal: ^2.3.3 # RECOMMANDÉ : remplacer les doubles par Decimal en compta OHADA
 

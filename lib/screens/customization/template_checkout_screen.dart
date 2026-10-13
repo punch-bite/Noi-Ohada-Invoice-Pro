@@ -1,17 +1,18 @@
 // lib/screens/customization/template_checkout_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../services/template_cart.dart';
 import '../../services/template_service.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/enkap_checkout_dialog.dart';
 import '../../widgets/glass_widgets.dart';
+import 'customization_ui.dart';
 
 /// 🛒 Écran d'achat / validation d'un modèle de facture premium ou gratuit.
 class TemplateCheckoutScreen extends StatefulWidget {
@@ -65,12 +66,9 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     final userId = auth.user?.id ?? '';
 
     if (userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez vous connecter pour acquérir des modèles.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      CustomSnack.show(context,
+          'Veuillez vous connecter pour acquérir des modèles.',
+          type: CustomSnackType.error);
       return;
     }
 
@@ -85,12 +83,9 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     // 💳 Panier payant : numéro Mobile Money requis (sauf carte bancaire).
     final phone = _phoneController.text.trim();
     if (_selectedPaymentMethod != 'card' && phone.length < 9) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez saisir un numéro de téléphone valide.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      CustomSnack.show(context,
+          'Veuillez saisir un numéro de téléphone valide.',
+          type: CustomSnackType.error);
       return;
     }
 
@@ -119,12 +114,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
         onCancel: () {
           if (!mounted) return;
           setState(() => _isProcessing = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Paiement annulé.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          CustomSnack.show(context, 'Paiement annulé.');
         },
       ),
     );
@@ -166,7 +156,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
       if (!mounted) return;
       setState(() => _isProcessing = false);
 
-      final theme = context.read<ThemeProvider>();
+      final p = CustomPalette.of(context);
 
       if (success || isFree) {
         // 🧹 Retire les modèles acquis du panier local (boutique / aperçu).
@@ -177,16 +167,20 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            backgroundColor: theme.cardColor,
+            backgroundColor: p.card,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
               children: [
-                const Icon(Icons.check_circle, color: RoyalColors.tertiary, size: 28),
+                Icon(Icons.check_circle_rounded, color: p.gold, size: 28),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     isFree ? 'Modèle débloqué !' : 'Paiement Réussi !',
-                    style: TextStyle(color: theme.textColor, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: p.text,
+                      fontFamily: 'Manrope',
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -195,7 +189,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               isFree
                   ? 'Le modèle est désormais disponible dans vos modèles.'
                   : 'Félicitations ! Votre modèle est prêt à être personnalisé.',
-              style: TextStyle(color: theme.subTextColor),
+              style: TextStyle(color: p.subText, height: 1.4),
             ),
             actions: [
               TextButton(
@@ -204,76 +198,49 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   context.go('/templates/mine');
                 },
                 child: Text('Voir Mes Modèles',
-                    style: TextStyle(color: theme.accentGold)),
+                    style: TextStyle(color: p.gold, fontWeight: FontWeight.w700)),
               ),
               if (_items.isNotEmpty)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.primaryColor,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: p.primary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () {
                     Navigator.of(ctx).pop();
                     context.go('/templates/workspace', extra: _items.first);
                   },
-                  child: const Text('Personnaliser Maintenant',
-                      style: TextStyle(color: Colors.white)),
+                  child: const Text('Personnaliser Maintenant'),
                 ),
             ],
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Le paiement n\'a pas pu être validé. Réessayez.'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        CustomSnack.show(context,
+            "Le paiement n'a pas pu être validé. Réessayez.",
+            type: CustomSnackType.error);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de la transaction : $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      CustomSnack.show(context,
+          'Erreur lors de la transaction : $e',
+          type: CustomSnackType.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
-    final isDark = theme.isDarkMode;
-    final goldAccent = theme.accentGold;
-    final textColor = theme.textColor;
-    final subTextColor = theme.subTextColor;
-
     if (_items.isEmpty) {
       return GlassScaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: Text('Panier de Modèles', style: TextStyle(color: textColor)),
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.shopping_basket_outlined,
-                  size: 64, color: subTextColor),
-              const SizedBox(height: 16),
-              Text('Votre panier est vide',
-                  style: TextStyle(color: textColor, fontSize: 18)),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => context.go('/templates'),
-                icon: const Icon(Icons.storefront),
-                label: const Text('Voir la boutique'),
-                style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor),
-              )
-            ],
-          ),
+        appBar: const CustomAppBar(title: 'Panier de modèles'),
+        body: EmptyState(
+          icon: Icons.shopping_basket_outlined,
+          title: 'Votre panier est vide',
+          message: 'Ajoutez un modèle depuis la boutique pour continuer.',
+          actionLabel: 'Voir la boutique',
+          onAction: () => context.go('/templates'),
         ),
       );
     }
@@ -281,90 +248,89 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     final isFree = _totalPrice <= 0;
 
     return GlassScaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Confirmation & Règlement',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Manrope',
-          ),
-        ),
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-          onPressed: () => context.pop(),
-        ),
+      appBar: const CustomAppBar(
+        title: 'Confirmation & Règlement',
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        child: Builder(builder: (context) {
+          final p = CustomPalette.of(context);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             Text(
               'Articles Sélectionnés',
               style: TextStyle(
-                color: textColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                color: p.text,
+                fontFamily: 'Manrope',
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
               ),
             ),
             const SizedBox(height: 12),
             ..._items.map(
-              (item) => GlassCard(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: item.primaryColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: item.primaryColor),
+              (item) => EntranceFade(
+                index: _items.indexOf(item),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: p.card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: p.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: item.primaryColor.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: item.primaryColor.withValues(alpha: 0.5)),
+                        ),
+                        child: Icon(Icons.description_rounded,
+                            color: item.primaryColor),
                       ),
-                      child: Icon(Icons.description, color: item.primaryColor),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            style: TextStyle(
-                              color: textColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: p.text,
+                                fontFamily: 'Manrope',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                letterSpacing: -0.2,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.category.toUpperCase(),
-                            style: TextStyle(
-                              color: goldAccent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(height: 4),
+                            Text(
+                              item.category.toUpperCase(),
+                              style: TextStyle(
+                                color: p.gold,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
+                      const SizedBox(width: 8),
                       item.price <= 0
-                          ? 'GRATUIT'
-                          : '${item.price.toStringAsFixed(0)} FCFA',
-                      style: TextStyle(
-                        color: item.price <= 0
-                            ? RoyalColors.tertiary
-                            : goldAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
+                          ? const OwnedPill(label: 'Gratuit')
+                          : PricePill(
+                              '${item.price.toStringAsFixed(0)} FCFA'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -375,50 +341,44 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               Text(
                 'Mode de Paiement',
                 style: TextStyle(
-                  color: textColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  color: p.text,
+                  fontFamily: 'Manrope',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 12),
-              RadioGroup<String>(
-                groupValue: _selectedPaymentMethod,
-                onChanged: (val) => setState(() => _selectedPaymentMethod = val ?? 'om'),
-                child: Column(
-                  children: [
-                    _buildPaymentOption(
-                      id: 'om',
-                      name: 'Orange Money',
-                      icon: Icons.phone_android,
-                      color: Colors.orange,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPaymentOption(
-                      id: 'mtn',
-                      name: 'MTN Mobile Money',
-                      icon: Icons.phone_iphone,
-                      color: Colors.yellow.shade700,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPaymentOption(
-                      id: 'moov',
-                      name: 'Moov Money',
-                      icon: Icons.mobile_friendly,
-                      color: Colors.blue,
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildPaymentOption(
-                      id: 'card',
-                      name: 'Carte Bancaire / Visa',
-                      icon: Icons.credit_card,
-                      color: Colors.purpleAccent,
-                      theme: theme,
-                    ),
-                  ],
-                ),
+              Column(
+                children: [
+                  _buildPaymentOption(
+                    id: 'om',
+                    name: 'Orange Money',
+                    icon: Icons.phone_android,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildPaymentOption(
+                    id: 'mtn',
+                    name: 'MTN Mobile Money',
+                    icon: Icons.phone_iphone,
+                    color: Colors.yellow.shade700,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildPaymentOption(
+                    id: 'moov',
+                    name: 'Moov Money',
+                    icon: Icons.mobile_friendly,
+                    color: Colors.blue,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildPaymentOption(
+                    id: 'card',
+                    name: 'Carte Bancaire / Visa',
+                    icon: Icons.credit_card,
+                    color: Colors.purpleAccent,
+                  ),
+                ],
               ),
 
               const SizedBox(height: 16),
@@ -427,16 +387,21 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  style: TextStyle(color: textColor),
+                  style: TextStyle(color: p.text),
+                  cursorColor: p.gold,
                   decoration: InputDecoration(
                     labelText: 'Numéro de Téléphone Mobile Money',
-                    labelStyle: TextStyle(color: subTextColor),
-                    prefixIcon: Icon(Icons.phone, color: goldAccent),
+                    labelStyle: TextStyle(color: p.subText),
+                    prefixIcon: Icon(Icons.phone_rounded, color: p.gold),
                     filled: true,
-                    fillColor: theme.inputFillColor,
-                    border: OutlineInputBorder(
+                    fillColor: p.card,
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(color: theme.inputBorderColor),
+                      borderSide: BorderSide(color: p.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: p.gold, width: 1.4),
                     ),
                   ),
                 ),
@@ -444,7 +409,13 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               ],
             ],
 
-            GlassCard(
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: p.cardHigh,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.border),
+              ),
               child: Column(
                 children: [
                   Row(
@@ -452,16 +423,23 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                     children: [
                       Text(
                         'Total à régler',
-                        style: TextStyle(color: textColor, fontSize: 16),
+                        style: TextStyle(
+                          color: p.text,
+                          fontFamily: 'Manrope',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       Text(
                         isFree
                             ? 'GRATUIT'
                             : '${_totalPrice.toStringAsFixed(0)} FCFA',
                         style: TextStyle(
-                          color: goldAccent,
+                          color: isFree ? p.gold : p.text,
+                          fontFamily: 'Manrope',
                           fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ],
@@ -470,79 +448,78 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   SizedBox(
                     width: double.infinity,
                     height: 52,
-                    child: ElevatedButton(
+                    child: FilledButton.icon(
                       onPressed: _isProcessing ? null : _processCheckout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.primaryColor,
+                      icon: Icon(
+                        isFree
+                            ? Icons.lock_open_rounded
+                            : Icons.shopping_cart_checkout_rounded,
+                        size: 20,
+                      ),
+                      label: _isProcessing
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: p.onPrimary, strokeWidth: 2.5),
+                            )
+                          : Text(
+                              isFree
+                                  ? 'Débloquer le Modèle'
+                                  : 'Confirmer & Payer (${_totalPrice.toStringAsFixed(0)} FCFA)',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: p.primary,
+                        foregroundColor: p.onPrimary,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        elevation: 4,
                       ),
-                      child: _isProcessing
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2.5),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                    isFree
-                                        ? Icons.lock_open
-                                        : Icons.shopping_cart_checkout,
-                                    color: Colors.white),
-                                const SizedBox(width: 10),
-                                Text(
-                                  isFree
-                                      ? 'Débloquer le Modèle'
-                                      : 'Confirmer & Payer (${_totalPrice.toStringAsFixed(0)} FCFA)',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
                     ),
                   ),
                 ],
               ),
             ),
           ],
-        ),
-      ).animate().fade().slideY(begin: 0.1, duration: const Duration(milliseconds: 300)),
+        )
+        .animate()
+        .fade(duration: const Duration(milliseconds: 300))
+        .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic);
+        }),
+      ),
     );
   }
 
-   Widget _buildPaymentOption({
+  Widget _buildPaymentOption({
     required String id,
     required String name,
     required IconData icon,
     required Color color,
-    required ThemeProvider theme,
   }) {
     final isSelected = _selectedPaymentMethod == id;
-    final goldAccent = theme.accentGold;
-    final isDark = theme.isDarkMode;
+    final p = CustomPalette.of(context);
 
-    return GestureDetector(
-      onTap: () => setState(() => _selectedPaymentMethod = id),
+    return PressScale(
+      scaleDown: 0.98,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _selectedPaymentMethod = id);
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: RoyalMotion.base,
+        curve: RoyalMotion.standard,
         decoration: BoxDecoration(
-          color: theme.cardColor,
+          color: isSelected ? p.cardHigh : p.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected
-                ? goldAccent
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.04)),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? p.gold : p.border,
+            width: isSelected ? 1.6 : 1,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -551,7 +528,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
+                color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -561,41 +538,34 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
               child: Text(
                 name,
                 style: TextStyle(
-                  color: theme.textColor,
+                  color: p.text,
+                  fontFamily: 'WorkSans',
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
               ),
             ),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: RoyalMotion.base,
+              curve: RoyalMotion.standard,
               width: 22,
               height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                color: isSelected ? p.gold : Colors.transparent,
                 border: Border.all(
-                  color: isSelected
-                      ? goldAccent
-                      : theme.subTextColor.withValues(alpha: 0.4),
+                  color: isSelected ? p.gold : p.border,
                   width: 2,
                 ),
               ),
               child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: goldAccent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    )
+                  ? Icon(Icons.check_rounded, size: 14, color: p.onGold)
                   : null,
             ),
           ],
         ),
       ),
     );
-  }}
+  }
+}
 

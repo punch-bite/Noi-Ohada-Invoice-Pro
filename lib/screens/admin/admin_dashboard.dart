@@ -229,6 +229,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     const SizedBox(height: 12),
 
                     _actionTile(
+                      icon: Icons.insights_rounded,
+                      title: 'Ventes & Abonnements',
+                      subtitle: 'Revenus, MRR, activité des forfaits',
+                      color: const Color(0xFF4F46E5),
+                      onTap: () => context.push('/admin/business'),
+                      isDark: isDark,
+                      text: text,
+                      sub: sub,
+                    ),
+                    const SizedBox(height: 10),
+                    _actionTile(
                       icon: Icons.people_alt_rounded,
                       title: 'Gérer les utilisateurs',
                       subtitle: 'Rôles, activation, abonnements',

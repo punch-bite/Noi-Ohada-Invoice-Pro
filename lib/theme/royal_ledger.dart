@@ -83,7 +83,53 @@ class RoyalRadius {
   static const double def = 8;
   static const double lg = 12;
   static const double xl = 16;
+  static const double card = 20;
+  static const double thumb = 16;
+  static const double control = 12;
   static const double full = 9999;
+}
+
+/// Ombres « Royal Ledger ».
+///
+/// Philosophie : **on remplace les bordures par l'élévation**. Un trait 1px
+/// donne un rendu « cheap » ; une ombre très diffuse (flou large, opacité
+/// faible) suggère la profondeur sans découper la surface. Ces jetons sont
+/// volontairement communs à toutes les surfaces afin qu'aucune card ne
+/// « flotte » à une hauteur différente d'une autre.
+class RoyalElevation {
+  RoyalElevation._();
+
+  /// Ombre portée standard des surfaces (cards, feuilles, panneaux).
+  /// En clair, le noir pur serait trop dur : on reste très près du gris.
+  static List<BoxShadow> surface(bool isDark) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.05),
+          blurRadius: isDark ? 22 : 18,
+          offset: const Offset(0, 6),
+          spreadRadius: isDark ? -2 : -4,
+        ),
+      ];
+
+  /// Ombre des éléments posés *dans* une surface (champs, chips, pastilles).
+  /// Discrète : elle sert à décoller le contrôle de son fond tonal.
+  static List<BoxShadow> raised(bool isDark) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.03),
+          blurRadius: isDark ? 14 : 10,
+          offset: const Offset(0, 2),
+          spreadRadius: isDark ? -2 : -2,
+        ),
+      ];
+
+  /// Ombre des éléments flottants (FAB, barres d'action).
+  static List<BoxShadow> floating(bool isDark) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.44 : 0.12),
+          blurRadius: isDark ? 30 : 24,
+          offset: const Offset(0, 10),
+          spreadRadius: isDark ? -4 : -6,
+        ),
+      ];
 }
 
 /// Espacements « Royal Ledger » (grille 4px).
@@ -343,4 +389,42 @@ class RoyalScheme {
   /// Palette correspondant à la luminosité courante du thème.
   static RoyalScheme of(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark ? dark : light;
+}
+
+/// 🎬 Jetons de mouvement « Royal Ledger ».
+///
+/// Centralise les durées et courbes du module (et au-delà) pour que toutes
+/// les animations partagent le même « tempo » premium :
+/// • états interactifs → [fast] (160 ms) ;
+/// • transitions standard → [base] (220 ms) ;
+/// • panneaux / entrées marquées → [slow] / [entrance] (320/420 ms).
+class RoyalMotion {
+  RoyalMotion._();
+
+  /// Micro-interaction (pressed, focus, sélection de chip).
+  static const Duration fast = Duration(milliseconds: 160);
+
+  /// Transition standard (cartes, pills, barres).
+  static const Duration base = Duration(milliseconds: 220);
+
+  /// Panneaux et apparitions d'écran.
+  static const Duration slow = Duration(milliseconds: 320);
+
+  /// Entrée de contenu (listes, grilles, héros).
+  static const Duration entrance = Duration(milliseconds: 420);
+
+  /// Courbe « emphasized » (Material 3-ish) pour les entrées.
+  static const Curve emphasized = Curves.easeOutCubic;
+
+  /// Courbe standard pour les changements d'état.
+  static const Curve standard = Curves.easeOutQuad;
+
+  /// Courbe de sortie (disparitions, replis).
+  static const Curve exit = Curves.easeInCubic;
+
+  /// Décalage d'entrée par index (stagger) — plafonné pour les longues
+  /// listes afin de garder un rendu perçu instantané.
+  static Duration stagger(int index,
+          {Duration step = const Duration(milliseconds: 40)}) =>
+      step * (index.clamp(0, 14));
 }

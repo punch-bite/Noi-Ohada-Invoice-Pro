@@ -992,9 +992,13 @@ class StitchA4InvoicePreview extends StatelessWidget {
       return v is bool ? v : true;
     }
 
+    // 🔒 Signature : TOUJOURS rendue dans le footer (exigence produit), quel
+    // que soit son placement drag & drop. On l'exclut donc du flux du body.
+    const kSignature = 'signature_block';
     final rows = <Widget>[];
     for (final section in sections) {
-      final visibleKeys = section.where(visOf).toList();
+      final visibleKeys =
+          section.where((e) => visOf(e) && e != kSignature).toList();
       if (visibleKeys.isEmpty) continue;
       final children = <Widget>[];
       for (var i = 0; i < visibleKeys.length; i++) {
@@ -1614,6 +1618,16 @@ class StitchA4InvoicePreview extends StatelessWidget {
   Widget _buildFooter(
       Color accent, Color cText, Color cSub, Color line, double k) {
     final widgets = <Widget>[];
+
+    // 🔒 Signature : toujours positionnée dans le footer, juste avant les
+    // mentions légales/contacts. Retourne SizedBox.shrink si masquée.
+    final signature = _signatureBlock(cText, cSub, k);
+    if (signature is! SizedBox) {
+      widgets.add(Padding(
+        padding: EdgeInsets.only(bottom: 12 * k),
+        child: signature,
+      ));
+    }
 
     if (_bankName.isNotEmpty || _bankAccount.isNotEmpty) {
       widgets.add(Padding(

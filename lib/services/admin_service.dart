@@ -375,4 +375,149 @@ class AdminService {
     }
     return null;
   }
+
+  // ============================================================
+  //  BUSINESS : ABONNEMENTS + VENTES (dashboard admin)
+  // ============================================================
+
+  /// Récupère TOUS les abonnements de la plateforme (admin uniquement).
+  Future<List<Subscription>> getAllSubscriptions() async {
+    try {
+      final snapshot = await _firestore
+          .collection('subscriptions')
+          .orderBy('createdAt', descending: true)
+          .get();
+      return snapshot.docs
+          .map((doc) => Subscription.fromMap(doc.data(), documentId: doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint('❌ Erreur getAllSubscriptions: $e');
+      // Fallback sans tri (si createdAt manque sur certains docs).
+      try {
+        final snapshot =
+            await _firestore.collection('subscriptions').get();
+        return snapshot.docs
+            .map((doc) =>
+                Subscription.fromMap(doc.data(), documentId: doc.id))
+            .toList();
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
+  /// Statistiques business agrégées pour le dashboard admin.
+  ///
+  /// Retourne :
+  ///  • `mrr` : revenu mensuel récurrent (abonnements actifs,
+  ///    normalisés en équivalent mensuel selon l'intervalle).
+  ///  • `totalRevenue` : revenu cumulé de tous les abonnements.
+  ///  • `activeSubs`, `expiredSubs`, `canceledSubs`, `pendingSubs`.
+  ///  • `expiringSoon` : abonnements actifs expirant sous 7 jours.
+  ///  • `salesThisMonth` : revenu encaissé ce mois-ci.
+  ///  • `byStatus` / `byPlan` : répartitions (Map<String, double> revenu).
+  ///  • `monthlyRevenue` : 6 derniers mois [{ 'label', 'revenue' }].
+  Future<Map<String, dynamic>> getPlatformStats() async {
+    try {
+      final subs = await getAllSubscriptions();
+      final now = DateTime.now();
+
+      double mrr = 0;
+      double totalRevenue = 0;
+      int active = 0, expired = 0, canceled = 0, pending = 0, expiringSoon = 0;
+      double salesThisMonth = 0;
+      final Map<String, double> byStatus = {};
+      final Map<String, double> byPlan = {};
+
+      // 6 derniers mois (index 5 = mois courant).
+      final List<Map<String, dynamic>> monthlyRevenue =
+          List.generate(6, (i) {
+        final d = DateTime(now.year, now.month - (5 - i), 1);
+        const names = [
+          'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+          'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'
+        ];
+        return {'label': names[d.month - 1], 'revenue': 0.0};
+      });
+
+      for (final s in subs) {
+        totalRevenue += s.amount;
+
+        final created = s.createdAt ?? s.startDate;
+        final monthKey = created.year == now.year && created.month == now.month;
+        if (monthKey) salesThisMonth += s.amount;
+
+        // Répartition par statut.
+        final st = s.status;
+        byStatus[st] = (byStatus[st] ?? 0) + s.amount;
+
+        // Répartition par plan (revenu).
+        byPlan[s.planId] = (byPlan[s.planId] ?? 0) + s.amount;
+
+        // Revenus mensuels (index par mois écoulé).
+        if (created.isAfter(DateTime(now.year, now.month - 6, 1))) {
+          final monthsAgo =
+              (now.year - created.year) * 12 + (now.month - created.month);
+          if (monthsAgo >= 0 && monthsAgo < 6) {
+            monthlyRevenue[5 - monthsAgo]['revenue'] =
+                (monthlyRevenue[5 - monthsAgo]['revenue'] as double) +
+                    s.amount;
+          }
+        }
+
+        switch (st) {
+          case 'active':
+            active++;
+            // MRR normalisé : interval 'year' -> /12, sinon montant brut.
+            final monthly =
+                s.interval == 'year' ? s.amount / 12 : s.amount;
+            mrr += monthly;
+            // Expire bientôt (< 7 jours).
+            final daysLeft = s.endDate.difference(now).inDays;
+            if (daysLeft >= 0 && daysLeft <= 7) expiringSoon++;
+            break;
+          case 'expired':
+            expired++;
+            break;
+          case 'canceled':
+            canceled++;
+            break;
+          default:
+            pending++;
+        }
+      }
+
+      return {
+        'mrr': mrr,
+        'totalRevenue': totalRevenue,
+        'salesThisMonth': salesThisMonth,
+        'activeSubs': active,
+        'expiredSubs': expired,
+        'canceledSubs': canceled,
+        'pendingSubs': pending,
+        'expiringSoon': expiringSoon,
+        'totalSubs': subs.length,
+        'byStatus': byStatus,
+        'byPlan': byPlan,
+        'monthlyRevenue': monthlyRevenue,
+      };
+    } catch (e) {
+      debugPrint('❌ Erreur getPlatformStats: $e');
+      return {
+        'mrr': 0.0,
+        'totalRevenue': 0.0,
+        'salesThisMonth': 0.0,
+        'activeSubs': 0,
+        'expiredSubs': 0,
+        'canceledSubs': 0,
+        'pendingSubs': 0,
+        'expiringSoon': 0,
+        'totalSubs': 0,
+        'byStatus': <String, double>{},
+        'byPlan': <String, double>{},
+        'monthlyRevenue': <Map<String, dynamic>>[],
+      };
+    }
+  }
+
 }

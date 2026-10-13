@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/theme_provider.dart';
+import '../../../l10n/app_localizations.dart';
 
 class DashboardStats extends StatelessWidget {
   final String revenue;
@@ -22,6 +23,7 @@ class DashboardStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    final l10n = AppLocalizations.of(context);
     final isDark = themeProvider.isDarkMode;
     final textColor = themeProvider.textColor;
     final subTextColor = themeProvider.subTextColor;
@@ -31,7 +33,7 @@ class DashboardStats extends StatelessWidget {
     return Row(
       children: [
         _buildStatCard(
-          label: 'Revenus',
+          label: l10n.statsRevenue,
           value: revenue,
           change: revenueChange,
           icon: Icons.account_balance_wallet_outlined,
@@ -43,7 +45,7 @@ class DashboardStats extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         _buildStatCard(
-          label: 'Commandes',
+          label: l10n.statsOrders,
           value: orders,
           change: ordersChange,
           icon: Icons.shopping_bag_outlined,
@@ -55,7 +57,7 @@ class DashboardStats extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         _buildStatCard(
-          label: 'Objectif',
+          label: l10n.statsGoal,
           value: goal,
           change: 8.2, // Valeur fixe ou dynamique
           icon: Icons.track_changes_rounded,

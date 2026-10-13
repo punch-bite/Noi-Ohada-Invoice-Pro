@@ -79,14 +79,39 @@ class SyncService {
     for (var local in localItems) {
       final id = _getId(local);
       if (!cloudMap.containsKey(id)) {
-        await _firestore
-            .collection(collectionName)
-            .doc(id)
-            .set({
-              ..._toMap(local),
-              'userId': userId,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+        // 🛡️ Anti-réattribution : si le document existe déjà dans Firestore,
+        //    on PRÉSERVE son userId/companyId d'origine. Sinon, la synchro
+        //    lancée par un admin (dont getAll ramène les docs de TOUS les
+        //    utilisateurs via la query admin) réécrirait chaque
+        //    facture/client/produit au nom de l'admin. `userId` n'est forcé
+        //    que si le document est réellement absent du cloud.
+        final docRef = _firestore.collection(collectionName).doc(id);
+        final existingSnap = await docRef.get();
+        final existingData = existingSnap.exists ? existingSnap.data() : null;
+
+        final payload = _toMap(local);
+        if (existingData != null) {
+          // Source de vérité = Firestore : on préserve le propriétaire d'origine.
+          if (existingData['userId'] != null) {
+            payload['userId'] = existingData['userId'];
+          }
+          if (existingData['companyId'] != null) {
+            payload['companyId'] = existingData['companyId'];
+          }
+        } else {
+          // Doc réellement absent du cloud : on garde le userId de l'objet
+          // local s'il est déjà défini (évite les orphelins mal attribués),
+          // sinon on l'attribue à l'utilisateur courant.
+          final localUserId = payload['userId'];
+          if (localUserId == null || (localUserId as String).isEmpty) {
+            payload['userId'] = userId;
+          }
+        }
+
+        await docRef.set({
+          ...payload,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
     }
 

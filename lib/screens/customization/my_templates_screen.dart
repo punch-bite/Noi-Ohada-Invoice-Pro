@@ -1,21 +1,19 @@
-// lib/screens/customization/my_templates_screen.dart
+﻿// lib/screens/customization/my_templates_screen.dart
 //
 // 📁 Mes Modèles : bibliothèque des modèles acquis + gestion du modèle actif.
-// Épuré : héro animé, cards uniformes, statut cohérent (Actif / Autre).
+// Refonte épurée & animée (kit `customization_ui.dart`) : héros dégradé,
+// cartes uniformes, états vides actionnables, hiérarchie typographique M3.
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../services/template_custom_service.dart';
 import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
-import '../../theme/royal_ledger.dart';
 import '../../widgets/glass_widgets.dart';
-import '../../widgets/template_thumbnail.dart';
+import 'customization_ui.dart';
 
 class MyTemplatesScreen extends StatefulWidget {
   const MyTemplatesScreen({super.key});
@@ -49,8 +47,8 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
 
     InvoiceTemplate? active;
     if (activeId != null) {
-      active = list.firstWhere((t) => t.id == activeId,
-          orElse: () => list.first);
+      active =
+          list.firstWhere((t) => t.id == activeId, orElse: () => list.first);
     } else if (list.isNotEmpty) {
       active = list.first;
     }
@@ -67,14 +65,10 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
     await TemplateSelectionService.setActiveTemplateId(template.id);
     if (!mounted) return;
     setState(() => _activeTemplate = template);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('« ${template.name} » est désormais votre modèle actif'),
-        backgroundColor: RoyalColors.tertiary,
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    CustomSnack.show(
+      context,
+      '« ${template.name} » est désormais votre modèle actif',
+      type: CustomSnackType.success,
     );
   }
 
@@ -94,11 +88,9 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Annuler'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
+            style: FilledButton.styleFrom(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
@@ -111,157 +103,85 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
     if (confirm != true) return;
     await TemplateCustomService.clearCustom(template.id);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('« ${template.name} » réinitialisé'),
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    CustomSnack.show(context, '« ${template.name} » réinitialisé');
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeProvider>();
-    final textColor = theme.textColor;
-    final subTextColor = theme.subTextColor;
-    final goldAccent = theme.accentGold;
-
     return GlassScaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: false,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(
-          'Mes modèles',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w700,
-            fontSize: 19,
-            letterSpacing: -0.3,
-          ),
-        ),
+      appBar: CustomAppBar(
+        title: 'Mes modèles',
+        subtitle: _myTemplates.isEmpty
+            ? 'Votre bibliothèque'
+            : '${_myTemplates.length} modèle(s) acquis',
         actions: [
           IconButton(
             tooltip: 'Boutique',
-            icon: Icon(Icons.add_shopping_cart_rounded,
-                color: goldAccent, size: 22),
+            icon: const Icon(Icons.add_shopping_cart_rounded, size: 22),
             onPressed: () => context.push('/templates'),
           ),
           const SizedBox(width: 6),
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: goldAccent))
+          ? const TemplatesSkeleton()
           : RefreshIndicator(
               onRefresh: _loadTemplates,
-              color: goldAccent,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics()),
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Héro : modèle actif ──
-                    if (_activeTemplate != null)
-                      _buildActiveHero(
-                        _activeTemplate!,
-                        theme,
-                        textColor,
-                        subTextColor,
-                      ).animate().fadeIn(duration: 400.ms).slideY(
-                            begin: 0.1,
-                            end: 0,
-                            duration: 400.ms,
-                            curve: Curves.easeOut,
+                    if (_myTemplates.isEmpty) ...[
+                      const SizedBox(height: 60),
+                      EmptyState(
+                        icon: Icons.collections_bookmark_outlined,
+                        title: 'Aucun modèle pour l''instant',
+                        message:
+                            'Rendez-vous dans la boutique pour acquérir votre premier modèle.',
+                        actionLabel: 'Explorer la boutique',
+                        onAction: () => context.push('/templates'),
+                      ),
+                    ] else ...[
+                      if (_activeTemplate != null)
+                        EntranceFade(
+                          index: 0,
+                          child: _buildActiveHero(_activeTemplate!),
+                        ),
+                      const SizedBox(height: 28),
+                      Row(
+                        children: [
+                          Text(
+                            'Bibliothèque',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
-                    const SizedBox(height: 28),
-
-                    // ── Section : tous les modèles ──
-                    Row(
-                      children: [
-                        Text(
-                          'Bibliothèque',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: textColor,
-                            letterSpacing: -0.2,
+                          const SizedBox(width: 8),
+                          _CountBadge(_myTemplates.length),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: () => context.push('/templates'),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Ajouter',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      for (var i = 0; i < _myTemplates.length; i++)
+                        EntranceFade(
+                          index: i + 1,
+                          child: _buildTemplateCard(
+                            _myTemplates[i],
+                            isActive:
+                                _myTemplates[i].id == _activeTemplate?.id,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: goldAccent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            '${_myTemplates.length}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: goldAccent,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () => context.push('/templates'),
-                          icon: Icon(Icons.add_rounded,
-                              color: goldAccent, size: 18),
-                          label: Text(
-                            'Ajouter',
-                            style: TextStyle(
-                              color: goldAccent,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8),
-                            minimumSize: const Size(0, 32),
-                            tapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    ..._myTemplates.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final t = entry.value;
-                      final isActive = t.id == _activeTemplate?.id;
-                      return _buildTemplateCard(
-                        t,
-                        isActive: isActive,
-                        theme: theme,
-                        textColor: textColor,
-                        subTextColor: subTextColor,
-                        goldAccent: goldAccent,
-                      )
-                          .animate()
-                          .fadeIn(
-                            delay: Duration(milliseconds: 100 + (i * 60)),
-                            duration: 400.ms,
-                          )
-                          .slideY(
-                            begin: 0.06,
-                            end: 0,
-                            duration: 400.ms,
-                            curve: Curves.easeOut,
-                          );
-                    }),
+                    ],
                   ],
                 ),
               ),
@@ -269,28 +189,21 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
     );
   }
 
-  // ── Héro : grand carte du modèle actif ──
-  Widget _buildActiveHero(
-    InvoiceTemplate template,
-    ThemeProvider theme,
-    Color textColor,
-    Color subTextColor,
-  ) {
+  // ── Héro : grande carte du modèle actif ──
+  Widget _buildActiveHero(InvoiceTemplate template) {
+    final accent = template.primaryColor;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            template.primaryColor,
-            template.primaryColor.withValues(alpha: 0.72),
-          ],
+          colors: [accent, accent.withValues(alpha: 0.78)],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: template.primaryColor.withValues(alpha: 0.32),
+            color: accent.withValues(alpha: 0.32),
             blurRadius: 22,
             offset: const Offset(0, 10),
           ),
@@ -299,56 +212,29 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.check_circle_rounded,
-                        color: Colors.white, size: 13),
-                    SizedBox(width: 5),
-                    Text(
-                      'MODÈLE ACTIF',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              Container(
-                width: 44,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.25),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 13),
+                SizedBox(width: 5),
+                Text(
+                  'MODÈLE ACTIF',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
                   ),
                 ),
-                child: Center(
-                  child: Container(
-                    width: 22,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 18),
           Text(
@@ -357,6 +243,7 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
+              fontFamily: 'Manrope',
               fontSize: 22,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
@@ -379,36 +266,27 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: () => context.push('/templates/workspace',
                       extra: template),
                   icon: const Icon(Icons.tune_rounded, size: 16),
                   label: const Text('Personnaliser'),
-                  style: ElevatedButton.styleFrom(
+                  style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: template.primaryColor,
+                    foregroundColor: accent,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    minimumSize: const Size(0, 46),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              Material(
-                color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  onTap: () => context.push('/templates/preview',
-                      extra: template),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    child: const Icon(Icons.visibility_outlined,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
+              _HeroIconButton(
+                icon: Icons.visibility_outlined,
+                tooltip: 'Aperçu',
+                onTap: () =>
+                    context.push('/templates/preview', extra: template),
               ),
             ],
           ),
@@ -417,223 +295,209 @@ class _MyTemplatesScreenState extends State<MyTemplatesScreen> {
     );
   }
 
-  // ── Card uniforme d'un modèle ──
+  // ── Carte uniforme d''un modèle ──
   Widget _buildTemplateCard(
     InvoiceTemplate t, {
     required bool isActive,
-    required ThemeProvider theme,
-    required Color textColor,
-    required Color subTextColor,
-    required Color goldAccent,
   }) {
-    final isDark = theme.isDarkMode;
+    final p = CustomPalette.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
+        color: p.card,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isActive
-              ? goldAccent.withValues(alpha: 0.5)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.04)),
-          width: isActive ? 1.5 : 1,
+          color: isActive ? p.gold : p.border,
+          width: isActive ? 1.6 : 1,
         ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => context.push('/templates/preview', extra: t),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
+      child: PressScale(
+        onTap: () => context.push('/templates/preview', extra: t),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      // Aperçu miniature
-                      Container(
-                        width: 60,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: t.backgroundColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: t.primaryColor.withValues(alpha: 0.4),
-                            width: 1.2,
-                          ),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: TemplateThumbnail(template: t),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  TemplateThumbFrame(
+                    template: t,
+                    radius: 12,
+                    border: Border.all(
+                        color: t.primaryColor.withValues(alpha: 0.4)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    t.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
+                            Expanded(
+                              child: Text(
+                                t.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: p.text,
+                                  fontFamily: 'Manrope',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
                                 ),
-                                if (isActive) _activeBadge(goldAccent),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              t.description.isNotEmpty
-                                  ? t.description
-                                  : t.category,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: subTextColor,
-                                fontSize: 12,
-                                height: 1.35,
                               ),
                             ),
+                            if (isActive) const ActivePill(),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Divider(
-                    height: 1,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.black.withValues(alpha: 0.04),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      // Réinitialiser (discret)
-                      InkWell(
-                        onTap: () => _resetTemplateCustom(t),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
-                          child: Row(
-                            children: [
-                              Icon(Icons.refresh_rounded,
-                                  size: 14,
-                                  color: subTextColor.withValues(alpha: 0.8)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Reset',
-                                style: TextStyle(
-                                  color: subTextColor.withValues(alpha: 0.8),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        const SizedBox(height: 4),
+                        Text(
+                          t.description.isNotEmpty
+                              ? t.description
+                              : t.category,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: p.subText,
+                            fontSize: 12,
+                            height: 1.35,
                           ),
-                        ),
-                      ),
-                      const Spacer(),
-                      // Aperçu
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => context.push(
-                              '/templates/preview', extra: t),
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            child: Icon(Icons.visibility_outlined,
-                                size: 18, color: subTextColor),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // Éditer
-                      ElevatedButton.icon(
-                        onPressed: () =>
-                            context.push('/templates/workspace', extra: t),
-                        icon: const Icon(Icons.tune_rounded, size: 15),
-                        label: const Text('Éditer'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.primaryColor,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          textStyle: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      if (!isActive) ...[
-                        const SizedBox(width: 8),
-                        // Activer
-                        OutlinedButton(
-                          onPressed: () => _setActiveTemplate(t),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: goldAccent,
-                            side: BorderSide(
-                                color: goldAccent.withValues(alpha: 0.5),
-                                width: 1.2),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            textStyle: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w700),
-                          ),
-                          child: const Text('Activer'),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: p.border),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => _resetTemplateCustom(t),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(Icons.refresh_rounded,
+                              size: 15, color: p.subText),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Reset',
+                            style: TextStyle(
+                              color: p.subText,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Aperçu',
+                    onPressed: () =>
+                        context.push('/templates/preview', extra: t),
+                    icon: Icon(Icons.visibility_outlined,
+                        size: 19, color: p.subText),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        context.push('/templates/workspace', extra: t),
+                    icon: const Icon(Icons.tune_rounded, size: 15),
+                    label: const Text('Éditer'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: p.primary,
+                      foregroundColor: p.onPrimary,
+                      elevation: 0,
+                      minimumSize: const Size(0, 40),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  if (!isActive) ...[
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: () => _setActiveTemplate(t),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: p.onGold,
+                        side: BorderSide(color: p.gold, width: 1.2),
+                        minimumSize: const Size(0, 40),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Activer',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _activeBadge(Color goldAccent) {
+/// Badge numérique pour la section bibliothèque.
+class _CountBadge extends StatelessWidget {
+  final int count;
+  const _CountBadge(this.count);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = CustomPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: goldAccent.withValues(alpha: 0.14),
+        color: p.gold.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_rounded, size: 11, color: goldAccent),
-          const SizedBox(width: 4),
-          Text(
-            'ACTIF',
-            style: TextStyle(
-              color: goldAccent,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.6,
-            ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: p.onGold,
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton icône translucide utilisé dans le héros (sur fond coloré).
+class _HeroIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _HeroIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 48,
+            height: 46,
+            child: Icon(icon, color: Colors.white, size: 20),
           ),
-        ],
+        ),
       ),
     );
   }

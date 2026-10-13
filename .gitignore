@@ -81,3 +81,4 @@ enkap_integration.txt
 enkap_swagger.json
 design/
 .vercel
+.agents/

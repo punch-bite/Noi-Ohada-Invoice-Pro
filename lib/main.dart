@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:noi_ohada_invoice_pro/firebase_options.dart';
 import 'package:noi_ohada_invoice_pro/services/sync_service.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,7 @@ import 'services/config_service.dart';
 import 'services/logger_service.dart';
 import 'services/permission_service.dart';
 import 'services/theme_service.dart';
+import 'services/locale_service.dart';
 import 'services/security_service.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
@@ -28,6 +30,8 @@ import 'services/boot_logger.dart' as boot;
 import 'providers/auth_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
+import 'l10n/app_localizations.dart';
 
 // Router & Widgets
 import 'router/app_router.dart';
@@ -181,6 +185,7 @@ Future<void> _initServices(AppBootstrapContext bootstrapContext) async {
         ReminderService().init(),
         stockService.init(),
         ThemeService.init(),
+        LocaleService.init(),
         SecurityService.init(),
       ]),
       Future.delayed(const Duration(seconds: 8)),
@@ -251,6 +256,7 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => FirestoreService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
         ChangeNotifierProvider.value(value: notificationService),
         ChangeNotifierProvider.value(value: connectivityService),
         Provider<StockService>.value(value: stockService),
@@ -259,8 +265,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<TemplateCart>.value(
             value: TemplateCart.instance),
       ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
+      child: Consumer2<ThemeProvider, LocaleProvider>(
+        builder: (context, themeProvider, localeProvider, child) {
           return _NotificationSync(
             notificationService: notificationService,
             child: MaterialApp.router(
@@ -272,6 +278,20 @@ class MyApp extends StatelessWidget {
               themeAnimationDuration: const Duration(milliseconds: 320),
               themeAnimationCurve: Curves.easeInOutCubic,
               themeMode: _getThemeMode(themeProvider.currentTheme),
+              // 🌍 Sélection de la langue par l'utilisateur.
+              locale: localeProvider.locale,
+              supportedLocales: AppLocalizations.supportedLocales,
+              // ⚠️ Utiliser les delegates `Global*` (flutter_localizations) et
+              //    NON `Default*` : ces derniers ne supportent que `en_US` et
+              //    laissent `MaterialLocalizations` à `null` en locale `fr`,
+              //    ce qui faisait planter tous les champs de saisie avec
+              //    « Null check operator used on a null value ».
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
               routerConfig: AppRouter.router,
               builder: (context, child) {
                 // 🖼️ Fond glass global derrière toute la navigation.
