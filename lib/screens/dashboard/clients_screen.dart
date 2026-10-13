@@ -11,6 +11,7 @@ import '../../models/client.dart';
 import '../../models/invoice.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class ClientsScreen extends StatefulWidget {
   const ClientsScreen({super.key});
@@ -118,8 +119,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
                           children: [
                             Text(
                               _searchQuery.isNotEmpty
-                                  ? 'Résultats'
-                                  : 'Tous les clients',
+                                  ? AppLocalizations.of(context).clientsResults
+                                  : AppLocalizations.of(context).clientsAllClients,
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -188,8 +189,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
         backgroundColor: primaryColor,
         elevation: 3,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'Client',
+        label: Text(
+          AppLocalizations.of(context).clientsFabLabel,
           style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -228,7 +229,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 autofocus: true,
                 style: TextStyle(color: textColor, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Rechercher un client…',
+                  hintText: AppLocalizations.of(context).clientsSearchHint,
                   hintStyle:
                       TextStyle(color: subTextColor, fontSize: 13.5),
                   border: InputBorder.none,
@@ -252,7 +253,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
               ),
             )
           : Text(
-              'Clients',
+              AppLocalizations.of(context).clientsTitle,
               style: TextStyle(
                 color: textColor,
                 fontWeight: FontWeight.w700,
@@ -288,7 +289,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
       children: [
         Expanded(
           child: _summaryTile(
-            label: 'Clients',
+            label: AppLocalizations.of(context).clientsTitle,
             value: '$totalClients',
             icon: Icons.people_rounded,
             color: primaryColor,
@@ -300,7 +301,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _summaryTile(
-            label: 'Factures',
+            label: AppLocalizations.of(context).clientsSummaryInvoices,
             value: '$totalInvoices',
             icon: Icons.receipt_long_rounded,
             color: const Color(0xFF4F46E5),
@@ -312,7 +313,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _summaryTile(
-            label: 'Encaissé',
+            label: AppLocalizations.of(context).clientsSummaryCollected,
             value: _kpi(totalRevenue),
             icon: Icons.account_balance_wallet_rounded,
             color: const Color(0xFF10B981),
@@ -573,7 +574,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 size: 44, color: subTextColor.withValues(alpha: 0.4)),
             const SizedBox(height: 14),
             Text(
-              'Aucun résultat',
+              AppLocalizations.of(context).clientsNoResult,
               style: TextStyle(
                   color: textColor,
                   fontSize: 15,
@@ -581,7 +582,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Essayez un autre mot-clé',
+              AppLocalizations.of(context).clientsTryAnotherKeyword,
               style: TextStyle(color: subTextColor, fontSize: 12.5),
             ),
           ],
@@ -624,7 +625,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 ),
             const SizedBox(height: 24),
             Text(
-              'Aucun client',
+              AppLocalizations.of(context).clientsNoClient,
               style: TextStyle(
                 fontSize: 18,
                 color: textColor,
@@ -634,7 +635,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Ajoutez votre premier client pour commencer.',
+              AppLocalizations.of(context).clientsNoClientMsg,
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 13, color: subTextColor, height: 1.5),
@@ -646,7 +647,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 if (mounted) _loadData();
               },
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Ajouter un client'),
+              label: Text(AppLocalizations.of(context).clientsAddFirstClient),
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,

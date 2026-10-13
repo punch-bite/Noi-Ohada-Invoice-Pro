@@ -20,6 +20,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/database_service.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../l10n/app_localizations.dart';
 
 class ProfileUpdateScreen extends StatefulWidget {
   const ProfileUpdateScreen({super.key});
@@ -94,7 +95,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       final authProvider = context.read<AppAuthProvider>();
       final user = authProvider.user;
 
-      if (user == null) throw Exception('Utilisateur non connecté');
+      if (user == null) throw Exception(AppLocalizations.of(context).profileUserNotConnected);
 
       final updatedUser = user.copyWith(
         displayName: _nameController.text.trim(),
@@ -109,11 +110,12 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
                 Icon(Icons.check_circle_rounded, color: Colors.white),
                 SizedBox(width: 10),
-                Expanded(child: Text('Profil mis à jour avec succès')),
+                Expanded(
+                    child: Text(AppLocalizations.of(context).profileUpdated)),
               ],
             ),
             backgroundColor: const Color(0xFF10B981),
@@ -129,7 +131,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur : ${e.toString()}'),
+            content: Text(
+                '${AppLocalizations.of(context).profileError}${e.toString()}'),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -161,7 +164,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Mon profil',
+          AppLocalizations.of(context).profileTitle,
           style: TextStyle(
             color: theme.textColor,
             fontSize: 17,
@@ -196,7 +199,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     child: Text(
-                      'Enregistrer',
+                      AppLocalizations.of(context).profileSave,
                       style: TextStyle(
                         color: primary,
                         fontWeight: FontWeight.w800,
@@ -234,8 +237,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
               padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
               child: _buildSectionHeader(
                 icon: Icons.person_rounded,
-                title: 'Informations personnelles',
-                subtitle: 'Vos coordonnées principales',
+                title: AppLocalizations.of(context).profilePersonalInfo,
+                subtitle: AppLocalizations.of(context).profilePersonalSubtitle,
                 color: primary,
                 theme: theme,
               ),
@@ -247,14 +250,14 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                 children: [
                   _buildTextField(
                     controller: _nameController,
-                    label: 'Nom complet',
-                    hint: 'Ex. Jean Dupont',
+                    label: AppLocalizations.of(context).profileFullName,
+                    hint: AppLocalizations.of(context).profileFullNameHint,
                     icon: Icons.person_outline_rounded,
                     theme: theme,
                     isRequired: true,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Veuillez entrer votre nom';
+                        return AppLocalizations.of(context).profileNameRequired;
                       }
                       return null;
                     },
@@ -262,8 +265,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                   const SizedBox(height: 12),
                   _buildTextField(
                     controller: _phoneController,
-                    label: 'Téléphone',
-                    hint: 'Ex. +237 6 90 00 00 00',
+                    label: AppLocalizations.of(context).profilePhone,
+                    hint: AppLocalizations.of(context).profilePhoneHint,
                     icon: Icons.phone_outlined,
                     theme: theme,
                     keyboardType: TextInputType.phone,
@@ -277,8 +280,8 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
               padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
               child: _buildSectionHeader(
                 icon: Icons.business_rounded,
-                title: 'Entreprise',
-                subtitle: 'Informations professionnelles',
+                title: AppLocalizations.of(context).profileCompany,
+                subtitle: AppLocalizations.of(context).profileCompanySubtitle,
                 color: const Color(0xFFF59E0B),
                 theme: theme,
               ),
@@ -290,16 +293,16 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                 children: [
                   _buildTextField(
                     controller: _companyController,
-                    label: 'Nom de l\'entreprise',
-                    hint: 'Ex. NOI Concept Digital',
+                    label: AppLocalizations.of(context).profileCompanyName,
+                    hint: AppLocalizations.of(context).profileCompanyHint,
                     icon: Icons.apartment_rounded,
                     theme: theme,
                   ),
                   const SizedBox(height: 12),
                   _buildTextField(
                     controller: _addressController,
-                    label: 'Adresse',
-                    hint: 'Ex. Douala, Cameroun',
+                    label: AppLocalizations.of(context).profileAddress,
+                    hint: AppLocalizations.of(context).profileAddressHint,
                     icon: Icons.location_on_outlined,
                     theme: theme,
                     maxLines: 3,
@@ -314,7 +317,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: GradientButton(
-                label: 'Enregistrer les modifications',
+                label: AppLocalizations.of(context).profileSaveChanges,
                 icon: Icons.check_circle_outline_rounded,
                 height: 54,
                 loading: _isSaving,
@@ -420,7 +423,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                             ),
                             const SizedBox(width: 5),
                             Text(
-                              'Compte sécurisé',
+                              AppLocalizations.of(context).profileSecureAccount,
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.95),
                                 fontSize: 10.5,
@@ -691,7 +694,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Complétion du profil',
+                      AppLocalizations.of(context).profileCompletion,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -702,8 +705,9 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
                     const SizedBox(height: 2),
                     Text(
                       isComplete
-                          ? 'Votre profil est complet ✓'
-                          : '$percent% — Complétez vos informations',
+                          ? AppLocalizations.of(context).profileCompleteDone
+                          : AppLocalizations.of(context)
+                              .profileCompletionHint(percent),
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w500,
@@ -836,7 +840,7 @@ class _ProfileUpdateScreenState extends State<ProfileUpdateScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Vos informations sont chiffrées et synchronisées en toute sécurité.',
+              AppLocalizations.of(context).profileSecurityNote,
               style: TextStyle(
                 fontSize: 12,
                 height: 1.4,

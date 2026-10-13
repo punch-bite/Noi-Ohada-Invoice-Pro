@@ -1,4 +1,4 @@
-﻿// lib/models/invoice_layout.dart
+// lib/models/invoice_layout.dart
 //
 // 📐 Layout par blocs avec grille de colonnes pour facture A4.
 //

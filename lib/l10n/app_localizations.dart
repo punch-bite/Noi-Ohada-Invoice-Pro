@@ -486,6 +486,348 @@ class AppLocalizations {
       isEnglish ? 'Back to the login screen' : "Retour à l'écran de connexion";
   String get auth2faCancelLogin =>
       isEnglish ? 'Cancel login' : 'Annuler la connexion';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  BOUTIQUE DE MODÈLES
+  // ═══════════════════════════════════════════════════════════════
+  String get storeTitle => isEnglish ? 'Store' : 'Boutique';
+  String get storeSubtitle => isEnglish
+      ? 'Official templates & creations'
+      : 'Modèles officiels & créations';
+  String get storeCart => isEnglish ? 'Cart' : 'Panier';
+  String get storeCartEmptyMsg =>
+      isEnglish ? 'Your cart is empty.' : 'Votre panier est vide.';
+  String get storeMyTemplates => isEnglish ? 'My templates' : 'Mes modèles';
+  String get storeSearchHint =>
+      isEnglish ? 'Search a style…' : 'Rechercher un style…';
+  String get storeEmptyTitle =>
+      isEnglish ? 'No template found' : 'Aucun modèle trouvé';
+  String get storeEmptyMsg => isEnglish
+      ? 'Try another category or keyword.'
+      : 'Essayez une autre catégorie ou un autre mot-clé.';
+  String get storeReset => isEnglish ? 'Reset' : 'Réinitialiser';
+  String storeAddedToCart(String name) =>
+      isEnglish ? '$name added to cart' : '$name ajouté au panier';
+  String get storeCustomize => isEnglish ? 'Customize' : 'Personnaliser';
+  String get storeAdd => isEnglish ? 'Add' : 'Ajouter';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CHECKOUT / PANIER DE MODÈLES
+  // ═══════════════════════════════════════════════════════════════
+  String get checkoutTitle => isEnglish ? 'Confirmation & Payment' : 'Confirmation & Règlement';
+  String get checkoutCartTitle => isEnglish ? 'Template cart' : 'Panier de modèles';
+  String get checkoutEmptyTitle => isEnglish ? 'Your cart is empty' : 'Votre panier est vide';
+  String get checkoutEmptyMsg => isEnglish
+      ? 'Add a template from the store to continue.'
+      : 'Ajoutez un modèle depuis la boutique pour continuer.';
+  String get checkoutBrowseStore => isEnglish ? 'Browse the store' : 'Voir la boutique';
+  String get checkoutSelectedItems => isEnglish ? 'Selected Items' : 'Articles Sélectionnés';
+  String get checkoutPaymentMethod => isEnglish ? 'Payment Method' : 'Mode de Paiement';
+  String get checkoutPhoneLabel => isEnglish
+      ? 'Mobile Money phone number'
+      : 'Numéro de Téléphone Mobile Money';
+  String get checkoutTotalToPay => isEnglish ? 'Total to pay' : 'Total à régler';
+  String get checkoutFree => isEnglish ? 'FREE' : 'GRATUIT';
+  String get checkoutFreeItem => isEnglish ? 'Free' : 'Gratuit';
+  String get checkoutUnlockButton => isEnglish ? 'Unlock Template' : 'Débloquer le Modèle';
+  String checkoutConfirmButton(String amount) => isEnglish
+      ? 'Confirm & Pay ($amount XAF)'
+      : 'Confirmer & Payer ($amount FCFA)';
+  String get checkoutLoginRequired => isEnglish
+      ? 'Please sign in to acquire templates.'
+      : 'Veuillez vous connecter pour acquérir des modèles.';
+  String get checkoutInvalidPhone => isEnglish
+      ? 'Please enter a valid phone number.'
+      : 'Veuillez saisir un numéro de téléphone valide.';
+  String checkoutPurchaseOne(String name) =>
+      isEnglish ? 'Template purchase: $name' : 'Achat modèle : $name';
+  String checkoutPurchaseMany(int count) => isEnglish
+      ? 'Purchase of $count invoice templates'
+      : 'Achat de $count modèles de facture';
+  String get checkoutPaymentCancelled =>
+      isEnglish ? 'Payment cancelled.' : 'Paiement annulé.';
+  String get checkoutUnlockedTitle =>
+      isEnglish ? 'Template unlocked!' : 'Modèle débloqué !';
+  String get checkoutSuccessTitle => isEnglish ? 'Payment Successful!' : 'Paiement Réussi !';
+  String get checkoutUnlockedMsg => isEnglish
+      ? 'The template is now available in your templates.'
+      : 'Le modèle est désormais disponible dans vos modèles.';
+  String get checkoutSuccessMsg => isEnglish
+      ? 'Congratulations! Your template is ready to be customized.'
+      : 'Félicitations ! Votre modèle est prêt à être personnalisé.';
+  String get checkoutViewMyTemplates =>
+      isEnglish ? 'View My Templates' : 'Voir Mes Modèles';
+  String get checkoutCustomizeNow =>
+      isEnglish ? 'Customize Now' : 'Personnaliser Maintenant';
+  String get checkoutPaymentFailed => isEnglish
+      ? "The payment could not be validated. Please try again."
+      : "Le paiement n'a pas pu être validé. Réessayez.";
+  String checkoutTransactionError(String error) => isEnglish
+      ? 'Transaction error: $error'
+      : 'Erreur lors de la transaction : $error';
+  String get checkoutOrangeMoney => isEnglish ? 'Orange Money' : 'Orange Money';
+  String get checkoutMtnMoney => isEnglish ? 'MTN Mobile Money' : 'MTN Mobile Money';
+  String get checkoutMoovMoney => isEnglish ? 'Moov Money' : 'Moov Money';
+  String get checkoutCard => isEnglish ? 'Bank Card / Visa' : 'Carte Bancaire / Visa';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DÉTAIL FACTURE
+  // ═══════════════════════════════════════════════════════════════
+  String get invoiceDetailPreviewQuote =>
+      isEnglish ? 'Quote Preview' : 'Aperçu Devis';
+  String get invoiceDetailPreviewInvoice =>
+      isEnglish ? 'Invoice Preview' : 'Aperçu Facture';
+  String get invoiceDetailNotFound =>
+      isEnglish ? 'Invoice not found' : 'Facture introuvable';
+  String get invoiceDetailNotFoundMsg => isEnglish
+      ? 'This invoice no longer exists.'
+      : "Cette facture n'existe plus.";
+  String get invoiceDetailThisInvoice => isEnglish ? 'This invoice' : 'Cette facture';
+  String get invoiceDetailCustomize => isEnglish ? 'Customize' : 'Personnaliser';
+  String get invoiceDetailCustomizeTooltip =>
+      isEnglish ? 'Customize the template' : 'Personnaliser le modèle';
+  String get invoiceDetailCustomizeRestricted => isEnglish
+      ? 'Customization is reserved for this template.'
+      : 'Personnalisation réservée à ce modèle.';
+  String get invoiceDetailReadOnly => isEnglish
+      ? 'Read-only mode — action disabled.'
+      : 'Mode lecture seule — action désactivée.';
+  String get invoiceDetailSharePdf => isEnglish ? 'Share the PDF' : 'Partager le PDF';
+  String get invoiceDetailPrintPreview =>
+      isEnglish ? 'Preview / Print PDF' : 'Aperçu / Imprimer PDF';
+  String get invoiceDetailSendEmail => isEnglish ? 'Send by email' : 'Envoyer par email';
+  String get invoiceDetailChangeTemplate =>
+      isEnglish ? 'Change template' : 'Changer de modèle';
+  String get invoiceDetailDelete => isEnglish ? 'Delete' : 'Supprimer';
+  String get invoiceDetailChooseTemplate =>
+      isEnglish ? 'Choose a template' : 'Choisir un modèle';
+  String get invoiceDetailSeeAll => isEnglish ? 'See all' : 'Voir tout';
+  String get invoiceDetailActive => isEnglish ? 'Active' : 'Actif';
+  String get invoiceDetailDeleteTitle =>
+      isEnglish ? 'Delete invoice?' : 'Supprimer la facture ?';
+  String invoiceDetailDeleteMsg(String number) => isEnglish
+      ? 'Invoice $number will be permanently deleted.'
+      : 'La facture $number sera définitivement supprimée.';
+  String get invoiceDetailCancel => isEnglish ? 'Cancel' : 'Annuler';
+  String get invoiceDetailDeleted => isEnglish ? 'Invoice deleted' : 'Facture supprimée';
+  String get invoiceDetailEmailSent =>
+      isEnglish ? 'Email sent successfully' : 'Email envoyé avec succès';
+  String get invoiceDetailEmailError =>
+      isEnglish ? 'Error while sending' : "Erreur lors de l'envoi";
+  String get invoiceDetailError => isEnglish ? 'Error' : 'Erreur';
+  String get invoiceDetailShareError => isEnglish ? 'Sharing error' : 'Erreur de partage';
+  String invoiceDetailEmailSubject(String number, String company) => isEnglish
+      ? 'Your invoice $number — $company'
+      : 'Votre facture $number — $company';
+
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CLIENTS
+  // ═══════════════════════════════════════════════════════════════
+  String get clientsTitle => isEnglish ? 'Clients' : 'Clients';
+  String get clientsResults => isEnglish ? 'Results' : 'Résultats';
+  String get clientsAllClients => isEnglish ? 'All clients' : 'Tous les clients';
+  String get clientsSearchHint =>
+      isEnglish ? 'Search a client…' : 'Rechercher un client…';
+  String get clientsFabLabel => isEnglish ? 'Client' : 'Client';
+  String get clientsNoClient =>
+      isEnglish ? 'No client' : 'Aucun client';
+  String get clientsNoClientMsg => isEnglish
+      ? 'Add your first client to get started.'
+      : 'Ajoutez votre premier client pour commencer.';
+  String get clientsAddFirstClient =>
+      isEnglish ? 'Add a client' : 'Ajouter un client';
+  String get clientsNoResult =>
+      isEnglish ? 'No result' : 'Aucun résultat';
+  String get clientsTryAnotherKeyword =>
+      isEnglish ? 'Try another keyword' : 'Essayez un autre mot-clé';
+  String get clientsSummaryInvoices =>
+      isEnglish ? 'Invoices' : 'Factures';
+  String get clientsSummaryCollected =>
+      isEnglish ? 'Collected' : 'Encaissé';
+  String clientsInvoiceCount(int count) => count > 1
+      ? (isEnglish ? '$count invoices' : '$count factures')
+      : (isEnglish ? '$count invoice' : '$count facture');
+
+
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PROFIL (profile_update_screen)
+  // ═══════════════════════════════════════════════════════════════
+  String get profileTitle => isEnglish ? 'My profile' : 'Mon profil';
+  String get profileSave => isEnglish ? 'Save' : 'Enregistrer';
+  String get profileUpdated =>
+      isEnglish ? 'Profile updated successfully' : 'Profil mis à jour avec succès';
+  String get profileError => isEnglish ? 'Error: ' : 'Erreur : ';
+  String get profileUserNotConnected =>
+      isEnglish ? 'User not logged in' : 'Utilisateur non connecté';
+  String get profilePersonalInfo =>
+      isEnglish ? 'Personal information' : 'Informations personnelles';
+  String get profilePersonalSubtitle =>
+      isEnglish ? 'Your main contact details' : 'Vos coordonnées principales';
+  String get profileFullName => isEnglish ? 'Full name' : 'Nom complet';
+  String get profileFullNameHint =>
+      isEnglish ? 'E.g. Jean Dupont' : 'Ex. Jean Dupont';
+  String get profileNameRequired =>
+      isEnglish ? 'Please enter your name' : 'Veuillez entrer votre nom';
+  String get profilePhone => isEnglish ? 'Phone' : 'Téléphone';
+  String get profilePhoneHint =>
+      isEnglish ? 'E.g. +237 6 90 00 00 00' : 'Ex. +237 6 90 00 00 00';
+  String get profileCompany => isEnglish ? 'Company' : 'Entreprise';
+  String get profileCompanySubtitle =>
+      isEnglish ? 'Professional information' : 'Informations professionnelles';
+  String get profileCompanyName =>
+      isEnglish ? 'Company name' : 'Nom de l\'entreprise';
+  String get profileCompanyHint =>
+      isEnglish ? 'E.g. NOI Concept Digital' : 'Ex. NOI Concept Digital';
+  String get profileAddress => isEnglish ? 'Address' : 'Adresse';
+  String get profileAddressHint =>
+      isEnglish ? 'E.g. Douala, Cameroon' : 'Ex. Douala, Cameroun';
+  String get profileSaveChanges =>
+      isEnglish ? 'Save changes' : 'Enregistrer les modifications';
+  String get profileSecureAccount =>
+      isEnglish ? 'Secure account' : 'Compte sécurisé';
+  String get profileMyAccount => isEnglish ? 'My account' : 'Mon compte';
+  String get profileStatus => isEnglish ? 'Status' : 'Statut';
+  String get profileStatusActive => isEnglish ? 'Active' : 'Actif';
+  String get profileAccount => isEnglish ? 'Account' : 'Compte';
+  String get profileAccountMember => isEnglish ? 'Member' : 'Membre';
+  String get profileCompletion =>
+      isEnglish ? 'Profile completion' : 'Complétion du profil';
+  String get profileCompleteDone =>
+      isEnglish ? 'Your profile is complete ✓' : 'Votre profil est complet ✓';
+  String profileCompletionHint(int percent) =>
+      isEnglish ? '$percent% — Complete your information'
+          : '$percent% — Complétez vos informations';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  FOURNISSEURS + TERMES COMMUNS
+  // ═══════════════════════════════════════════════════════════════
+  String get suppliersTitle => isEnglish ? 'Suppliers' : 'Fournisseurs';
+  String suppliersCount(int count) => isEnglish
+      ? '$count partner${count > 1 ? 's' : ''} registered'
+      : '$count partenaire${count > 1 ? 's' : ''} enregistré${count > 1 ? 's' : ''}';
+  String get suppliersSearchHint => isEnglish
+      ? 'Search by name, email or phone…'
+      : 'Rechercher par nom, email ou téléphone…';
+  String get suppliersNoContact =>
+      isEnglish ? 'No contact provided' : 'Aucun contact renseigné';
+  String get suppliersCannotDeleteLinked => isEnglish
+      ? 'Cannot delete: supplier linked to products'
+      : 'Impossible de supprimer : fournisseur lié à des produits';
+  String get suppliersDeleteTitle =>
+      isEnglish ? 'Delete supplier' : 'Supprimer le fournisseur';
+  String get suppliersDeleteConfirmPrefix => isEnglish
+      ? 'Are you sure you want to delete '
+      : 'Voulez-vous vraiment supprimer ';
+  String get suppliersDeleted =>
+      isEnglish ? 'Supplier deleted' : 'Fournisseur supprimé';
+  String get suppliersEmptyTitle => isEnglish ? 'No supplier' : 'Aucun fournisseur';
+  String get suppliersEmptySubtitle => isEnglish
+      ? 'Add your first supplier\nto link it to your products.'
+      : 'Ajoutez votre premier fournisseur\npour l\'associer à vos produits.';
+  String get suppliersAdd =>
+      isEnglish ? 'Add a supplier' : 'Ajouter un fournisseur';
+
+  // Communs (partagés entre écrans)
+  String get commonTotal => isEnglish ? 'Total' : 'Total';
+  String get commonActive => isEnglish ? 'Active' : 'Actifs';
+  String get commonInactive => isEnglish ? 'Inactive' : 'Inactifs';
+  String get commonActiveSingular => isEnglish ? 'Active' : 'Actif';
+  String get commonInactiveSingular => isEnglish ? 'Inactive' : 'Inactif';
+  String get commonAll => isEnglish ? 'All' : 'Tous';
+  String get commonEdit => isEnglish ? 'Edit' : 'Modifier';
+  String get commonDelete => isEnglish ? 'Delete' : 'Supprimer';
+
+  String get profileSecurityNote => isEnglish
+      ? 'Your information is encrypted and synced securely.'
+      : 'Vos informations sont chiffrées et synchronisées en toute sécurité.';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  FOURNISSEUR — CRÉATION / ÉDITION
+  // ═══════════════════════════════════════════════════════════════
+  String get supplierFormTitleEdit =>
+      isEnglish ? 'Edit supplier' : 'Modifier fournisseur';
+  String get supplierFormTitleNew =>
+      isEnglish ? 'New supplier' : 'Nouveau fournisseur';
+  String get supplierFormSave => isEnglish ? 'Save' : 'Enregistrer';
+  String get supplierFormAdd => isEnglish ? 'Add' : 'Ajouter';
+  String get supplierFormSectionEdit =>
+      isEnglish ? 'Edit information' : 'Modifier les informations';
+  String get supplierFormSectionBasic =>
+      isEnglish ? 'Basic information' : 'Informations de base';
+  String get supplierFormSectionContact =>
+      isEnglish ? 'Contact details' : 'Coordonnées';
+  String get supplierFormSectionNotes =>
+      isEnglish ? 'Additional notes' : 'Notes complémentaires';
+  String get supplierFormName => isEnglish ? 'Supplier name' : 'Nom du fournisseur';
+  String get supplierFormContactPerson =>
+      isEnglish ? 'Contact person' : 'Personne de contact';
+  String get supplierFormTaxId => isEnglish ? 'Tax ID / RCCM' : 'NUI / RCCM';
+  String get supplierFormEmail => isEnglish ? 'Email' : 'Email';
+  String get supplierFormPhone => isEnglish ? 'Phone' : 'Téléphone';
+  String get supplierFormAddress => isEnglish ? 'Address' : 'Adresse';
+  String get supplierFormNotes => isEnglish ? 'Notes' : 'Notes';
+  String get supplierFormRequired => isEnglish ? 'Required' : 'Champ requis';
+  String get supplierFormEmailInvalid =>
+      isEnglish ? 'Invalid email' : 'Email invalide';
+  String get supplierFormButtonSave =>
+      isEnglish ? 'Save supplier' : 'Sauvegarder le fournisseur';
+  String get supplierFormButtonAdd =>
+      isEnglish ? 'Add supplier' : 'Ajouter le fournisseur';
+  String get supplierFormEmptyTitleEdit =>
+      isEnglish ? 'Update this supplier' : 'Mettez à jour ce fournisseur';
+  String get supplierFormEmptyTitleNew =>
+      isEnglish ? 'Add a new partner' : 'Ajoutez un nouveau partenaire';
+  String get supplierFormStatusTitle =>
+      isEnglish ? 'Supplier status' : 'Statut du fournisseur';
+  String get supplierFormStatusActive =>
+      isEnglish ? 'Active — can be linked to products'
+          : 'Actif — associable aux produits';
+  String get supplierFormStatusInactive =>
+      isEnglish ? 'Inactive — hidden from selections'
+          : 'Inactif — masqué des sélections';
+  String get supplierFormLimitReached => isEnglish
+      ? 'Supplier limit reached. Upgrade to a higher plan.'
+      : 'Limite de fournisseurs atteinte. Passez au plan supérieur.';
+  String get supplierFormAdded =>
+      isEnglish ? 'Supplier added successfully' : 'Fournisseur ajouté avec succès';
+  String get supplierFormUpdated => isEnglish
+      ? 'Supplier updated successfully'
+      : 'Fournisseur modifié avec succès';
+  String get supplierFormError => isEnglish ? 'Error: ' : 'Erreur: ';
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SUPPLIER DETAIL
+  // ═══════════════════════════════════════════════════════════════
+  String get edit => isEnglish ? 'Edit' : 'Modifier';
+  String get productsProvided =>
+      isEnglish ? 'Products supplied' : 'Produits fournis';
+  String productsProvidedCount(int count) => isEnglish
+      ? '$count item${count > 1 ? 's' : ''}'
+      : '$count référence${count > 1 ? 's' : ''}';
+  String get active => isEnglish ? 'Active' : 'Actif';
+  String get inactive => isEnglish ? 'Inactive' : 'Inactif';
+  String get phone => isEnglish ? 'Phone' : 'Téléphone';
+  String get emailLabel => isEnglish ? 'Email' : 'Email';
+  String get contact => isEnglish ? 'Contact' : 'Contact';
+  String get address => isEnglish ? 'Address' : 'Adresse';
+  String get volumeYtd => isEnglish ? 'VOLUME YTD' : 'VOLUME YTD';
+  String get productsKpi => isEnglish ? 'PRODUCTS' : 'PRODUITS';
+  String stockAlertsCount(int count) => isEnglish
+      ? '$count alert${count > 1 ? 's' : ''}'
+      : '$count alerte${count > 1 ? 's' : ''}';
+  String get noProductLinked =>
+      isEnglish ? 'No linked product' : 'Aucun produit lié';
+  String get associateProductsHint => isEnglish
+      ? 'Link products to this supplier\nfrom stock management.'
+      : 'Associez des produits à ce fournisseur\ndepuis la gestion du stock.';
+  String get outOfStock => isEnglish ? 'Out of stock' : 'Rupture';
+  String get lowStock => isEnglish ? 'Low stock' : 'Stock faible';
+  String inStockLabel(int quantity) =>
+      isEnglish ? 'In stock ($quantity)' : 'En stock ($quantity)';
+  String get noCategory => isEnglish ? 'No category' : 'Sans catégorie';
+
 }
 
 class _AppLocalizationsDelegate

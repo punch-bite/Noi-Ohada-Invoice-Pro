@@ -1,4 +1,4 @@
-﻿// lib/screens/customization/templates_screen.dart
+// lib/screens/customization/templates_screen.dart
 //
 // 🎨 Sélecteur rapide de modèle de facture.
 // Refonte épurée & animée (kit `customization_ui.dart`) : recherche inline,

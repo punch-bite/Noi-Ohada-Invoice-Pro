@@ -12,6 +12,7 @@ import '../../../providers/theme_provider.dart';
 import '../../../services/supplier_service.dart';
 import '../../../services/stock_service.dart';
 import '../../../models/supplier.dart';
+import '../../../l10n/app_localizations.dart';
 import 'create_supplier_screen.dart';
 import 'supplier_detail_screen.dart';
 
@@ -165,7 +166,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Fournisseurs',
+                      AppLocalizations.of(context).suppliersTitle,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -175,7 +176,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_suppliers.length} partenaire${_suppliers.length > 1 ? 's' : ''} enregistré${_suppliers.length > 1 ? 's' : ''}',
+                      AppLocalizations.of(context)
+                          .suppliersCount(_suppliers.length),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -227,7 +229,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               cursorColor: primary,
               onChanged: (q) => setState(() => _searchQuery = q),
               decoration: InputDecoration(
-                hintText: 'Rechercher par nom, email ou téléphone…',
+                hintText: AppLocalizations.of(context).suppliersSearchHint,
                 hintStyle: TextStyle(
                   color: sub.withValues(alpha: 0.7),
                   fontSize: 13.5,
@@ -294,7 +296,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       children: [
         Expanded(
           child: _buildMiniStat(
-            label: 'Total',
+            label: AppLocalizations.of(context).commonTotal,
             value: '${_suppliers.length}',
             color: primary,
             icon: Icons.business_rounded,
@@ -306,7 +308,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _buildMiniStat(
-            label: 'Actifs',
+            label: AppLocalizations.of(context).commonActive,
             value: '$_activeCount',
             color: const Color(0xFF10B981),
             icon: Icons.check_circle_outline_rounded,
@@ -318,7 +320,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _buildMiniStat(
-            label: 'Inactifs',
+            label: AppLocalizations.of(context).commonInactive,
             value: '$_inactiveCount',
             color: const Color(0xFF94A3B8),
             icon: Icons.pause_circle_outline_rounded,
@@ -397,10 +399,16 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     Color primary,
     Color card,
   ) {
+    final l10n = AppLocalizations.of(context);
     final filters = [
-      ('Tous', null, Icons.apps_rounded, _suppliers.length),
-      ('Actifs', true, Icons.check_circle_rounded, _activeCount),
-      ('Inactifs', false, Icons.pause_circle_rounded, _inactiveCount),
+      (l10n.commonAll, null, Icons.apps_rounded, _suppliers.length),
+      (l10n.commonActive, true, Icons.check_circle_rounded, _activeCount),
+      (
+        l10n.commonInactive,
+        false,
+        Icons.pause_circle_rounded,
+        _inactiveCount
+      ),
     ];
 
     return SizedBox(
@@ -616,7 +624,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                'Inactif',
+                                AppLocalizations.of(context).commonInactiveSingular,
                                 style: TextStyle(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w800,
@@ -683,7 +691,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                         )
                       else
                         Text(
-                          'Aucun contact renseigné',
+                          AppLocalizations.of(context).suppliersNoContact,
                           style: TextStyle(
                             fontSize: 11.5,
                             color: sub.withValues(alpha: 0.6),
@@ -725,23 +733,24 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'edit',
           child: Row(
             children: [
               Icon(Icons.edit_outlined, size: 18),
               SizedBox(width: 10),
-              Text('Modifier'),
+              Text(AppLocalizations.of(context).commonEdit),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
               Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
               SizedBox(width: 10),
-              Text('Supprimer', style: TextStyle(color: Colors.redAccent)),
+              Text(AppLocalizations.of(context).commonDelete,
+              style: const TextStyle(color: Colors.redAccent)),
             ],
           ),
         ),
@@ -804,13 +813,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     if (hasProducts) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.white),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Impossible de supprimer : fournisseur lié à des produits',
+                  AppLocalizations.of(context).suppliersCannotDeleteLinked,
                 ),
               ),
             ],
@@ -828,7 +837,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Supprimer le fournisseur'),
+        title: Text(AppLocalizations.of(context).suppliersDeleteTitle),
         content: RichText(
           text: TextSpan(
             style: TextStyle(
@@ -838,7 +847,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   : Colors.black87,
             ),
             children: [
-              const TextSpan(text: 'Voulez-vous vraiment supprimer '),
+              TextSpan(
+                  text: AppLocalizations.of(context).suppliersDeleteConfirmPrefix),
               TextSpan(
                 text: '"${supplier.name}"',
                 style: const TextStyle(fontWeight: FontWeight.w700),
@@ -850,7 +860,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -860,7 +870,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Supprimer'),
+            child: Text(AppLocalizations.of(context).commonDelete),
           ),
         ],
       ),
@@ -873,11 +883,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
               Icon(Icons.check_circle_rounded, color: Colors.white),
               SizedBox(width: 10),
-              Text('Fournisseur supprimé'),
+              Text(AppLocalizations.of(context).suppliersDeleted),
             ],
           ),
           backgroundColor: Colors.green,
@@ -970,7 +980,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   ).then((_) => _loadSuppliers());
                 },
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Ajouter un fournisseur'),
+                label: Text(AppLocalizations.of(context).suppliersAdd),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,

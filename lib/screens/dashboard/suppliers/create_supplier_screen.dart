@@ -12,6 +12,7 @@ import '../../../services/quota_enforcement_service.dart';
 import '../../../models/supplier.dart';
 import '../../../models/plan.dart';
 import '../../../widgets/glass_widgets.dart';
+import '../../../l10n/app_localizations.dart';
 
 class CreateSupplierScreen extends StatefulWidget {
   final Supplier? supplier;
@@ -88,7 +89,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  result.message ?? 'Limite de fournisseurs atteinte. Passez au plan supérieur.'),
+                  result.message ?? AppLocalizations.of(context).supplierFormLimitReached),
               backgroundColor: Colors.orange,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -113,11 +114,11 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
                 Icon(Icons.check_circle_rounded, color: Colors.white),
                 SizedBox(width: 10),
-                Text('Fournisseur ajouté avec succès'),
+                Text(AppLocalizations.of(context).supplierFormAdded),
               ],
             ),
             backgroundColor: Colors.green,
@@ -143,11 +144,11 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
                 Icon(Icons.check_circle_rounded, color: Colors.white),
                 SizedBox(width: 10),
-                Text('Fournisseur modifié avec succès'),
+                Text(AppLocalizations.of(context).supplierFormUpdated),
               ],
             ),
             backgroundColor: Colors.green,
@@ -164,7 +165,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur: $e'),
+          content: Text('${AppLocalizations.of(context).supplierFormError}$e'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -194,7 +195,9 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          isEditing ? 'Modifier fournisseur' : 'Nouveau fournisseur',
+          isEditing
+              ? AppLocalizations.of(context).supplierFormTitleEdit
+              : AppLocalizations.of(context).supplierFormTitleNew,
           style: TextStyle(
             color: text,
             fontSize: 17,
@@ -230,7 +233,9 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                     child: Text(
-                      isEditing ? 'Enregistrer' : 'Ajouter',
+                      isEditing
+                          ? AppLocalizations.of(context).supplierFormSave
+                          : AppLocalizations.of(context).supplierFormAdd,
                       style: TextStyle(
                         color: primary,
                         fontWeight: FontWeight.w800,
@@ -260,26 +265,27 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     // ── Section : Identité ──
                     _sectionLabel(
                       isEditing
-                          ? 'Modifier les informations'
-                          : 'Informations de base',
+                          ? AppLocalizations.of(context).supplierFormSectionEdit
+                          : AppLocalizations.of(context).supplierFormSectionBasic,
                       sub,
                     ),
                     const SizedBox(height: 12),
 
                     _buildField(
                       controller: _nameController,
-                      label: 'Nom du fournisseur',
+                      label: AppLocalizations.of(context).supplierFormName,
                       icon: Icons.business_rounded,
                       theme: theme,
                       isDark: isDark,
                       textCapitalization: TextCapitalization.words,
-                      validator: (v) =>
-                          v?.trim().isEmpty ?? true ? 'Champ requis' : null,
+                      validator: (v) => v?.trim().isEmpty ?? true
+                          ? AppLocalizations.of(context).supplierFormRequired
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     _buildField(
                       controller: _contactPersonController,
-                      label: 'Personne de contact',
+                      label: AppLocalizations.of(context).supplierFormContactPerson,
                       icon: Icons.person_rounded,
                       theme: theme,
                       isDark: isDark,
@@ -297,19 +303,21 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     const SizedBox(height: 24),
 
                     // ── Section : Contact ──
-                    _sectionLabel('Coordonnées', sub),
+                    _sectionLabel(
+                        AppLocalizations.of(context).supplierFormSectionContact, sub),
                     const SizedBox(height: 12),
 
                     _buildField(
                       controller: _emailController,
-                      label: 'Email',
+                      label: AppLocalizations.of(context).supplierFormEmail,
                       icon: Icons.mail_rounded,
                       theme: theme,
                       isDark: isDark,
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) {
                         if (v?.isNotEmpty == true && !v!.contains('@')) {
-                          return 'Email invalide';
+                          return AppLocalizations.of(context)
+                              .supplierFormEmailInvalid;
                         }
                         return null;
                       },
@@ -317,7 +325,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     const SizedBox(height: 12),
                     _buildField(
                       controller: _phoneController,
-                      label: 'Téléphone',
+                      label: AppLocalizations.of(context).supplierFormPhone,
                       icon: Icons.phone_rounded,
                       theme: theme,
                       isDark: isDark,
@@ -326,7 +334,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     const SizedBox(height: 12),
                     _buildField(
                       controller: _addressController,
-                      label: 'Adresse',
+                      label: AppLocalizations.of(context).supplierFormAddress,
                       icon: Icons.location_on_rounded,
                       theme: theme,
                       isDark: isDark,
@@ -336,11 +344,12 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     const SizedBox(height: 24),
 
                     // ── Section : Notes ──
-                    _sectionLabel('Notes complémentaires', sub),
+                    _sectionLabel(
+                        AppLocalizations.of(context).supplierFormSectionNotes, sub),
                     const SizedBox(height: 12),
                     _buildField(
                       controller: _notesController,
-                      label: 'Notes',
+                      label: AppLocalizations.of(context).supplierFormNotes,
                       icon: Icons.sticky_note_2_rounded,
                       theme: theme,
                       isDark: isDark,
@@ -363,8 +372,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     // ── CTA ──
                     GradientButton(
                       label: isEditing
-                          ? 'Sauvegarder le fournisseur'
-                          : 'Ajouter le fournisseur',
+                          ? AppLocalizations.of(context).supplierFormButtonSave
+                          : AppLocalizations.of(context).supplierFormButtonAdd,
                       icon: Icons.check_circle_outline_rounded,
                       height: 54,
                       onPressed: _saveSupplier,
@@ -423,8 +432,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
           const SizedBox(height: 14),
           Text(
             isEditing
-                ? 'Mettez à jour ce fournisseur'
-                : 'Ajoutez un nouveau partenaire',
+                ? AppLocalizations.of(context).supplierFormEmptyTitleEdit
+                : AppLocalizations.of(context).supplierFormEmptyTitleNew,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -594,7 +603,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Statut du fournisseur',
+                  AppLocalizations.of(context).supplierFormStatusTitle,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -605,8 +614,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                 const SizedBox(height: 2),
                 Text(
                   _isActive
-                      ? 'Actif — associable aux produits'
-                      : 'Inactif — masqué des sélections',
+                      ? AppLocalizations.of(context).supplierFormStatusActive
+                      : AppLocalizations.of(context).supplierFormStatusInactive,
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w500,

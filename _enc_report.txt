@@ -1,0 +1,2 @@
+lib/screens/landing/landing_screen.dart: bom=False utf8_ok=True utf8_e=0 utf8_egrave=0 utf8_cced=0 mojibake_Atilde=0 highbytes=181 size=41513
+lib/widgets/marketing_carousel.dart: bom=False utf8_ok=True utf8_e=11 utf8_egrave=0 utf8_cced=1 mojibake_Atilde=0 highbytes=20 size=6893

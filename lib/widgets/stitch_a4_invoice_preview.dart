@@ -928,27 +928,44 @@ class StitchA4InvoicePreview extends StatelessWidget {
         color: onColor,
       ),
     );
-    return Container(
+    // Logo rendu en Stack : le fond décoratif reste en dessous (index bas),
+    // l'image (ou les initiales) est empilée PAR-DESSUS et n'est jamais
+    // rognée (haut/bas) grâce à BoxFit.contain.
+    return SizedBox(
       width: size,
       height: size,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: onColor.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: onColor.withValues(alpha: 0.35), width: 1.5),
-      ),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(4),
-      child: bytes == null
-          ? fallback
-          : Image.memory(
-              bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => fallback,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Fond décoratif (contour arrondi) — jamais au-dessus du logo.
+          Container(
+            width: size,
+            height: size,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: onColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14 * k),
+              border:
+                  Border.all(color: onColor.withValues(alpha: 0.35), width: 1.5),
             ),
+          ),
+          // Logo (ou initiales) indexé au-dessus de tout, sans rognage.
+          if (bytes == null)
+            fallback
+          else
+            Padding(
+              padding: EdgeInsets.all(3 * k),
+              child: Image.memory(
+                bytes,
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => fallback,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -974,10 +991,16 @@ class StitchA4InvoicePreview extends StatelessWidget {
     final visMap = (customPositions['block_visibility'] as Map?) ?? {};
     final alignMap = (customPositions['block_alignment'] as Map?) ?? {};
     final widthMap = (customPositions['block_widths'] as Map?) ?? {};
+    final scaleMap = (customPositions['block_font_scales'] as Map?) ?? {};
 
     double widthOf(String key) {
       final v = widthMap[key];
       return v is num ? v.toDouble().clamp(0.3, 3.0) : 1.0;
+    }
+
+    double scaleOf(String key) {
+      final v = scaleMap[key];
+      return v is num ? v.toDouble().clamp(0.5, 2.5) : 1.0;
     }
 
     TextAlign alignOf(String key) {
@@ -1009,7 +1032,7 @@ class StitchA4InvoicePreview extends StatelessWidget {
           flex: w,
           child: Align(
             alignment: _alignmentOf(alignOf(key)),
-            child: _bodyBlock(key, cText, cSub, line, k),
+            child: _bodyBlock(key, cText, cSub, line, k * scaleOf(key)),
           ),
         ));
       }

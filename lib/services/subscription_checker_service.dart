@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/notification.dart';
 import '../services/subscription_service.dart';
 import '../services/notification_service.dart';
+import '../services/auth_service.dart';
 import '../models/subscription.dart';
 
 class SubscriptionCheckerService {
@@ -41,8 +42,15 @@ class SubscriptionCheckerService {
 
   Future<void> _checkAll() async {
     try {
-      final subscriptions = await _subscriptionService.getActiveSubscriptions();
-      for (final sub in subscriptions) {
+      // 🔒 Ne vérifier QUE l'abonnement de l'utilisateur connecté.
+      // Utiliser getActiveSubscriptions() listerait ceux de TOUS les users et
+      // déclencherait N notifications « expiré » (une par abonnement actif
+      // expiré de la plateforme) à l'utilisateur connecté.
+      final userId = AuthService().currentUserId;
+      if (userId == null) return; // pas encore connecté → rien à vérifier
+
+      final sub = await _subscriptionService.getUserSubscription(userId);
+      if (sub != null) {
         await _checkSubscription(sub);
       }
     } catch (e) {

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/subscription_provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../../services/template_service.dart';
 import '../../services/template_cart.dart';
 import '../../theme/royal_ledger.dart';
@@ -87,10 +88,13 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
       return matchesCat && matchesSearch;
     }).toList();
 
+    final p = CustomPalette.of(context);
+    final l10n = AppLocalizations.of(context);
+
     return GlassScaffold(
       appBar: CustomAppBar(
-        title: 'Boutique',
-        subtitle: 'Modèles officiels & créations',
+        title: l10n.storeTitle,
+        subtitle: l10n.storeSubtitle,
         actions: [
           // 🛒 Panier d'achat (badge = nombre d'articles)
           ListenableBuilder(
@@ -101,13 +105,13 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   IconButton(
-                    tooltip: 'Panier',
+                    tooltip: l10n.storeCart,
                     icon: const Icon(Icons.shopping_cart_outlined, size: 22),
                     onPressed: () {
                       if (TemplateCart.instance.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Votre panier est vide.'),
+                          SnackBar(
+                            content: Text(l10n.storeCartEmptyMsg),
                           ),
                         );
                         return;
@@ -124,15 +128,15 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                         padding: const EdgeInsets.all(4),
                         constraints: const BoxConstraints(
                             minWidth: 17, minHeight: 17),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFEF4444),
+                        decoration: BoxDecoration(
+                          color: p.error,
                           shape: BoxShape.circle,
                         ),
                         child: Text(
                           '$count',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: p.onError,
                             fontSize: 9,
                             fontWeight: FontWeight.w800,
                             height: 1,
@@ -146,7 +150,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
           ),
           const SizedBox(width: 2),
           IconButton(
-            tooltip: 'Mes modèles',
+            tooltip: l10n.storeMyTemplates,
             icon: const Icon(Icons.collections_bookmark_rounded, size: 22),
             onPressed: () => context.push('/templates/mine'),
           ),
@@ -162,7 +166,7 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                   child: CustomSearchField(
                     controller: _searchController,
-                    hint: 'Rechercher un style…',
+                    hint: l10n.storeSearchHint,
                     onChanged: (v) => setState(() => _searchQuery = v),
                   ),
                 ),
@@ -182,10 +186,9 @@ class _TemplateStoreScreenState extends State<TemplateStoreScreen> {
                   child: filtered.isEmpty
                       ? EmptyState(
                           icon: Icons.search_off_rounded,
-                          title: 'Aucun modèle trouvé',
-                          message:
-                              'Essayez une autre catégorie ou un autre mot-clé.',
-                          actionLabel: 'Réinitialiser',
+                          title: l10n.storeEmptyTitle,
+                          message: l10n.storeEmptyMsg,
+                          actionLabel: l10n.storeReset,
                           onAction: () {
                             setState(() {
                               _selectedCategory = 'Tous';

@@ -37,6 +37,7 @@ import '../../services/template_selection_service.dart';
 import '../../services/template_service.dart';
 import '../../services/wallet_service.dart';
 import '../../theme/royal_ledger.dart';
+import '../../l10n/app_localizations.dart';
 import '../../widgets/stitch_a4_invoice_preview.dart';
 import '../../widgets/template_background_palette.dart';
 import '../../widgets/template_thumbnail.dart';
@@ -81,6 +82,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Color get textColor => themeProvider.textColor ?? Colors.black;
   Color get subTextColor => themeProvider.subTextColor ?? Colors.grey;
   Color get primaryColor => themeProvider.primaryColor ?? Colors.indigo;
+  AppLocalizations get l10n => AppLocalizations.of(context);
 
   /// 🛡️ Vrai si l'utilisateur est admin MAIS pas propriétaire de la facture.
   bool get _isReadOnlyForAdmin {
@@ -276,11 +278,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     final t = _selectedTemplate;
     if (t == null) return _openTemplatePicker();
     if (!_canCustomize()) {
-      _toast('Personnalisation réservée à ce modèle.', Colors.orange);
+      _toast(l10n.invoiceDetailCustomizeRestricted, Colors.orange);
       return;
     }
     if (_isReadOnlyForAdmin) {
-      _toast('Mode lecture seule — action désactivée.', Colors.orange);
+      _toast(l10n.invoiceDetailReadOnly, Colors.orange);
       return;
     }
     await context.push('/templates/workspace', extra: t);
@@ -342,7 +344,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         invoiceSettings: _invoiceSettings,
       );
       final fileName =
-          '${_invoice!.isDevis ? 'Devis' : 'Facture'}_${_invoice!.invoiceNumber}.pdf';
+          '${_invoice!.isDevis ? l10n.invoiceDetailPreviewQuote : l10n.invoiceDetailPreviewInvoice}_${_invoice!.invoiceNumber}.pdf';
       await SharePlus.instance.share(ShareParams(
         files: [
           XFile.fromData(pdfData, mimeType: 'application/pdf', name: fileName),
@@ -401,7 +403,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
       final sent = await MailService.sendHtmlEmail(
         to: _client!.email,
-        subject: 'Votre facture ${_invoice!.invoiceNumber} — ${_company!.name}',
+        subject:
+            l10n.invoiceDetailEmailSubject(_invoice!.invoiceNumber, _company!.name),
         htmlBody: html,
         attachments: [
           EmailAttachment(
@@ -412,11 +415,11 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         ],
       );
       if (!mounted) return;
-      _toast(sent ? 'Email envoyé avec succès' : 'Erreur lors de l\'envoi',
+      _toast(sent ? l10n.invoiceDetailEmailSent : l10n.invoiceDetailEmailError,
           sent ? Colors.green : Colors.red);
     } catch (e) {
       messenger.showSnackBar(SnackBar(
-        content: Text('Erreur: $e'),
+        content: Text('${l10n.invoiceDetailError}: $e'),
         backgroundColor: Colors.red,
       ));
     }
@@ -442,8 +445,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (_invoice == null) {
       return Scaffold(
         backgroundColor: c.surface,
-        appBar: _appBar(c, title: 'Facture introuvable'),
-        body: const Center(child: Text('Cette facture n\'existe plus.')),
+        appBar: _appBar(c, title: l10n.invoiceDetailNotFound),
+        body: Center(child: Text(l10n.invoiceDetailNotFoundMsg)),
       );
     }
 
@@ -452,7 +455,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     return Scaffold(
       backgroundColor: c.surface,
       appBar: _appBar(c,
-          title: _invoice!.isDevis ? 'Aperçu Devis' : 'Aperçu Facture'),
+          title:
+              _invoice!.isDevis ? l10n.invoiceDetailPreviewQuote : l10n.invoiceDetailPreviewInvoice),
       // 🎯 FloatingActionButton : « Personnaliser »
       floatingActionButton: readOnly || !_canCustomize()
           ? null
@@ -461,15 +465,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               backgroundColor: c.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.palette_outlined, size: 20),
-              label: const Text(
-                'Personnaliser',
+              label: Text(
+                l10n.invoiceDetailCustomize,
                 style: TextStyle(
                   fontFamily: 'WorkSans',
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
               ),
-              tooltip: 'Personnaliser le modèle',
+              tooltip: l10n.invoiceDetailCustomizeTooltip,
             ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       // 🎠 Carousel de templates en bas de page
@@ -481,7 +485,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
           // 🛡️ Bandeau lecture seule si admin sur doc tiers
           if (readOnly)
             AdminReadOnlyBanner(
-              documentName: 'Cette facture',
+              documentName: l10n.invoiceDetailThisInvoice,
               ownerName: _client?.name,
             ),
           Expanded(
@@ -558,20 +562,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             }
           },
           itemBuilder: (ctx) => [
-            const PopupMenuItem(value: 'share', child: Text('Partager le PDF')),
-            const PopupMenuItem(
-                value: 'pdf', child: Text('Aperçu / Imprimer PDF')),
-            const PopupMenuItem(
-                value: 'email', child: Text('Envoyer par email')),
+            PopupMenuItem(value: 'share', child: Text(l10n.invoiceDetailSharePdf)),
+            PopupMenuItem(
+                value: 'pdf', child: Text(l10n.invoiceDetailPrintPreview)),
+            PopupMenuItem(
+                value: 'email', child: Text(l10n.invoiceDetailSendEmail)),
             if (!_isReadOnlyForAdmin)
-              const PopupMenuItem(
-                  value: 'picker', child: Text('Changer de modèle')),
+              PopupMenuItem(
+                  value: 'picker', child: Text(l10n.invoiceDetailChangeTemplate)),
             if (!_isReadOnlyForAdmin) const PopupMenuDivider(),
             if (!_isReadOnlyForAdmin)
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
-                child: Text('Supprimer',
-                    style: TextStyle(color: Colors.redAccent)),
+                child: Text(
+                  l10n.invoiceDetailDelete,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ),
           ],
         ),
@@ -657,7 +663,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 GestureDetector(
                   onTap: _openTemplatePicker,
                   child: Text(
-                    'Voir tout',
+                    l10n.invoiceDetailSeeAll,
                     style: TextStyle(
                       fontFamily: 'WorkSans',
                       fontSize: 11,
@@ -763,13 +769,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   color: c.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.check, size: 10, color: Colors.white),
                     SizedBox(width: 2),
                     Text(
-                      'Actif',
+                      l10n.invoiceDetailActive,
                       style: TextStyle(
                         fontFamily: 'WorkSans',
                         fontSize: 8.5,
@@ -846,18 +852,17 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Supprimer la facture ?'),
-        content: Text(
-            'La facture ${inv.invoiceNumber} sera définitivement supprimée.'),
+        content: Text(l10n.invoiceDetailDeleteMsg(inv.invoiceNumber)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
+              child: Text(l10n.invoiceDetailCancel)),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: Colors.redAccent,
                 foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer'),
+            child: Text(l10n.invoiceDetailDelete),
           ),
         ],
       ),

@@ -1,4 +1,4 @@
-﻿// lib/theme/royal_ledger.dart
+// lib/theme/royal_ledger.dart
 //
 // 👑 DESIGN SYSTEM « Royal Ledger » (maquette Stitch — stitch_refined_billing_interface)
 //

@@ -1,0 +1,4 @@
+lib/widgets/marketing_carousel.dart: bytes=6893 bom=False bom16=False utf8_dec_ok=True c383(moji)=0 correct_accents=12 raw_latin1_accents=0
+lib/screens/landing/landing_screen.dart: bytes=41513 bom=False bom16=False utf8_dec_ok=True c383(moji)=0 correct_accents=0 raw_latin1_accents=0
+--- files with c383 double-encoding in lib ---
+.\lib\screens\dashboard\create_invoice_screen.dart c383=46

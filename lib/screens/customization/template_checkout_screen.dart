@@ -9,6 +9,7 @@ import '../../models/invoice_template.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/template_cart.dart';
 import '../../services/template_service.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/royal_ledger.dart';
 import '../../widgets/enkap_checkout_dialog.dart';
 import '../../widgets/glass_widgets.dart';
@@ -62,12 +63,12 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
   Future<void> _processCheckout() async {
     if (_items.isEmpty) return;
 
+    final l10n = AppLocalizations.of(context);
     final auth = Provider.of<AppAuthProvider>(context, listen: false);
     final userId = auth.user?.id ?? '';
 
     if (userId.isEmpty) {
-      CustomSnack.show(context,
-          'Veuillez vous connecter pour acquérir des modèles.',
+      CustomSnack.show(context, l10n.checkoutLoginRequired,
           type: CustomSnackType.error);
       return;
     }
@@ -83,8 +84,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     // 💳 Panier payant : numéro Mobile Money requis (sauf carte bancaire).
     final phone = _phoneController.text.trim();
     if (_selectedPaymentMethod != 'card' && phone.length < 9) {
-      CustomSnack.show(context,
-          'Veuillez saisir un numéro de téléphone valide.',
+      CustomSnack.show(context, l10n.checkoutInvalidPhone,
           type: CustomSnackType.error);
       return;
     }
@@ -103,8 +103,8 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
         amount: _totalPrice,
         currency: 'XAF',
         description: _items.length == 1
-            ? 'Achat modèle : ${_items.first.name}'
-            : 'Achat de ${_items.length} modèles de facture',
+            ? l10n.checkoutPurchaseOne(_items.first.name)
+            : l10n.checkoutPurchaseMany(_items.length),
         merchantReference: reference,
         providerName: _providerName,
         phoneNumber: _selectedPaymentMethod == 'card' ? null : phone,
@@ -114,7 +114,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
         onCancel: () {
           if (!mounted) return;
           setState(() => _isProcessing = false);
-          CustomSnack.show(context, 'Paiement annulé.');
+          CustomSnack.show(context, l10n.checkoutPaymentCancelled);
         },
       ),
     );
@@ -137,6 +137,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
   /// Débloque les modèles : appelé directement pour un panier gratuit
   /// (`reference` = null) ou après confirmation du paiement ENKAP.
   Future<void> _unlockTemplates({required String? reference}) async {
+    final l10n = AppLocalizations.of(context);
     final auth = Provider.of<AppAuthProvider>(context, listen: false);
     final userId = auth.user?.id ?? '';
     final isFree = reference == null;
@@ -175,7 +176,9 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    isFree ? 'Modèle débloqué !' : 'Paiement Réussi !',
+                    isFree
+                        ? l10n.checkoutUnlockedTitle
+                        : l10n.checkoutSuccessTitle,
                     style: TextStyle(
                       color: p.text,
                       fontFamily: 'Manrope',
@@ -187,8 +190,8 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             ),
             content: Text(
               isFree
-                  ? 'Le modèle est désormais disponible dans vos modèles.'
-                  : 'Félicitations ! Votre modèle est prêt à être personnalisé.',
+                  ? l10n.checkoutUnlockedMsg
+                  : l10n.checkoutSuccessMsg,
               style: TextStyle(color: p.subText, height: 1.4),
             ),
             actions: [
@@ -197,8 +200,9 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   Navigator.of(ctx).pop();
                   context.go('/templates/mine');
                 },
-                child: Text('Voir Mes Modèles',
-                    style: TextStyle(color: p.gold, fontWeight: FontWeight.w700)),
+                child: Text(l10n.checkoutViewMyTemplates,
+                    style:
+                        TextStyle(color: p.gold, fontWeight: FontWeight.w700)),
               ),
               if (_items.isNotEmpty)
                 FilledButton(
@@ -211,35 +215,34 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                     Navigator.of(ctx).pop();
                     context.go('/templates/workspace', extra: _items.first);
                   },
-                  child: const Text('Personnaliser Maintenant'),
+                  child: Text(l10n.checkoutCustomizeNow),
                 ),
             ],
           ),
         );
       } else {
-        CustomSnack.show(context,
-            "Le paiement n'a pas pu être validé. Réessayez.",
+        CustomSnack.show(context, l10n.checkoutPaymentFailed,
             type: CustomSnackType.error);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      CustomSnack.show(context,
-          'Erreur lors de la transaction : $e',
+      CustomSnack.show(context, l10n.checkoutTransactionError('$e'),
           type: CustomSnackType.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     if (_items.isEmpty) {
       return GlassScaffold(
-        appBar: const CustomAppBar(title: 'Panier de modèles'),
+        appBar: CustomAppBar(title: l10n.checkoutCartTitle),
         body: EmptyState(
           icon: Icons.shopping_basket_outlined,
-          title: 'Votre panier est vide',
-          message: 'Ajoutez un modèle depuis la boutique pour continuer.',
-          actionLabel: 'Voir la boutique',
+          title: l10n.checkoutEmptyTitle,
+          message: l10n.checkoutEmptyMsg,
+          actionLabel: l10n.checkoutBrowseStore,
           onAction: () => context.go('/templates'),
         ),
       );
@@ -248,8 +251,8 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
     final isFree = _totalPrice <= 0;
 
     return GlassScaffold(
-      appBar: const CustomAppBar(
-        title: 'Confirmation & Règlement',
+      appBar: CustomAppBar(
+        title: l10n.checkoutTitle,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -259,7 +262,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
             Text(
-              'Articles Sélectionnés',
+              l10n.checkoutSelectedItems,
               style: TextStyle(
                 color: p.text,
                 fontFamily: 'Manrope',
@@ -326,7 +329,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                       ),
                       const SizedBox(width: 8),
                       item.price <= 0
-                          ? const OwnedPill(label: 'Gratuit')
+                          ? OwnedPill(label: l10n.checkoutFreeItem)
                           : PricePill(
                               '${item.price.toStringAsFixed(0)} FCFA'),
                     ],
@@ -339,7 +342,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
 
             if (!isFree) ...[
               Text(
-                'Mode de Paiement',
+                l10n.checkoutPaymentMethod,
                 style: TextStyle(
                   color: p.text,
                   fontFamily: 'Manrope',
@@ -353,28 +356,28 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                 children: [
                   _buildPaymentOption(
                     id: 'om',
-                    name: 'Orange Money',
+                    name: l10n.checkoutOrangeMoney,
                     icon: Icons.phone_android,
                     color: Colors.orange,
                   ),
                   const SizedBox(height: 10),
                   _buildPaymentOption(
                     id: 'mtn',
-                    name: 'MTN Mobile Money',
+                    name: l10n.checkoutMtnMoney,
                     icon: Icons.phone_iphone,
                     color: Colors.yellow.shade700,
                   ),
                   const SizedBox(height: 10),
                   _buildPaymentOption(
                     id: 'moov',
-                    name: 'Moov Money',
+                    name: l10n.checkoutMoovMoney,
                     icon: Icons.mobile_friendly,
                     color: Colors.blue,
                   ),
                   const SizedBox(height: 10),
                   _buildPaymentOption(
                     id: 'card',
-                    name: 'Carte Bancaire / Visa',
+                    name: l10n.checkoutCard,
                     icon: Icons.credit_card,
                     color: Colors.purpleAccent,
                   ),
@@ -390,7 +393,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                   style: TextStyle(color: p.text),
                   cursorColor: p.gold,
                   decoration: InputDecoration(
-                    labelText: 'Numéro de Téléphone Mobile Money',
+                    labelText: l10n.checkoutPhoneLabel,
                     labelStyle: TextStyle(color: p.subText),
                     prefixIcon: Icon(Icons.phone_rounded, color: p.gold),
                     filled: true,
@@ -422,7 +425,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Total à régler',
+                        l10n.checkoutTotalToPay,
                         style: TextStyle(
                           color: p.text,
                           fontFamily: 'Manrope',
@@ -432,7 +435,7 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                       ),
                       Text(
                         isFree
-                            ? 'GRATUIT'
+                            ? l10n.checkoutFree
                             : '${_totalPrice.toStringAsFixed(0)} FCFA',
                         style: TextStyle(
                           color: isFree ? p.gold : p.text,
@@ -465,8 +468,9 @@ class _TemplateCheckoutScreenState extends State<TemplateCheckoutScreen> {
                             )
                           : Text(
                               isFree
-                                  ? 'Débloquer le Modèle'
-                                  : 'Confirmer & Payer (${_totalPrice.toStringAsFixed(0)} FCFA)',
+                                  ? l10n.checkoutUnlockButton
+                                  : l10n.checkoutConfirmButton(
+                                      _totalPrice.toStringAsFixed(0)),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700,

@@ -1,4 +1,4 @@
-﻿// lib/screens/customization/my_templates_screen.dart
+// lib/screens/customization/my_templates_screen.dart
 //
 // 📁 Mes Modèles : bibliothèque des modèles acquis + gestion du modèle actif.
 // Refonte épurée & animée (kit `customization_ui.dart`) : héros dégradé,

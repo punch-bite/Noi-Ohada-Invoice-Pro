@@ -1,4 +1,4 @@
-﻿// lib/models/plan.dart
+// lib/models/plan.dart
 import 'package:hive/hive.dart';
 
 part 'plan.g.dart';
