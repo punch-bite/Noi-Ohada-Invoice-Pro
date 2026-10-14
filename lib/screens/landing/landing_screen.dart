@@ -1,4 +1,4 @@
-// lib/screens/landing/landing_screen.dart
+﻿// lib/screens/landing/landing_screen.dart
 // ============================================================
 //  Landing (pr├®-connexion) ÔÇö refonte ┬½ soft & minimal ┬╗ (2026-09)
 //  Reprend l'esprit de la page d'accueil (server/landing.js) :
@@ -128,14 +128,14 @@ class _LandingScreenState extends State<LandingScreen>
       icon: Icons.account_balance_wallet_rounded,
       title: 'Conformit├® OHADA',
       description:
-          'G├®n├®rez vos factures et documents comptables en toute l├®galit├® et s├®r├®nit├®.',
+          'Gérez vos factures et documents comptables en toute légalité et sérénité.',
       accent: Color(0xFF4338CA),
     ),
     _Feature(
       icon: Icons.cloud_done_rounded,
       title: 'Cloud Synchro',
       description:
-          'Vos donn├®es financi├¿res s├®curis├®es, ├á jour sur tous vos appareils.',
+          'Vos données financières sécurisées, á jour sur tous vos appareils.',
       accent: Color(0xFF7C3AED),
     ),
     _Feature(
@@ -147,16 +147,16 @@ class _LandingScreenState extends State<LandingScreen>
     ),
     _Feature(
       icon: Icons.group_rounded,
-      title: 'Travail en ├ëquipe',
+      title: 'Travail en équipe',
       description:
-          'Collaborez avec vos associ├®s, comptables et collaborateurs en temps r├®el.',
+          'Collaborez avec vos associés, comptables et collaborateurs en temps rèel.',
       accent: Color(0xFF06B6D4),
     ),
     _Feature(
       icon: Icons.campaign_rounded,
       title: 'Marketing & Relance',
       description:
-          'Relancez vos clients et partagez vos donn├®es pour booster vos ventes.',
+          'Relancez vos clients et partagez vos données pour booster vos ventes.',
       accent: Color(0xFFF59E0B),
     ),
   ];
@@ -357,8 +357,8 @@ class _LandingScreenState extends State<LandingScreen>
             .slideY(begin: 0.15, end: 0),
         const SizedBox(height: 16),
         Text(
-          'Cr├®ez, suivez et encaissez vos factures en toute conformit├® '
-          'SYSCOHADA, avec des paiements mobiles int├®gr├®s d├¿s le d├®part.',
+          'Créez, suivez et encaissez vos factures en toute conformité '
+          'SYSCOHADA, avec des paiements mobiles intégrés dès le départ.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,
@@ -741,8 +741,8 @@ class _LandingScreenState extends State<LandingScreen>
             .slideY(begin: 0.2, end: 0),
         const SizedBox(height: 14),
         Text(
-          'Invitez vos associ├®s, comptables et collaborateurs. '
-          'G├®rez vos r├┤les, partagez les donn├®es et collaborez en temps r├®el.',
+          'Invitez vos associés, comptables et collaborateurs. '
+          'Gérez vos rôles, partagez les données et collaborez en temps réel.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14.5,
@@ -850,7 +850,7 @@ class _LandingScreenState extends State<LandingScreen>
         const SizedBox(height: 14),
         Text(
           'Relancez vos clients, partagez vos rapports et prenez '
-          'des d├®cisions ├®clair├®es gr├óce ├á vos donn├®es.',
+          'des décisions éclairées grâce à vos données.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14.5,
